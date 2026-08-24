@@ -390,6 +390,9 @@ def ump2_mpq_onthefly_no(
     occupation_window=None,
     include_quadratic=False,
     common_no_mixing_tolerance=1.0e-10,
+    common_no_transform="block_projected",
+    max_exact_tensor_memory_mb=512.0,
+    max_exact_orbitals=30,
 ):
     """Construct a low-cost UMP2 RDM-information analyzer.
 
@@ -435,6 +438,16 @@ def ump2_mpq_onthefly_no(
     common_no_mixing_tolerance : float, optional
         Warning threshold for discarded occupied-virtual mixing in the
         low-cost block-projected common-NO transformation.
+    common_no_transform : {"block_projected", "exact_selected"}, optional
+        Use the legacy occupied/virtual block projection or apply the full
+        alpha and beta MO-to-common-NO transformations to dense first-order
+        cumulant tensors restricted to the selected orbital space.
+    max_exact_tensor_memory_mb : float, optional
+        Explicit peak-memory budget for ``common_no_transform="exact_selected"``.
+        Exceeding it raises instead of silently using block projection.
+    max_exact_orbitals : int, optional
+        Hard cap on the number of common natural orbitals transformed in exact
+        selected-space mode.  The default is 30.
 
     Returns
     -------
@@ -469,6 +482,9 @@ def ump2_mpq_onthefly_no(
         cache_pair_blocks=cache_pair_blocks,
         cache_fixed_slabs=cache_fixed_slabs,
         common_no_mixing_tolerance=common_no_mixing_tolerance,
+        common_no_transform=common_no_transform,
+        max_exact_tensor_memory_mb=max_exact_tensor_memory_mb,
+        max_exact_orbitals=max_exact_orbitals,
     )
 
     gamma1_no_a = _rotate_1rdm(gamma1[0], Ua)

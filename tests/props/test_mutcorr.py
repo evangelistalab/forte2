@@ -251,6 +251,121 @@ def test_ump2_mpq_first_order_and_optional_quadratic_terms():
     assert mp2.E_total == approx(emp2)
 
 
+def test_ump2_exact_selected_common_no_transform():
+    """Compare selected-space streaming against a dense rank-four rotation."""
+
+    xyz = """
+    O  0.000000000000  0.000000000000 -0.061664597388
+    H  0.000000000000 -0.711620616369  0.489330954643
+    H  0.000000000000  0.711620616369  0.489330954643
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    uhf = UHF(charge=0, ms=1)(system)
+    mp2 = UMP2(store_t2=True)(uhf)
+    mp2.run()
+    assert mp2.naocc != mp2.nbocc
+
+    rng = np.random.default_rng(7)
+    Ua = np.linalg.qr(
+        rng.normal(size=(mp2.nmo, mp2.nmo))
+        + 1j * rng.normal(size=(mp2.nmo, mp2.nmo))
+    )[0]
+    Ub = np.linalg.qr(
+        rng.normal(size=(mp2.nmo, mp2.nmo))
+        + 1j * rng.normal(size=(mp2.nmo, mp2.nmo))
+    )[0]
+    selected = (0, 2, 4)
+    analyzer = UMP2MPQOnTheFly(
+        mp2,
+        Ua=Ua,
+        Ub=Ub,
+        orbital_indices=selected,
+        common_no_transform="exact_selected",
+    )
+    analyzer.make_measures()
+
+    def canonical_first_order(t2, nocc_first, nocc_second=None):
+        if nocc_second is None:
+            nocc_second = nocc_first
+        tensor = np.zeros((mp2.nmo,) * 4)
+        tensor[
+            :nocc_first, :nocc_second, nocc_first:, nocc_second:
+        ] = t2
+        tensor[
+            nocc_first:, nocc_second:, :nocc_first, :nocc_second
+        ] = t2.transpose(2, 3, 0, 1)
+        return tensor
+
+    lambda_aa_mo = canonical_first_order(mp2.t2_a, mp2.naocc)
+    lambda_bb_mo = canonical_first_order(mp2.t2_b, mp2.nbocc)
+    lambda_ab_mo = canonical_first_order(
+        mp2.t2_ab, mp2.naocc, mp2.nbocc
+    )
+
+    Ua_selected = Ua[:, selected]
+    Ub_selected = Ub[:, selected]
+
+    def transform(tensor, U1, U2):
+        return np.einsum(
+            "pP,qQ,pqrs,rR,sS->PQRS",
+            U1.conj(),
+            U2.conj(),
+            tensor,
+            U1,
+            U2,
+            optimize=True,
+        )
+
+    expected_aa = transform(lambda_aa_mo, Ua_selected, Ua_selected)
+    expected_bb = transform(lambda_bb_mo, Ub_selected, Ub_selected)
+    expected_ab = transform(lambda_ab_mo, Ua_selected, Ub_selected)
+
+    assert analyzer.lambda2_aa_selected == approx(expected_aa)
+    assert analyzer.lambda2_bb_selected == approx(expected_bb)
+    assert analyzer.lambda2_ab_selected == approx(expected_ab)
+    assert analyzer.lambda2_selected_indices == selected
+    assert analyzer.lambda2_aa_selected.shape == (3, 3, 3, 3)
+    assert analyzer.exact_selected_tensor_memory_mb < 0.01
+    unselected = sorted(set(range(mp2.nmo)) - set(selected))
+    assert np.count_nonzero(analyzer.M1[unselected]) == 0
+    assert np.count_nonzero(analyzer.M2[unselected, :]) == 0
+    assert np.count_nonzero(analyzer.M2[:, unselected]) == 0
+
+    with pytest.raises(ValueError, match="supports only the first-order"):
+        UMP2MPQOnTheFly(
+            mp2,
+            Ua=Ua,
+            Ub=Ub,
+            orbital_indices=selected,
+            common_no_transform="exact_selected",
+            include_quadratic=True,
+        )
+
+    with pytest.raises(MemoryError, match="estimated"):
+        UMP2MPQOnTheFly(
+            mp2,
+            Ua=Ua,
+            Ub=Ub,
+            orbital_indices=selected,
+            common_no_transform="exact_selected",
+            max_exact_tensor_memory_mb=1.0e-6,
+        )
+
+    with pytest.raises(ValueError, match="exceeds max_exact_orbitals=2"):
+        UMP2MPQOnTheFly(
+            mp2,
+            Ua=Ua,
+            Ub=Ub,
+            orbital_indices=selected,
+            common_no_transform="exact_selected",
+            max_exact_orbitals=2,
+        )
+
+
 def test_ump2_mpq_wrapper():
     """Test UMP2-MPQ natural orbitals and RDM-info selection."""
 
@@ -302,6 +417,20 @@ def test_ump2_mpq_wrapper():
     assert np.count_nonzero(M1[2:]) == 0
     assert np.count_nonzero(M2[2:, :]) == 0
     assert np.count_nonzero(M2[:, 2:]) == 0
+
+    exact_mpq = ump2_mpq_onthefly_no(
+        mp2,
+        mo_range=(0, 2),
+        common_no_transform="exact_selected",
+    )
+    exact_M1, exact_M2 = exact_mpq.make_measures()
+    assert exact_mpq.common_no_transform == "exact_selected"
+    assert exact_mpq.lambda2_aa_selected.shape == (2, 2, 2, 2)
+    assert exact_M1.shape == (mp2.nmo,)
+    assert exact_M2.shape == (mp2.nmo, mp2.nmo)
+    assert mp2.t2_a is None
+    assert mp2.t2_b is None
+    assert mp2.t2_ab is None
 
     occupation_mpq = ump2_mpq_onthefly_no(
         mp2, occupation_window=(0.02, 1.98)

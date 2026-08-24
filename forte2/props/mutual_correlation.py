@@ -702,7 +702,7 @@ class RMP2MPQOnTheFly:
 
 
 class UMP2MPQOnTheFly:
-    """Evaluate a low-cost, block-rotated UMP2 dyad correlation matrix.
+    """Evaluate a low-cost UMP2 dyad correlation matrix.
 
     The production definition retains the first-order ``oovv`` and ``vvoo``
     MP2 cumulant blocks for alpha-alpha, beta-beta, and alpha-beta amplitudes.
@@ -710,9 +710,11 @@ class UMP2MPQOnTheFly:
     particle-hole contractions are retained only as an opt-in diagnostic and
     are not part of the paper's definition.
 
-    When ``Ua`` and ``Ub`` contain occupied-virtual mixing, only their
-    occupied-occupied and virtual-virtual blocks are applied.  This is the
-    block-projected common-NO approximation used by this low-cost class.
+    ``common_no_transform="block_projected"`` applies only the occupied-
+    occupied and virtual-virtual blocks of ``Ua`` and ``Ub``.  The opt-in
+    ``"exact_selected"`` mode instead applies the full transformations and
+    stores only the dense rank-four first-order cumulant tensors within the
+    requested orbital subset.
     The public spin densities ``gamma1_a``/``gamma1_b`` and the spin-free
     ``Gamma1``/``Γ1`` are stored in the target NO basis; canonical-MO inputs
     are retained as ``gamma1_mo_a`` and ``gamma1_mo_b``.
@@ -745,6 +747,17 @@ class UMP2MPQOnTheFly:
         first-order MP2 doubles amplitudes. Disabled by default.
     common_no_mixing_tolerance : float, optional
         Threshold above which occupied-virtual mixing produces a warning.
+    common_no_transform : {"block_projected", "exact_selected"}, optional
+        Common-NO transformation used for the first-order cumulant.  The
+        default preserves the legacy block-projected result.  Exact selected-
+        space transformation is incompatible with ``include_quadratic=True``.
+    max_exact_tensor_memory_mb : float, optional
+        Maximum estimated peak storage for exact selected-space rank-four
+        tensors.  The exact mode raises instead of silently falling back when
+        this budget would be exceeded.
+    max_exact_orbitals : int, optional
+        Maximum number of target common natural orbitals allowed in the exact
+        selected-space transformation.  The default production cap is 30.
     """
 
     def __init__(
@@ -758,6 +771,9 @@ class UMP2MPQOnTheFly:
         cache_pair_blocks=True,
         cache_fixed_slabs=False,
         common_no_mixing_tolerance=1.0e-10,
+        common_no_transform="block_projected",
+        max_exact_tensor_memory_mb=512.0,
+        max_exact_orbitals=30,
     ):
         self.mp2 = mp2
 
@@ -772,6 +788,23 @@ class UMP2MPQOnTheFly:
         self.include_quadratic = bool(include_quadratic)
         self.common_no_mixing_tolerance = common_no_mixing_tolerance
         self.rdm_info_indices = self._normalize_indices(orbital_indices)
+        self.common_no_transform = str(common_no_transform)
+        self.max_exact_tensor_memory_mb = float(max_exact_tensor_memory_mb)
+        self.max_exact_orbitals = int(max_exact_orbitals)
+        if self.common_no_transform not in {"block_projected", "exact_selected"}:
+            raise ValueError(
+                "common_no_transform must be 'block_projected' or "
+                "'exact_selected'."
+            )
+        if self.max_exact_tensor_memory_mb <= 0.0:
+            raise ValueError("max_exact_tensor_memory_mb must be positive.")
+        if self.max_exact_orbitals <= 0:
+            raise ValueError("max_exact_orbitals must be positive.")
+        if self.common_no_transform == "exact_selected" and self.include_quadratic:
+            raise ValueError(
+                "common_no_transform='exact_selected' currently supports only "
+                "the first-order MP2 cumulant; set include_quadratic=False."
+            )
 
         if getattr(mp2, "B_iaQ", None) is None:
             raise ValueError("mp2.B_iaQ is missing. Run mp2.run() first.")
@@ -822,7 +855,10 @@ class UMP2MPQOnTheFly:
             np.linalg.norm(self.Ub[self.nbocc :, : self.nbocc]),
         )
         self.common_no_ov_mixing = max(mix_a, mix_b)
-        if self.common_no_ov_mixing > self.common_no_mixing_tolerance:
+        if (
+            self.common_no_transform == "block_projected"
+            and self.common_no_ov_mixing > self.common_no_mixing_tolerance
+        ):
             logger.log_info1(
                 "Using the occupied/virtual-block approximation to a "
                 "common-NO transformation; discarded ov/vo mixing norm is "
@@ -855,6 +891,44 @@ class UMP2MPQOnTheFly:
         self._zero_aa = np.zeros((self.navir, self.navir))
         self._zero_bb = np.zeros((self.nbvir, self.nbvir))
 
+        self.lambda2_selected_indices = self.rdm_info_indices
+        self.lambda2_aa_selected = None
+        self.lambda2_bb_selected = None
+        self.lambda2_ab_selected = None
+        self._selected_index_position = {
+            p: position for position, p in enumerate(self.rdm_info_indices)
+        }
+
+        tensor_dtype = np.result_type(self.Ua, self.Ub, *self.mp2.B_iaQ)
+        k = len(self.rdm_info_indices)
+        if (
+            self.common_no_transform == "exact_selected"
+            and k > self.max_exact_orbitals
+        ):
+            raise ValueError(
+                "Exact selected-space common-NO transformation requested "
+                f"{k} orbitals, which exceeds max_exact_orbitals="
+                f"{self.max_exact_orbitals}. Reduce the selected RDM space."
+            )
+        tensor_bytes = k**4 * np.dtype(tensor_dtype).itemsize
+        self.exact_selected_tensor_memory_mb = 3.0 * tensor_bytes / 1024**2
+        # Three persistent spin tensors plus one rank-four work tensor and a
+        # rank-three transformed fixed-occupied slab.
+        peak_bytes = 4 * tensor_bytes + k**3 * np.dtype(tensor_dtype).itemsize
+        self.exact_selected_peak_memory_mb = peak_bytes / 1024**2
+        if (
+            self.common_no_transform == "exact_selected"
+            and self.exact_selected_peak_memory_mb > self.max_exact_tensor_memory_mb
+        ):
+            raise MemoryError(
+                "Exact selected-space common-NO transformation is estimated "
+                f"to require {self.exact_selected_peak_memory_mb:.1f} MiB, "
+                "which exceeds max_exact_tensor_memory_mb="
+                f"{self.max_exact_tensor_memory_mb:.1f}. Reduce the selected "
+                "orbital space, increase the explicit budget, or request "
+                "common_no_transform='block_projected'."
+            )
+
     @property
     def occs(self):
         return np.diag(self.Gamma1_no).real
@@ -886,6 +960,110 @@ class UMP2MPQOnTheFly:
         return _block_natural_orbital_rotation(gamma1, nocc)
 
     # ------------------------------------------------------------------
+    # Exact dense transformation within the selected common-NO space
+    # ------------------------------------------------------------------
+
+    def _transform_first_order_oovv_selected(
+        self,
+        fixed_slab_builder,
+        nfixed,
+        Uo_first,
+        Uo_fixed,
+        Uv_first,
+        Uv_second,
+    ):
+        """Transform one canonical ``oovv`` spin block into selected NOs.
+
+        The fixed-occupied canonical amplitude slabs are generated and
+        contracted one at a time.  Therefore the exact selected-space path
+        does not require a persistent full canonical ``t2`` tensor.
+        """
+        k = len(self.rdm_info_indices)
+        dtype = np.result_type(
+            Uo_first, Uo_fixed, Uv_first, Uv_second, *self.mp2.B_iaQ
+        )
+        transformed = np.zeros((k, k, k, k), dtype=dtype)
+        for j in range(nfixed):
+            fixed_j = fixed_slab_builder(j)
+            partial = np.einsum(
+                "ip,iab,ar,bs->prs",
+                Uo_first.conj(),
+                fixed_j,
+                Uv_first,
+                Uv_second,
+                optimize=True,
+            )
+            transformed += np.einsum(
+                "q,prs->pqrs", Uo_fixed[j].conj(), partial, optimize=True
+            )
+        return transformed
+
+    def _ensure_exact_selected_cumulants(self):
+        if self.common_no_transform != "exact_selected":
+            return
+        if self.lambda2_aa_selected is not None:
+            return
+
+        selected = list(self.rdm_info_indices)
+        Uoa = self.Ua[: self.naocc, selected]
+        Uva = self.Ua[self.naocc :, selected]
+        Uob = self.Ub[: self.nbocc, selected]
+        Uvb = self.Ub[self.nbocc :, selected]
+
+        aa_oovv = self._transform_first_order_oovv_selected(
+            self._t2_aa_fixed_j_canonical,
+            self.naocc,
+            Uoa,
+            Uoa,
+            Uva,
+            Uva,
+        )
+        self.lambda2_aa_selected = (
+            aa_oovv + aa_oovv.conj().transpose(2, 3, 0, 1)
+        )
+
+        bb_oovv = self._transform_first_order_oovv_selected(
+            self._t2_bb_fixed_j_canonical,
+            self.nbocc,
+            Uob,
+            Uob,
+            Uvb,
+            Uvb,
+        )
+        self.lambda2_bb_selected = (
+            bb_oovv + bb_oovv.conj().transpose(2, 3, 0, 1)
+        )
+
+        ab_oovv = self._transform_first_order_oovv_selected(
+            self._t2_ab_fixed_beta_j_canonical,
+            self.nbocc,
+            Uoa,
+            Uob,
+            Uva,
+            Uvb,
+        )
+        self.lambda2_ab_selected = (
+            ab_oovv + ab_oovv.conj().transpose(2, 3, 0, 1)
+        )
+
+        logger.log_info1(
+            "Applied the exact common-NO transformation to the selected "
+            f"first-order UMP2 cumulant ({len(selected)} orbitals; "
+            f"{self.exact_selected_tensor_memory_mb:.1f} MiB persistent "
+            "rank-four storage)."
+        )
+
+    def _exact_selected_elem(self, tensor_name, p, q, r, s):
+        self._ensure_exact_selected_cumulants()
+        positions = tuple(
+            self._selected_index_position.get(index) for index in (p, q, r, s)
+        )
+        if any(position is None for position in positions):
+            return 0.0
+        tensor = getattr(self, tensor_name)
+        return tensor[positions]
+
+    # ------------------------------------------------------------------
     # Spin-space index helpers
     # ------------------------------------------------------------------
 
@@ -914,6 +1092,8 @@ class UMP2MPQOnTheFly:
     def _t2_aa_fixed_j_canonical(self, j):
         if j in self._cache_fixed_aa:
             return self._cache_fixed_aa[j]
+        if getattr(self.mp2, "t2_a", None) is not None:
+            return self.mp2.t2_a[:, j]
 
         Ba, _ = self.mp2.B_iaQ
         eps_i = self.mp2.eps_a[: self.naocc]
@@ -936,6 +1116,8 @@ class UMP2MPQOnTheFly:
     def _t2_bb_fixed_j_canonical(self, j):
         if j in self._cache_fixed_bb:
             return self._cache_fixed_bb[j]
+        if getattr(self.mp2, "t2_b", None) is not None:
+            return self.mp2.t2_b[:, j]
 
         _, Bb = self.mp2.B_iaQ
         eps_i = self.mp2.eps_b[: self.nbocc]
@@ -958,6 +1140,8 @@ class UMP2MPQOnTheFly:
     def _t2_ab_fixed_beta_j_canonical(self, j):
         if j in self._cache_fixed_ab_beta:
             return self._cache_fixed_ab_beta[j]
+        if getattr(self.mp2, "t2_ab", None) is not None:
+            return self.mp2.t2_ab[:, j]
 
         Ba, Bb = self.mp2.B_iaQ
         eps_ai = self.mp2.eps_a[: self.naocc]
@@ -1110,6 +1294,11 @@ class UMP2MPQOnTheFly:
 
     def lambda2_aa_first_order_elem(self, p, q, r, s):
         """Return the first-order alpha-alpha MP2 cumulant contribution."""
+        if self.common_no_transform == "exact_selected":
+            return self._exact_selected_elem(
+                "lambda2_aa_selected", p, q, r, s
+            )
+
         if p == q or r == s:
             return 0.0
 
@@ -1155,6 +1344,11 @@ class UMP2MPQOnTheFly:
 
     def lambda2_bb_first_order_elem(self, p, q, r, s):
         """Return the first-order beta-beta MP2 cumulant contribution."""
+        if self.common_no_transform == "exact_selected":
+            return self._exact_selected_elem(
+                "lambda2_bb_selected", p, q, r, s
+            )
+
         if p == q or r == s:
             return 0.0
 
@@ -1200,6 +1394,11 @@ class UMP2MPQOnTheFly:
 
     def lambda2_ab_first_order_elem(self, p, q, r, s):
         """Return the first-order alpha-beta MP2 cumulant contribution."""
+        if self.common_no_transform == "exact_selected":
+            return self._exact_selected_elem(
+                "lambda2_ab_selected", p, q, r, s
+            )
+
         if self._oa(p) and self._ob(q) and self._va(r) and self._vb(s):
             return self._t2_ab_elem(
                 p, q, self._a_vir(r), self._b_vir(s)
