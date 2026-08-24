@@ -1,0 +1,554 @@
+\documentclass[aip,jcp,preprint]{revtex4-1}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{braket}
+\usepackage{booktabs}
+\usepackage[capitalize]{cleveref}
+
+\newcommand{\Tr}{\operatorname{Tr}}
+\newcommand{\diag}{\operatorname{diag}}
+
+\begin{document}
+
+\title{Technical Notes: CASSCF Wavefunction Overlaps via Nonunitary
+Biorthogonalization}
+\author{Forte2 Developers}
+\noaffiliation
+\date{\today}
+\maketitle
+
+\section{Purpose and implementation status}
+
+This note documents the machinery that computes the overlap
+$\braket{\Psi_1|\Psi_2}$ between two complete active space self-consistent
+field (CASSCF) wavefunctions built from independent, non-orthogonal molecular
+orbital (MO) sets --- for example, two states from separate CASSCF
+optimizations, the same state at two different geometries, or a wavefunction
+compared against itself under an orbital rotation. Neither $\Psi_1$ nor
+$\Psi_2$ needs to be expressed in the other's orbital basis; the two orbital
+sets are related only through their mutual atomic-orbital (AO) overlap.
+
+The implementation follows the nonunitary orbital biorthogonalization scheme
+of Malmqvist,\cite{Malmqvist1986} specialized to CASSCF wavefunctions with a
+single doubly (or, in the two-component case, singly) occupied inactive
+block and one active block of unrestricted occupation. Given two orbital
+sets that are not orthonormal to each other, the scheme constructs a pair of
+\emph{biorthonormal} bases in which the two Slater-determinant expansions can
+be compared by a plain configuration interaction (CI) vector dot product,
+rather than by summing determinant-of-overlap terms over every pair of
+determinants.
+
+Two regimes are supported:
+\begin{center}
+\begin{tabular}{@{}p{0.22\linewidth}p{0.32\linewidth}p{0.36\linewidth}@{}}
+\toprule
+Regime & Orbitals & Docc occupation \\
+\midrule
+Nonrelativistic & real, spin-restricted spatial MOs & doubly occupied \\
+Two-component & complex spinors (GHF/X2C) & singly occupied \\
+\bottomrule
+\end{tabular}
+\end{center}
+Both regimes share the same biorthogonalization and CI-vector-transform
+machinery; only a handful of scalar factors and the choice of sigma-vector
+builder differ, as detailed in \cref{sec:two-component}.
+
+\section{Setup and notation}
+
+Let $X$ and $Y$ denote two independently obtained CASSCF orbital sets sharing
+the same partition into $n_I$ inactive (``docc'') and $n_T$ active orbitals,
+with no separate restricted/virtual block. Write $C_X,C_Y\in\mathbb
+C^{n_\mathrm{bf}\times(n_I+n_T)}$ for their docc+active MO coefficient
+matrices, each individually orthonormal under its own AO overlap,
+$C_X^\dagger S_\mathrm{AO} C_X=C_Y^\dagger S_\mathrm{AO} C_Y=1$, but with a
+generally non-diagonal mutual overlap
+\begin{equation}
+ S^{XY} = C_X^\dagger S_\mathrm{AO}(X,Y)\, C_Y ,
+ \label{eq:mixed-overlap}
+\end{equation}
+where $S_\mathrm{AO}(X,Y)$ is the AO overlap between the (possibly distinct)
+molecular geometries or basis sets underlying $X$ and $Y$. Partition
+$S^{XY}$ into inactive (``$I$'') and active (``$T$'') blocks,
+\begin{equation}
+ S^{XY}=
+ \begin{pmatrix} S_{II} & S_{IT} \\ S_{TI} & S_{TT} \end{pmatrix}.
+\end{equation}
+The two CASSCF wavefunctions are
+\begin{equation}
+ \ket{\Psi_1}=\sum_K c_1(K)\ket{K}_{\varphi^X}, \qquad
+ \ket{\Psi_2}=\sum_L c_2(L)\ket{L}_{\varphi^Y},
+\end{equation}
+sums over active-space determinants (with the inactive block always fully
+occupied), $\varphi^X,\varphi^Y$ the orbitals in $C_X,C_Y$. Here $K,L$ index
+determinants; $I,T$ below always denote the inactive and active orbital
+blocks.
+
+\section{Malmqvist biorthogonalization}
+\label{sec:biorthogonalization}
+
+The goal is a pair of transformations $C^{XA},C^{YB}$ such that the new
+orbital sets $\varphi^A=\varphi^X C^{XA}$, $\varphi^B=\varphi^YC^{YB}$
+satisfy $(C^{XA})^\dagger S^{XY} C^{YB}=1$ exactly, while $C^{XA}$ is
+block upper-triangular (its active-row/docc-column block is exactly zero) so
+that the new docc orbitals of $A$ are pure recombinations of the old docc
+orbitals of $X$ --- the structural condition needed for the transformed
+determinant expansion to stay closed within the same CAS manifold (see
+\cref{sec:generator}). By an identical construction, $C^{YB}$ has the same
+zero block.
+
+The construction (implemented in
+\texttt{biorthogonalize\_casscf\_orbitals}) proceeds in six steps, following
+Malmqvist's Appendix specialized to a CASSCF (rather than general
+restricted-active-space) partition:
+
+\begin{enumerate}
+\item \textbf{Inactive-block correspondence.} Singular value decompose the
+inactive-inactive block,
+\begin{equation}
+ S_{II}=U_I^{(1)} D_I \big(U_I^{(2)}\big)^\dagger,
+\end{equation}
+with $D_I>0$ (Malmqvist's nonsingularity criterion; a vanishing singular
+value means the two orbital sets cannot be biorthogonalized within the
+CASSCF-closed transformation group, and typically signals qualitatively
+different orbital character between $X$ and $Y$).
+
+\item \textbf{Active-block correction.} Remove the inactive admixture from
+the active-active block,
+\begin{equation}
+ S_{TT}^{\mathrm{mod}} = S_{TT}
+ - S_{TI}\,U_I^{(2)} D_I^{-1} \big(U_I^{(1)}\big)^\dagger S_{IT},
+\end{equation}
+and singular value decompose it,
+\begin{equation}
+ S_{TT}^{\mathrm{mod}}=U_T^{(1)} D_T \big(U_T^{(2)}\big)^\dagger,
+ \qquad D_T>0.
+\end{equation}
+
+\item \textbf{Pseudo-corresponding mixed overlaps.} In the orthonormal
+$(U_I^{(1)},U_I^{(2)},U_T^{(1)},U_T^{(2)})$ basis, the residual
+inactive-active overlaps are
+\begin{equation}
+ S_{IT}^{P_1P_2} = \big(U_I^{(1)}\big)^\dagger S_{IT} U_T^{(2)}, \qquad
+ S_{TI}^{P_1P_2} = \big(U_T^{(1)}\big)^\dagger S_{TI} U_I^{(2)}.
+\end{equation}
+These need not be Hermitian conjugates of each other, since $P_1$ and $P_2$
+label two different (unrelated) orbital sets.
+
+\item \textbf{Shift to the nonorthogonal basis.} New active orbitals on each
+side pick up an admixture of the (already fixed) new docc orbitals of that
+side, chosen to cancel the residual inactive-active overlap:
+\begin{equation}
+ M_A = -D_I^{-1}\big(S_{TI}^{P_1P_2}\big)^\dagger, \qquad
+ M_B = -D_I^{-1} S_{IT}^{P_1P_2}.
+\end{equation}
+Assemble, in $(I,T)$ block order,
+\begin{equation}
+ C^{XA}=
+ \begin{pmatrix} U_I^{(1)} & U_I^{(1)}M_A \\ 0 & U_T^{(1)}\end{pmatrix},
+ \qquad
+ C^{YB}=
+ \begin{pmatrix} U_I^{(2)} & U_I^{(2)}M_B \\ 0 & U_T^{(2)}\end{pmatrix}.
+ \label{eq:cxa-cyb-preresc}
+\end{equation}
+At this stage $(C^{XA})^\dagger S^{XY} C^{YB} = \diag(D_I,D_T)$.
+
+\item \textbf{Rescale.} Divide $C^{YB}$'s columns by $d=(D_I,D_T)$ so that
+$(C^{XA})^\dagger S^{XY}C^{YB}=1$ exactly.
+\end{enumerate}
+The singular value decompositions in steps 1 and 2 are unique only up to an
+arbitrary joint rotation of degenerate singular subspaces; when $S_{II}$ or
+$S_{TT}^{\mathrm{mod}}$ has (near-)degenerate singular values, $C^{XA}$ and
+$C^{YB}$ can come back far from the identity even when $X$ and $Y$ are
+nearly the same orbital set. The pair remains a valid biorthonormalizing
+solution --- the CI-vector transform in \cref{sec:generator} handles this via
+scaling-and-squaring rather than assuming a small rotation angle.
+
+\section{From biorthogonal orbitals to a CI-vector transform}
+\label{sec:generator}
+
+Once $\varphi^A,\varphi^B$ are biorthonormal, $\braket{\Psi_1|\Psi_2}$
+reduces to a plain dot product of CI vectors \emph{re-expressed} in the
+$A,B$ orbital bases,
+\begin{equation}
+ \braket{\Psi_1|\Psi_2} = c_1'^\dagger c_2',
+ \label{eq:overlap-as-dot-product}
+\end{equation}
+where $c_1'$ is $c_1$ re-expressed under $\varphi^A=\varphi^X C^{XA}$ and
+$c_2'$ is $c_2$ re-expressed under $\varphi^B=\varphi^YC^{YB}$. For an
+invertible orbital transformation $\varphi^\mathrm{new}=\varphi^\mathrm{old}
+M$ (right multiplication), the corresponding CI-vector map is the one-body
+Fock-space representation
+\begin{equation}
+ \rho[M] = \exp\!\Big(-\sum_{pq}(\log M)_{pq}\,E_{pq}\Big), \qquad
+ c^\mathrm{new}=\rho[M]\,c^\mathrm{old},
+ \label{eq:rho-def}
+\end{equation}
+with $E_{pq}=p_\alpha^\dagger q_\alpha+p_\beta^\dagger q_\beta$
+(nonrelativistic; see \cref{sec:two-component} for the two-component form).
+Because orbitals transform by right multiplication, composing two orbital
+transformations reverses order on the CI-vector side,
+\begin{equation}
+ \rho[M_1M_2] = \rho[M_2]\,\rho[M_1],
+ \label{eq:anti-homomorphism}
+\end{equation}
+an anti-homomorphism. Getting \cref{eq:anti-homomorphism}'s order backward
+does not raise an error --- during development it silently produced a
+plausible-looking but wrong overlap (0.908 instead of the correct 1.0), so
+any extension of the step-decomposition in \cref{sec:branch-cut} must
+rederive step order from \cref{eq:anti-homomorphism} rather than guessing by
+pattern-matching.
+
+\subsection{The docc block reduces to a scalar}
+
+$M=C^{XA}$ (or $C^{YB}$) is block upper-triangular with a zero
+active-row/docc-column block (\cref{sec:biorthogonalization}). For a
+block-triangular matrix, any analytic matrix function --- in particular
+$\log$ --- is itself block-triangular with the \emph{same} zero block, and
+its diagonal blocks depend only on the corresponding diagonal block of $M$:
+\begin{equation}
+ \log M =
+ \begin{pmatrix}\log M_{II} & \star \\ 0 & \log M_{TT}\end{pmatrix}.
+ \label{eq:block-triangular-log}
+\end{equation}
+Consequently $t\equiv\log M$ has the same zero (active,docc) block as $M$,
+and its $(I,I)$ block is exactly $\log M_{II}$, independent of the active
+block or of the admixture $M_{IT}$.
+
+Two structural facts about this generator matter for how it acts on a CAS
+determinant, whose inactive block is \emph{always} fully occupied for every
+determinant in the expansion:
+\begin{itemize}
+\item The (active,docc) block of $t$ is exactly zero, so the generator never
+creates an electron in an active orbital at the expense of the (always-full)
+inactive block --- this is what keeps the transformed wavefunction inside
+the same CAS manifold representable by an active-space-only CI vector.
+\item Any surviving one-body term $t_{pq}\,p^\dagger q$ with $p$ inactive and
+$q\ne p$ (whether $q$ is inactive or active) is Pauli-blocked when acting on
+a CAS determinant: $q$'s annihilation is followed by a creation at $p$, but
+$p$ is still fully occupied (its own electron, if $q\ne p$, was never
+removed), so the term annihilates the determinant. Only the diagonal
+$p=q$ (inactive-orbital number-operator) terms survive.
+\end{itemize}
+The generator therefore acts on the CAS space exactly as
+\begin{equation}
+ \exp\!\Big(-\sum_{p\in I} t_{pp}\, n_p\Big)
+ = \exp\big(-\Tr t_{II}\big)^{\,n_\mathrm{ch}}
+ = \det(M_{II})^{-n_\mathrm{ch}},
+ \label{eq:docc-scalar}
+\end{equation}
+a state-independent scalar, where $n_\mathrm{ch}$ is the number of
+second-quantized channels contributing to $E_{pq}$: $n_\mathrm{ch}=2$
+(spin-summed $\alpha+\beta$) for the nonrelativistic case, since every
+inactive spatial orbital is doubly occupied and each spin channel
+independently contributes a factor $\det(M_{II})^{-1}$; $n_\mathrm{ch}=1$
+for the two-component case, whose inactive spinors are singly occupied in a
+single channel (\cref{sec:two-component}). Only the active-active block
+$M_{TT}$ therefore needs to be exponentiated as a genuine (potentially
+large, nontrivial) generator; the inactive block contributes only the scalar
+prefactor
+\begin{equation}
+ \texttt{docc\_scale} = \det(M_{II})^{-n_\mathrm{ch}}.
+ \label{eq:docc-scale-code}
+\end{equation}
+This is exactly what \texttt{casscf\_wavefunction\_overlap} computes from
+$C^{XA}[{:}n_I,{:}n_I]$/$C^{YB}[{:}n_I,{:}n_I]$ and applies once, at the end
+of each side's active-space CI-vector transform.
+
+\section{Real matrix logarithms and the branch-cut pitfall}
+\label{sec:branch-cut}
+
+$M_{TT}=C^{XA}[n_I{:},n_I{:}]$ is exactly an SVD orthogonal factor
+$U_T^{(1)}$ (for $C^{XA}$) or an orthogonal factor times a positive diagonal
+rescale $U_T^{(2)}D_T^{-1}$ (for $C^{YB}$). \texttt{scipy.linalg.logm}
+computes eigenvalue-wise logarithms via the principal branch of the complex
+logarithm, which is discontinuous across the negative real axis. A proper
+rotation ($\det=+1$) with an eigenvalue near $-1$ (a rotation angle near
+$\pi$) comes back from \texttt{logm} with a spurious, numerically large
+imaginary part, even though a real antisymmetric logarithm always exists.
+Worse, an \emph{improper} rotation ($\det=-1$, a reflection composed with a
+rotation) genuinely has \emph{no} real logarithm at all, since
+$\det(\exp\kappa)=\exp(\Tr\kappa)>0$ for any real $\kappa$. Testing showed
+this is not a rare edge case: two independently converged CASSCF
+wavefunctions being compared, or a state related to itself by a plain
+orbital rotation, reliably produce such matrices, because
+\texttt{MCOptimizer}'s orbital optimization is float-order-sensitive enough
+that repeated runs occasionally land in a different numerical regime for
+near-degenerate singular subspaces.
+
+\texttt{\_robust\_real\_logm}$(M)$ decomposes $M$ into an ordered list of
+steps, \texttt{("reflect",)} and/or \texttt{("generator", t)}, applied to the
+CI vector in that order:
+\begin{enumerate}
+\item Try \texttt{logm}$(M)$ directly. If the result is already negligibly
+complex, use it (the common, fast path).
+\item If $M$ is orthogonal, its real antisymmetric logarithm $\kappa$
+(when $\det M=+1$) is read off directly from the real Schur decomposition
+$M=Z T Z^\dagger$: each $2\times2$ rotation block on $T$'s diagonal gives an
+angle via \texttt{arctan2} (branch-free over the full range $(-\pi,\pi]$),
+and any unpaired $-1$ eigenvalues (guaranteed even in number when $\det
+M=+1$) are paired into synthetic $\pi$-rotation blocks --- a gauge choice in
+the same spirit as the SVD degeneracy freedom of
+\cref{sec:biorthogonalization}. For $\det M=-1$, factor $M=FR$ with $F$ a
+fixed reflection (flipping the sign of active orbital 0; an exact,
+closed-form CI-vector operation, $(-1)^{n_0}$ on each determinant's
+coefficient, needing no exponential) and $R=FM$ proper; log $R$ as above.
+\item Otherwise (a general invertible, non-orthogonal $M$), use the polar
+decomposition $M=QP$ ($Q$ orthogonal, $P$ symmetric positive-definite,
+unique for invertible $M$ and exactly matching $C^{YB}$'s own construction).
+$Q$ is handled as in step 2; $P$'s logarithm is always real, via
+eigendecomposition (eigenvalues of an SPD matrix are strictly positive, so
+this branch never touches the negative-real-axis cut).
+\end{enumerate}
+By \cref{eq:anti-homomorphism}, for $M=QP$ the returned steps apply $Q$'s
+steps first, then $P$'s generator; for $M=FR$, the reflection is applied
+before $R$'s generator.
+
+\section{Implementation}
+
+\subsection{C++ sigma-build reuse primitives}
+
+\texttt{CISigmaBuilder} and \texttt{RelCISigmaBuilder}
+(\texttt{forte2/ci/ci\_sigma\_builder.\{h,cc\}},
+\texttt{forte2/ci/rel\_ci\_sigma\_builder.\{h,cc\}}) gain two public methods,
+thin wrappers splitting the existing private one- and two-electron sigma
+contributions:
+\begin{itemize}
+\item \texttt{sigma\_one\_electron(basis, sigma)}: applies the scalar and
+one-electron part of the Hamiltonian only.
+\item \texttt{sigma\_two\_electron(basis, sigma)}: applies the two-electron
+part only.
+\end{itemize}
+The existing fused \texttt{Hamiltonian(basis, sigma)} is unchanged, and
+\texttt{sigma\_one\_electron(basis, s1) + sigma\_two\_electron(basis, s2)}
+always equals it for $s_1+s_2$. Neither method assumes $H$ is symmetric ---
+both sigma-build algorithms (Knowles--Handy and Harrison--Zarrabian) loop the
+full range of orbital-index pairs. This matters because the generator
+$t=\log M$ used here is not a physical (Hermitian/symmetric) Hamiltonian.
+\texttt{set\_Hamiltonian(E, H, V)} is also bound to Python for both classes;
+it reuses internal scratch buffers when the orbital count is unchanged, so a
+caller can swap Hamiltonians into an existing builder without reconstructing
+one. Together these let \texttt{transform\_ci\_vector\_direct} build one
+lightweight builder per active-space generator and apply only its
+one-electron part ($V=0$), reusing exactly the machinery every CASSCF/CI run
+already uses for its own sigma-vector builds.
+
+\subsection{Python module (\texttt{forte2/orbitals/wavefunction\_overlap.py})}
+
+\paragraph{Orbital-space construction.}
+\texttt{biorthogonalize\_casscf\_orbitals} implements
+\cref{sec:biorthogonalization}.
+
+\paragraph{Ground-truth backend.}
+\texttt{transform\_ci\_vector\_sparse\_ops} applies $\exp(-t_{TT})$ to a CI
+vector using \texttt{forte2.lib.sparse\_ops.SparseExp}'s Taylor-series
+operator exponential over the generic, hash-map-based sparse-operator
+infrastructure. Correct but not optimized for large active spaces; kept as a
+correctness reference. \texttt{\_make\_sparse\_state} builds the initial
+\texttt{SparseState} directly in Python (screening coefficients below a
+threshold) rather than through \texttt{CISigmaBuilder.make\_sparse\_state},
+since that C++ method is bound only for real (\texttt{float64}) vectors and
+this needs to work for complex two-component vectors too; the same helper
+now serves both regimes.
+
+\paragraph{Efficient backend (default).}
+\texttt{transform\_ci\_vector\_direct} performs the same computation using
+\texttt{sigma\_one\_electron} via scaling-and-squaring around a Taylor
+series, the standard technique for $\exp(A)v$ when $\|A\|$ may be large:
+choose the smallest integer $m\ge0$ with $\|t_{TT}\|_2/2^m$ under a target
+threshold (default $0.5$), evaluate $\exp(-t_{TT}/2^m)v$ by a Taylor series
+that terminates once successive terms fall below a relative tolerance, and
+apply that map $2^m$ times in sequence --- exact, since
+$\exp(-t_{TT})=\big(\exp(-t_{TT}/2^m)\big)^{2^m}$ for any $m$, unlike a
+single un-scaled Taylor truncation, which would only converge for small
+$\|t_{TT}\|$. This means large rotation angles (from the SVD gauge freedom
+on near-degenerate singular values, or genuinely large orbital differences
+between independently optimized states) do not require tuning the Taylor
+order up front.
+
+\paragraph{Dispatcher.}
+\texttt{casscf\_wavefunction\_overlap}$(\text{ci\_strings}_1, C_1,
+C^{\mathrm{docc+actv}}_1, \mathrm{system}_1, \ldots, n_I, n_T,
+\text{backend}, \ldots)$ runs the full pipeline: the mixed MO overlap
+(\cref{eq:mixed-overlap}, via \texttt{mo\_overlap}), biorthogonalization,
+per-side CI-vector transform including the docc scalar
+(\cref{eq:docc-scale-code}), and the final dot product
+(\cref{eq:overlap-as-dot-product}).
+
+\section{Two-component specialization}
+\label{sec:two-component}
+
+Two-component (spinor, GHF/X2C) CASSCF wavefunctions differ from the
+nonrelativistic case in three places, all following from a single physical
+fact: each spinor already carries both spin components internally, so
+there is no separate $\alpha/\beta$ pairing. \texttt{RelCISigmaBuilder}
+(complex128 analogue of \texttt{CISigmaBuilder}, sharing the same
+\texttt{CIStrings} class) reflects this by packing all active electrons
+into a single string, with the second string always empty --- see
+\texttt{rel\_ci.py}'s convention: ``all active electrons live in the alpha
+(spinor) string; \texttt{nb = 0}.''
+
+\begin{enumerate}
+\item \textbf{Single-channel generator.} The one-body generator has only
+one channel, $E_{pq}=p^\dagger q$, not the spin-summed
+$p_\alpha^\dagger q_\alpha+p_\beta^\dagger q_\beta$ of
+\cref{eq:rho-def}. \texttt{\_one\_body\_sparse\_operator} accordingly takes
+a \texttt{two\_component} flag that drops the second (beta) term.
+
+\item \textbf{Docc power.} Each inactive spinor is singly, not doubly,
+occupied, so $n_\mathrm{ch}=1$ in \cref{eq:docc-scalar,eq:docc-scale-code}
+rather than $2$. Getting this wrong would not raise an error --- it would
+silently return $\det(M_{II})^{-1}$ where $\det(M_{II})^{-2}$ (or vice
+versa) was needed, a subtle, plausible-looking bug of exactly the kind
+warned about after \cref{eq:anti-homomorphism}. This was verified with a
+dedicated, closed-form test (\cref{sec:verification}) rather than trusted
+from the derivation alone.
+
+\item \textbf{No branch-cut pitfall.} For a genuinely complex, invertible
+$M$, a complex logarithm always exists: $\exp\colon
+\mathfrak{gl}(n,\mathbb C)\to GL(n,\mathbb C)$ is surjective, since
+$\mathbb C$ is algebraically closed and every invertible complex matrix has
+a Jordan decomposition with nonzero eigenvalues, each admitting a complex
+logarithm. Equivalently, $\det(\exp\kappa)=\exp(\Tr\kappa)$ ranges over all
+of $\mathbb C\setminus\{0\}$ as $\kappa$ ranges over
+$\mathfrak{gl}(n,\mathbb C)$ (unlike the real case, where it is confined to
+the positive reals) --- so there is no two-component analogue of
+\cref{sec:branch-cut}'s ``improper rotation has no real logarithm''
+obstruction. \texttt{\_apply\_generator\_steps}'s two-component branch
+therefore applies \texttt{logm}$(M)$ directly, with no step decomposition.
+
+\item \textbf{AO overlap block-doubling.} Forte2 stores a spinor MO
+coefficient matrix as
+$C_\mathrm{spinor}=\binom{C^\alpha_\mathrm{AO}}{C^\beta_\mathrm{AO}}$
+(a $2n_\mathrm{bf}\times n_\mathrm{spinor}$ matrix). The physical AO overlap
+operator acts identically and independently on each spin sector, so the
+overlap entering \cref{eq:mixed-overlap} must be block-doubled,
+$S_\mathrm{AO}\to\diag(S_\mathrm{AO},S_\mathrm{AO})$. \texttt{mo\_overlap}
+(\texttt{forte2/orbitals/orbital\_overlap.py}) previously built only the
+undoubled overlap and raised a shape-mismatch error on any spinor input; it
+now applies \texttt{block\_diag\_2x2} whenever
+\texttt{system\_a.two\_component} is set, mirroring the convention already
+used by \texttt{System.ints\_overlap()} for the same-system case.
+\end{enumerate}
+\texttt{casscf\_wavefunction\_overlap} reads \texttt{two\_component} off
+\texttt{system\_1.two\_component} rather than taking it as a separate
+caller-supplied flag, so it cannot silently disagree with the actual orbital
+representation being passed in.
+
+\section{Code map}
+
+\begin{center}
+\begin{tabular}{p{0.42\linewidth}p{0.50\linewidth}}
+\toprule
+File or function & Responsibility \\
+\midrule
+\texttt{forte2/orbitals/wavefunction\_overlap.py} & Biorthogonalization,
+robust real-log decomposition, both CI-vector-transform backends, and the
+\texttt{casscf\_wavefunction\_overlap} dispatcher.\\
+\texttt{forte2/orbitals/orbital\_overlap.py} & \texttt{mo\_overlap}, with
+two-component AO-overlap block-doubling.\\
+\texttt{forte2/ci/ci\_sigma\_builder.\{h,cc\}} & \texttt{sigma\_one\_electron},
+\texttt{sigma\_two\_electron}, \texttt{set\_Hamiltonian} (nonrelativistic).\\
+\texttt{forte2/ci/rel\_ci\_sigma\_builder.\{h,cc\}} & Same primitives,
+complex128 (two-component).\\
+\texttt{forte2/api/ci\_helpers\_api.cc} & nanobind bindings for the above.\\
+\texttt{tests/ci/test\_sigma\_builder\_reuse.py} & C++ primitive unit
+tests (real and two-component).\\
+\texttt{tests/orbitals/test\_wavefunction\_overlap.py} & End-to-end overlap
+tests, both regimes.\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Verification strategy}
+\label{sec:verification}
+
+\begin{enumerate}
+\item \textbf{Biorthogonalization algebra.} On synthetic random orbital sets
+(three $(n_\mathrm{bf},n_I,n_T)$ configurations, including $n_I=0$),
+\texttt{biorthogonalize\_casscf\_orbitals} is checked to recover
+$(C^{XA})^\dagger S^{XY}C^{YB}=1$ to $10^{-10}$ and the block
+upper-triangular structure exactly.
+\item \textbf{Nonrelativistic self-overlap.} A real LiH CASSCF wavefunction
+compared against itself gives $1$, both backends.
+\item \textbf{Nonrelativistic rotated active orbitals.} Rotate the active
+orbitals by a random orthogonal $R$ and independently build the CI vector of
+the \emph{same} physical wavefunction in the rotated basis via
+\texttt{SparseExp.apply\_op} directly (not through the module under test);
+the biorthogonalized overlap recovers $1$.
+\item \textbf{Two independent CASSCF optimizations.} Two full
+\texttt{MCOptimizer} runs at different LiH bond lengths (orbitals and CI
+vectors unrelated by any known analytic transformation) are cross-checked
+against an $O(n_{\det,1}n_{\det,2})$ brute-force L\"owdin
+determinant-overlap sum, built independently of the biorthogonalization/
+sparse-ops machinery.
+\item \textbf{Backend cross-check.} \texttt{transform\_ci\_vector\_direct}
+and \texttt{transform\_ci\_vector\_sparse\_ops} are compared for a random
+non-symmetric generator, and again for a deliberately large-angle
+($\sim\!3$ rad) generator that exercises the scaling-and-squaring path.
+\item \textbf{Physical sanity check} (manual, not in the automated suite):
+scanning $\braket{\Psi(R_e)|\Psi(R)}$ for LiH from equilibrium out to
+6 bohr reproduces a smooth decay from 1, a sign flip, and partial recovery
+near $R=5$ bohr --- the expected signature of LiH's known ionic-covalent
+avoided crossing. The two backends agree to six decimal places, differing
+in overall sign only very close to the crossing, where the phase is
+inherently ambiguous.
+\item \textbf{Two-component self-overlap.} A two-component (GHF)
+\texttt{RelCI} wavefunction compared against itself gives $1$, both
+backends.
+\item \textbf{Two-component docc-power discriminator.} Rotate \emph{only}
+the inactive spinors by a random unitary $U_\mathrm{docc}$, leaving the
+active orbitals and CI vector untouched; the predicted overlap is exactly
+$\det(U_\mathrm{docc})^{n_\mathrm{ch}}$
+(\cref{eq:docc-scalar,eq:docc-scale-code}). This test was used to
+numerically confirm $n_\mathrm{ch}=1$ (versus the nonrelativistic $2$)
+\emph{before} being committed: with $n_\mathrm{ch}=2$ the predicted overlap
+differs from the actual result by roughly $\mathcal O(1)$ (not merely a
+rounding-level discrepancy), giving a sharp pass/fail signal rather than a
+marginal one.
+\item \textbf{Two-component rotated active orbitals.} Analogous to item 3,
+using the single-channel generator of \cref{sec:two-component}.
+\item \textbf{Two-component backend cross-check.} Analogous to item 5, for a
+random non-Hermitian complex generator and a genuinely complex CI vector.
+\item \textbf{Regression.} The full \texttt{pytest -m "not slow"} suite
+(826 passed, 2 skipped after this work, versus 819 passed, 2 skipped before
+the two-component extension) confirms no regressions, in particular from
+the \texttt{mo\_overlap} block-doubling fix, which is shared code also used
+by the (unrelated) occupied-orbital-projection utility.
+\end{enumerate}
+
+\section{Known limitations}
+
+\begin{itemize}
+\item \texttt{\_robust\_real\_logm}'s general (polar-decomposition) branch
+handles every case observed in testing, but no case has required a
+non-normal-matrix fallback beyond it. If it ever raises in practice, that is
+the next thing to generalize.
+\item The C++ primitives (\texttt{sigma\_one\_electron},
+\texttt{sigma\_two\_electron}, \texttt{set\_Hamiltonian}) are
+general-purpose infrastructure, not wired up anywhere else yet --- for
+example, reusing one builder across many states to compute a full pairwise
+overlap matrix is a natural follow-up, not yet implemented.
+\item Skipping the $O(n_T^4)$ two-electron-integral tensor setup inside
+\texttt{set\_Hamiltonian} when only \texttt{sigma\_one\_electron} is needed
+was considered and deferred: it would require splitting the Knowles--Handy
+correction term's coupling to $V$ out of the one-electron setup, adding
+state-tracking complexity for a cost that is microseconds at the active-space
+sizes ($n_T\lesssim30$) this module targets.
+\item Wavefunctions restricted to a general active space (GAS) beyond a
+single CAS block are not addressed. Comparing a two-component wavefunction
+against a nonrelativistic one is not supported;
+\texttt{system\_1.two\_component} and \texttt{system\_2.two\_component} must
+agree.
+\end{itemize}
+
+\begin{thebibliography}{9}
+\bibitem{Malmqvist1986}
+P.-\AA.~Malmqvist,
+``Calculation of transition density matrices by nonunitary orbital
+transformations,''
+Int. J. Quantum Chem. \textbf{30}, 479--494 (1986).
+\end{thebibliography}
+
+\end{document}
