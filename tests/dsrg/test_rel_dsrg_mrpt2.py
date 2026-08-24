@@ -322,18 +322,6 @@ def test_mrpt2_sh_with_slow():
 
 
 def test_mrpt2_gamma_vv_fast_vs_slow():
-    # Unrelaxed virtual-virtual 1-RDM (used to build FNOs): the on-the-fly
-    # (RelDSRG_MRPT2) and fully in-core (RelDSRG_MRPT2_Slow) implementations
-    # must agree, and the result must be Hermitian.
-    #
-    # Both DSRG objects are attached to the *same* mc/reference, with no
-    # reference relaxation. This is deliberate: raw, orbital-basis-dependent
-    # quantities like T1/T2 (and therefore Gamma_vv) are only defined up to an
-    # arbitrary rotation within any degenerate orbital subspace (e.g. Kramers
-    # pairs), so comparing them between two *independently re-optimized* mc
-    # objects is not meaningful even when the underlying physics agrees -- only
-    # gauge-invariant quantities like the DSRG energy are guaranteed to match
-    # in that case.
     xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 2.0

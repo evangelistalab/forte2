@@ -451,7 +451,7 @@ class RelDSRG_MRPT2_Slow(DSRGBase):
         )
         return E
 
-    def compute_unrelaxed_gamma_vv(self):
+    def compute_unrelaxed_gamma_vv(self, use_3cumulant=True):
         """
         Virtual-virtual block of the unrelaxed second-order 1-RDM,
         Gamma_ef = (1/2) <Phi0| [[E^e_f, Ahat], Ahat] |Phi0>, Ahat = (T1-T1^) + (T2-T2^),
@@ -466,6 +466,7 @@ class RelDSRG_MRPT2_Slow(DSRGBase):
         gamma1 = self.cumulants["gamma1"]
         eta1 = self.cumulants["eta1"]
         lambda2 = self.cumulants["lambda2"]
+        lambda3 = self.cumulants["lambda3"]
         T1 = self.T1
         T2 = self.T2
 
@@ -538,10 +539,16 @@ class RelDSRG_MRPT2_Slow(DSRGBase):
         Gamma += +0.250 * np.einsum(
             "uvwx,wxac,uvbc->ab", lambda2, T2["aavv"], T2["aavv"].conj(), optimize=True
         )
+        if use_3cumulant:
+            Gamma += -0.250000 * np.einsum(
+                "uvwxyz,xywa,uvzb->ab",
+                lambda3,
+                T2["aaav"],
+                T2["aaav"].conj(),
+                optimize=True,
+            )
 
-        # defensive Hermitization: the sum above is Hermitian in exact arithmetic
-        # (each term pairs a tensor with its own conjugate against Hermitian
-        # cumulants), so this only removes floating-point roundoff.
+        # defensive Hermitization - Gamma should already be hermitian, this removes numerical noise
         Gamma = 0.5 * (Gamma + Gamma.conj().T)
         return Gamma
 
