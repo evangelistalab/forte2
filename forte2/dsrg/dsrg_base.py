@@ -31,14 +31,25 @@ class DSRGBase(Method):
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
         assert isinstance(
-            self.parent_method, (CIBase, RelCIBase, MCOptimizerBase)
-        ), "Parent method must be an instance of CIBase, RelCIBase, or MCOptimizerBase."
+            self.parent_method, (CIBase, RelCIBase, MCOptimizerBase, DSRGBase)
+        ), "Parent method must be an instance of CIBase, RelCIBase, MCOptimizerBase, or DSRGBase."
         return self
+
+    @property
+    def ci_solver(self):
+        """
+        The ci_solver of the parent method. A property (rather than a plain
+        attribute cached in _startup) so it is available immediately at
+        construction time, matching CIBase.ci_solver -- this lets a DSRGBase
+        object itself serve as a valid parent for another DSRG method before
+        it has necessarily been run.
+        """
+        return self.parent_method.ci_solver
 
     def __post_init__(self):
         self.requires = {"system", "mos", "mo_space"}
         self.provides = {"system", "mos", "mo_space"}
-        self.requires_attrs.update({"final_orbitals": "semicanonical"})
+        self.requires_attrs.update({"ci_solver": None})
 
         # parse reference relaxation options
         if isinstance(self.relax_reference, bool):
@@ -111,10 +122,6 @@ class DSRGBase(Method):
         perm = self.mo_space.orig_to_contig
         self._C = self.mos.C[0][:, perm].copy()
 
-        # parent_method is either a bare CIBase/RelCIBase (its own ci_solver) or an
-        # MCOptimizerBase (which wraps one) - both expose .ci_solver uniformly.
-        self.ci_solver = self.parent_method.ci_solver
-
         self.E_core_orig = self.ci_solver.sub_solvers[0].ints.E
         self.H_orig = self.ci_solver.sub_solvers[0].ints.H.copy()
         self.V_orig = self.ci_solver.sub_solvers[0].ints.V.copy()
@@ -133,6 +140,15 @@ class DSRGBase(Method):
         self.fock_builder = self.system.fock_builder
         self.ints, self.cumulants = self.get_integrals()
         self.hbar = dict()
+
+    def _release_integrals(self):
+        """
+        Release large per-run integral/cumulant state once it is no longer
+        needed, freeing the underlying memory. Subclasses holding additional
+        large arrays (e.g. T1/T2 amplitudes) should override and call super().
+        """
+        self.ints = None
+        self.cumulants = None
 
     def run(self):
         self._startup()

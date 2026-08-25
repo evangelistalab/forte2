@@ -363,6 +363,69 @@ def test_mrpt2_gamma_vv_fast_vs_slow():
     assert np.all(evals > -1e-10)
 
 
+def test_mrpt2_fno():
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    rhf = GHF(charge=0)(system)
+    rhf.run()
+    rng = np.random.default_rng(1234)
+    random_phase = np.diag(np.exp(1j * rng.uniform(-np.pi, np.pi, size=rhf.nmo * 2)))
+    rhf.C[0] = rhf.C[0] @ random_phase
+
+    ci_solver = RelCISolver(
+        nel=14,
+        core_orbitals=8,
+        active_orbitals=12,
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
+    mc.run()
+
+    pt2_ref = RelDSRG_MRPT2(flow_param=0.5, frozen_core_orbitals=4)(mc)
+    pt2_ref.run()
+
+    # p_o=1.0 retains every virtual orbital, so this is a pure orbital
+    # rotation (natural-orbital basis instead of semicanonical) with no actual
+    # truncation. The chained (fno-less) second pass must reproduce the
+    # untruncated energy to near machine precision -- this is a real
+    # correctness check on the rotation/write-back, not an accuracy statement
+    # about truncation.
+    pt2_full_100 = RelDSRG_MRPT2(flow_param=0.5, frozen_core_orbitals=4, fno_p_o=1.0)(
+        mc
+    )
+    pt2_full_100.run()
+    assert pt2_full_100.fno_active
+    assert pt2_full_100.mo_space.nvirt == pt2_ref.mo_space.nvirt
+    assert pt2_full_100.mo_space.nfrozen_core == pt2_ref.mo_space.nfrozen_core
+    # large (full-space) integrals/amplitudes are released once no longer needed
+    assert pt2_full_100.ints is None
+    assert pt2_full_100.T1 is None
+
+    pt2_fno_100 = RelDSRG_MRPT2(flow_param=0.5)(pt2_full_100)
+    pt2_fno_100.run()
+    # a plain instance chained onto an FNO pass does not itself set fno_active
+    assert not pt2_fno_100.fno_active
+    assert pt2_fno_100.E_dsrg == approx(pt2_ref.E_dsrg)
+
+    # a genuinely truncated case: fewer virtuals retained, energy deviates by
+    # a bounded, physically sane amount for this small basis.
+    pt2_full = RelDSRG_MRPT2(flow_param=0.5, frozen_core_orbitals=4, fno_p_o=0.9)(mc)
+    pt2_full.run()
+    assert pt2_full.mo_space.nvirt < pt2_ref.mo_space.nvirt
+
+    pt2_fno = RelDSRG_MRPT2(flow_param=0.5)(pt2_full)
+    pt2_fno.run()
+    assert abs(pt2_fno.E_dsrg - pt2_ref.E_dsrg) < 0.05
+
+
 def test_rel_mrpt2_all_active():
     xyz = f"""
     H 0.0 0.0 0.0

@@ -1,8 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
+from forte2.helpers import logger
+
 from .dsrg_base import DSRGBase
+from .fno_utils import build_fno_virtual_space
 from .utils import (
     antisymmetrize_2body,
     cas_energy_given_RDMs,
@@ -35,6 +38,26 @@ class RelDSRG_MRPT2(DSRGBase):
         The maximum number of reference relaxation iterations.
     relax_tol : float, optional, default=1e-6
         The convergence tolerance for reference relaxation (in Hartree).
+    fno_p_o : float, optional, default=None
+        Enable frozen natural orbitals (FNO), retaining the smallest set of
+        leading virtual natural orbitals whose cumulative occupation is at
+        least this fraction (0, 1] of the total. Mutually exclusive with
+        fno_n_kappa; setting either activates FNO. When active, this object
+        performs a single unrelaxed pass in the full virtual space to build
+        the natural orbitals, then truncates: relax_reference is not
+        supported on this pass (see the class docstring below).
+    fno_n_kappa : float, optional, default=None
+        Enable FNO, retaining all virtual natural orbitals with occupation
+        number >= fno_n_kappa. Mutually exclusive with fno_p_o.
+    fno_degeneracy_tol : float, optional, default=1e-2
+        When FNO is active, the truncation boundary is pushed outward (more
+        orbitals retained) while the occupation numbers straddling it differ
+        by less than this fraction of the larger one, so that near-degenerate
+        natural orbitals (e.g. Kramers partners) are never split between the
+        retained and discarded sets.
+    fno_use_3cumulant : bool, optional, default=True
+        Whether to include the reference's 3-body density cumulant when
+        building the FNO virtual-virtual 1-RDM; see compute_unrelaxed_gamma_vv.
 
     Attributes
     ----------
@@ -49,6 +72,29 @@ class RelDSRG_MRPT2(DSRGBase):
         The eigenvalues of the relaxed CI Hamiltonian.
     relax_eigvals_history : NDArray
         The history of eigenvalues of the relaxed CI Hamiltonian during relaxation.
+    fno_active : bool
+        Whether this object performed FNO truncation (i.e. fno_p_o or
+        fno_n_kappa was given). Set to True at the end of a successful FNO
+        pass; a plain RelDSRG_MRPT2 chained onto such an object (e.g.
+        RelDSRG_MRPT2()(pt2_fno_pass)) does not inherit or inspect this flag
+        itself -- downstream methods that need to detect FNO do so by
+        checking their own parent chain.
+
+    Notes
+    -----
+    To build and use FNOs, run this class twice in a chain, e.g.::
+
+        pt2_full = RelDSRG_MRPT2(fno_p_o=0.98)(mc)
+        pt2_full.run()
+        pt2_fno = RelDSRG_MRPT2(relax_reference="iterate")(pt2_full)
+        pt2_fno.run()
+
+    The first pass (fno_p_o or fno_n_kappa given) always performs a single
+    unrelaxed solve in the full virtual space, builds the natural orbitals
+    from the unrelaxed virtual-virtual 1-RDM, and exposes the truncated,
+    natural-orbital-rotated virtual space as its own mos/mo_space -- so the
+    second, chained instance runs as an entirely ordinary RelDSRG_MRPT2 (with
+    relax_reference supported normally) in that truncated space.
 
     References
     ----------
@@ -60,11 +106,69 @@ class RelDSRG_MRPT2(DSRGBase):
               J. Chem. Phys. 2016, 144, 204111.
     .. [4] C. Li and F. A. Evangelista, "Driven similarity renormalization group for excited states: A state-averaged perturbation theory",
            J. Chem. Phys. 2018, 148, 124106.
+    .. [5] C. Li, S. Mao, R. Huang, F. A. Evangelista, "Frozen Natural Orbitals for the State-Averaged Driven Similarity Renormalization Group",
+           J. Chem. Theory Comput. 2024, 20, 4170-4181.
     """
+
+    fno_p_o: float | None = None
+    fno_n_kappa: float | None = None
+    fno_degeneracy_tol: float = 1e-2
+    fno_use_3cumulant: bool = True
+
+    fno_active: bool = field(init=False, default=False)
 
     def __post_init__(self):
         super().__post_init__()
         self.requires_attrs.update({"two_component": True})
+
+        if self.fno_p_o is not None or self.fno_n_kappa is not None:
+            assert (self.fno_p_o is None) != (
+                self.fno_n_kappa is None
+            ), "Specify exactly one of fno_p_o or fno_n_kappa."
+            assert not self.relax_reference, (
+                "relax_reference is not supported together with fno_p_o/fno_n_kappa: "
+                "the natural orbitals must come from an unrelaxed reference. Run this "
+                "class once with FNO options and no relaxation to build the truncated "
+                "space, then chain a second RelDSRG_MRPT2 (with relax_reference if "
+                "desired) onto it."
+            )
+
+    def run(self):
+        if self.fno_p_o is None and self.fno_n_kappa is None:
+            return super().run()
+
+        # FNO pass: a single unrelaxed solve in the full virtual space, used
+        # only to build Gamma_vv and truncate. See the class docstring.
+        self._startup()
+        self.ints, self.cumulants = self.get_integrals()
+        self.E_dsrg = self.solve_dsrg(form_hbar=False)
+        self.E = self.E_dsrg
+
+        nvirt_full = self.nvirt
+        gamma_vv = self.compute_unrelaxed_gamma_vv(use_3cumulant=self.fno_use_3cumulant)
+        self.mos, self.mo_space = build_fno_virtual_space(
+            self,
+            gamma_vv,
+            p_o=self.fno_p_o,
+            n_kappa=self.fno_n_kappa,
+            degeneracy_tol=self.fno_degeneracy_tol,
+        )
+        self.fno_active = True
+        logger.log_info1(
+            f"\nFrozen natural orbitals: retained {self.mo_space.nvirt} of "
+            f"{nvirt_full} virtual orbitals "
+            f"({100 * self.mo_space.nvirt / nvirt_full:.1f}%)."
+        )
+
+        self._release_integrals()
+        self.executed = True
+        return self
+
+    def _release_integrals(self):
+        super()._release_integrals()
+        self.T1 = None
+        self.T2 = None
+        self.F_tilde = None
 
     def get_integrals(self):
         g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
@@ -723,7 +827,13 @@ class RelDSRG_MRPT2(DSRGBase):
             "uvwx,wxac,uvbc->ab", lambda2, T2["aavv"], T2["aavv"].conj(), optimize=True
         )
         if use_3cumulant:
-            Gamma += -0.250000 * np.einsum("uvwxyz,xywa,uvzb->ab", lambda3, T2["aaav"], T2["aaav"].conj(), optimize=True)
+            Gamma += -0.250000 * np.einsum(
+                "uvwxyz,xywa,uvzb->ab",
+                lambda3,
+                T2["aaav"],
+                T2["aaav"].conj(),
+                optimize=True,
+            )
 
         Gamma += self._compute_gamma_vv_ccvv()
         Gamma += self._compute_gamma_vv_cavv()
