@@ -5,6 +5,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/complex.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 
 #include "ci/ci_strings.h"
@@ -109,9 +110,10 @@ void export_ci_sigma_builder_api(nb::module_& sub_m) {
              "Apply the scalar and one-electron part of the Hamiltonian to the wave function")
         .def("sigma_two_electron", &CISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
              "Apply the two-electron part of the Hamiltonian to the wave function")
-        .def("set_Hamiltonian", &CISigmaBuilder::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
+        .def("set_Hamiltonian", &CISigmaBuilder::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
              "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
-             "scratch buffers")
+             "scratch buffers. Any argument left as None keeps its current value.")
         .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a, "threshold"_a = 1e-12,
              "Convert a CI vector to a sparse state")
         // Spin-free RDMs and cumulants
@@ -225,9 +227,10 @@ void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
              "Apply the scalar and one-electron part of the Hamiltonian to the wave function")
         .def("sigma_two_electron", &RelCISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
              "Apply the two-electron part of the Hamiltonian to the wave function")
-        .def("set_Hamiltonian", &RelCISigmaBuilder::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
+        .def("set_Hamiltonian", &RelCISigmaBuilder::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
              "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
-             "scratch buffers")
+             "scratch buffers. Any argument left as None keeps its current value.")
         .def("so_1rdm", &RelCISigmaBuilder::compute_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital one-electron reduced density matrix")
         .def("so_2rdm", &RelCISigmaBuilder::compute_2rdm, "C_left"_a, "C_right"_a,
@@ -253,8 +256,9 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "frozen_annihilation"_a = std::vector<size_t>{},
              "Initialize the SelectedCIHelper with the number of orbitals, initial determinants, "
              "energy, Hamiltonian, and integrals")
-        .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
-             "Set the Hamiltonian integrals")
+        .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Set the Hamiltonian integrals. Any argument left as None keeps its current value.")
         .def("Hamiltonian", &SelectedCIHelper::Hamiltonian, "basis"_a, "sigma"_a,
              "Apply the Hamiltonian to the basis and store the result in sigma")
         .def("Hdiag", &SelectedCIHelper::Hdiag, "Return the diagonal of the Hamiltonian matrix")
@@ -333,8 +337,10 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "frozen_annihilation"_a = std::vector<size_t>{},
              "Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, "
              "energy, complex Hamiltonian, and complex integrals")
-        .def("set_Hamiltonian", &RelSelectedCIHelper::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
-             "Set the (complex) Hamiltonian integrals")
+        .def("set_Hamiltonian", &RelSelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Set the (complex) Hamiltonian integrals. Any argument left as None keeps its "
+             "current value.")
         .def("Hamiltonian", &RelSelectedCIHelper::Hamiltonian, "basis"_a, "sigma"_a,
              "Apply the Hamiltonian to the (complex) basis and store the result in sigma")
         .def("Hdiag", &RelSelectedCIHelper::Hdiag,

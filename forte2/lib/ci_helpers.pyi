@@ -164,9 +164,9 @@ class CISigmaBuilder:
     def sigma_two_electron(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
         """Apply the two-electron part of the Hamiltonian to the wave function"""
 
-    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
+    def set_Hamiltonian(self, E: float | None = None, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))] | None = None, V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))] | None = None) -> None:
         """
-        Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers
+        Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers. Any argument left as None keeps its current value.
         """
 
     def make_sparse_state(self, C: Annotated[NDArray[numpy.float64], dict(shape=(None,))], threshold: float = 1e-12) -> forte2.lib.sparse_ops.SparseState:
@@ -343,9 +343,9 @@ class RelCISigmaBuilder:
     def sigma_two_electron(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None:
         """Apply the two-electron part of the Hamiltonian to the wave function"""
 
-    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]) -> None:
+    def set_Hamiltonian(self, E: float | None = None, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))] | None = None, V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))] | None = None) -> None:
         """
-        Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers
+        Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers. Any argument left as None keeps its current value.
         """
 
     def so_1rdm(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
@@ -375,8 +375,10 @@ class SelectedCIHelper:
         Initialize the SelectedCIHelper with the number of orbitals, initial determinants, energy, Hamiltonian, and integrals
         """
 
-    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
-        """Set the Hamiltonian integrals"""
+    def set_Hamiltonian(self, E: float | None = None, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))] | None = None, V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))] | None = None) -> None:
+        """
+        Set the Hamiltonian integrals. Any argument left as None keeps its current value.
+        """
 
     def Hamiltonian(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
         """Apply the Hamiltonian to the basis and store the result in sigma"""
@@ -499,8 +501,10 @@ class RelSelectedCIHelper:
         Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, energy, complex Hamiltonian, and complex integrals
         """
 
-    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]) -> None:
-        """Set the (complex) Hamiltonian integrals"""
+    def set_Hamiltonian(self, E: float | None = None, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))] | None = None, V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))] | None = None) -> None:
+        """
+        Set the (complex) Hamiltonian integrals. Any argument left as None keeps its current value.
+        """
 
     def Hamiltonian(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None:
         """

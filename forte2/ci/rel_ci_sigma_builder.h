@@ -3,6 +3,7 @@
 #include <functional>
 #include <vector>
 #include <cmath>
+#include <optional>
 #include <span>
 #include <complex>
 
@@ -39,7 +40,12 @@ class RelCISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V);
+    /// @param E New scalar energy, or nullopt to keep the current value
+    /// @param H New one-electron integrals, or nullopt to keep the current value
+    /// @param V New two-electron integrals, or nullopt to keep the current value
+    void set_Hamiltonian(std::optional<double> E = std::nullopt,
+                         std::optional<np_matrix_complex> H = std::nullopt,
+                         std::optional<np_tensor4_complex> V = std::nullopt);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -69,7 +75,8 @@ class RelCISigmaBuilder {
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = (E + sum_pq H_pq E_pq) |basis>
     /// @note Hamiltonian(basis, sigma) == sigma_one_electron(basis, s1) +
-    /// sigma_two_electron(basis, s2) for s1 + s2. H is not required to be Hermitian.
+    /// sigma_two_electron(basis, s2) for s1 + s2. 
+    /// The one-electron integrals are not required to be Hermitian.
     void sigma_one_electron(np_vector_complex basis, np_vector_complex sigma) const;
 
     /// @brief Apply the two-electron part of the Hamiltonian to the wave function

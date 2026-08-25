@@ -47,12 +47,27 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
 }
 
 void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
+    CIAlgorithm new_algorithm;
     if (algorithm == "kh" or algorithm == "knowles-handy") {
-        algorithm_ = CIAlgorithm::Knowles_Handy;
+        new_algorithm = CIAlgorithm::Knowles_Handy;
     } else if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
-        algorithm_ = CIAlgorithm::Harrison_Zarrabian;
+        new_algorithm = CIAlgorithm::Harrison_Zarrabian;
     } else {
         throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
+    }
+
+    if (new_algorithm != algorithm_) {
+        algorithm_ = new_algorithm;
+        // set_Hamiltonian only rebuilds the currently active algorithm's derived arrays, so the
+        // ones for the algorithm we are switching into may be missing or stale. H_/V_ themselves
+        // are always current (kept in sync regardless of algorithm), so rebuild from those.
+        if (algorithm_ == CIAlgorithm::Knowles_Handy) {
+            update_h_kh();
+            update_v_kh();
+        } else {
+            update_h_hz();
+            update_v_hz();
+        }
     }
 }
 
@@ -99,50 +114,72 @@ size_t CISigmaBuilder::max_composite_hole_dimension(const StringAddress& alpha_a
     return max_alpha * max_beta;
 }
 
-void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
-    E_ = E;
-
-    if (H.ndim() != 2) {
-        throw std::runtime_error("H must be a 2D matrix.");
+void CISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<np_matrix> H,
+                                     std::optional<np_tensor4> V) {
+    if (E) {
+        E_ = *E;
     }
-    if (H.shape(0) != lists_.norb() || H.shape(1) != lists_.norb()) {
-        throw std::runtime_error("H shape does not match the number of orbitals.");
+
+    if (H) {
+        if (H->ndim() != 2) {
+            throw std::runtime_error("H must be a 2D matrix.");
+        }
+        if (H->shape(0) != lists_.norb() || H->shape(1) != lists_.norb()) {
+            throw std::runtime_error("H shape does not match the number of orbitals.");
+        }
+        H_ = *H;
     }
-    H_ = H;
 
-    // Initialize the one-electron integrals h_hz and h_kh
+    if (V) {
+        if (V->ndim() != 4) {
+            throw std::runtime_error("V must be a 4D tensor.");
+        }
+        if (V->shape(0) != lists_.norb() || V->shape(1) != lists_.norb() ||
+            V->shape(2) != lists_.norb() || V->shape(3) != lists_.norb()) {
+            throw std::runtime_error("V shape does not match the number of orbitals.");
+        }
+        V_ = *V;
+    }
 
+    if (!H && !V) {
+        return;
+    }
+
+    // Only rebuild the derived arrays used by the currently active algorithm; set_algorithm
+    // rebuilds the other algorithm's arrays if/when it becomes active.
+    if (algorithm_ == CIAlgorithm::Knowles_Handy) {
+        update_h_kh(); // mixes H_ and V_, so it is stale whenever either one changes
+        if (V) {
+            update_v_kh();
+        }
+    } else {
+        if (H) {
+            update_h_hz();
+        }
+        if (V) {
+            update_v_hz();
+        }
+    }
+}
+
+void CISigmaBuilder::update_h_hz() {
     const size_t norb = lists_.norb();
-    h_kh.resize(norb * norb);
     h_hz.resize(norb * norb);
-    auto h = H.view();
-    auto v = V.view();
+    auto h = H_.view();
     for (size_t p = 0; p < norb; ++p) {
         for (size_t q = 0; q < norb; ++q) {
             h_hz[p * norb + q] = h(p, q);
-            h_kh[p * norb + q] = h(p, q);
-            for (size_t r = 0; r < norb; ++r) {
-                h_kh[p * norb + q] -= 0.5 * v(p, q, r, r);
-            }
         }
     }
+}
 
-    // Initialize the two-electron integrals v_pr_qs and v_pr_qs_a
-    if (V.ndim() != 4) {
-        throw std::runtime_error("V must be a 4D tensor.");
-    }
-    if (V.shape(0) != lists_.norb() || V.shape(1) != lists_.norb() || V.shape(2) != lists_.norb() ||
-        V.shape(3) != lists_.norb()) {
-        throw std::runtime_error("V shape does not match the number of orbitals.");
-    }
-    V_ = V;
-
+void CISigmaBuilder::update_v_hz() {
+    const size_t norb = lists_.norb();
     const size_t norb2 = norb * norb;
-    const size_t npairs = (norb * (norb - 1)) / 2;    // Number of pairs (p, r) with p > r
-    const size_t ngeqpairs = (norb * (norb + 1)) / 2; // Number of pairs (p, r) with p >= r
+    const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
     v_pr_qs.resize(norb2 * norb2);
     v_pr_qs_a.resize(npairs * npairs);
-    v_ijkl_hk.resize(ngeqpairs * ngeqpairs);
+    auto v = V_.view();
 
     // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs
     for (size_t p = 0; p < norb; ++p) {
@@ -168,6 +205,29 @@ void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
             }
         }
     }
+}
+
+void CISigmaBuilder::update_h_kh() {
+    const size_t norb = lists_.norb();
+    h_kh.resize(norb * norb);
+    auto h = H_.view();
+    auto v = V_.view();
+    for (size_t p = 0; p < norb; ++p) {
+        for (size_t q = 0; q < norb; ++q) {
+            h_kh[p * norb + q] = h(p, q);
+            for (size_t r = 0; r < norb; ++r) {
+                h_kh[p * norb + q] -= 0.5 * v(p, q, r, r);
+            }
+        }
+    }
+}
+
+void CISigmaBuilder::update_v_kh() {
+    const size_t norb = lists_.norb();
+    const size_t ngeqpairs = (norb * (norb + 1)) / 2; // Number of pairs (p, r) with p >= r
+    v_ijkl_hk.resize(ngeqpairs * ngeqpairs);
+    auto v = V_.view();
+
     // Loop over all pairs (i, j) and (k, l) to fill v_ijkl_hk with i >= j and k >= l
     for (size_t i = 0; i < norb; ++i) {
         for (size_t j = 0; j <= i; ++j) {

@@ -3,6 +3,7 @@
 #include <functional>
 #include <vector>
 #include <cmath>
+#include <optional>
 #include <span>
 
 #include "helpers/ndarray.h"
@@ -60,10 +61,13 @@ class SelectedCIHelper {
     const std::vector<Determinant>& variational_dets() const { return dets_; }
 
     /// @brief Set the Hamiltonian integrals
-    /// @param E Hamiltonian scalar energy
-    /// @param H One-electron integrals
-    /// @param V Two-electron integrals in physicist notation
-    void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
+    /// @param E New Hamiltonian scalar energy, or nullopt to keep the current value
+    /// @param H New one-electron integrals, or nullopt to keep the current value
+    /// @param V New two-electron integrals in physicist notation, or nullopt to keep the
+    ///        current value
+    void set_Hamiltonian(std::optional<double> E = std::nullopt,
+                         std::optional<np_matrix> H = std::nullopt,
+                         std::optional<np_tensor4> V = std::nullopt);
 
     /// @brief Set the CI coefficients
     /// @param c The CI coefficients for the determinants (shape: (n_dets, n_roots))

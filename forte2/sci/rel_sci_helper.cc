@@ -46,52 +46,66 @@ RelSelectedCIHelper::RelSelectedCIHelper(size_t norb, const std::vector<Determin
     prepare_strings();
 }
 
-void RelSelectedCIHelper::set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V) {
-    E_ = E;
-
-    if (H.ndim() != 2) {
-        throw std::runtime_error("H must be a 2D matrix.");
-    }
-    if (H.shape(0) != norb_ || H.shape(1) != norb_) {
-        throw std::runtime_error("H shape does not match the number of orbitals.");
+void RelSelectedCIHelper::set_Hamiltonian(std::optional<double> E,
+                                          std::optional<np_matrix_complex> H,
+                                          std::optional<np_tensor4_complex> V) {
+    if (E) {
+        E_ = *E;
     }
 
-    // Initialize the one-electron integrals epsilon (real) and h (complex).
-    epsilon_.resize(norb_);
-    h_.resize(norb_ * norb_);
-    auto h = H.view();
-    for (size_t p{0}; p < norb_; ++p) {
-        // The diagonal of a Hermitian matrix is real; the PT2 denominator uses only epsilon.
-        epsilon_[p] = h(p, p).real();
-        for (size_t q{0}; q < norb_; ++q) {
-            h_[p * norb_ + q] = h(p, q);
+    if (H) {
+        if (H->ndim() != 2) {
+            throw std::runtime_error("H must be a 2D matrix.");
+        }
+        if (H->shape(0) != norb_ || H->shape(1) != norb_) {
+            throw std::runtime_error("H shape does not match the number of orbitals.");
+        }
+
+        // Initialize the one-electron integrals epsilon (real) and h (complex).
+        epsilon_.resize(norb_);
+        h_.resize(norb_ * norb_);
+        auto h = H->view();
+        for (size_t p{0}; p < norb_; ++p) {
+            // The diagonal of a Hermitian matrix is real; the PT2 denominator uses only epsilon.
+            epsilon_[p] = h(p, p).real();
+            for (size_t q{0}; q < norb_; ++q) {
+                h_[p * norb_ + q] = h(p, q);
+            }
         }
     }
 
-    // Initialize the two-electron integrals v_ = <pq|rs> and v_a_ = <pq||rs>.
-    if (V.ndim() != 4) {
-        throw std::runtime_error("V must be a 4D tensor.");
-    }
-    if (V.shape(0) != norb_ || V.shape(1) != norb_ || V.shape(2) != norb_ || V.shape(3) != norb_) {
-        throw std::runtime_error("V shape does not match the number of orbitals.");
-    }
+    if (V) {
+        // Initialize the two-electron integrals v_ = <pq|rs> and v_a_ = <pq||rs>.
+        if (V->ndim() != 4) {
+            throw std::runtime_error("V must be a 4D tensor.");
+        }
+        if (V->shape(0) != norb_ || V->shape(1) != norb_ || V->shape(2) != norb_ ||
+            V->shape(3) != norb_) {
+            throw std::runtime_error("V shape does not match the number of orbitals.");
+        }
 
-    v_.resize(norb_ * norb_ * norb_ * norb_);
-    v_a_.resize(norb_ * norb_ * norb_ * norb_);
+        v_.resize(norb_ * norb_ * norb_ * norb_);
+        v_a_.resize(norb_ * norb_ * norb_ * norb_);
 
-    auto v = V.view();
-    for (size_t p{0}, pqrs{0}; p < norb_; ++p) {
-        for (size_t q{0}; q < norb_; ++q) {
-            for (size_t r{0}; r < norb_; ++r) {
-                for (size_t s{0}; s < norb_; ++s, ++pqrs) {
-                    v_[pqrs] = v(p, q, r, s);
-                    v_a_[pqrs] = v(p, q, r, s) - v(p, q, s, r);
+        auto v = V->view();
+        for (size_t p{0}, pqrs{0}; p < norb_; ++p) {
+            for (size_t q{0}; q < norb_; ++q) {
+                for (size_t r{0}; r < norb_; ++r) {
+                    for (size_t s{0}; s < norb_; ++s, ++pqrs) {
+                        v_[pqrs] = v(p, q, r, s);
+                        v_a_[pqrs] = v(p, q, r, s) - v(p, q, s, r);
+                    }
                 }
             }
         }
     }
 
-    update_hbci_ints();
+    // va_sorted_ (built in update_hbci_ints) is keyed on |<pq||rs>| alone (unlike the real
+    // helper, this screening key does not use epsilon_), so it only needs rebuilding when V
+    // changes.
+    if (V) {
+        update_hbci_ints();
+    }
 }
 
 void RelSelectedCIHelper::set_frozen_creation(const std::vector<size_t>& frozen_creation) {

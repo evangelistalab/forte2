@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <cmath>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <tuple>
@@ -50,7 +51,14 @@ class CISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
+    /// @param E New scalar energy, or nullopt to keep the current value
+    /// @param H New one-electron integrals, or nullopt to keep the current value
+    /// @param V New two-electron integrals, or nullopt to keep the current value
+    /// @note Any provided H or V triggers a recompute of all derived integral arrays, since
+    /// some of them (e.g. the Knowles-Handy modified one-electron integrals) mix H and V.
+    void set_Hamiltonian(std::optional<double> E = std::nullopt,
+                         std::optional<np_matrix> H = std::nullopt,
+                         std::optional<np_tensor4> V = std::nullopt);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -98,7 +106,8 @@ class CISigmaBuilder {
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = (E + sum_pq H_pq E_pq) |basis>
     /// @note Hamiltonian(basis, sigma) == sigma_one_electron(basis, s1) +
-    /// sigma_two_electron(basis, s2) for s1 + s2. H is not required to be symmetric.
+    /// sigma_two_electron(basis, s2) for s1 + s2.
+    /// The one-electron integrals are not required to be symmetric.
     void sigma_one_electron(np_vector basis, np_vector sigma) const;
 
     /// @brief Apply the two-electron part of the Hamiltonian to the wave function
@@ -355,6 +364,11 @@ class CISigmaBuilder {
     /// @brief Two-electron integrals: V[p][q][r][s] = <pq||rs> = (pr|qs) - (ps|qr)
     mutable std::vector<double> v_pr_qs_a;
 
+    /// @brief Rebuild h_hz from H_. Depends only on H_.
+    void update_h_hz();
+    /// @brief Rebuild v_pr_qs and v_pr_qs_a from V_. Depends only on V_.
+    void update_v_hz();
+
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
     /// @param alpha If true, compute the alpha contribution, otherwise the beta
     /// @param h The one-electron integrals
@@ -376,6 +390,12 @@ class CISigmaBuilder {
     mutable std::vector<double> h_kh;
     // Modified two-electron integrals used in the Knowles-Handy algorithm
     mutable std::vector<double> v_ijkl_hk;
+
+    /// @brief Rebuild h_kh from H_ and V_. Mixes both, so it must be rebuilt whenever either
+    /// one changes.
+    void update_h_kh();
+    /// @brief Rebuild v_ijkl_hk from V_. Depends only on V_.
+    void update_v_kh();
 
     /// @brief Builds the one-electron contribution to the sigma vector using the Knowles-Handy
     /// algorithm.

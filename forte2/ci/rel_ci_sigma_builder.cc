@@ -68,51 +68,58 @@ void RelCISigmaBuilder::set_memory(int mb) {
     std::vector<std::complex<double>>{}.swap(Kblock2_);
 }
 
-void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V) {
-    E_ = E;
-
-    if (H.ndim() != 2) {
-        throw std::runtime_error("H must be a 2D matrix.");
+void RelCISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<np_matrix_complex> H,
+                                        std::optional<np_tensor4_complex> V) {
+    if (E) {
+        E_ = *E;
     }
-    if (H.shape(0) != lists_.norb() || H.shape(1) != lists_.norb()) {
-        throw std::runtime_error("H shape does not match the number of orbitals.");
-    }
-    H_ = H;
-
-    // Initialize the one-electron integrals h_hz
 
     const size_t norb = lists_.norb();
-    h_hz.resize(norb * norb);
-    auto h = H.view();
-    auto v = V.view();
-    for (size_t p = 0; p < norb; ++p) {
-        for (size_t q = 0; q < norb; ++q) {
-            h_hz[p * norb + q] = h(p, q);
+
+    if (H) {
+        if (H->ndim() != 2) {
+            throw std::runtime_error("H must be a 2D matrix.");
+        }
+        if (H->shape(0) != norb || H->shape(1) != norb) {
+            throw std::runtime_error("H shape does not match the number of orbitals.");
+        }
+        H_ = *H;
+
+        // Initialize the one-electron integrals h_hz
+        h_hz.resize(norb * norb);
+        auto h = H_.view();
+        for (size_t p = 0; p < norb; ++p) {
+            for (size_t q = 0; q < norb; ++q) {
+                h_hz[p * norb + q] = h(p, q);
+            }
         }
     }
 
-    // Initialize the two-electron integrals v_pr_qs and v_pr_qs_a
-    if (V.ndim() != 4) {
-        throw std::runtime_error("V must be a 4D tensor.");
-    }
-    if (V.shape(0) != lists_.norb() || V.shape(1) != lists_.norb() || V.shape(2) != lists_.norb() ||
-        V.shape(3) != lists_.norb()) {
-        throw std::runtime_error("V shape does not match the number of orbitals.");
-    }
-    V_ = V;
+    if (V) {
+        if (V->ndim() != 4) {
+            throw std::runtime_error("V must be a 4D tensor.");
+        }
+        if (V->shape(0) != norb || V->shape(1) != norb || V->shape(2) != norb ||
+            V->shape(3) != norb) {
+            throw std::runtime_error("V shape does not match the number of orbitals.");
+        }
+        V_ = *V;
 
-    const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
-    v_pr_qs.resize(npairs * npairs);
+        // Initialize the two-electron integrals v_pr_qs
+        const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
+        v_pr_qs.resize(npairs * npairs);
+        auto v = V_.view();
 
-    // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs with p > r and q > s.
-    // V is given in physicist's notation <pq|rs> and antisymmetrized here on the fly.
-    for (int p = 1; p < norb; ++p) {
-        for (int r = 0; r < p; ++r) {
-            const auto pr_index = (p * (p - 1)) / 2 + r;
-            for (int q = 1; q < norb; ++q) {
-                for (int s = 0; s < q; ++s) {
-                    const auto qs_index = pair_index_gt(q, s);
-                    v_pr_qs[pr_index * npairs + qs_index] = v(p, r, q, s) - v(p, r, s, q);
+        // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs with p > r and q > s.
+        // V is given in physicist's notation <pq|rs> and antisymmetrized here on the fly.
+        for (int p = 1; p < norb; ++p) {
+            for (int r = 0; r < p; ++r) {
+                const auto pr_index = (p * (p - 1)) / 2 + r;
+                for (int q = 1; q < norb; ++q) {
+                    for (int s = 0; s < q; ++s) {
+                        const auto qs_index = pair_index_gt(q, s);
+                        v_pr_qs[pr_index * npairs + qs_index] = v(p, r, q, s) - v(p, r, s, q);
+                    }
                 }
             }
         }

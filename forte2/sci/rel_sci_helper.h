@@ -4,6 +4,7 @@
 #include <functional>
 #include <vector>
 #include <cmath>
+#include <optional>
 #include <span>
 
 #include "helpers/ndarray.h"
@@ -63,7 +64,13 @@ class RelSelectedCIHelper {
     const std::vector<Determinant>& variational_dets() const { return dets_; }
 
     /// @brief Set the Hamiltonian integrals
-    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V);
+    /// @param E New Hamiltonian scalar energy, or nullopt to keep the current value
+    /// @param H New one-electron integrals, or nullopt to keep the current value
+    /// @param V New two-electron integrals in physicist notation, or nullopt to keep the
+    ///        current value
+    void set_Hamiltonian(std::optional<double> E = std::nullopt,
+                         std::optional<np_matrix_complex> H = std::nullopt,
+                         std::optional<np_tensor4_complex> V = std::nullopt);
 
     /// @brief Set the CI coefficients (shape: (n_dets, n_roots))
     void set_c(np_matrix_complex& c);
