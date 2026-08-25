@@ -437,16 +437,16 @@ def _compute_ci_orbital_hessian_vector_product(
     for absolute_root, state_index, root_in_state, coefficient_slice in layout:
         sub_solver = mc.ci_solver.sub_solvers[state_index]
         if state_index not in builders:
+            algorithm = sub_solver.ci_params.ci_algorithm.lower()
             builder = CISigmaBuilder(
                 sub_solver.ci_strings,
                 scalar_response,
                 one_body_response,
                 two_body_response,
                 sub_solver.log_level,
+                "kh" if algorithm == "exact" else algorithm,
             )
             builder.set_memory(sub_solver.ci_params.ci_builder_memory)
-            algorithm = sub_solver.ci_params.ci_algorithm.lower()
-            builder.set_algorithm("kh" if algorithm == "exact" else algorithm)
             builders[state_index] = builder
 
         reference = sub_solver.evecs[:, root_in_state]
