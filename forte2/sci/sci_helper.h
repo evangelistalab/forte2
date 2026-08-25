@@ -339,10 +339,6 @@ class SelectedCIHelper {
 
     /// @brief The scalar energy
     double E_;
-    /// @brief One-electron integrals in the form of a matrix H[p][q] = <p|H|q> = h_pq
-    np_matrix H_;
-    /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
-    np_tensor4 V_;
 
     /// @brief The Slater rules for the current set of determinants
     SlaterRules slater_rules_;

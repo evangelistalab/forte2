@@ -44,8 +44,7 @@ def test_real_sigma_build_against_sparse_ops(algorithm, symmetric_H):
     H, V = _random_real_integrals(rng, norb, symmetric_H)
     E = 0.37
 
-    builder = CISigmaBuilder(lists, E, H, V, 0)
-    builder.set_algorithm(algorithm)
+    builder = CISigmaBuilder(lists, E, H, V, 0, algorithm)
 
     basis = rng.normal(size=lists.ndet)
 
@@ -68,8 +67,7 @@ def test_complex_sigma_build_against_sparse_ops(symmetric_H):
     H, V = _random_complex_integrals(rng, norb, symmetric_H)
     E = 0.37
 
-    builder = RelCISigmaBuilder(lists, E, H, V, 0)
-    builder.set_algorithm("hz")
+    builder = RelCISigmaBuilder(lists, E, H, V, 0, "hz")
 
     basis = rng.normal(size=lists.ndet) + 1j * rng.normal(size=lists.ndet)
 
@@ -95,8 +93,7 @@ def test_sigma_one_two_electron_sum_to_hamiltonian(algorithm, symmetric_H):
     H, V = _random_real_integrals(rng, norb, symmetric_H)
     E = 0.37
 
-    builder = CISigmaBuilder(lists, E, H, V, 0)
-    builder.set_algorithm(algorithm)
+    builder = CISigmaBuilder(lists, E, H, V, 0, algorithm)
 
     basis = rng.normal(size=lists.ndet)
 
@@ -143,42 +140,14 @@ def test_set_hamiltonian_matches_fresh_builder(algorithm):
     H_a, V_a = _random_real_integrals(rng, norb, symmetric_H=True)
     H_b, V_b = _random_real_integrals(rng, norb, symmetric_H=False)
 
-    reused_builder = CISigmaBuilder(lists, 0.1, H_a, V_a, 0)
-    reused_builder.set_algorithm(algorithm)
+    reused_builder = CISigmaBuilder(lists, 0.1, H_a, V_a, 0, algorithm)
     reused_builder.set_Hamiltonian(0.2, H_b, V_b)
 
-    fresh_builder = CISigmaBuilder(lists, 0.2, H_b, V_b, 0)
-    fresh_builder.set_algorithm(algorithm)
+    fresh_builder = CISigmaBuilder(lists, 0.2, H_b, V_b, 0, algorithm)
 
     basis = rng.normal(size=lists.ndet)
     sigma_reused = np.zeros(lists.ndet)
     reused_builder.Hamiltonian(basis, sigma_reused)
-    sigma_fresh = np.zeros(lists.ndet)
-    fresh_builder.Hamiltonian(basis, sigma_fresh)
-
-    np.testing.assert_allclose(sigma_reused, sigma_fresh, rtol=1e-12, atol=1e-12)
-
-
-def test_set_algorithm_after_partial_hamiltonian_update_rebuilds_arrays():
-    """set_Hamiltonian only rebuilds the derived arrays for the currently active algorithm.
-    Switching algorithm afterwards must (re)build the newly active algorithm's arrays from the
-    current H_/V_, including any update made while the other algorithm was active."""
-    norb = 6
-    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
-    rng = np.random.default_rng(12)
-    H_a, V_a = _random_real_integrals(rng, norb, symmetric_H=True)
-    H_b, _ = _random_real_integrals(rng, norb, symmetric_H=False)
-
-    builder = CISigmaBuilder(lists, 0.1, H_a, V_a, 0)  # defaults to "kh"
-    builder.set_Hamiltonian(H=H_b)  # "kh" still active; only H_ and h_kh change
-    builder.set_algorithm("hz")  # must rebuild h_hz/v_pr_qs/v_pr_qs_a from H_b and V_a
-
-    fresh_builder = CISigmaBuilder(lists, 0.1, H_b, V_a, 0)
-    fresh_builder.set_algorithm("hz")
-
-    basis = rng.normal(size=lists.ndet)
-    sigma_reused = np.zeros(lists.ndet)
-    builder.Hamiltonian(basis, sigma_reused)
     sigma_fresh = np.zeros(lists.ndet)
     fresh_builder.Hamiltonian(basis, sigma_fresh)
 
@@ -192,8 +161,7 @@ def test_rel_sigma_one_two_electron_sum_to_hamiltonian():
     H, V = _random_complex_integrals(rng, norb, symmetric_H=True)
     E = -0.11
 
-    builder = RelCISigmaBuilder(lists, E, H, V, 0)
-    builder.set_algorithm("hz")
+    builder = RelCISigmaBuilder(lists, E, H, V, 0, "hz")
 
     basis = rng.normal(size=lists.ndet) + 1j * rng.normal(size=lists.ndet)
 
@@ -217,8 +185,7 @@ def test_rel_sigma_one_electron_matches_hamiltonian_with_zero_V():
     )  # non-Hermitian
     V = np.zeros((norb, norb, norb, norb), dtype=complex)
 
-    builder = RelCISigmaBuilder(lists, 0.0, H, V, 0)
-    builder.set_algorithm("hz")
+    builder = RelCISigmaBuilder(lists, 0.0, H, V, 0, "hz")
     basis = rng.normal(size=lists.ndet) + 1j * rng.normal(size=lists.ndet)
 
     sigma_fused = np.zeros(lists.ndet, dtype=complex)
@@ -236,12 +203,10 @@ def test_rel_set_hamiltonian_matches_fresh_builder():
     H_a, V_a = _random_complex_integrals(rng, norb, symmetric_H=True)
     H_b, V_b = _random_complex_integrals(rng, norb, symmetric_H=True)
 
-    reused_builder = RelCISigmaBuilder(lists, 0.1, H_a, V_a, 0)
-    reused_builder.set_algorithm("hz")
+    reused_builder = RelCISigmaBuilder(lists, 0.1, H_a, V_a, 0, "hz")
     reused_builder.set_Hamiltonian(0.2, H_b, V_b)
 
-    fresh_builder = RelCISigmaBuilder(lists, 0.2, H_b, V_b, 0)
-    fresh_builder.set_algorithm("hz")
+    fresh_builder = RelCISigmaBuilder(lists, 0.2, H_b, V_b, 0, "hz")
 
     basis = rng.normal(size=lists.ndet) + 1j * rng.normal(size=lists.ndet)
     sigma_reused = np.zeros(lists.ndet, dtype=complex)
@@ -252,35 +217,83 @@ def test_rel_set_hamiltonian_matches_fresh_builder():
     np.testing.assert_allclose(sigma_reused, sigma_fresh, rtol=1e-12, atol=1e-12)
 
 
-@pytest.mark.parametrize("which", ["E", "H", "V"])
 @pytest.mark.parametrize("algorithm", ["kh", "hz"])
-def test_set_hamiltonian_partial_update_keeps_other_arguments(algorithm, which):
-    """set_Hamiltonian with only one of E/H/V given must update only that argument, leaving the
-    others at their previous values, exactly as if a fresh builder were constructed with the
-    same effective (E, H, V)."""
+def test_set_hamiltonian_e_only_update_keeps_h_v(algorithm):
+    """E is independent of H/V for both algorithms, so set_Hamiltonian(E=...) alone must work
+    and leave H/V untouched, regardless of algorithm."""
+    norb = 6
+    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
+    rng = np.random.default_rng(6)
+    H, V = _random_real_integrals(rng, norb, symmetric_H=True)
+    E_a, E_b = 0.1, 0.2
+
+    reused_builder = CISigmaBuilder(lists, E_a, H, V, 0, algorithm)
+    reused_builder.set_Hamiltonian(E=E_b)
+
+    fresh_builder = CISigmaBuilder(lists, E_b, H, V, 0, algorithm)
+
+    basis = rng.normal(size=lists.ndet)
+    sigma_reused = np.zeros(lists.ndet)
+    reused_builder.Hamiltonian(basis, sigma_reused)
+    sigma_fresh = np.zeros(lists.ndet)
+    fresh_builder.Hamiltonian(basis, sigma_fresh)
+
+    np.testing.assert_allclose(sigma_reused, sigma_fresh, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize("which", ["H", "V"])
+def test_hz_set_hamiltonian_partial_update_keeps_other_argument(which):
+    """Harrison-Zarrabian's h_hz and v_pr_qs/v_pr_qs_a depend on only H or only V respectively,
+    so set_Hamiltonian with just one of them given must update only that argument."""
     norb = 6
     lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(6)
     H_a, V_a = _random_real_integrals(rng, norb, symmetric_H=True)
     H_b, V_b = _random_real_integrals(rng, norb, symmetric_H=False)
-    E_a, E_b = 0.1, 0.2
 
-    reused_builder = CISigmaBuilder(lists, E_a, H_a, V_a, 0)
-    reused_builder.set_algorithm(algorithm)
-    reused_builder.set_Hamiltonian(**{which: {"E": E_b, "H": H_b, "V": V_b}[which]})
+    reused_builder = CISigmaBuilder(lists, 0.1, H_a, V_a, 0, "hz")
+    reused_builder.set_Hamiltonian(**{which: {"H": H_b, "V": V_b}[which]})
 
     fresh_builder = CISigmaBuilder(
         lists,
-        E_b if which == "E" else E_a,
+        0.1,
         H_b if which == "H" else H_a,
         V_b if which == "V" else V_a,
         0,
+        "hz",
     )
-    fresh_builder.set_algorithm(algorithm)
 
     basis = rng.normal(size=lists.ndet)
     sigma_reused = np.zeros(lists.ndet)
     reused_builder.Hamiltonian(basis, sigma_reused)
+    sigma_fresh = np.zeros(lists.ndet)
+    fresh_builder.Hamiltonian(basis, sigma_fresh)
+
+    np.testing.assert_allclose(sigma_reused, sigma_fresh, rtol=1e-12, atol=1e-12)
+
+
+def test_kh_set_hamiltonian_requires_h_and_v_together():
+    """Knowles-Handy's h_kh mixes H and V, and neither is cached between calls, so
+    set_Hamiltonian must reject H-only or V-only updates and accept H-and-V-together."""
+    norb = 6
+    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
+    rng = np.random.default_rng(6)
+    H_a, V_a = _random_real_integrals(rng, norb, symmetric_H=True)
+    H_b, V_b = _random_real_integrals(rng, norb, symmetric_H=False)
+
+    builder = CISigmaBuilder(lists, 0.1, H_a, V_a, 0, "kh")
+
+    with pytest.raises(RuntimeError, match="given together"):
+        builder.set_Hamiltonian(H=H_b)
+    with pytest.raises(RuntimeError, match="given together"):
+        builder.set_Hamiltonian(V=V_b)
+
+    builder.set_Hamiltonian(H=H_b, V=V_b)
+    fresh_builder = CISigmaBuilder(lists, 0.1, H_b, V_b, 0, "kh")
+
+    basis = rng.normal(size=lists.ndet)
+    sigma_reused = np.zeros(lists.ndet)
+    builder.Hamiltonian(basis, sigma_reused)
     sigma_fresh = np.zeros(lists.ndet)
     fresh_builder.Hamiltonian(basis, sigma_fresh)
 
@@ -296,8 +309,7 @@ def test_rel_set_hamiltonian_partial_update_keeps_other_arguments(which):
     H_b, V_b = _random_complex_integrals(rng, norb, symmetric_H=True)
     E_a, E_b = 0.1, 0.2
 
-    reused_builder = RelCISigmaBuilder(lists, E_a, H_a, V_a, 0)
-    reused_builder.set_algorithm("hz")
+    reused_builder = RelCISigmaBuilder(lists, E_a, H_a, V_a, 0, "hz")
     reused_builder.set_Hamiltonian(**{which: {"E": E_b, "H": H_b, "V": V_b}[which]})
 
     fresh_builder = RelCISigmaBuilder(
@@ -306,8 +318,8 @@ def test_rel_set_hamiltonian_partial_update_keeps_other_arguments(which):
         H_b if which == "H" else H_a,
         V_b if which == "V" else V_a,
         0,
+        "hz",
     )
-    fresh_builder.set_algorithm("hz")
 
     basis = rng.normal(size=lists.ndet) + 1j * rng.normal(size=lists.ndet)
     sigma_reused = np.zeros(lists.ndet, dtype=complex)
@@ -395,3 +407,36 @@ def test_rel_sci_helper_set_hamiltonian_partial_update_keeps_other_argument(whic
     np.testing.assert_allclose(
         sigma_reused[1:], sigma_fresh[1:], rtol=1e-12, atol=1e-12
     )
+
+
+@pytest.mark.parametrize("algorithm", ["kh", "hz"])
+def test_constructor_algorithm_is_fixed_for_lifetime(algorithm):
+    """The algorithm is chosen once, at construction, and get_algorithm() must report it;
+    there is no runtime setter to switch it afterwards."""
+    norb = 6
+    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
+    rng = np.random.default_rng(13)
+    H, V = _random_real_integrals(rng, norb, symmetric_H=False)
+    E = 0.3
+
+    builder = CISigmaBuilder(lists, E, H, V, 0, algorithm)
+    assert builder.get_algorithm() == (
+        "Knowles-Handy" if algorithm == "kh" else "Harrison-Zarrabian"
+    )
+    assert not hasattr(builder, "set_algorithm")
+
+    with pytest.raises(RuntimeError):
+        CISigmaBuilder(lists, E, H, V, 0, "not-a-real-algorithm")
+
+
+def test_rel_constructor_algorithm_defaults_to_hz_and_validates():
+    norb = 5
+    lists = CIStrings(3, 0, 0, [[0] * norb], [], [])
+    rng = np.random.default_rng(14)
+    H, V = _random_complex_integrals(rng, norb, symmetric_H=True)
+
+    builder = RelCISigmaBuilder(lists, 0.1, H, V, 0, "hz")
+    assert builder.get_algorithm() == "Harrison-Zarrabian"
+
+    with pytest.raises(RuntimeError):
+        RelCISigmaBuilder(lists, 0.1, H, V, 0, "kh")

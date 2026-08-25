@@ -75,12 +75,6 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
         self.b_det = np.zeros((self.ndet,), dtype=self.dtype)
         self.sigma_det = np.zeros((self.ndet,), dtype=self.dtype)
 
-    def _select_algorithm(self):
-        # the C++ builder only implements Harrison-Zarrabian in the spinor basis;
-        # "sparse" is a Python-side path that still needs "hz" configured here
-        self.ci_sigma_builder.set_algorithm("hz")
-        return self.ci_sigma_builder.get_algorithm()
-
     def _form_hdiag(self):
         return self.ci_sigma_builder.form_Hdiag(self.dets)
 

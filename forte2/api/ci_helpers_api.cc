@@ -88,11 +88,9 @@ void export_ci_strings_api(nb::module_& sub_m) {
 
 void export_ci_sigma_builder_api(nb::module_& sub_m) {
     nb::class_<CISigmaBuilder>(sub_m, "CISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int>(), "lists"_a, "E"_a,
-             "H"_a, "V"_a, "log_level"_a = 3,
+        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int, const std::string&>(),
+             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "algorithm"_a = "kh",
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
-        .def("set_algorithm", &CISigmaBuilder::set_algorithm, "algorithm"_a,
-             "Set the sigma build algorithm (options = kh, hz)")
         .def("get_algorithm", &CISigmaBuilder::get_algorithm,
              "Get the current sigma build algorithm")
         .def("set_memory", &CISigmaBuilder::set_memory, "memory"_a,
@@ -211,11 +209,10 @@ void export_ci_spin_adapter_api(nb::module_& sub_m) {
 
 void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
     nb::class_<RelCISigmaBuilder>(sub_m, "RelCISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int>(),
-             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
+        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int,
+                      const std::string&>(),
+             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "algorithm"_a = "hz",
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
-        .def("set_algorithm", &RelCISigmaBuilder::set_algorithm, "algorithm"_a,
-             "Set the sigma build algorithm (options = kh, hz)")
         .def("get_algorithm", &RelCISigmaBuilder::get_algorithm,
              "Get the current sigma build algorithm")
         .def("set_memory", &RelCISigmaBuilder::set_memory, "memory"_a,

@@ -54,12 +54,10 @@ void SelectedCIHelper::set_Hamiltonian(std::optional<double> E, std::optional<np
         if (H->shape(0) != norb_ || H->shape(1) != norb_) {
             throw std::runtime_error("H shape does not match the number of orbitals.");
         }
-        H_ = *H;
-
         // Initialize the one-electron integrals epsilon and h
         epsilon_.resize(norb_);
         h_.resize(norb_ * norb_);
-        auto h = H_.view();
+        auto h = H->view();
         for (size_t p{0}; p < norb_; ++p) {
             epsilon_[p] = h(p, p);
             for (size_t q{0}; q < norb_; ++q) {
@@ -76,13 +74,11 @@ void SelectedCIHelper::set_Hamiltonian(std::optional<double> E, std::optional<np
             V->shape(3) != norb_) {
             throw std::runtime_error("V shape does not match the number of orbitals.");
         }
-        V_ = *V;
-
         v_.resize(norb_ * norb_ * norb_ * norb_); // V[p][q][r][s] = <pq|rs>
         v_a_.resize(norb_ * norb_ * norb_ *
                     norb_); // V_a[p][q][r][s] = <pq||rs> = <pq|rs> - <pq|sr>
 
-        auto v = V_.view();
+        auto v = V->view();
         // Loop over all pairs (p, r) and (q, s) to fill v_
         for (size_t p{0}, pqrs{0}; p < norb_; ++p) {
             for (size_t q{0}; q < norb_; ++q) {

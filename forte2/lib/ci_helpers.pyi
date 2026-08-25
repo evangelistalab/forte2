@@ -130,13 +130,10 @@ class CIStrings:
     def make_determinants(self) -> DeterminantVector: ...
 
 class CISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3, algorithm: str = 'kh') -> None:
         """
         Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
         """
-
-    def set_algorithm(self, algorithm: str) -> None:
-        """Set the sigma build algorithm (options = kh, hz)"""
 
     def get_algorithm(self) -> str:
         """Get the current sigma build algorithm"""
@@ -315,13 +312,10 @@ class CISpinAdapter:
         """Set the logging level for the class"""
 
 class RelCISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, algorithm: str = 'hz') -> None:
         """
         Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
         """
-
-    def set_algorithm(self, algorithm: str) -> None:
-        """Set the sigma build algorithm (options = kh, hz)"""
 
     def get_algorithm(self) -> str:
         """Get the current sigma build algorithm"""

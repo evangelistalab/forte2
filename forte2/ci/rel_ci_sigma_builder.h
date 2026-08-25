@@ -19,21 +19,17 @@ namespace forte2 {
 class RelCISigmaBuilder {
   public:
     // == Class Constructor ==
+    /// @param algorithm The CI algorithm to use, fixed for the object's lifetime (default and
+    ///        only supported value is "hz"/"harrison-zarrabian"; Knowles-Handy is unported from
+    ///        the non-relativistic CISigmaBuilder, so "kh"/"knowles-handy" raises)
     RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H, np_tensor4_complex& V,
-                      int log_level = 3);
+                      int log_level = 3, const std::string& algorithm = "hz");
 
     // == Class Public Functions ==
 
     /// @brief Set the memory size for temporary buffers in bytes. Use before calling Hamiltonian().
     /// @param mb Memory size in megabytes (default is 1 GB)
     void set_memory(int mb);
-
-    /// @brief Set the CI algorithm to use for building the Hamiltonian
-    /// @param algorithm The CI algorithm to use (default and only supported value is
-    ///        "harrison-zarrabian")
-    /// @note Knowles-Handy is unported from the non-relativistic CISigmaBuilder; "kh"/
-    /// "knowles-handy" raises here rather than being accepted and silently doing nothing.
-    void set_algorithm(const std::string& algorithm);
 
     /// @brief Get the name of the current sigma build algorithm
     /// @return The name of the current sigma build algorithm
@@ -74,9 +70,7 @@ class RelCISigmaBuilder {
     /// @brief Apply the scalar and one-electron part of the Hamiltonian to the wave function
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = (E + sum_pq H_pq E_pq) |basis>
-    /// @note Hamiltonian(basis, sigma) == sigma_one_electron(basis, s1) +
-    /// sigma_two_electron(basis, s2) for s1 + s2. 
-    /// The one-electron integrals are not required to be Hermitian.
+    /// @note The one-electron integrals are not required to be Hermitian.
     void sigma_one_electron(np_vector_complex basis, np_vector_complex sigma) const;
 
     /// @brief Apply the two-electron part of the Hamiltonian to the wave function
@@ -137,17 +131,12 @@ class RelCISigmaBuilder {
     // == Class Private Variables ==
 
     /// @brief The CI algorithm to use for building the Hamiltonian
-    // Default to Harrison-Zarrabian: Knowles-Handy is unimplemented for this class (see
-    // set_algorithm).
+    // Default to Harrison-Zarrabian: Knowles-Handy is unimplemented for this class.
     CIAlgorithm algorithm_ = CIAlgorithm::Harrison_Zarrabian;
     /// @brief The CIStrings object containing the determinant classes and their properties
     const CIStrings& lists_;
     /// @brief The scalar energy
     double E_;
-    /// @brief One-electron integrals in the form of a matrix H[p][q] = <p|H|q> = h_pq
-    np_matrix_complex H_;
-    /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
-    np_tensor4_complex V_;
     /// @brief Object for computing the energy and Slater determinants
     RelSlaterRules rel_slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
@@ -180,6 +169,11 @@ class RelCISigmaBuilder {
     mutable std::vector<std::complex<double>> h_hz;
     /// @brief Two-electron integrals: V[p][q][r][s] = <pq||rs> = (pr|qs) - (ps|qr)
     mutable std::vector<std::complex<double>> v_pr_qs;
+
+    /// @brief Rebuild h_hz from H. Depends only on H.
+    void update_h_hz(np_matrix_complex& H);
+    /// @brief Rebuild v_pr_qs from V. Depends only on V.
+    void update_v_hz(np_tensor4_complex& V);
 
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
     /// @param basis The basis vector

@@ -108,12 +108,17 @@ class _CISingleStateSolver:
 
     def _make_sigma_builder_obj(self):
         """Construct the C++ sigma builder for the current integrals."""
+        algorithm = self.ci_params.ci_algorithm.lower()
+        if algorithm not in ("kh", "hz", "knowles-handy", "harrison-zarrabian"):
+            # e.g. "exact": the iterative sigma-build algorithm is unused on that path
+            algorithm = "kh"
         return self._sigma_builder_cls(
             self.ci_strings,
             self.ints.E,
             self.ints.H,
             self.ints.V,
             self.log_level,
+            algorithm,
         )
 
     def _make_ci_strings(self):
@@ -207,11 +212,6 @@ class _CISingleStateSolver:
 
         return self
 
-    def _select_algorithm(self):
-        """Configure the sigma builder's algorithm and return its name."""
-        self.ci_sigma_builder.set_algorithm(self.ci_params.ci_algorithm.lower())
-        return self.ci_sigma_builder.get_algorithm()
-
     def _form_hdiag(self):
         """Diagonal of the Hamiltonian in the variational (CSF) basis."""
         return self.ci_sigma_builder.form_Hdiag_csf(
@@ -248,7 +248,7 @@ class _CISingleStateSolver:
         Harrison-Zarrabian or Knowles-Handy sigma builder algorithm.
         """
         logger.log(
-            f"Using CI algorithm: {self._select_algorithm()}",
+            f"Using CI algorithm: {self.ci_sigma_builder.get_algorithm()}",
             self.log_level,
         )
 

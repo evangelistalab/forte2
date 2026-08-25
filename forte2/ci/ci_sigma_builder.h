@@ -32,19 +32,16 @@ enum class CIAlgorithm {
 class CISigmaBuilder {
   public:
     // == Class Constructor ==
-    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
-                   int log_level = 3);
+    /// @param algorithm The CI algorithm to use, fixed for the object's lifetime.
+    ///        Supported: "kh", "hz", "knowles-handy", "harrison-zarrabian" (default is "hz")
+    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V, int log_level = 3,
+                   const std::string& algorithm = "hz");
 
     // == Class Public Functions ==
 
     /// @brief Set the memory size for temporary buffers in bytes. Use before calling Hamiltonian().
     /// @param mb Memory size in megabytes (default is 1 GB)
     void set_memory(int mb);
-
-    /// @brief Set the CI algorithm to use for building the Hamiltonian
-    /// @param algorithm The CI algorithm to use (default is "knowles-handy")
-    /// Supported algorithms: "kh", "hz", "knowles-handy", "harrison-zarrabian"
-    void set_algorithm(const std::string& algorithm);
 
     /// @brief Get the name of the current sigma build algorithm
     /// @return The name of the current sigma build algorithm
@@ -54,8 +51,10 @@ class CISigmaBuilder {
     /// @param E New scalar energy, or nullopt to keep the current value
     /// @param H New one-electron integrals, or nullopt to keep the current value
     /// @param V New two-electron integrals, or nullopt to keep the current value
-    /// @note Any provided H or V triggers a recompute of all derived integral arrays, since
-    /// some of them (e.g. the Knowles-Handy modified one-electron integrals) mix H and V.
+    /// @note With the Knowles-Handy algorithm, H and V must be given together (or not at all):
+    /// its modified one-electron integrals mix both, and neither is cached between calls, so
+    /// there is nothing to fall back on for the one not supplied. Harrison-Zarrabian has no such
+    /// restriction since H and V feed independent derived arrays.
     void set_Hamiltonian(std::optional<double> E = std::nullopt,
                          std::optional<np_matrix> H = std::nullopt,
                          std::optional<np_tensor4> V = std::nullopt);
@@ -105,9 +104,7 @@ class CISigmaBuilder {
     /// @brief Apply the scalar and one-electron part of the Hamiltonian to the wave function
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = (E + sum_pq H_pq E_pq) |basis>
-    /// @note Hamiltonian(basis, sigma) == sigma_one_electron(basis, s1) +
-    /// sigma_two_electron(basis, s2) for s1 + s2.
-    /// The one-electron integrals are not required to be symmetric.
+    /// @note The one-electron integrals are not required to be symmetric.
     void sigma_one_electron(np_vector basis, np_vector sigma) const;
 
     /// @brief Apply the two-electron part of the Hamiltonian to the wave function
@@ -316,10 +313,6 @@ class CISigmaBuilder {
     const CIStrings& lists_;
     /// @brief The scalar energy
     double E_;
-    /// @brief One-electron integrals in the form of a matrix H[p][q] = <p|H|q> = h_pq
-    np_matrix H_;
-    /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
-    np_tensor4 V_;
     /// @brief Object for computing the energy and Slater determinants
     SlaterRules slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
@@ -364,10 +357,10 @@ class CISigmaBuilder {
     /// @brief Two-electron integrals: V[p][q][r][s] = <pq||rs> = (pr|qs) - (ps|qr)
     mutable std::vector<double> v_pr_qs_a;
 
-    /// @brief Rebuild h_hz from H_. Depends only on H_.
-    void update_h_hz();
-    /// @brief Rebuild v_pr_qs and v_pr_qs_a from V_. Depends only on V_.
-    void update_v_hz();
+    /// @brief Rebuild h_hz from H. Depends only on H.
+    void update_h_hz(np_matrix& H);
+    /// @brief Rebuild v_pr_qs and v_pr_qs_a from V. Depends only on V.
+    void update_v_hz(np_tensor4& V);
 
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
     /// @param alpha If true, compute the alpha contribution, otherwise the beta
@@ -391,11 +384,11 @@ class CISigmaBuilder {
     // Modified two-electron integrals used in the Knowles-Handy algorithm
     mutable std::vector<double> v_ijkl_hk;
 
-    /// @brief Rebuild h_kh from H_ and V_. Mixes both, so it must be rebuilt whenever either
-    /// one changes.
-    void update_h_kh();
-    /// @brief Rebuild v_ijkl_hk from V_. Depends only on V_.
-    void update_v_kh();
+    /// @brief Rebuild h_kh from H and V. Mixes both, so set_Hamiltonian requires both to be
+    /// given together whenever this algorithm is active.
+    void update_h_kh(np_matrix& H, np_tensor4& V);
+    /// @brief Rebuild v_ijkl_hk from V. Depends only on V.
+    void update_v_kh(np_tensor4& V);
 
     /// @brief Builds the one-electron contribution to the sigma vector using the Knowles-Handy
     /// algorithm.

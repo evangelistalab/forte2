@@ -13,9 +13,18 @@
 namespace forte2 {
 
 RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H,
-                                     np_tensor4_complex& V, int log_level)
-    : lists_(lists), E_(E), H_(H), V_(V), rel_slater_rules_(lists.norb(), E, H, V),
-      log_level_(log_level) {
+                                     np_tensor4_complex& V, int log_level,
+                                     const std::string& algorithm)
+    : lists_(lists), E_(E), rel_slater_rules_(lists.norb(), E, H, V), log_level_(log_level) {
+    if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
+        algorithm_ = CIAlgorithm::Harrison_Zarrabian;
+    } else if (algorithm == "kh" or algorithm == "knowles-handy") {
+        throw std::runtime_error("Knowles-Handy algorithm is not implemented for "
+                                 "RelCISigmaBuilder; use 'hz' (Harrison-Zarrabian).");
+    } else {
+        throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
+    }
+
     // Two-component (relativistic) CI treats every electron as an alpha spinor, so the beta space
     // is the single vacuum string (nb == 0). The sigma/RDM builders rely on this: the opposite-spin
     // spectator string count is always 1.
@@ -37,17 +46,6 @@ RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix
     TL.resize(max_size);
 
     set_Hamiltonian(E, H, V);
-}
-
-void RelCISigmaBuilder::set_algorithm(const std::string& algorithm) {
-    if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
-        algorithm_ = CIAlgorithm::Harrison_Zarrabian;
-    } else if (algorithm == "kh" or algorithm == "knowles-handy") {
-        throw std::runtime_error("Knowles-Handy algorithm is not implemented for "
-                                 "RelCISigmaBuilder; use 'hz' (Harrison-Zarrabian).");
-    } else {
-        throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
-    }
 }
 
 std::string RelCISigmaBuilder::get_algorithm() const {
@@ -83,16 +81,7 @@ void RelCISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<n
         if (H->shape(0) != norb || H->shape(1) != norb) {
             throw std::runtime_error("H shape does not match the number of orbitals.");
         }
-        H_ = *H;
-
-        // Initialize the one-electron integrals h_hz
-        h_hz.resize(norb * norb);
-        auto h = H_.view();
-        for (size_t p = 0; p < norb; ++p) {
-            for (size_t q = 0; q < norb; ++q) {
-                h_hz[p * norb + q] = h(p, q);
-            }
-        }
+        update_h_hz(*H);
     }
 
     if (V) {
@@ -103,23 +92,36 @@ void RelCISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<n
             V->shape(3) != norb) {
             throw std::runtime_error("V shape does not match the number of orbitals.");
         }
-        V_ = *V;
+        update_v_hz(*V);
+    }
+}
 
-        // Initialize the two-electron integrals v_pr_qs
-        const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
-        v_pr_qs.resize(npairs * npairs);
-        auto v = V_.view();
+void RelCISigmaBuilder::update_h_hz(np_matrix_complex& H) {
+    const size_t norb = lists_.norb();
+    h_hz.resize(norb * norb);
+    auto h = H.view();
+    for (size_t p = 0; p < norb; ++p) {
+        for (size_t q = 0; q < norb; ++q) {
+            h_hz[p * norb + q] = h(p, q);
+        }
+    }
+}
 
-        // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs with p > r and q > s.
-        // V is given in physicist's notation <pq|rs> and antisymmetrized here on the fly.
-        for (int p = 1; p < norb; ++p) {
-            for (int r = 0; r < p; ++r) {
-                const auto pr_index = (p * (p - 1)) / 2 + r;
-                for (int q = 1; q < norb; ++q) {
-                    for (int s = 0; s < q; ++s) {
-                        const auto qs_index = pair_index_gt(q, s);
-                        v_pr_qs[pr_index * npairs + qs_index] = v(p, r, q, s) - v(p, r, s, q);
-                    }
+void RelCISigmaBuilder::update_v_hz(np_tensor4_complex& V) {
+    const size_t norb = lists_.norb();
+    const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
+    v_pr_qs.resize(npairs * npairs);
+    auto v = V.view();
+
+    // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs with p > r and q > s.
+    // V is given in physicist's notation <pq|rs> and antisymmetrized here on the fly.
+    for (int p = 1; p < norb; ++p) {
+        for (int r = 0; r < p; ++r) {
+            const auto pr_index = (p * (p - 1)) / 2 + r;
+            for (int q = 1; q < norb; ++q) {
+                for (int s = 0; s < q; ++s) {
+                    const auto qs_index = pair_index_gt(q, s);
+                    v_pr_qs[pr_index * npairs + qs_index] = v(p, r, q, s) - v(p, r, s, q);
                 }
             }
         }
