@@ -1,15 +1,51 @@
+import warnings
+from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.linalg import logm, polar, schur
+from scipy.linalg import logm, schur
 
 from .orbital_overlap import mo_overlap
 
 
+@dataclass
+class BiorthogonalOrbitals:
+    r"""
+    The output of :func:`biorthogonalize_casscf_orbitals`: the assembled
+    transformations plus the active-space factors they were built from.
+
+    The active-active block of ``C_XA`` is exactly ``U_actv_A``, and that of
+    ``C_YB`` is exactly ``U_actv_B @ diag(1 / d_actv)``. Keeping the factors
+    is what lets :func:`casscf_wavefunction_overlap` apply an orthogonal
+    rotation and a diagonal rescale as two separate, well-conditioned steps
+    (Malmqvist's Appendix, steps 4-6) instead of taking a single matrix
+    logarithm of their product.
+
+    Attributes
+    ----------
+    C_XA, C_YB : NDArray
+        Transformations from orbital sets X and Y to the biorthonormal bases
+        A and B, each of shape ``(ndocc + nactv, ndocc + nactv)``.
+    U_actv_A, U_actv_B : NDArray
+        The orthogonal (unitary) active-space factors, shape
+        ``(nactv, nactv)``. Either may be improper (determinant -1).
+    d_actv : NDArray
+        The strictly positive singular values of the modified active-active
+        overlap block, shape ``(nactv,)``. Only the B side is rescaled by
+        these, following Malmqvist.
+    """
+
+    C_XA: NDArray
+    C_YB: NDArray
+    U_actv_A: NDArray
+    U_actv_B: NDArray
+    d_actv: NDArray
+
+
 def biorthogonalize_casscf_orbitals(
     S: NDArray, ndocc: int, nactv: int
-) -> tuple[NDArray, NDArray]:
+) -> BiorthogonalOrbitals:
     r"""
     Build a biorthonormalizing pair of orbital transformations for two CASSCF
     orbital sets with matching inactive/active partitions.
@@ -46,12 +82,9 @@ def biorthogonalize_casscf_orbitals(
 
     Returns
     -------
-    C_XA : NDArray
-        Transformation from X to the biorthonormal basis A, shape
-        ``(ndocc + nactv, ndocc + nactv)``.
-    C_YB : NDArray
-        Transformation from Y to the biorthonormal basis B, shape
-        ``(ndocc + nactv, ndocc + nactv)``.
+    BiorthogonalOrbitals
+        The two transformations and the active-space orthogonal/singular-value
+        factors they were assembled from.
 
     Raises
     ------
@@ -70,6 +103,11 @@ def biorthogonalize_casscf_orbitals(
     solution, but callers exponentiating the corresponding generator (e.g.
     :func:`transform_ci_vector_direct`) handle this via scaling-and-squaring
     rather than requiring a small angle.
+
+    References
+    ----------
+    P.-A. Malmqvist, Int. J. Quantum Chem. 30, 479 (1986); the numbered steps
+    below follow the Appendix, Eqs. (A.1)-(A.7).
     """
     n = ndocc + nactv
     S = np.asarray(S)
@@ -84,30 +122,33 @@ def biorthogonalize_casscf_orbitals(
     S_TI = S[actv, docc]
     S_TT = S[actv, actv]
 
-    # Step 1: corresponding orbitals within the inactive block only.
+    # Step 1 (A.2): corresponding orbitals within the inactive block only.
     U1I, D_I, U2I_h = np.linalg.svd(S_II)
     U2I = U2I_h.conj().T
     _check_nonsingular(D_I, "inactive-inactive overlap block")
 
-    # Step 2: modified active-active block, correcting for inactive admixture.
+    # Step 2 (A.3): modified active-active block, correcting for inactive admixture.
     S_TT_mod = S_TT - S_TI @ U2I @ np.diag(1.0 / D_I) @ U1I.conj().T @ S_IT
 
-    # Step 3: corresponding orbitals for the modified active-active block.
+    # Step 3 (A.4): corresponding orbitals for the modified active-active block.
     U1T, D_T, U2T_h = np.linalg.svd(S_TT_mod)
     U2T = U2T_h.conj().T
     _check_nonsingular(D_T, "modified active-active overlap block")
 
-    # Step 4: pseudo-corresponding (still orthonormal) orbitals, and the
+    # Step 4 (A.5): pseudo-corresponding (still orthonormal) orbitals, and the
     # mixed inactive-active overlaps in that basis. These are two independent
     # blocks (P1 and P2 are different orbital sets, so S^{P1P2} need not be
     # Hermitian): S_IT_P1P2 = <P1-docc|P2-active>, S_TI_P1P2 = <P1-active|P2-docc>.
     S_IT_P1P2 = U1I.conj().T @ S_IT @ U2T  # (ndocc, nactv)
     S_TI_P1P2 = U1T.conj().T @ S_TI @ U2I  # (nactv, ndocc)
 
-    # Step 5: shift to the nonorthogonal basis. New docc orbitals are left
+    # Step 5 (A.6): shift to the nonorthogonal basis. New docc orbitals are left
     # untouched (pure old-docc combinations); new active orbitals of each side
     # pick up an admixture of the (unchanged) new-docc orbitals of that same
-    # side, chosen to cancel the inactive-active overlap blocks.
+    # side, chosen to cancel the inactive-active overlap blocks. This shift
+    # leaves the CI expansion itself unaltered: adding a multiple of an
+    # always-fully-occupied orbital to another occupied orbital does not change
+    # a Slater determinant.
     invD_I = 1.0 / D_I
     M_A = -np.diag(invD_I) @ S_TI_P1P2.conj().T  # (ndocc, nactv), A side
     M_B = -np.diag(invD_I) @ S_IT_P1P2  # (ndocc, nactv), B side
@@ -122,12 +163,14 @@ def biorthogonalize_casscf_orbitals(
     C_YB[docc, actv] = U2I @ M_B
     C_YB[actv, actv] = U2T
 
-    # Step 6: rescale the B side by the diagonal so that S^{AB} = 1 exactly
+    # Step 6 (A.7): rescale the B side by the diagonal so that S^{AB} = 1 exactly
     # (after step 5, S^{AB} = diag(D_I, D_T)).
     d = np.concatenate([D_I, D_T])
     C_YB = C_YB @ np.diag(1.0 / d)
 
-    return C_XA, C_YB
+    return BiorthogonalOrbitals(
+        C_XA=C_XA, C_YB=C_YB, U_actv_A=U1T, U_actv_B=U2T, d_actv=D_T
+    )
 
 
 def _check_nonsingular(singular_values: NDArray, name: str, tol: float = 1e-10) -> None:
@@ -236,97 +279,29 @@ def _real_orthogonal_logm(Q: NDArray, tol: float = 1e-10) -> NDArray:
     return Z @ K @ Z.T
 
 
-def _real_symmetric_logm(P: NDArray, tol: float = 1e-12) -> NDArray:
-    """
-    Real logarithm of a symmetric positive-definite matrix ``P``, via
-    eigendecomposition. Always real and well-defined (eigenvalues of a
-    positive-definite matrix are strictly positive, so this never touches the
-    negative-real-axis branch cut that affects the general/orthogonal cases).
-    """
-    P = np.asarray(P)
-    w, V = np.linalg.eigh(P)
-    if np.any(w <= tol):
-        raise np.linalg.LinAlgError(
-            f"P is not positive definite (smallest eigenvalue {np.min(w):.3e})."
-        )
-    return V @ np.diag(np.log(w)) @ V.T
-
-
 def _robust_orthogonal_steps(Q: NDArray, tol: float = 1e-10) -> list[tuple]:
     """
     Decompose an orthogonal matrix ``Q`` into an ordered sequence of CI-vector
     steps -- ``("reflect",)`` and/or ``("generator", t)`` -- whose composed
     application (in the returned order) represents ``Q``.
 
-    Handles both the genuine absence of a real antisymmetric logarithm for an
-    improper ``Q`` (:math:`\\det Q < 0`: no real matrix exponentiates to a
-    negative determinant) and ``scipy.linalg.logm``'s branch-cut artifacts for
-    a proper ``Q`` with an eigenvalue near -1 (see
-    :func:`_real_orthogonal_logm`), by factoring an improper ``Q`` as
-    ``Q = F @ R`` (``F`` flips the sign of active orbital 0, chosen
-    arbitrarily among equally valid reflections; ``R`` proper) and logging
-    ``R`` via :func:`_real_orthogonal_logm`. Because orbitals transform via
-    right-multiplication (:math:`\\varphi^{new} = \\varphi^{old} M`), the
-    CI-vector representation of a product ``M1 @ M2`` applies as
-    ``rho[M2] . rho[M1]`` (an anti-homomorphism), so for ``Q = F @ R`` the
-    reflection is applied to the CI vector *before* ``R``'s generator.
+    An improper ``Q`` (:math:`\\det Q < 0`) has no real antisymmetric
+    logarithm at all, since :math:`\\det(\\exp \\kappa) = \\exp(\\Tr \\kappa) > 0`
+    for real :math:`\\kappa`. Such a ``Q`` is factored as ``Q = F @ R``
+    (``F`` flips the sign of active orbital 0, chosen arbitrarily among
+    equally valid reflections; ``R`` proper), and ``R`` is logged via
+    :func:`_real_orthogonal_logm`, which is branch-cut free. Because orbitals
+    transform via right-multiplication
+    (:math:`\\varphi^{new} = \\varphi^{old} M`), the CI-vector representation
+    of a product ``M1 @ M2`` applies as ``rho[M2] . rho[M1]`` (an
+    anti-homomorphism), so for ``Q = F @ R`` the reflection is applied to the
+    CI vector *before* ``R``'s generator.
     """
     if np.linalg.det(Q) < 0:
         F0 = np.eye(Q.shape[0])
         F0[0, 0] = -1.0
         return [("reflect",), ("generator", _real_orthogonal_logm(F0 @ Q, tol=tol))]
     return [("generator", _real_orthogonal_logm(Q, tol=tol))]
-
-
-def _robust_real_logm(M: NDArray, tol: float = 1e-8) -> list[tuple]:
-    """
-    Decompose a real, invertible matrix ``M`` into an ordered sequence of
-    CI-vector steps -- ``("reflect",)`` and/or ``("generator", t)`` -- whose
-    composed application (in the returned order) represents ``M``, working
-    around ``scipy.linalg.logm``'s branch-cut artifacts and the genuine
-    absence of a real logarithm for matrices with a component like an
-    improper rotation (see :func:`_robust_orthogonal_steps`).
-
-    ``scipy.linalg.logm(M)`` is tried first (fast path, correct for almost
-    all inputs). If that comes back non-negligibly complex and ``M`` is
-    orthogonal, :func:`_robust_orthogonal_steps` handles it directly -- the
-    case actually produced by :func:`biorthogonalize_casscf_orbitals` for
-    ``C_XA``'s active-active block (always exactly an SVD orthogonal factor)
-    and for ``C_YB``'s whenever the corresponding singular values are all 1
-    (e.g. comparing two identical or near-identical orbital sets). Otherwise,
-    ``M`` is factored via the polar decomposition ``M = Q @ P`` (``Q``
-    orthogonal, ``P`` symmetric positive-definite -- always possible for
-    invertible ``M``, and exactly recovers ``C_YB``'s actual construction, an
-    SVD orthogonal factor times a positive diagonal rescale, when that block's
-    naive ``logm`` also hits a branch cut). ``P``'s generator is always
-    well-behaved (:func:`_real_symmetric_logm`); ``Q``'s is handled by
-    :func:`_robust_orthogonal_steps`. Using the same right-multiplication
-    composition rule as there, for ``M = Q @ P`` the returned step order
-    applies ``Q``'s steps first, then ``P``'s generator.
-
-    Parameters
-    ----------
-    M : NDArray
-        A real, invertible matrix.
-    tol : float, optional
-        Tolerance for judging ``logm(M)``'s imaginary part negligible, and
-        for judging ``M`` numerically orthogonal.
-
-    Returns
-    -------
-    list[tuple]
-        An ordered sequence of ``("reflect",)`` / ``("generator", t)`` steps.
-    """
-    result = logm(M)
-    if not np.iscomplexobj(result) or np.max(np.abs(result.imag)) <= tol:
-        return [("generator", np.asarray(np.real(result)))]
-    if np.allclose(M @ M.T, np.eye(M.shape[0]), atol=tol):
-        return _robust_orthogonal_steps(M, tol=tol)
-
-    Q, P = polar(M)
-    return _robust_orthogonal_steps(Q, tol=tol) + [
-        ("generator", _real_symmetric_logm(P, tol=tol))
-    ]
 
 
 def _apply_orbital0_reflection(ci_strings, C: NDArray) -> NDArray:
@@ -336,11 +311,48 @@ def _apply_orbital0_reflection(ci_strings, C: NDArray) -> NDArray:
     occupation of orbital 0. This is the exact, closed-form representation of
     a single-orbital reflection (:math:`\\det = -1`, an improper
     transformation with no real antisymmetric generator), needed as a
-    companion to :func:`_robust_real_logm`'s improper-matrix branch.
+    companion to :func:`_robust_orthogonal_steps`'s improper-matrix branch.
     """
     dets = ci_strings.make_determinants()
     sign = np.array([(-1) ** (int(d.na(0)) + int(d.nb(0))) for d in dets], dtype=float)
     return np.asarray(C) * sign
+
+
+def _apply_active_scaling(ci_strings, C: NDArray, d: NDArray) -> NDArray:
+    r"""
+    The CI-vector action of the diagonal active-orbital rescale
+    :math:`\varphi_t \to \varphi_t / d_t`: multiplies each determinant's
+    coefficient by :math:`\prod_t d_t^{n_t}`, with :math:`n_t` its occupation
+    of active orbital ``t``.
+
+    This is Malmqvist's Appendix step 6 in closed form. The equivalent
+    generator route -- exponentiating :math:`\log \operatorname{diag}(1/d)` --
+    needs a Taylor series whose cost grows with the spread of ``d``, and is
+    the single worst-conditioned piece of the whole transformation when the
+    two active spaces differ substantially. Here it costs one pass over the
+    determinant list.
+
+    Parameters
+    ----------
+    ci_strings : forte2.lib.ci_helpers.CIStrings
+        The determinant list ``C`` is expressed in.
+    C : NDArray
+        The active-space CI vector, shape ``(ndet,)``.
+    d : NDArray
+        The strictly positive active-space singular values, shape ``(nactv,)``.
+
+    Returns
+    -------
+    NDArray
+        The rescaled CI vector.
+    """
+    dets = ci_strings.make_determinants()
+    log_d = np.log(d)
+    exponents = np.array(
+        [[int(det.na(t)) + int(det.nb(t)) for t in range(len(d))] for det in dets],
+        dtype=float,
+    )
+    return np.asarray(C) * np.exp(exponents @ log_d)
 
 
 # -- Ground-truth backend (generic sparse-operator machinery) --------------
@@ -610,26 +622,30 @@ def transform_ci_vector_direct(
     return complex(docc_scale) * vec if docc_scale != 1.0 else vec
 
 
-def _apply_generator_steps(
+def _transform_side_direct(
     ci_strings,
     C: NDArray,
-    M: NDArray,
-    docc_scale: complex = 1.0,
-    two_component: bool = False,
+    U_actv: NDArray,
+    d_actv: NDArray | None,
+    docc_scale: complex,
+    two_component: bool,
     **transform_kwargs,
 ) -> NDArray:
-    """
-    Apply the active-active orbital transformation ``M`` (invertible, not
-    necessarily orthogonal/unitary) to the CI vector ``C`` via
-    :func:`transform_ci_vector_direct`.
+    r"""
+    Re-express one side's CI vector in its biorthonormal basis, via the
+    string-addressed direct-CI backend.
 
-    For the real (nonrelativistic) case, ``M`` is decomposed into a sequence
-    of real, well-behaved steps (see :func:`_robust_real_logm`) rather than
-    exponentiating a single (possibly spuriously or genuinely complex)
-    ``logm(M)``. For the two-component case, no such decomposition is needed:
-    a complex matrix logarithm always exists for any invertible complex ``M``
-    (unlike the real case, where an improper rotation has no real logarithm
-    at all), so ``logm(M)`` is applied directly.
+    The active-space transformation is applied as its two natural factors
+    rather than as a single matrix logarithm of their product: first the
+    orthogonal (unitary) rotation ``U_actv``, then -- for the B side only --
+    the diagonal rescale :math:`\varphi_t \to \varphi_t / d_t`. Because
+    orbitals transform by right multiplication, the CI-vector operators
+    compose in reverse (:math:`\rho[M_1 M_2] = \rho[M_2]\rho[M_1]`), so
+    ``U_actv`` is applied to the vector first and the rescale second.
+
+    Splitting the two factors keeps every exponentiated generator a bounded
+    rotation and turns the (arbitrarily ill-conditioned) diagonal part into
+    the closed form of :func:`_apply_active_scaling`.
 
     Parameters
     ----------
@@ -637,15 +653,17 @@ def _apply_generator_steps(
         The determinant list ``C`` is expressed in.
     C : NDArray
         The active-space CI vector, shape ``(ndet,)``.
-    M : NDArray
-        The active-active orbital transformation matrix, shape
-        ``(nactv, nactv)``.
-    docc_scale : complex, optional
+    U_actv : NDArray
+        The orthogonal (unitary) active-space factor, shape ``(nactv, nactv)``.
+        May be improper in the real case; see :func:`_robust_orthogonal_steps`.
+    d_actv : NDArray or None
+        The active-space singular values to rescale by, or None to skip the
+        rescale (the A side is not rescaled).
+    docc_scale : complex
         The scalar factor from the inactive-space part of the transformation,
         applied once at the end.
-    two_component : bool, optional
-        If True, treat ``C`` and ``M`` as genuinely complex (two-component
-        spinor case); see :func:`transform_ci_vector_direct`.
+    two_component : bool
+        Whether ``C`` and ``U_actv`` are complex two-component quantities.
     **transform_kwargs
         Forwarded to each :func:`transform_ci_vector_direct` call.
 
@@ -656,28 +674,149 @@ def _apply_generator_steps(
         ordering as ``C``.
     """
     if two_component:
-        t = logm(np.asarray(M, dtype=complex))
+        # A complex logarithm exists for any invertible complex matrix, so the
+        # unitary factor needs no reflection/branch-cut handling here.
         vec = transform_ci_vector_direct(
             ci_strings,
             np.asarray(C, dtype=complex),
-            t,
+            logm(np.asarray(U_actv, dtype=complex)),
             two_component=True,
             **transform_kwargs,
         )
-        return complex(docc_scale) * vec
+    else:
+        vec = np.asarray(C, dtype=float)
+        for step in _robust_orthogonal_steps(U_actv):
+            if step[0] == "reflect":
+                vec = _apply_orbital0_reflection(ci_strings, vec)
+            else:
+                vec = transform_ci_vector_direct(
+                    ci_strings, vec, step[1], **transform_kwargs
+                )
 
-    vec = np.asarray(C, dtype=float)
-    for step in _robust_real_logm(M):
-        if step[0] == "reflect":
-            vec = _apply_orbital0_reflection(ci_strings, vec)
-        else:
-            vec = transform_ci_vector_direct(
-                ci_strings, vec, step[1], **transform_kwargs
-            )
+    if d_actv is not None:
+        vec = _apply_active_scaling(ci_strings, vec, d_actv)
     return complex(docc_scale) * vec if docc_scale != 1.0 else vec
 
 
 # -- Dispatcher --------------------------------------------------------------
+
+
+def _validate_overlap_inputs(
+    ci_strings_1,
+    C1,
+    C_docc_actv_1,
+    system_1,
+    ci_strings_2,
+    C2,
+    C_docc_actv_2,
+    system_2,
+    ndocc,
+    nactv,
+    n_frozen_docc,
+) -> bool:
+    """
+    Check the inputs to :func:`casscf_wavefunction_overlap` and return whether
+    this is a two-component calculation.
+
+    Every mismatch caught here would otherwise either raise deep inside numpy
+    with an opaque shape error or, worse, return a plausible-looking but
+    meaningless number: the final step is a dot product of two CI vectors, which
+    is silently well-defined whenever the determinant counts happen to agree.
+    """
+    if bool(system_1.two_component) != bool(system_2.two_component):
+        raise ValueError(
+            "system_1 and system_2 disagree on two_component "
+            f"({system_1.two_component} vs {system_2.two_component}); a "
+            "two-component wavefunction cannot be compared with a "
+            "nonrelativistic one."
+        )
+    if not 0 <= n_frozen_docc <= ndocc:
+        raise ValueError(
+            f"n_frozen_docc must be between 0 and ndocc={ndocc}, "
+            f"got {n_frozen_docc}."
+        )
+    if (ci_strings_1.na, ci_strings_1.nb) != (ci_strings_2.na, ci_strings_2.nb):
+        raise ValueError(
+            "The two determinant lists have different alpha/beta electron "
+            f"counts ({ci_strings_1.na}, {ci_strings_1.nb}) vs "
+            f"({ci_strings_2.na}, {ci_strings_2.nb}); their CI vectors span "
+            "different Fock-space sectors and their overlap is not defined."
+        )
+    if ci_strings_1.ndet != ci_strings_2.ndet:
+        raise ValueError(
+            f"The two determinant lists differ in size ({ci_strings_1.ndet} vs "
+            f"{ci_strings_2.ndet}); the CI vectors are not comparable."
+        )
+    for label, C, strings in (
+        ("C1", C1, ci_strings_1),
+        ("C2", C2, ci_strings_2),
+    ):
+        if np.asarray(C).shape != (strings.ndet,):
+            raise ValueError(
+                f"{label} has shape {np.asarray(C).shape}, expected "
+                f"({strings.ndet},) to match its determinant list."
+            )
+    for label, C_mo in (
+        ("C_docc_actv_1", C_docc_actv_1),
+        ("C_docc_actv_2", C_docc_actv_2),
+    ):
+        if np.asarray(C_mo).shape[1] != ndocc + nactv:
+            raise ValueError(
+                f"{label} has {np.asarray(C_mo).shape[1]} columns, expected "
+                f"ndocc + nactv = {ndocc + nactv}."
+            )
+    return bool(system_1.two_component)
+
+
+def _warn_if_frozen_docc_coupled(
+    S_full: NDArray, n_frozen_docc: int, tol: float = 0.3
+) -> None:
+    r"""
+    Warn if the orbitals about to be discarded are substantially coupled to
+    the orbitals that are kept.
+
+    Plasser's Eq. (21) makes two assumptions about frozen orbitals: that they
+    are orthonormal between the two states, and that they are orthogonal to
+    every retained orbital. Only the second is checked here. The first
+    *deliberately* fails whenever the nuclei have moved -- a displaced core
+    orbital's self-overlap decays, and removing precisely that decaying factor
+    is the reason to freeze it at all -- so testing it would flag the intended
+    use case.
+
+    Coupling to the retained space is the assumption whose failure makes
+    freezing invalid: an orbital that partly lives in the retained space cannot
+    be eliminated without changing the retained problem. Tight cores stay well
+    below the threshold; valence orbitals do not. For FH/STO-3G displaced by
+    0.1 bohr, freezing the 1s gives a coupling of 0.09 (and improves the
+    overlap), while also freezing the valence docc orbitals gives 0.97 (and
+    destroys it).
+
+    Only a warning is raised, so a caller who knows what they are doing can
+    still proceed.
+
+    Parameters
+    ----------
+    S_full : NDArray
+        The full mixed MO overlap, before any frozen orbitals are dropped.
+        Both coupling blocks are read off it, so no extra AO integrals are
+        needed.
+    n_frozen_docc : int
+        Number of leading inactive orbitals about to be discarded.
+    tol : float, optional
+        Largest tolerated frozen-retained overlap.
+    """
+    frozen, retained = slice(0, n_frozen_docc), slice(n_frozen_docc, None)
+    blocks = [S_full[frozen, retained], S_full[retained, frozen]]
+    coupling = max((float(np.max(np.abs(b))) for b in blocks if b.size), default=0.0)
+    if coupling > tol:
+        warnings.warn(
+            f"n_frozen_docc={n_frozen_docc} discards orbitals that are "
+            "substantially coupled to the retained orbitals (max overlap "
+            f"{coupling:.3g}). The overlap will be unreliable; freeze only "
+            "tight core orbitals.",
+            UserWarning,
+            stacklevel=3,
+        )
 
 
 def casscf_wavefunction_overlap(
@@ -692,6 +831,7 @@ def casscf_wavefunction_overlap(
     ndocc: int,
     nactv: int,
     backend: Literal["direct", "sparse_ops"] = "direct",
+    n_frozen_docc: int = 0,
     **backend_kwargs,
 ) -> complex:
     r"""
@@ -708,7 +848,8 @@ def casscf_wavefunction_overlap(
     Parameters
     ----------
     ci_strings_1, ci_strings_2 : forte2.lib.ci_helpers.CIStrings
-        The determinant lists for states 1 and 2, respectively.
+        The determinant lists for states 1 and 2, respectively. Must describe
+        the same number of electrons in the same number of active orbitals.
     C1, C2 : NDArray
         The active-space CI vectors for states 1 and 2.
     C_docc_actv_1, C_docc_actv_2 : NDArray
@@ -726,6 +867,21 @@ def casscf_wavefunction_overlap(
         Which CI-vector transform to use. ``"direct"`` (default) is the
         efficient, string-addressed backend; ``"sparse_ops"`` is the
         ground-truth reference.
+    n_frozen_docc : int, optional
+        Discard this many leading inactive orbitals from the overlap, assuming
+        they are orthonormal between the two states and orthogonal to all
+        remaining orbitals. Strongly recommended when the two states sit at
+        different geometries: tight core orbitals move with their nuclei, so
+        their mutual overlap decays steeply with displacement and multiplies
+        into the result, which can destroy an overlap that should be near 1.
+        The effect worsens with nuclear charge: for FH/STO-3G, a rigid 0.1 bohr
+        translation of an *identical* state returns 0.75 with all cores
+        included, versus 0.94 with the 1s frozen. Freeze only tight core
+        orbitals -- the justifying assumption fails for valence orbitals, and
+        over-freezing degrades the result badly (0.05 for the same case with
+        all four docc orbitals frozen). A warning is issued when the discarded
+        orbitals visibly violate the assumption. See Plasser et al., J. Chem.
+        Theory Comput. 12, 1207 (2016), Sec. 3.3 and Eq. (21).
     **backend_kwargs
         Forwarded to the selected backend's ``transform_ci_vector_*`` function.
 
@@ -733,62 +889,94 @@ def casscf_wavefunction_overlap(
     -------
     complex
         The wavefunction overlap :math:`\langle \Psi_1 | \Psi_2 \rangle`.
-    """
-    two_component = system_1.two_component
-    S_XY = mo_overlap(C_docc_actv_1, system_1, C_docc_actv_2, system_2)
-    C_XA, C_YB = biorthogonalize_casscf_orbitals(S_XY, ndocc, nactv)
 
-    # Only the docc-docc and active-active diagonal blocks of the (ndocc+nactv)
-    # transformation act nontrivially on a CAS (docc-always-fully-occupied) CI
-    # vector: any one-body term with a docc creation index p != q is Pauli-blocked
-    # (p is already fully occupied), and the docc-active coupling block is
-    # structurally zero (see biorthogonalize_casscf_orbitals). What remains from
-    # the docc-docc block collapses to a single scalar, since
-    # exp(-sum_i t_ii) = exp(-trace(logm(M))) = det(M)^-1 for the docc-docc block
-    # M, per occupied channel. Nonrelativistic docc orbitals are doubly occupied
-    # (alpha and beta strings both hold them, hence the square); two-component
-    # docc spinors are singly occupied (a single, spin-summed string; see
-    # rel_ci.py's "all active electrons live in the alpha (spinor) string"),
-    # so only one power applies.
+    Raises
+    ------
+    ValueError
+        If the two systems disagree on ``two_component``, if the determinant
+        lists are incompatible, if a CI vector length does not match its
+        determinant list, or if the orbital counts are inconsistent.
+    """
+    two_component = _validate_overlap_inputs(
+        ci_strings_1,
+        C1,
+        C_docc_actv_1,
+        system_1,
+        ci_strings_2,
+        C2,
+        C_docc_actv_2,
+        system_2,
+        ndocc,
+        nactv,
+        n_frozen_docc,
+    )
+
+    # Plasser Eq. (21): frozen cores are taken to be orthonormal between the
+    # two states and orthogonal to everything else, so they drop out of the
+    # overlap entirely rather than contributing a steeply decaying factor.
+    ndocc_eff = ndocc - n_frozen_docc
+    S_full = mo_overlap(C_docc_actv_1, system_1, C_docc_actv_2, system_2)
+    if n_frozen_docc:
+        _warn_if_frozen_docc_coupled(S_full, n_frozen_docc)
+    keep = slice(n_frozen_docc, ndocc + nactv)
+    bio = biorthogonalize_casscf_orbitals(S_full[keep, keep], ndocc_eff, nactv)
+
+    # Only the docc-docc and active-active diagonal blocks of the transformation
+    # act nontrivially on a CAS (docc-always-fully-occupied) CI vector: any
+    # one-body term with a docc creation index p != q is Pauli-blocked (p is
+    # already fully occupied), and the docc-active coupling block is structurally
+    # zero (see biorthogonalize_casscf_orbitals). What remains from the docc-docc
+    # block collapses to a single scalar, since exp(-sum_i t_ii) =
+    # exp(-trace(logm(M))) = det(M)^-1 for the docc-docc block M, per occupied
+    # channel. Nonrelativistic docc orbitals are doubly occupied (alpha and beta
+    # strings both hold them, hence the square); two-component docc spinors are
+    # singly occupied (a single, spin-summed string; see rel_ci.py's "all active
+    # electrons live in the alpha (spinor) string"), so only one power applies.
+    # This is Malmqvist's factor prod_i (t_ii)^2, p. 489 and Eq. (10) on p. 492.
     docc_power = 1 if two_component else 2
     docc_scale_1 = (
-        1.0 / np.linalg.det(C_XA[:ndocc, :ndocc]) ** docc_power if ndocc else 1.0
+        1.0 / np.linalg.det(bio.C_XA[:ndocc_eff, :ndocc_eff]) ** docc_power
+        if ndocc_eff
+        else 1.0
     )
     docc_scale_2 = (
-        1.0 / np.linalg.det(C_YB[:ndocc, :ndocc]) ** docc_power if ndocc else 1.0
+        1.0 / np.linalg.det(bio.C_YB[:ndocc_eff, :ndocc_eff]) ** docc_power
+        if ndocc_eff
+        else 1.0
     )
 
     if backend == "direct":
-        # Real-valued (nonrelativistic) backend: logm(M) may be spuriously
-        # (or genuinely) complex for a real M, so route through the robust
-        # step-sequence decomposition (see _robust_real_logm). The
-        # two-component path skips this; see _apply_generator_steps.
-        state_A = _apply_generator_steps(
+        # Apply the active-space transformation as its two exact factors: the
+        # orthogonal rotation, then (B side only) the diagonal rescale.
+        state_A = _transform_side_direct(
             ci_strings_1,
             C1,
-            C_XA[ndocc:, ndocc:],
+            bio.U_actv_A,
+            None,
             docc_scale_1,
-            two_component=two_component,
+            two_component,
             **backend_kwargs,
         )
-        state_B = _apply_generator_steps(
+        state_B = _transform_side_direct(
             ci_strings_2,
             C2,
-            C_YB[ndocc:, ndocc:],
+            bio.U_actv_B,
+            bio.d_actv,
             docc_scale_2,
-            two_component=two_component,
+            two_component,
             **backend_kwargs,
         )
         return complex(np.vdot(state_A, state_B))
     elif backend == "sparse_ops":
-        # A plain logm (possibly complex) is already correct here, since
-        # SparseOperator/SparseExp handle complex generators natively.
-        t_actv_1 = logm(C_XA[ndocc:, ndocc:])
-        t_actv_2 = logm(C_YB[ndocc:, ndocc:])
+        # Ground-truth reference: deliberately kept on the combined
+        # active-block matrix and a single logm, so that it cross-checks the
+        # factored route above rather than sharing its assumptions. A plain
+        # (possibly complex) logm is correct here, since SparseOperator/
+        # SparseExp handle complex generators natively.
         state_A = transform_ci_vector_sparse_ops(
             ci_strings_1,
             C1,
-            t_actv_1,
+            logm(bio.C_XA[ndocc_eff:, ndocc_eff:]),
             docc_scale_1,
             two_component=two_component,
             **backend_kwargs,
@@ -796,7 +984,7 @@ def casscf_wavefunction_overlap(
         state_B = transform_ci_vector_sparse_ops(
             ci_strings_2,
             C2,
-            t_actv_2,
+            logm(bio.C_YB[ndocc_eff:, ndocc_eff:]),
             docc_scale_2,
             two_component=two_component,
             **backend_kwargs,
