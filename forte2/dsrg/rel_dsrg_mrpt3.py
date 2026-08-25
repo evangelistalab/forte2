@@ -37,6 +37,30 @@ class RelDSRG_MRPT3(DSRGBase):
     relax_tol : float, optional, default=1e-6
         The convergence tolerance for reference relaxation (in Hartree).
 
+    Notes
+    -----
+    If this object is chained onto a frozen natural orbital (FNO) DSRG-MRPT2
+    pipeline (see RelDSRG_MRPT2's docstring), it detects this via its
+    immediate parent's fno_e/fno_hbar1/fno_hbar2 attributes and adds them
+    into its own effective Hamiltonian everywhere it builds one::
+
+        pt2_full = RelDSRG_MRPT2(fno_p_o=0.98)(mc)
+        pt2_full.run()
+        pt2_fno = RelDSRG_MRPT2()(pt2_full)
+        pt2_fno.run()
+        pt3_fno = RelDSRG_MRPT3()(pt2_fno)
+        pt3_fno.run()
+
+    The correction (eq. 11 of ref. [5] below) is [H_PT2^MO(s1) -
+    H_PT2^FNO(s1)] -- computed once, by pt2_fno itself when it detects its
+    own parent is fno_active, entirely independent of this class. It is
+    added to E_dsrg at every relaxation iteration (via the scalar fno_e) and
+    folded directly into the effective one-/two-body Hamiltonian handed to
+    the CI solver during reference relaxation (via fno_hbar1/fno_hbar2), so
+    relaxed (including state-averaged) reference states are properly
+    perturbed by the correction rather than uniformly shifted after the
+    fact.
+
     Attributes
     ----------
     E_dsrg : float
@@ -61,6 +85,8 @@ class RelDSRG_MRPT3(DSRGBase):
               J. Chem. Phys. 2016, 144, 204111.
     .. [4] C. Li and F. A. Evangelista, "Driven similarity renormalization group for excited states: A state-averaged perturbation theory",
            J. Chem. Phys. 2018, 148, 124106.
+    .. [5] C. Li, S. Mao, R. Huang, F. A. Evangelista, "Frozen Natural Orbitals for the State-Averaged Driven Similarity Renormalization Group",
+           J. Chem. Theory Comput. 2024, 20, 4170-4181.
     """
 
     def get_integrals(self):
@@ -168,9 +194,22 @@ class RelDSRG_MRPT3(DSRGBase):
             + self.e_dsrg_mrpt3_2
             + self.e_dsrg_mrpt3_3
         )
+        fno_e = getattr(self.parent_method, "fno_e", None)
+        if fno_e is not None:
+            E = E + fno_e
         return E
 
-    def do_reference_relaxation(self):
+    def _build_ci_hamiltonian(self):
+        """
+        Fold self.hbar1/hbar2 (as built by solve_dsrg(form_hbar=True)) into
+        the fully processed, CI-ready effective Hamiltonian -- the scalar and
+        rotated-to-CASSCF-basis one-/two-body pieces handed to the CI solver.
+        If this object is chained onto an FNO DSRG-MRPT2 pipeline (its
+        parent_method has fno_e/fno_hbar1/fno_hbar2 set -- see that class's
+        docstring), the eq. 11 truncation correction is added in before
+        returning. See eq. 11 of Li, Mao, Huang, Evangelista, J. Chem.
+        Theory Comput. 2024, 20, 4170-4181.
+        """
         self.hbar1 += self.hbar1.T.conj()
         self.hbar1 += self.fock[self.actv, self.actv]
 
@@ -207,6 +246,17 @@ class RelDSRG_MRPT3(DSRGBase):
             self.Uactv.conj(),
             optimize=True,
         )
+
+        fno_e = getattr(self.parent_method, "fno_e", None)
+        if fno_e is not None:
+            _e_scalar = _e_scalar + fno_e
+            _hbar1_canon = _hbar1_canon + self.parent_method.fno_hbar1
+            _hbar2_canon = _hbar2_canon + self.parent_method.fno_hbar2
+
+        return _e_scalar, _hbar1_canon, _hbar2_canon
+
+    def do_reference_relaxation(self):
+        _e_scalar, _hbar1_canon, _hbar2_canon = self._build_ci_hamiltonian()
 
         # _hbar2_canon is already antisymmetric (<pq||rs>), the CI solver
         # antisymmetrizes it again, doubling it, hence the 0.5

@@ -79,6 +79,15 @@ class RelDSRG_MRPT2(DSRGBase):
         RelDSRG_MRPT2()(pt2_fno_pass)) does not inherit or inspect this flag
         itself -- downstream methods that need to detect FNO do so by
         checking their own parent chain.
+    fno_e, fno_hbar1, fno_hbar2 : complex, np.ndarray, np.ndarray, or None
+        Only set on a plain instance chained directly onto an fno_active
+        parent: the truncation correction [H_PT2^MO(s1) - H_PT2^FNO(s1)] of
+        eq. 11 of ref. [5] below -- this object's own scalar/one-/two-body
+        effective Hamiltonian minus its parent's, both evaluated at the
+        shared flow_param s1. A downstream high-level method (e.g.
+        RelDSRG_MRPT3) applies this by adding it into its own effective
+        Hamiltonian wherever it builds one (see that class's docstring).
+        None if this object is not chained onto an fno_active parent.
 
     Notes
     -----
@@ -86,15 +95,22 @@ class RelDSRG_MRPT2(DSRGBase):
 
         pt2_full = RelDSRG_MRPT2(fno_p_o=0.98)(mc)
         pt2_full.run()
-        pt2_fno = RelDSRG_MRPT2(relax_reference="iterate")(pt2_full)
+        pt2_fno = RelDSRG_MRPT2()(pt2_full)
         pt2_fno.run()
 
     The first pass (fno_p_o or fno_n_kappa given) always performs a single
     unrelaxed solve in the full virtual space, builds the natural orbitals
     from the unrelaxed virtual-virtual 1-RDM, and exposes the truncated,
     natural-orbital-rotated virtual space as its own mos/mo_space -- so the
-    second, chained instance runs as an entirely ordinary RelDSRG_MRPT2 (with
-    relax_reference supported normally) in that truncated space.
+    second, chained instance runs as an entirely ordinary RelDSRG_MRPT2 in
+    that truncated space, additionally computing fno_e/fno_hbar1/fno_hbar2
+    (see above) for a downstream high-level method to pick up. The second
+    instance must share flow_param with the first (both are "s1"); a
+    downstream high-level method's own flow_param ("s2") is independent and
+    typically higher. The second instance is expected to run with
+    relax_reference=False (the common pattern -- relaxation happens at the
+    high-level method, not here); relax_reference on this pass itself is not
+    currently supported together with FNO correction detection.
 
     References
     ----------
@@ -116,6 +132,15 @@ class RelDSRG_MRPT2(DSRGBase):
     fno_use_3cumulant: bool = True
 
     fno_active: bool = field(init=False, default=False)
+    # Set only on a plain instance chained onto an fno_active parent: the
+    # truncation correction [H_PT2^MO(s1) - H_PT2^FNO(s1)] of eq. 11 of Li,
+    # Mao, Huang, Evangelista, J. Chem. Theory Comput. 2024, 20, 4170-4181,
+    # i.e. this object's own effective Hamiltonian minus its parent's. A
+    # downstream high-level method (e.g. RelDSRG_MRPT3) detects and applies
+    # it by inspecting these attributes on its own parent_method.
+    fno_e: complex | None = field(init=False, default=None)
+    fno_hbar1: np.ndarray | None = field(init=False, default=None)
+    fno_hbar2: np.ndarray | None = field(init=False, default=None)
 
     def __post_init__(self):
         super().__post_init__()
@@ -135,13 +160,16 @@ class RelDSRG_MRPT2(DSRGBase):
 
     def run(self):
         if self.fno_p_o is None and self.fno_n_kappa is None:
-            return super().run()
+            super().run()
+            self._compute_fno_correction()
+            return self
 
         # FNO pass: a single unrelaxed solve in the full virtual space, used
         # only to build Gamma_vv and truncate. See the class docstring.
         self._startup()
         self.ints, self.cumulants = self.get_integrals()
-        self.E_dsrg = self.solve_dsrg(form_hbar=False)
+        self.E_dsrg = self.solve_dsrg(form_hbar=True)
+        self._build_ci_hamiltonian()
         self.E = self.E_dsrg
 
         nvirt_full = self.nvirt
@@ -163,6 +191,28 @@ class RelDSRG_MRPT2(DSRGBase):
         self._release_integrals()
         self.executed = True
         return self
+
+    def _compute_fno_correction(self):
+        """
+        If this is a plain (non-FNO) instance chained onto an fno_active
+        parent, build this object's own CI-ready effective Hamiltonian and
+        store its difference against the parent's as fno_e/fno_hbar1/
+        fno_hbar2 -- the eq. 11 truncation correction, for a downstream
+        high-level method (e.g. RelDSRG_MRPT3) to detect and apply.
+        """
+        parent = self.parent_method
+        if not getattr(parent, "fno_active", False):
+            return
+        assert self.flow_param == parent.flow_param, (
+            "The FNO-space companion (this object) must share flow_param "
+            "with the FNO-building pass (its parent): both are 's1' in "
+            "eq. 11 of Li, Mao, Huang, Evangelista, J. Chem. Theory "
+            "Comput. 2024, 20, 4170-4181."
+        )
+        self._build_ci_hamiltonian()
+        self.fno_e = parent.e_pt2 - self.e_pt2
+        self.fno_hbar1 = parent.hbar1_pt2 - self.hbar1_pt2
+        self.fno_hbar2 = parent.hbar2_pt2 - self.hbar2_pt2
 
     def _release_integrals(self):
         super()._release_integrals()
@@ -293,6 +343,7 @@ class RelDSRG_MRPT2(DSRGBase):
         return ints, cumulants
 
     def solve_dsrg(self, form_hbar=False):
+        form_hbar = form_hbar or getattr(self.parent_method, "fno_active", False)
         self.T1, self.T2 = self._build_tamps()
         self.F_tilde = self._renormalize_F()
         # self.ints["V"] gets renormalizes to V_tilde in place for the following blocks:
@@ -305,7 +356,16 @@ class RelDSRG_MRPT2(DSRGBase):
         E += self.ints["E"]
         return E
 
-    def do_reference_relaxation(self):
+    def _build_ci_hamiltonian(self):
+        """
+        Fold self.hbar1/hbar2 (as built by solve_dsrg(form_hbar=True)) into
+        the fully processed, CI-ready effective Hamiltonian -- the scalar and
+        rotated-to-CASSCF-basis one-/two-body pieces that either get handed
+        to the CI solver directly (do_reference_relaxation) or compared
+        against another such triple to build an FNO truncation correction
+        (see RelDSRG_MRPT3._build_ci_hamiltonian). Caches the result as
+        self.e_pt2/hbar1_pt2/hbar2_pt2 in addition to returning it.
+        """
         self.hbar1 += self.fock[self.actv, self.actv]
         self.hbar2 += self.ints["V"]["aaaa"]
 
@@ -336,6 +396,14 @@ class RelDSRG_MRPT2(DSRGBase):
             self.Uactv.conj(),
             optimize=True,
         )
+
+        self.e_pt2 = _e_scalar
+        self.hbar1_pt2 = _hbar1_canon
+        self.hbar2_pt2 = _hbar2_canon
+        return _e_scalar, _hbar1_canon, _hbar2_canon
+
+    def do_reference_relaxation(self):
+        _e_scalar, _hbar1_canon, _hbar2_canon = self._build_ci_hamiltonian()
 
         # _hbar2_canon is already antisymmetric (<pq||rs>),
         # the CI solver antisymmetrizes it again, doubling it, hence the 0.5
