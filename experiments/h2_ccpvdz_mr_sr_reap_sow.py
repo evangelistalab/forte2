@@ -150,6 +150,7 @@ def run_sr(case: dict) -> dict:
 
 
 def run_mr(case: dict) -> dict:
+    sr_benchmark.BASIS = BASIS
     logger.set_verbosity_level(0)
     with contextlib.redirect_stdout(io.StringIO()):
         system, rhf, hamiltonian, eps = sr_benchmark.build_linear_h_sparse_hamiltonian(
