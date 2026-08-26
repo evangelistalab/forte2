@@ -1,4 +1,3 @@
-import time
 from dataclasses import dataclass, field
 from collections import OrderedDict
 from typing import ClassVar
@@ -33,9 +32,6 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
     two_component: ClassVar[bool] = True
     dtype: ClassVar[type] = complex
 
-    def _make_slater_rules(self):
-        return det.RelSlaterRules(self.norb, self.ints.E.real, self.ints.H, self.ints.V)
-
     def _make_sci_helper(self):
         return ci_helpers.RelSelectedCIHelper(
             self.norb,
@@ -49,6 +45,10 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
             self.sci_params.frozen_creation,
             self.sci_params.frozen_annihilation,
         )
+
+    def _update_sci_helper_ints(self):
+        # RelSelectedCIHelper.set_Hamiltonian's E parameter is a plain double.
+        self.sci_helper.set_Hamiltonian(self.ints.E.real, self.ints.H, self.ints.V)
 
     def _compute_spin2(self):
         # Spin is not a good quantum number in the two-component (spinor) basis, and the
@@ -64,6 +64,11 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         the beta string empty. Guess coefficients come from diagonalizing the complex
         Hermitian Hamiltonian in the guess space.
         """
+        # local object used only to build initial guess
+        # exact diag uses sci_helper's slater_rules
+        slater_rules = det.RelSlaterRules(
+            self.norb, self.ints.E.real, self.ints.H, self.ints.V
+        )
         window_occ = self.sci_params.guess_occ_window
         window_vir = self.sci_params.guess_vir_window
         if (
@@ -79,7 +84,7 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
 
         # refine the guess determinants by determinantal energy if there are more than needed
         if len(self.sci_params.guess_dets) > 0:
-            guess_hdiag = self.slater_rules.energies(self.sci_params.guess_dets)
+            guess_hdiag = slater_rules.energies(self.sci_params.guess_dets)
             nguess_dets = len(self.sci_params.guess_dets)
             num_guess_states = min(
                 self.davidson_liu_params.guess_per_root * self.nroot, nguess_dets
@@ -88,6 +93,10 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
                 self.davidson_liu_params.ndets_per_guess * num_guess_states,
                 nguess_dets,
             )
+        else:
+            # no guess dets and only pinned guess dets
+            guess_hdiag = np.empty(0)
+            nguess_dets = 0
 
         if self.sci_params.energy_shift is not None:
             indices = np.argsort(np.abs(guess_hdiag - self.sci_params.energy_shift))[
@@ -111,7 +120,7 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
         for i in range(ndet):
             for j in range(i + 1):
-                Hguess[i, j] = self.slater_rules.slater_rules(
+                Hguess[i, j] = slater_rules.slater_rules(
                     self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
                 )
                 Hguess[j, i] = np.conj(Hguess[i, j])

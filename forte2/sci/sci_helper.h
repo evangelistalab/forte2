@@ -3,6 +3,7 @@
 #include <functional>
 #include <vector>
 #include <cmath>
+#include <optional>
 #include <span>
 
 #include "helpers/ndarray.h"
@@ -59,11 +60,27 @@ class SelectedCIHelper {
     /// @brief Return the determinants in the variational space
     const std::vector<Determinant>& variational_dets() const { return dets_; }
 
+    /// @brief Compute the Hamiltonian matrix element between two determinants.
+    /// @param dets The list of determinants
+    /// @param I The index of the first determinant
+    /// @param J The index of the second determinant
+    /// @return The Hamiltonian matrix element <I|H|J>
+    double slater_rules(const std::vector<Determinant>& dets, size_t I, size_t J) const {
+        if (I == J) {
+            return slater_rules_.energy(dets[I]);
+        }
+        return slater_rules_.slater_rules(dets[I], dets[J]);
+    }
+
     /// @brief Set the Hamiltonian integrals
-    /// @param E Hamiltonian scalar energy
-    /// @param H One-electron integrals
-    /// @param V Two-electron integrals in physicist notation
-    void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
+    /// @param E New Hamiltonian scalar energy, or nullopt to keep the current value
+    /// @param H New one-electron integrals, or nullopt to keep the current value
+    /// @param V New two-electron integrals in physicist notation, or nullopt to keep the
+    ///        current value
+    /// @note This method also updates slater_rules and det_energies.
+    void set_Hamiltonian(std::optional<double> E = std::nullopt,
+                         std::optional<np_matrix> H = std::nullopt,
+                         std::optional<np_tensor4> V = std::nullopt);
 
     /// @brief Set the CI coefficients
     /// @param c The CI coefficients for the determinants (shape: (n_dets, n_roots))
@@ -335,10 +352,6 @@ class SelectedCIHelper {
 
     /// @brief The scalar energy
     double E_;
-    /// @brief One-electron integrals in the form of a matrix H[p][q] = <p|H|q> = h_pq
-    np_matrix H_;
-    /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
-    np_tensor4 V_;
 
     /// @brief The Slater rules for the current set of determinants
     SlaterRules slater_rules_;

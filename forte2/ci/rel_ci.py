@@ -48,6 +48,12 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
             self.log_level,
         )
 
+    def _update_sigma_builder_ints(self):
+        # RelCISigmaBuilder.set_Hamiltonian's E parameter is a plain double.
+        self.ci_sigma_builder.set_Hamiltonian(
+            self.ints.E.real, self.ints.H, self.ints.V
+        )
+
     def _make_ci_strings(self):
         _nactel = self.state.nel - self.ncore
         assert (
@@ -74,12 +80,6 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
         self.dets = self.ci_strings.make_determinants()
         self.b_det = np.zeros((self.ndet,), dtype=self.dtype)
         self.sigma_det = np.zeros((self.ndet,), dtype=self.dtype)
-
-    def _select_algorithm(self):
-        # the C++ builder only implements Harrison-Zarrabian in the spinor basis;
-        # "sparse" is a Python-side path that still needs "hz" configured here
-        self.ci_sigma_builder.set_algorithm("hz")
-        return self.ci_sigma_builder.get_algorithm()
 
     def _form_hdiag(self):
         return self.ci_sigma_builder.form_Hdiag(self.dets)

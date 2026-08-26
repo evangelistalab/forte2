@@ -77,7 +77,6 @@ class _SelectedCISingleStateSolver:
     die_if_not_converged: bool = False
 
     ### Non-init attributes
-    slater_rules: SlaterRules = field(default=None, init=False)
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
@@ -100,10 +99,6 @@ class _SelectedCISingleStateSolver:
             f"{self._allowed_algorithms}. Got '{self.sci_params.ci_algorithm}'."
         )
 
-    def _make_slater_rules(self):
-        """Build the Slater rules object used for guesses, diagonals, and exact diag."""
-        return SlaterRules(self.norb, self.ints.E, self.ints.H, self.ints.V)
-
     def _make_sci_helper(self):
         """Build the C++ selected CI helper that owns selection and the sigma build."""
         return SelectedCIHelper(
@@ -125,9 +120,6 @@ class _SelectedCISingleStateSolver:
         return self.sci_helper.compute_spin2()
 
     def _sci_solver_startup(self):
-        # Create the Slater rules object
-        self.slater_rules = self._make_slater_rules()
-
         # Create an initial guess
         (
             self.guess_determinants,
@@ -140,12 +132,21 @@ class _SelectedCISingleStateSolver:
         self.ndet = len(self.guess_determinants)
         logger.log(f"Number of determinants: {self.ndet}", self.log_level)
 
+    def _update_sci_helper_ints(self):
+        """Push the current active-space integrals into the existing sci helper."""
+        self.sci_helper.set_Hamiltonian(self.ints.E, self.ints.H, self.ints.V)
+
     def run(self):
         if not self.executed:
             self._sci_solver_startup()
-
-        # Create the selected CI helper to manage the selected CI procedure
-        self.sci_helper = self._make_sci_helper()
+            # Create the selected CI helper to manage the selected CI procedure
+            self.sci_helper = self._make_sci_helper()
+        else:
+            # Reuse the existing helper (e.g. across MCSCF/DSRG iterations) instead of
+            # reconstructing it: guess_determinants/guess_c at this point already equal the
+            # helper's own dets_/c_ from the end of the previous run, so only the integrals
+            # it holds need to be refreshed.
+            self._update_sci_helper_ints()
 
         self.sci_helper.set_energies(self.guess_energies)
         self.sci_helper.set_num_batches_per_thread(
@@ -353,6 +354,9 @@ class _SelectedCISingleStateSolver:
         return self
 
     def _initial_guess(self):
+        # local object used only to build initial guess
+        # exact diag uses sci_helper's slater_rules
+        slater_rules = SlaterRules(self.norb, self.ints.E, self.ints.H, self.ints.V)
         window_occ = self.sci_params.guess_occ_window
         window_vir = self.sci_params.guess_vir_window
         # If there are no guess determinants, generate some based on occupation windows
@@ -371,7 +375,7 @@ class _SelectedCISingleStateSolver:
         # if there are more than needed for the initial guess
         # this can be controlled by DavidsonLiuParams
         if len(self.sci_params.guess_dets) > 0:
-            guess_hdiag = self.slater_rules.energies(self.sci_params.guess_dets)
+            guess_hdiag = slater_rules.energies(self.sci_params.guess_dets)
             nguess_dets = len(self.sci_params.guess_dets)
             num_guess_states = min(
                 self.davidson_liu_params.guess_per_root * self.nroot, nguess_dets
@@ -411,7 +415,7 @@ class _SelectedCISingleStateSolver:
         Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
         for i in range(ndet):
             for j in range(i + 1):
-                Hguess[i, j] = self.slater_rules.slater_rules(
+                Hguess[i, j] = slater_rules.slater_rules(
                     self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
                 )
                 Hguess[j, i] = np.conj(Hguess[i, j])
@@ -656,19 +660,14 @@ class _SelectedCISingleStateSolver:
                     self.log_level,
                 )
 
-    def _selected_dets(self):
-        """The current variational determinant list (from the C++ helper)."""
-        return self.sci_helper.dets()
-
     def _do_exact_diagonalization(self):
         logger.log("Using CI algorithm: Exact Diagonalization", self.log_level)
 
-        dets = self._selected_dets()
-
+        dets = self.sci_helper.dets()
         H = np.zeros((self.ndet,) * 2, dtype=self.dtype)
         for i in range(self.ndet):
             for j in range(i + 1):
-                H[i, j] = self.slater_rules.slater_rules(dets[i], dets[j])
+                H[i, j] = self.sci_helper.slater_rules(dets, i, j)
                 H[j, i] = np.conj(H[i, j])
 
         self.evals_full, self.evecs_full = np.linalg.eigh(H)
@@ -885,11 +884,6 @@ class _SelectedCISingleStateSolver:
         self.ints.E = scalar
         self.ints.H = oei
         self.ints.V = tei
-        # SlaterRules is not reinitialized when rerun.
-        # It must be rebuilt here if needed,
-        # otherwise the previous integrals would be used.
-        if self.slater_rules is not None:
-            self.slater_rules = self._make_slater_rules()
 
     def get_top_determinants(self, n=5):
         """

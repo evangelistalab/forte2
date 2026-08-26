@@ -108,12 +108,17 @@ class _CISingleStateSolver:
 
     def _make_sigma_builder_obj(self):
         """Construct the C++ sigma builder for the current integrals."""
+        algorithm = self.ci_params.ci_algorithm.lower()
+        if algorithm not in ("kh", "hz", "knowles-handy", "harrison-zarrabian"):
+            # e.g. "exact": the iterative sigma-build algorithm is unused on that path
+            algorithm = "kh"
         return self._sigma_builder_cls(
             self.ci_strings,
             self.ints.E,
             self.ints.H,
             self.ints.V,
             self.log_level,
+            algorithm,
         )
 
     def _make_ci_strings(self):
@@ -182,14 +187,18 @@ class _CISingleStateSolver:
 
         self._setup_basis()
 
+    def _update_sigma_builder_ints(self):
+        """Push the current active-space integrals into the existing sigma builder."""
+        self.ci_sigma_builder.set_Hamiltonian(self.ints.E, self.ints.H, self.ints.V)
+
     def run(self):
         if not self.executed:
             self._ci_solver_startup()
-
-        # Create the sigma builder from the CI strings and integrals. This object
-        # handles some temporary memory deallocated at destruction and is used to
-        # compute the Hamiltonian matrix elements in the determinant basis.
-        self.ci_sigma_builder = self._make_sigma_builder_obj()
+            # Create the sigma builder from the CI strings and integrals.
+            self.ci_sigma_builder = self._make_sigma_builder_obj()
+        else:
+            # Update the integrals (reusing the same sigma builder)
+            self._update_sigma_builder_ints()
         self.ci_sigma_builder.set_memory(self.ci_params.ci_builder_memory)
         if self.ci_params.ci_algorithm.lower() == "exact":
             self._do_exact_diagonalization()
@@ -206,11 +215,6 @@ class _CISingleStateSolver:
         self.executed = True
 
         return self
-
-    def _select_algorithm(self):
-        """Configure the sigma builder's algorithm and return its name."""
-        self.ci_sigma_builder.set_algorithm(self.ci_params.ci_algorithm.lower())
-        return self.ci_sigma_builder.get_algorithm()
 
     def _form_hdiag(self):
         """Diagonal of the Hamiltonian in the variational (CSF) basis."""
@@ -248,7 +252,7 @@ class _CISingleStateSolver:
         Harrison-Zarrabian or Knowles-Handy sigma builder algorithm.
         """
         logger.log(
-            f"Using CI algorithm: {self._select_algorithm()}",
+            f"Using CI algorithm: {self.ci_sigma_builder.get_algorithm()}",
             self.log_level,
         )
 
