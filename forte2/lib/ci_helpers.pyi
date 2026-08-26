@@ -591,3 +591,8 @@ class RelSelectedCIHelper:
 
     def selection_time(self) -> float:
         """Return the total selection time"""
+
+def batch_of(det: forte2.lib.det.Determinant, num_batches: int) -> int:
+    """
+    Return the batch that the alpha string of a determinant is assigned to during batched selected CI selection
+    """

@@ -244,6 +244,20 @@ void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
 }
 
 void export_sci_helper_api(nb::module_& sub_m) {
+    sub_m.def(
+        "batch_of",
+        [](const Determinant& d, size_t num_batches) {
+            if (num_batches == 0)
+                throw std::invalid_argument("num_batches must be greater than zero");
+            String a = String::zero();
+            for (size_t n{0}; n < Norb; ++n)
+                a.set_bit(n, d.na(n));
+            return batch_of(a, num_batches);
+        },
+        "det"_a, "num_batches"_a,
+        "Return the batch that the alpha string of a determinant is assigned to during batched "
+        "selected CI selection");
+
     nb::class_<SelectedCIHelper>(sub_m, "SelectedCIHelper")
         .def(nb::init<size_t, const std::vector<Determinant>&, np_matrix&, double, np_matrix&,
                       np_tensor4&, int, const std::string&, const std::vector<size_t>&,

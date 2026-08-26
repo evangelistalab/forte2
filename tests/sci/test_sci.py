@@ -6,7 +6,7 @@ from forte2 import System, State, MOSpace
 from forte2.lib import rdms
 from forte2.lib.sparse_ops import SparseState
 from forte2.lib.det import Determinant
-from forte2.lib.ci_helpers import CIStrings, SelectedCIHelper
+from forte2.lib.ci_helpers import CIStrings, SelectedCIHelper, batch_of
 from forte2.ci import CI
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
@@ -999,3 +999,40 @@ def test_sci_final_orbitals(final_orbitals):
     sci.run()
 
     assert sci.E[0] == approx(-2.180967812920)
+
+
+def test_batch_of_spreads_alpha_strings():
+    """Batching must not partition determinants by their low-orbital occupation.
+
+    Selection, PT2, and `compute_spin2` all assign work with `batch_of(alpha_string,
+    num_batches)`, which has to spread determinants evenly. The low orbitals are occupied in
+    nearly every determinant of a selected CI wavefunction, so a batch index that depends only on
+    them concentrates the work in a few batches, breaking both the load balancing across threads
+    and the per-batch memory cap that `num_batches_per_thread` provides.
+    """
+    norb = 24
+
+    # Determinants sharing an identical low-orbital core, differing only in one high orbital
+    same_core = []
+    for a in range(8, 40):
+        occ = ["2"] * 5 + ["0"] * 59
+        occ[a] = "a"
+        same_core.append(Determinant("".join(occ)))
+
+    for num_batches in (64, 128, 256):
+        distinct = {batch_of(det, num_batches) for det in same_core}
+        assert len(distinct) > len(same_core) // 2
+
+    # Alpha strings shaped like a real wavefunction: a frozen pair in orbitals 0-1 plus three
+    # electrons distributed over the rest. Every batch should get a comparable share.
+    wavefunction = [
+        Determinant("".join("a" if o in (0, 1) + rest else "0" for o in range(norb)))
+        for rest in itertools.combinations(range(2, norb), 3)
+    ]
+
+    for num_batches in (64, 128, 256):
+        load = np.bincount(
+            [batch_of(det, num_batches) for det in wavefunction], minlength=num_batches
+        )
+        assert (load > 0).all()
+        assert load.max() / load.mean() < 3.0
