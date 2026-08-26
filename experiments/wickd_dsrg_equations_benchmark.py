@@ -312,10 +312,21 @@ def result_key_from_equation(block_key, equations):
     if block_key == "|":
         return ""
     for equation in equations:
-        lhs = equation.compile("einsum").split("+=", 1)[0].strip()
-        if lhs.startswith("y"):
-            return lhs[1:]
+        for statement in compiled_einsum_statements(equation):
+            lhs = statement.split("+=", 1)[0].strip()
+            if lhs.startswith("y"):
+                return lhs[1:]
     raise RuntimeError(f"Could not infer result key for block {block_key}")
+
+
+def compiled_einsum_statements(equation):
+    compiled = equation.compile("einsum").replace('optimize="optimal"', "optimize=True")
+    return tuple(
+        statement.strip()
+        for line in compiled.splitlines()
+        for statement in line.split(";")
+        if statement.strip()
+    )
 
 
 def compile_block_function(block_key, equations, nocc, nvir):
@@ -328,10 +339,9 @@ def compile_block_function(block_key, equations, nocc, nvir):
         shape = block_shape_from_tensor_key(result_key, nocc, nvir)
         code.append(f"    {result_var} = np.zeros({shape!r}, dtype=float)")
     for equation in equations:
-        contraction = equation.compile("einsum").replace(
-            'optimize="optimal"', "optimize=True"
+        code.extend(
+            f"    {statement}" for statement in compiled_einsum_statements(equation)
         )
-        code.append(f"    {contraction}")
     code.append(f"    return {result_var}")
     namespace = {"np": np}
     exec("\n".join(code), namespace)
@@ -384,7 +394,11 @@ def make_wickd_commutator(rank, nocc, nvir):
             "compile": compile_s,
             "total": build_s + contract_s + equation_s + compile_s,
         },
-        n_equations=sum(len(equations) for equations in many_body_equations.values()),
+        n_equations=sum(
+            len(compiled_einsum_statements(equation))
+            for equations in many_body_equations.values()
+            for equation in equations
+        ),
         n_expression_terms=len(expression),
     )
 

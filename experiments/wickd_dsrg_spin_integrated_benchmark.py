@@ -102,10 +102,21 @@ def result_key_from_equation(block_key, equations):
     if block_key == "|":
         return ""
     for equation in equations:
-        lhs = equation.compile("einsum").split("+=", 1)[0].strip()
-        if lhs.startswith("y"):
-            return lhs[1:]
+        for statement in compiled_einsum_statements(equation):
+            lhs = statement.split("+=", 1)[0].strip()
+            if lhs.startswith("y"):
+                return lhs[1:]
     raise RuntimeError(f"Could not infer result key for block {block_key}")
+
+
+def compiled_einsum_statements(equation):
+    compiled = equation.compile("einsum")
+    return tuple(
+        statement.strip()
+        for line in compiled.splitlines()
+        for statement in line.split(";")
+        if statement.strip()
+    )
 
 
 def compile_block_function(block_key, equations, nocc, nvir):
@@ -119,10 +130,10 @@ def compile_block_function(block_key, equations, nocc, nvir):
             f"    {result_var} = np.zeros({tensor_shape(result_key, nocc, nvir)!r})"
         )
     for equation in equations:
-        contraction = equation.compile("einsum").replace(
-            'optimize="optimal"', "optimize=False"
+        code.extend(
+            f"    {statement.replace('optimize=\"optimal\"', 'optimize=False')}"
+            for statement in compiled_einsum_statements(equation)
         )
-        code.append(f"    {contraction}")
     code.append(f"    return {result_var}")
     namespace = {"np": np}
     exec("\n".join(code), namespace)
@@ -361,43 +372,46 @@ def make_spin_unique_commutator(rank, nocc, nvir):
     for block_key, equations in many_body_equations.items():
         result_key = result_key_from_equation(block_key, equations)
         for equation in equations:
-            n_equations += 1
-            lhs, coefficient, subscripts, refs = parse_einsum_line(
-                equation.compile("einsum")
-            )
-            input_subscripts, output_subscripts = subscripts.split("->", 1)
-            input_indices = input_subscripts.split(",") if input_subscripts else []
-            output_mapping = spin_unique_tensor_ref("y", result_key, output_subscripts)
-            if output_mapping is None:
-                continue
-            output_sign, output_name, output_key, output_indices = output_mapping
-            unique_output = (
-                ""
-                if output_key == ""
-                else f"{output_name.split(':', 1)[1]}:{output_key}"
-            )
-            if representative_by_output.get(unique_output) != result_key:
-                continue
-            mapped_refs = []
-            mapped_indices = []
-            mapped_coefficient = output_sign * coefficient
-            keep_term = True
-            for (name, ref_key), ref_indices in zip(refs, input_indices):
-                mapped = spin_unique_tensor_ref(name, ref_key, ref_indices)
-                if mapped is None:
-                    keep_term = False
-                    break
-                sign, unique_name, unique_key, unique_indices = mapped
-                mapped_coefficient *= sign
-                mapped_refs.append((unique_name, unique_key))
-                mapped_indices.append(unique_indices)
-            if not keep_term:
-                continue
-            n_mapped_equations += 1
-            normalized_subscripts = normalize_subscripts(mapped_indices, output_indices)
-            terms_by_output.setdefault(unique_output, []).append(
-                (mapped_coefficient, normalized_subscripts, tuple(mapped_refs))
-            )
+            for statement in compiled_einsum_statements(equation):
+                n_equations += 1
+                lhs, coefficient, subscripts, refs = parse_einsum_line(statement)
+                input_subscripts, output_subscripts = subscripts.split("->", 1)
+                input_indices = input_subscripts.split(",") if input_subscripts else []
+                output_mapping = spin_unique_tensor_ref(
+                    "y", result_key, output_subscripts
+                )
+                if output_mapping is None:
+                    continue
+                output_sign, output_name, output_key, output_indices = output_mapping
+                unique_output = (
+                    ""
+                    if output_key == ""
+                    else f"{output_name.split(':', 1)[1]}:{output_key}"
+                )
+                if representative_by_output.get(unique_output) != result_key:
+                    continue
+                mapped_refs = []
+                mapped_indices = []
+                mapped_coefficient = output_sign * coefficient
+                keep_term = True
+                for (name, ref_key), ref_indices in zip(refs, input_indices):
+                    mapped = spin_unique_tensor_ref(name, ref_key, ref_indices)
+                    if mapped is None:
+                        keep_term = False
+                        break
+                    sign, unique_name, unique_key, unique_indices = mapped
+                    mapped_coefficient *= sign
+                    mapped_refs.append((unique_name, unique_key))
+                    mapped_indices.append(unique_indices)
+                if not keep_term:
+                    continue
+                n_mapped_equations += 1
+                normalized_subscripts = normalize_subscripts(
+                    mapped_indices, output_indices
+                )
+                terms_by_output.setdefault(unique_output, []).append(
+                    (mapped_coefficient, normalized_subscripts, tuple(mapped_refs))
+                )
 
     t0 = time.perf_counter()
     compiled = []
@@ -515,7 +529,11 @@ def make_spin_integrated_commutator(rank, nocc, nvir):
             "compile": compile_s,
             "total": build_s + commutator_build_s + contract_s + equation_s + compile_s,
         },
-        n_equations=sum(len(equations) for equations in many_body_equations.values()),
+        n_equations=sum(
+            len(compiled_einsum_statements(equation))
+            for equations in many_body_equations.values()
+            for equation in equations
+        ),
         n_expression_terms=len(expression),
     )
 

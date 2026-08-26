@@ -51,3 +51,15 @@ def test_wickd_dsrg_h2_sto3g_regression(h2_sto3g_data, rank, solver, expected):
     assert result.max_rank == rank
     assert result.energy == pytest.approx(expected, abs=5.0e-10)
     assert result.equations.rank == rank
+
+
+@pytest.mark.slow
+def test_wickd_spin_unique_h2_sto3g_regression():
+    from experiments.wickd_dsrg_spin_integrated_benchmark import run_case
+
+    result = run_case(2, 0.74, 2, {})
+
+    assert result["status"] == "ok"
+    assert result["spin_integrated_energy"] == pytest.approx(
+        -1.137831710258920, abs=5.0e-10
+    )

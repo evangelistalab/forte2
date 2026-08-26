@@ -302,10 +302,21 @@ def _result_key_from_equation(block_key: str, equations) -> str:
     if block_key == "|":
         return ""
     for equation in equations:
-        lhs = equation.compile("einsum").split("+=", 1)[0].strip()
-        if lhs.startswith("y"):
-            return lhs[1:]
+        for statement in _compiled_einsum_statements(equation):
+            lhs = statement.split("+=", 1)[0].strip()
+            if lhs.startswith("y"):
+                return lhs[1:]
     raise RuntimeError(f"Could not infer Wick&d result key for block {block_key}")
+
+
+def _compiled_einsum_statements(equation) -> tuple[str, ...]:
+    compiled = equation.compile("einsum").replace('optimize="optimal"', "optimize=True")
+    return tuple(
+        statement.strip()
+        for line in compiled.splitlines()
+        for statement in line.split(";")
+        if statement.strip()
+    )
 
 
 def _compile_block_function(block_key: str, equations, nocc: int, nvir: int):
@@ -319,21 +330,13 @@ def _compile_block_function(block_key: str, equations, nocc: int, nvir: int):
             f"    {result_var} = np.zeros({_block_shape(result_key, nocc, nvir)!r}, dtype=float)"
         )
     for equation in equations:
-        contraction = equation.compile("einsum").replace(
-            'optimize="optimal"', "optimize=True"
+        code.extend(
+            f"    {statement}" for statement in _compiled_einsum_statements(equation)
         )
-        code.extend(f"    {line}" for line in contraction.splitlines())
     code.append(f"    return {result_var}")
     namespace = {"np": np}
     exec("\n".join(code), namespace)
     return result_key, namespace[f"eval_{result_var}"]
-
-
-def _manybody_items(equations):
-    """Iterate over Wick&d equation blocks across supported API versions."""
-    if hasattr(equations, "items"):
-        return equations.items()
-    return ((block_key, equations[block_key]) for block_key in equations)
 
 
 @lru_cache(maxsize=8)
@@ -369,7 +372,7 @@ def make_wickd_commutator(rank: int, nocc: int, nvir: int) -> WickdCommutator:
 
     t0 = time.perf_counter()
     compiled = []
-    equation_blocks = tuple(_manybody_items(many_body_equations))
+    equation_blocks = tuple(many_body_equations.items())
     for block_key, equations in sorted(equation_blocks):
         compiled.append(_compile_block_function(block_key, equations, nocc, nvir))
     compile_s = time.perf_counter() - t0
@@ -385,7 +388,11 @@ def make_wickd_commutator(rank: int, nocc: int, nvir: int) -> WickdCommutator:
             "compile": compile_s,
             "total": build_s + contract_s + equation_s + compile_s,
         },
-        n_equations=sum(len(equations) for _, equations in equation_blocks),
+        n_equations=sum(
+            len(_compiled_einsum_statements(equation))
+            for _, equations in equation_blocks
+            for equation in equations
+        ),
         n_expression_terms=len(expression),
     )
 
