@@ -138,7 +138,14 @@ class RelDSRG_MRPT2(DSRGBase):
     # i.e. this object's own effective Hamiltonian minus its parent's. A
     # downstream high-level method (e.g. RelDSRG_MRPT3) detects and applies
     # it by inspecting these attributes on its own parent_method.
+    #
+    # fno_e (a plain E_dsrg difference) is for the reported unrelaxed
+    # energy. fno_e_relax/fno_hbar1/fno_hbar2 are the corresponding
+    # difference of the two full CI-ready effective Hamiltonians, for
+    # injection into reference relaxation. Note fno_e_relax already
+    # contains fno_e (see _compute_fno_correction).
     fno_e: complex | None = field(init=False, default=None)
+    fno_e_relax: complex | None = field(init=False, default=None)
     fno_hbar1: np.ndarray | None = field(init=False, default=None)
     fno_hbar2: np.ndarray | None = field(init=False, default=None)
 
@@ -196,9 +203,30 @@ class RelDSRG_MRPT2(DSRGBase):
         """
         If this is a plain (non-FNO) instance chained onto an fno_active
         parent, build this object's own CI-ready effective Hamiltonian and
-        store its difference against the parent's as fno_e/fno_hbar1/
-        fno_hbar2 -- the eq. 11 truncation correction, for a downstream
-        high-level method (e.g. RelDSRG_MRPT3) to detect and apply.
+        store its difference against the parent's as fno_e/fno_e_relax/
+        fno_hbar1/fno_hbar2 -- the eq. 11 truncation correction, for a
+        downstream high-level method (e.g. RelDSRG_MRPT3) to detect and
+        apply.
+
+        Two separate corrections are computed, mirroring forte's own FNO
+        implementation (dsrg_fno_procrouting/dsrg.py), which keeps its
+        analogous "dept2" (a plain compute_energy() difference) and "dhpt2"
+        (a compute_Heff_actv() difference: a scalar + one-/two-body object)
+        separate:
+
+        - fno_e = E_dsrg(parent) - E_dsrg(self): a plain difference of the
+          total DSRG energies, for the reported (unrelaxed) energy.
+        - fno_e_relax/fno_hbar1/fno_hbar2 = difference of
+          _build_ci_hamiltonian's e_pt2/hbar1_pt2/hbar2_pt2, i.e. of the two
+          full CI-ready effective Hamiltonians, for injecting into reference
+          relaxation.
+
+        The two scalars are not independent: e_pt2 = [de-normal-ordering
+        terms] + E_dsrg, so fno_e_relax = [de-normal-ordering difference] +
+        fno_e. A consumer that has already applied fno_e to its own E_dsrg
+        must therefore add only fno_e_relax - fno_e when building its CI
+        Hamiltonian, or fno_e is counted twice (see
+        RelDSRG_MRPT3._build_ci_hamiltonian).
         """
         parent = self.parent_method
         if not getattr(parent, "fno_active", False):
@@ -210,7 +238,8 @@ class RelDSRG_MRPT2(DSRGBase):
             "Comput. 2024, 20, 4170-4181."
         )
         self._build_ci_hamiltonian()
-        self.fno_e = parent.e_pt2 - self.e_pt2
+        self.fno_e = parent.E_dsrg - self.E_dsrg
+        self.fno_e_relax = parent.e_pt2 - self.e_pt2
         self.fno_hbar1 = parent.hbar1_pt2 - self.hbar1_pt2
         self.fno_hbar2 = parent.hbar2_pt2 - self.hbar2_pt2
 
