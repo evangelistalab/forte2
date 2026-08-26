@@ -163,3 +163,21 @@ def test_generalized_normal_order_can_truncate_final_many_body_rank():
     assert all(term.count() <= 2 for term, _ in one_body)
     assert one_body == no_op.truncate(1)
     assert "[0a+ 0b+ 0b- 0a-]" not in generalized_normal_order_dict(one_body)
+
+
+def test_generalized_normal_order_truncation_keeps_only_supported_contractions():
+    vacuum = sparse_ops.SparseState({det("200"): 1.0})
+    op = sparse_ops.sparse_operator("[0a+ 2b+ 2b- 0a-]", 1.0)
+
+    no_op = generalized_normal_order(
+        op, vacuum, norb=3, max_cumulant=2, max_rank=-1
+    )
+    one_body = generalized_normal_order(
+        op, vacuum, norb=3, max_cumulant=2, max_rank=1
+    )
+
+    assert one_body == no_op.truncate(1)
+    assert generalized_normal_order_dict(one_body) == {
+        "[2b+ 2b-]": pytest.approx(1.0)
+    }
+    assert no_op.to_sparse_operator() == op
