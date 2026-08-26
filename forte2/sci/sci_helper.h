@@ -284,6 +284,30 @@ class SelectedCIHelper {
                             const SelectedCIStrings& list, size_t i, size_t j,
                             double int_sign) const;
 
+    /// @brief Enumerate the determinants connected to the variational space and hand each
+    /// connection to an accumulator
+    /// @param c_screen The coefficients used for screening, laid out as c_screen[i * nroots + r]
+    /// for determinant i and root r. Zeroing a determinant's entries removes it as a parent.
+    /// @param screen_threshold Connections whose criterion falls below this are never generated.
+    /// A caller that splits connections between two thresholds must pass the tighter one and let
+    /// the accumulator apply the looser one.
+    /// @param num_batches The total number of batches
+    /// @param batch_id The batch index to process
+    /// @param existing_dets Determinants already in the variational space, which are skipped
+    /// @param acc Called as acc(det, c_parent, det_index, coupling, criterion) for every
+    /// connection, where `coupling` carries the excitation sign and `criterion` is the screening
+    /// value, which is not |coupling| under the eHBCI criterion
+    ///
+    /// Batch membership is a function of the connected determinant alone, so every parent that
+    /// reaches a given determinant is visited in the same batch and the batches partition the
+    /// connected space.
+    ///
+    /// The definition lives in sci_connections.hpp.
+    template <class Acc>
+    void generate_connections(std::span<const double> c_screen, double screen_threshold,
+                              size_t num_batches, size_t batch_id, const DetSet& existing_dets,
+                              Acc&& acc) const;
+
     /// @brief Select new variational and PT2 determinants using a batch approach
     /// @param V_map The map to accumulate variational determinants and their contributions
     /// @param PT_map The map to accumulate PT2 determinants and their contributions
