@@ -122,6 +122,12 @@ void CISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<np_m
         }
     }
 
+    // optional containers forwarded to slater rules update,
+    // where partial updates are also supported
+    if (E || H || V) {
+        slater_rules_.update_integrals(static_cast<int>(lists_.norb()), E, H, V);
+    }
+
     if (!H && !V) {
         return;
     }

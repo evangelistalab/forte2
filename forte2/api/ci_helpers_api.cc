@@ -308,6 +308,8 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Return the determinants in the variational space")
         .def("ndets", &SelectedCIHelper::num_dets_var,
              "Return the number of determinants in the variational space")
+        .def("slater_rules", &SelectedCIHelper::slater_rules, "dets"_a, "I"_a, "J"_a,
+             "Compute the Hamiltonian matrix element <I|H|J>")
         .def("energies", &SelectedCIHelper::energies, "Return the energies of the roots")
         .def("ept2_var", &SelectedCIHelper::ept2_var,
              "Return the variational part of the Epstein-Nesbet second-order energy correction")
@@ -370,6 +372,8 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "Return the determinants in the variational space")
         .def("ndets", &RelSelectedCIHelper::num_dets_var,
              "Return the number of determinants in the variational space")
+        .def("slater_rules", &RelSelectedCIHelper::slater_rules, "dets"_a, "I"_a, "J"_a,
+             "Compute the Hamiltonian matrix element <I|H|J>")
         .def("energies", &RelSelectedCIHelper::energies, "Return the energies of the roots")
         .def("ept2_var", &RelSelectedCIHelper::ept2_var,
              "Return the variational part of the Epstein-Nesbet second-order energy correction")

@@ -953,8 +953,10 @@ def test_sci_per_state_params_are_not_shared():
             assert (d.count_alpha(), d.count_beta()) == (na, nb)
 
 
-def test_sci_set_ints_resets_slater_rules():
-    """set_ints must rebuild the cached SlaterRules object."""
+def test_sci_set_ints_then_run_updates_slater_rules():
+    """set_ints followed by run() must push the new integrals into the sci helper's internal
+    SlaterRules -- there is no separate, persistent Python-level SlaterRules to keep in sync
+    anymore; see SelectedCIHelper.slater_rules."""
     _, rhf = _lih_rhf_tight()
     sci = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
@@ -965,11 +967,17 @@ def test_sci_set_ints_resets_slater_rules():
     sci.run()
 
     worker = sci.sub_solvers[0]
-    det = worker.dets[0]
-    before = worker.slater_rules.slater_rules(det, det)
+    sci_helper_before = worker.sci_helper
+    dets = worker.sci_helper.dets()
+    before = worker.sci_helper.slater_rules(dets, 0, 0)
+
     # shifting only the scalar term must shift every diagonal element by the same amount
-    worker.set_ints(worker.ints.E + 1.0, worker.ints.H, worker.ints.V)
-    after = worker.slater_rules.slater_rules(det, det)
+    sci.set_ints(worker.ints.E + 1.0, worker.ints.H, worker.ints.V)
+    sci.run()
+
+    assert worker.sci_helper is sci_helper_before
+    dets = worker.sci_helper.dets()
+    after = worker.sci_helper.slater_rules(dets, 0, 0)
     assert after - before == approx(1.0)
 
 

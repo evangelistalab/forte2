@@ -48,6 +48,12 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
             self.log_level,
         )
 
+    def _update_sigma_builder_ints(self):
+        # RelCISigmaBuilder.set_Hamiltonian's E parameter is a plain double.
+        self.ci_sigma_builder.set_Hamiltonian(
+            self.ints.E.real, self.ints.H, self.ints.V
+        )
+
     def _make_ci_strings(self):
         _nactel = self.state.nel - self.ncore
         assert (

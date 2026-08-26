@@ -463,6 +463,9 @@ class SelectedCIHelper:
     def ndets(self) -> int:
         """Return the number of determinants in the variational space"""
 
+    def slater_rules(self, dets: DeterminantVector, I: int, J: int) -> float:
+        """Compute the Hamiltonian matrix element <I|H|J>"""
+
     def energies(self) -> list[float]:
         """Return the energies of the roots"""
 
@@ -559,6 +562,9 @@ class RelSelectedCIHelper:
 
     def ndets(self) -> int:
         """Return the number of determinants in the variational space"""
+
+    def slater_rules(self, dets: DeterminantVector, I: int, J: int) -> complex:
+        """Compute the Hamiltonian matrix element <I|H|J>"""
 
     def energies(self) -> list[float]:
         """Return the energies of the roots"""

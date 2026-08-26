@@ -187,14 +187,18 @@ class _CISingleStateSolver:
 
         self._setup_basis()
 
+    def _update_sigma_builder_ints(self):
+        """Push the current active-space integrals into the existing sigma builder."""
+        self.ci_sigma_builder.set_Hamiltonian(self.ints.E, self.ints.H, self.ints.V)
+
     def run(self):
         if not self.executed:
             self._ci_solver_startup()
-
-        # Create the sigma builder from the CI strings and integrals. This object
-        # handles some temporary memory deallocated at destruction and is used to
-        # compute the Hamiltonian matrix elements in the determinant basis.
-        self.ci_sigma_builder = self._make_sigma_builder_obj()
+            # Create the sigma builder from the CI strings and integrals.
+            self.ci_sigma_builder = self._make_sigma_builder_obj()
+        else:
+            # Update the integrals (reusing the same sigma builder)
+            self._update_sigma_builder_ints()
         self.ci_sigma_builder.set_memory(self.ci_params.ci_builder_memory)
         if self.ci_params.ci_algorithm.lower() == "exact":
             self._do_exact_diagonalization()

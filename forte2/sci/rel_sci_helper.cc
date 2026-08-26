@@ -106,6 +106,14 @@ void RelSelectedCIHelper::set_Hamiltonian(std::optional<double> E,
     if (V) {
         update_hbci_ints();
     }
+
+    // optional containers forwarded to slater rules update,
+    // where partial updates are also supported
+    if (E || H || V) {
+        slater_rules_.update_integrals(static_cast<int>(norb_), E, H, V);
+        det_energies_.clear();
+        compute_det_energies();
+    }
 }
 
 void RelSelectedCIHelper::set_frozen_creation(const std::vector<size_t>& frozen_creation) {

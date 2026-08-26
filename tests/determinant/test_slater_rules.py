@@ -177,6 +177,85 @@ def test_slater_rules_rejects_negative_norb():
         SlaterRules(-1, 0.0, h, v)
 
 
+def _random_hermitian_integrals(nspinor, seed):
+    """Helper function to generate random Hermitian one- and antisymmetrizable two-electron
+    integrals suitable for RelSlaterRules."""
+    rng = np.random.default_rng(seed)
+    h = rng.normal(size=(nspinor, nspinor)) + 1j * rng.normal(size=(nspinor, nspinor))
+    h = h + h.T.conj()
+    v = rng.normal(size=(nspinor,) * 4) + 1j * rng.normal(size=(nspinor,) * 4)
+    v = v + v.transpose(1, 0, 3, 2)  # electron exchange: <pq|rs> = <qp|sr>
+    v = v + v.transpose(2, 3, 0, 1).conj()  # Hermiticity: <pq|rs> = <rs|pq>*
+    return h, v
+
+
+@pytest.mark.parametrize("which", ["E", "H", "V"])
+def test_rel_slater_rules_update_integrals_partial_update_keeps_other_arguments(which):
+    """update_integrals with only one of E/H/V given must update only that argument, matching
+    a fresh RelSlaterRules built with the same effective (E, H, V)."""
+    nspinor = 6
+    h_a, v_a = _random_hermitian_integrals(nspinor, seed=1)
+    h_b, v_b = _random_hermitian_integrals(nspinor, seed=2)
+    e_a, e_b = 0.1, 0.2
+
+    reused = RelSlaterRules(nspinor, e_a, h_a, v_a)
+    if which == "E":
+        reused.update_integrals(nspinor, scalar_energy=e_b)
+    elif which == "H":
+        reused.update_integrals(nspinor, one_electron_integrals=h_b)
+    else:
+        reused.update_integrals(nspinor, two_electron_integrals=v_b)
+
+    fresh = RelSlaterRules(
+        nspinor,
+        e_b if which == "E" else e_a,
+        h_b if which == "H" else h_a,
+        v_b if which == "V" else v_a,
+    )
+
+    dets = _random_determinants(nspinor, 3, 0, ndets=5)
+    for det in dets:
+        assert reused.energy(det) == approx(fresh.energy(det))
+
+
+def test_rel_slater_rules_update_integrals_nspinor_change_requires_h_and_v_together():
+    """RelSlaterRules's owned H/V copies are sized by nspinor, so a stale one left over from a
+    different nspinor would be read out of bounds; giving only one of H/V while nspinor changes
+    must raise, and giving both together must succeed."""
+    nspinor_a, nspinor_b = 4, 6
+    h_a, v_a = _random_hermitian_integrals(nspinor_a, seed=1)
+    h_b, v_b = _random_hermitian_integrals(nspinor_b, seed=2)
+
+    rsr = RelSlaterRules(nspinor_a, 0.1, h_a, v_a)
+    with pytest.raises(RuntimeError, match="given together"):
+        rsr.update_integrals(nspinor_b, one_electron_integrals=h_b)
+    with pytest.raises(RuntimeError, match="given together"):
+        rsr.update_integrals(nspinor_b, two_electron_integrals=v_b)
+
+    rsr.update_integrals(nspinor_b, 0.2, h_b, v_b)
+    fresh = RelSlaterRules(nspinor_b, 0.2, h_b, v_b)
+    for det in _random_determinants(nspinor_b, 3, 0, ndets=5):
+        assert rsr.energy(det) == approx(fresh.energy(det))
+
+
+def test_rel_slater_rules_copies_integrals_not_aliases():
+    """RelSlaterRules must deep-copy H/V at construction/update_integrals time rather than
+    alias the numpy arrays: mutating H/V afterward from Python must not change subsequently
+    computed energies."""
+    nspinor = 5
+    h, v = _random_hermitian_integrals(nspinor, seed=3)
+    rsr = RelSlaterRules(nspinor, 0.1, h, v)
+
+    dets = _random_determinants(nspinor, 3, 0, ndets=5)
+    energies_before = [rsr.energy(det) for det in dets]
+
+    h[:] = 0.0
+    v[:] = 0.0
+
+    energies_after = [rsr.energy(det) for det in dets]
+    assert energies_after == approx(energies_before)
+
+
 def test_slater_rules_diagonal_edge_cases_match_main_formula():
     """Test that the energy of edge case determinants matches the main diagonal formula."""
     norb = 4
@@ -321,9 +400,7 @@ def test_slater_rules_1_complex():
     orbitals = [0, 1, 2, 3]
     norb = len(orbitals)
     system.two_component = True
-    ints = SpinorbitalIntegrals(
-        system=system, C=mos_2c.C[0], spinorbitals=orbitals
-    )
+    ints = SpinorbitalIntegrals(system=system, C=mos_2c.C[0], spinorbitals=orbitals)
 
     random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=norb)))
     ints.H = random_phase.T.conj() @ ints.H @ random_phase
@@ -338,7 +415,7 @@ def test_slater_rules_1_complex():
     )
 
     slater_rules = RelSlaterRules(
-        norb * 2, ints.E, ints.H.astype(complex), ints.V.astype(complex)
+        norb, ints.E, ints.H.astype(complex), ints.V.astype(complex)
     )
 
     dets = hilbert_space(norb, scf.na + scf.nb, 0)

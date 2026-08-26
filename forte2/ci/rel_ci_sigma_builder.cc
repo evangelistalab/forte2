@@ -94,6 +94,12 @@ void RelCISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<n
         }
         update_v_hz(*V);
     }
+
+    // optional containers forwarded to slater rules update,
+    // where partial updates are also supported
+    if (E || H || V) {
+        rel_slater_rules_.update_integrals(static_cast<int>(norb), E, H, V);
+    }
 }
 
 void RelCISigmaBuilder::update_h_hz(np_matrix_complex& H) {

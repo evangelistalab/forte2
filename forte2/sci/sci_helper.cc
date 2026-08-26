@@ -97,6 +97,19 @@ void SelectedCIHelper::set_Hamiltonian(std::optional<double> E, std::optional<np
     if (H || V) {
         update_hbci_ints();
     }
+
+    // slater_rules_ is a separate view of the same integrals (used by compute_det_energies())
+    // and is not touched by the code above.
+    if (E || H || V) {
+        slater_rules_.update_integrals(static_cast<int>(norb_), E, H, V);
+        // det_energies_ is an incremental cache: compute_det_energies() only fills entries past
+        // its current size, so every determinant already in the variational space would keep an
+        // energy computed under the previous Hamiltonian unless the cache is cleared and eagerly
+        // rebuilt here (eagerly, so this object is never left with a stale/empty cache regardless
+        // of what the caller does next).
+        det_energies_.clear();
+        compute_det_energies();
+    }
 }
 
 void SelectedCIHelper::set_frozen_creation(const std::vector<size_t>& frozen_creation) {
