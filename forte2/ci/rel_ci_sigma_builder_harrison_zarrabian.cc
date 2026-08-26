@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
 #include "helpers/timer.hpp"
@@ -25,30 +27,32 @@ template <typename F> inline void gated_parallel_for_chunked(size_t count, F&& f
 
 std::tuple<std::span<std::complex<double>>, std::span<std::complex<double>>, size_t>
 RelCISigmaBuilder::get_Kblock_spans(size_t nrows, size_t ncols) const {
-    // Find the maximum size of the temporary block to allocate. This is either set by the full
-    // size of the block (nrows * ncols) or by the available memory size, whichever is smaller
-    std::size_t block_size =
-        std::min(nrows * ncols, memory_size_ / (2 * sizeof(std::complex<double>)));
-
-    // Find the corresponding chunk size for K
-    size_t cols_chunk_size = std::min(block_size / nrows, ncols);
-
-    // If the chunk size is too small to store one row, resize it
-    bool need_resize = false;
-    if (cols_chunk_size < 1) {
-        // resize to a reasonable minimum and update block_size
-        cols_chunk_size = std::min(static_cast<size_t>(64), ncols);
-        block_size = nrows * cols_chunk_size;
-        need_resize = true;
+    if ((nrows == 0) or (ncols == 0)) {
+        throw std::invalid_argument("K-block dimensions must be nonzero.");
     }
 
-    // If the temporary buffers are too small, resize them
-    if (Kblock1_.size() < block_size) {
-        Kblock1_.resize(block_size);
-        Kblock2_.resize(block_size);
-        if (need_resize) {
-            auto block_size_MB = to_mb<std::complex<double>>(2 * block_size);
-        }
+    const size_t max_elements_per_buffer = memory_size_ / (2 * sizeof(std::complex<double>));
+    if (max_elements_per_buffer < nrows) {
+        throw std::runtime_error("The CI builder memory limit (" + std::to_string(memory_size_) +
+                                 " bytes) is too small for one complex K-block column of " +
+                                 std::to_string(nrows) + " elements per buffer.");
+    }
+    const size_t cols_chunk_size = std::min({max_elements_per_buffer / nrows, ncols,
+                                             static_cast<size_t>(std::numeric_limits<int>::max())});
+    const size_t block_size = nrows * cols_chunk_size;
+
+    // Keep a larger live size: shrinking here makes a later larger kernel value-initialize the
+    // same scratch storage again. The returned spans still expose only block_size elements.
+    const bool can_reuse = Kblock1_.size() >= block_size && Kblock2_.size() >= block_size &&
+                           Kblock1_.capacity() <= max_elements_per_buffer &&
+                           Kblock2_.capacity() <= max_elements_per_buffer;
+    if (!can_reuse) {
+        // Drop both allocations before growing either one. This prevents geometric vector growth
+        // from exceeding the pair budget and leaves a failed partial allocation safe to retry.
+        std::vector<std::complex<double>>{}.swap(Kblock1_);
+        std::vector<std::complex<double>>{}.swap(Kblock2_);
+        Kblock1_ = std::vector<std::complex<double>>(block_size);
+        Kblock2_ = std::vector<std::complex<double>>(block_size);
     }
 
     return {std::span<std::complex<double>>{Kblock1_.data(), block_size},
@@ -99,7 +103,8 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
                 // Parallelize over K: each K writes its own column of Kblock2, so no write race.
                 gated_parallel_for_chunked(K_size, [&](size_t kb, size_t ke) {
                     for (size_t K = kb; K < ke; ++K) {
-                        const auto& Klist = lists_.get_alpha_1h_list(class_K, K_start + K, class_Ia);
+                        const auto& Klist =
+                            lists_.get_alpha_1h_list(class_K, K_start + K, class_Ia);
                         for (const auto& [sign_K, q, I] : Klist)
                             Kblock2[q * K_size + K] += static_cast<double>(sign_K) * tr[I];
                     }
@@ -177,11 +182,11 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                 // Parallelize over K: each K writes its own column of Kblock2, so no write race.
                 gated_parallel_for_chunked(K_size, [&](size_t kb, size_t ke) {
                     for (size_t K = kb; K < ke; ++K) {
-                        const auto& Krlist = lists_.get_alpha_2h_list(class_K, K + K_start, class_Ia);
+                        const auto& Krlist =
+                            lists_.get_alpha_2h_list(class_K, K + K_start, class_Ia);
                         for (const auto& [sign_K, q, s, I] : Krlist) {
                             const size_t qs_index = pair_index_gt(q, s);
-                            Kblock2[qs_index * K_size + K] +=
-                                static_cast<double>(sign_K) * tr[I];
+                            Kblock2[qs_index * K_size + K] += static_cast<double>(sign_K) * tr[I];
                         }
                     }
                 });
@@ -209,7 +214,8 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                                 if (J < J_begin || J >= J_end)
                                     continue;
                                 const size_t pr_index = pair_index_gt(p, r);
-                                TL[J] += static_cast<double>(sign_K) * Kblock1[pr_index * K_size + K];
+                                TL[J] +=
+                                    static_cast<double>(sign_K) * Kblock1[pr_index * K_size + K];
                             }
                         }
                     });

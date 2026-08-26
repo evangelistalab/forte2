@@ -9,7 +9,6 @@ from forte2 import (
     orbitals,
     State,
     MCOptimizer,
-    integrals,
     CISolver,
 )
 from forte2.helpers.comparisons import approx
@@ -18,6 +17,7 @@ from forte2.orbitals import (
     OrbitalBlockBuilder,
     Semicanonicalizer,
     make_natural_orbitals,
+    mo_overlap,
 )
 from forte2.base_classes import DavidsonLiuParams
 from forte2.state import EmbeddingMOSpace
@@ -40,7 +40,7 @@ def test_semican_rhf():
     )
 
     semi = orbitals.Semicanonicalizer(mo_space=mo_space, system=system)
-    semi.semi_canonicalize(g1=np.diag([2, 2, 2, 0, 0, 0]), C_contig=rhf.C[0])
+    semi.semi_canonicalize(g1=np.diag([2, 2, 2, 0, 0, 0]), C_contig=rhf.mos.C[0])
     assert rhf.eps[0] == approx(semi.eps_semican)
 
 
@@ -66,7 +66,7 @@ def test_semican_ci():
     eci_orig = ci.evals_flat[0]
     assert eci_orig == approx(-109.01444624968038)
 
-    rhf.C[0] = ci.C[0].copy()
+    rhf.mos = ci.mos.copy()
     ci = CI(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
@@ -101,7 +101,7 @@ def test_semican_casscf():
     eci_orig = mc.ci_solver.evals_flat[0]
     assert eci_orig == approx(-109.0811491968)
 
-    rhf.C[0] = mc.C[0].copy()
+    rhf.mos = mc.mos.copy()
     ci_solver = CISolver(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
@@ -135,7 +135,7 @@ def test_semican_fock_offdiag():
 
     mo_space = ci.mo_space
     semi = orbitals.Semicanonicalizer(mo_space=mo_space, system=system)
-    semi.semi_canonicalize(g1=ci.make_average_1rdm(), C_contig=ci.C[0])
+    semi.semi_canonicalize(g1=ci.make_average_1rdm(), C_contig=ci.mos.C[0])
 
     fock = semi.fock
     fock_cc = fock[mo_space.core, mo_space.core]
@@ -213,9 +213,7 @@ def test_semican_embedding_gas_blocks():
     assert "gas" in spaces
     assert "actv" not in spaces
 
-    mixed = Semicanonicalizer(
-        system=DummySystem(), mo_space=mo_space, mix_active=True
-    )
+    mixed = Semicanonicalizer(system=DummySystem(), mo_space=mo_space, mix_active=True)
     spaces = mixed._semicanonical_spaces()
     assert "actv" in spaces
     assert "gas" not in spaces
@@ -334,14 +332,16 @@ def test_semican_orbitals():
         final_orbitals="semicanonical",
     )(rhf)
     mc.run()
-    c_mc = mc.C[0].copy()
+    c_mc = mc.mos.C[0].copy()
     assert mc.E == approx(eci)
 
     semi = Semicanonicalizer(mo_space=mc.mo_space, system=system)
-    semi.semi_canonicalize(g1=mc.ci_solver.make_average_1rdm(), C_contig=mc.C[0])
+    semi.semi_canonicalize(g1=mc.ci_solver.make_average_1rdm(), C_contig=mc.mos.C[0])
     c_semi = semi.C_semican.copy()
-    ovlp = integrals.overlap(system)
 
     assert np.allclose(
-        np.abs(c_mc.T @ ovlp @ c_semi), np.eye(c_mc.shape[1]), rtol=0, atol=1e-8
+        np.abs(mo_overlap(c_mc, system, c_semi)),
+        np.eye(c_mc.shape[1]),
+        rtol=0,
+        atol=1e-8,
     )

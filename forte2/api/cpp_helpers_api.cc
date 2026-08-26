@@ -5,6 +5,7 @@
 #include "helpers/indexing.hpp"
 #include "helpers/np_matrix_functions.h"
 #include "helpers/logger.h"
+#include "helpers/parallel.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -14,6 +15,7 @@ namespace forte2 {
 namespace {
 void export_indexing_api(nb::module_& m);
 void export_logging_api(nb::module_& m);
+void export_parallel_api(nb::module_& m);
 } // namespace
 
 void export_cpp_helpers_api(nb::module_& m) {
@@ -22,6 +24,8 @@ void export_cpp_helpers_api(nb::module_& m) {
     export_indexing_api(sub_m);
 
     export_logging_api(sub_m);
+
+    export_parallel_api(sub_m);
 }
 
 namespace {
@@ -53,5 +57,7 @@ void export_logging_api(nb::module_& sub_m) {
         "get_log_level", []() { return static_cast<int>(Logger::getInstance().getLevel()); },
         "Get the current logging verbosity level");
 }
+
+void export_parallel_api(nb::module_& sub_m) { sub_m.def("get_num_threads", &get_num_threads); }
 } // namespace
 } // namespace forte2

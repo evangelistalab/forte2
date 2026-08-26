@@ -317,9 +317,12 @@ void compute_two_electron_3c_by_shell(
     const std::size_t stride2 = buffer.shape(1);
     const std::size_t stride3 = buffer.shape(2);
 
+    const std::size_t nish = ish1 - ish0;
+    const std::size_t njsh = jsh1 - jsh0;
+
     /// This lambda function computes the integrals for a given range of shells
     /// in the first basis and fills the buffer.
-    auto kernel = [&](std::size_t s1_begin, std::size_t s1_end) {
+    auto kernel = [&](std::size_t idx_begin, std::size_t idx_end) {
         libint2::Engine engine(Op, max_nprim, max_l);
         engine.set(libint2::BraKet::xs_xx);
         if constexpr (!std::is_same_v<Params, NoParams>) {
@@ -327,37 +330,38 @@ void compute_two_electron_3c_by_shell(
         }
         const auto& results = engine.results();
 
-        // Loop over the given range of shells in basis1
-        for (std::size_t s1 = s1_begin; s1 < s1_end; ++s1) {
+        // Loop over the given range of composite ij indices
+        for (std::size_t idx = idx_begin; idx < idx_end; ++idx) {
+            const std::size_t s1 = ish0 + idx / njsh;
+            const std::size_t s2 = jsh0 + idx % njsh;
+
             const auto& shell1 = basis1[s1];
             auto [f1, n1] = first_size1[s1];
             f1 -= first1; // adjust f1 to be the index in the sliced basis
 
-            // Loop over the shells in basis2 and basis3
-            for (std::size_t s2 = jsh0; s2 < jsh1; ++s2) {
-                const auto& shell2 = basis2[s2];
-                auto [f2, n2] = first_size2[s2];
-                f2 -= first2; // adjust f2 to be the index in the sliced basis
-                for (std::size_t s3 = ksh0; s3 < ksh1; ++s3) {
-                    const auto& shell3 = basis3[s3];
+            const auto& shell2 = basis2[s2];
+            auto [f2, n2] = first_size2[s2];
+            f2 -= first2; // adjust f2 to be the index in the sliced basis
 
-                    // Compute the integrals for this shell triplet
-                    engine.compute(shell1, shell2, shell3);
-                    auto buf = results[0];
-                    if (!buf)
-                        continue;
+            for (std::size_t s3 = ksh0; s3 < ksh1; ++s3) {
+                const auto& shell3 = basis3[s3];
 
-                    auto [f3, n3] = first_size3[s3];
-                    f3 -= first3; // adjust f3 to be the index in the sliced basis
+                // Compute the integrals for this shell triplet
+                engine.compute(shell1, shell2, shell3);
+                auto buf = results[0];
+                if (!buf)
+                    continue;
 
-                    std::size_t offset = f1 * stride2 * stride3 + f2 * stride3 + f3;
+                auto [f3, n3] = first_size3[s3];
+                f3 -= first3; // adjust f3 to be the index in the sliced basis
 
-                    for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
-                        for (std::size_t j = 0; j < n2; ++j) {
-                            for (std::size_t k = 0; k < n3; ++k, ++ijk) {
-                                data[offset + i * stride2 * stride3 + j * stride3 + k] =
-                                    static_cast<double>(buf[ijk]);
-                            }
+                const std::size_t offset = f1 * stride2 * stride3 + f2 * stride3 + f3;
+
+                for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
+                    for (std::size_t j = 0; j < n2; ++j) {
+                        for (std::size_t k = 0; k < n3; ++k, ++ijk) {
+                            data[offset + i * stride2 * stride3 + j * stride3 + k] =
+                                static_cast<double>(buf[ijk]);
                         }
                     }
                 }
@@ -365,7 +369,7 @@ void compute_two_electron_3c_by_shell(
         }
     };
 
-    parallel_for_chunked(ish0, ish1, kernel);
+    parallel_for_chunked(0, nish * njsh, kernel);
 
     // Finalize libint2
     libint2::finalize();

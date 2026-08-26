@@ -47,7 +47,6 @@ def test_sciscf_n2_multiple_roots(
             screening_criterion="hbci",
             guess_occ_window=2,
             guess_vir_window=2,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         die_if_not_converged=False,

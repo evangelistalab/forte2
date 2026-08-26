@@ -103,6 +103,61 @@ def test_avas_subspace():
     )(rhf)
 
 
+def test_avas_bare_element_subspace():
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+
+    expected_minaos = [10, 5, 10]
+    for i, spec in enumerate(["N", "N1", "N1-2"]):
+        avas = AVAS(
+            selection_method="total",
+            num_active=4,
+            subspace=[spec],
+        )(rhf)
+        # A bare element selects at least one AO into the subspace.
+        assert len(avas.minao_subspace) == expected_minaos[i]
+
+
+def test_avas_total_num_active_too_large():
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rhf = RHF(charge=0, e_tol=1e-11)(system)
+    rhf.run()
+    with pytest.raises(ValueError, match="exceeds the number"):
+        AVAS(selection_method="total", num_active=999, subspace=["N(2p)"])(rhf).run()
+
+
+def test_avas_rohf_half_integer_ms_somo_count():
+    system = System(
+        xyz="N 0 0 0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rohf = ROHF(charge=0, ms=0.5)(system)
+    # AVAS doesn't do anything here since the only
+    # active orbital is the SOMO, but it is a valid input
+    _ = AVAS(
+        selection_method="separate",
+        subspace=["N(2p)"],
+        num_active_docc=0,
+        num_active_uocc=0,
+    )(rohf)
+
+
 def test_avas_separate_n2():
     eref_casci = -109.00462206150347
     eref_casci_avas = -109.005019207444

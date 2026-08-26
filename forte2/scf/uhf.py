@@ -27,6 +27,11 @@ class UHF(SCFBase):
     ms: float = None
     guess_mix: bool = False  # only used if ms == 0
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
+        self.provides.add("gradient")
+
     def __call__(self, system):
         system.two_component = False
         self = super().__call__(system)
@@ -54,8 +59,9 @@ class UHF(SCFBase):
         ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
-        Ja, Jb = fock_builder.build_J(self.D)
-        K = fock_builder.build_K([self.C[0][:, : self.na], self.C[1][:, : self.nb]])
+        (Ja, Jb), K = fock_builder.build_JK(
+            [self.C[0][:, : self.na], self.C[1][:, : self.nb]]
+        )
         F = [H + Ja + Jb - k for k in K]
 
         F_canon = F
@@ -142,11 +148,15 @@ class UHF(SCFBase):
         return F
 
     def _apply_level_shift(self, F, S):
-        if self.level_shift is None or all(ls < 1e-4 for ls in self.level_shift):
+        if self._current_level_shift is None or all(
+            ls < 1e-4 for ls in self._current_level_shift
+        ):
             return F
         D_vir = [S - S @ d @ S for d in self.D]
 
-        return [f + ls * d for ls, f, d in zip(self.level_shift, F, D_vir)]
+        return [
+            f + ls * d for ls, f, d in zip(self._current_level_shift, F, D_vir)
+        ]
 
     def _get_occupation(self):
         self.aocc = self.na

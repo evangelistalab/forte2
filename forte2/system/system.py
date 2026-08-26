@@ -1,4 +1,6 @@
-from dataclasses import dataclass, field, fields
+import copy
+from dataclasses import dataclass, field, fields, asdict
+from typing import Literal, get_args
 import numpy as np
 from numpy.typing import NDArray
 import json
@@ -14,9 +16,15 @@ from forte2.helpers import (
     print_metric_info,
 )
 from forte2.x2c import X2CHelper
+from forte2.base_classes.params import X2CParams
 from forte2.jkbuilder import FockBuilder, FockBuilderOTF
 from .build_basis import build_basis, build_basis_from_dict
-from .geom_utils import GeometryHelper, parse_geometry
+from .geom_utils import (
+    GeometryHelper,
+    parse_geometry,
+    coords_to_atoms,
+    coords_to_xyz,
+)
 
 
 @dataclass
@@ -35,13 +43,10 @@ class System:
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
-    x2c_type : str | None, optional, default=None
-        The type of X2C transformation to be used. Options are "sf" for scalar
-        relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
-    snso_type : str | None, optional, default="row-dependent"
-        The type of screened nuclear spin-orbit coupling scaling scheme to use.
-        Only relevant if `x2c_type` is "so".
-        Options are None, "boettger", "dc", "dcb", or "row-dependent".
+    x2c : X2CParams | None, optional, default=None
+        The X2C Hamiltonian to use, specified as an :class:`X2CParams` instance
+        (see its documentation for the available ``x2c_type``, ``x2c_model``, and
+        ``snso_type`` options). If None, no X2C transformation is applied.
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     overlap_ortho_rtol : float, optional, default=1e-8
@@ -63,6 +68,8 @@ class System:
     jk_mem_thres_mb : float | None, optional, default=None
         If set, the Fock builder will have a memory footprint smaller than the threshold.
         If None, the the in-core Fock builder algorithm will be used with no special memory limit.
+    integral_backend : str, optional, default="auto"
+        The integral backend to use. Options are "auto", "libint2", and "libcint".
 
     Attributes
     ----------
@@ -109,9 +116,8 @@ class System:
     # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
-    x2c_type: str | None = None
-    snso_type: str | None = "row-dependent"
-    unit: str = "angstrom"
+    x2c: X2CParams | None = None
+    unit: Literal["angstrom", "bohr"] = "angstrom"
     overlap_ortho_rtol: float = 1e-8
     df_ortho_rtol: float | None = None
     cholesky_tei: bool = False
@@ -120,6 +126,7 @@ class System:
     symmetry_tol: float = 1e-4
     use_gaussian_charges: bool = False
     jk_mem_thres_mb: float | None = None
+    integral_backend: Literal["auto", "libint2", "libcint"] = "auto"
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -140,11 +147,11 @@ class System:
         self._common_init()
 
     def _sanity_check(self):
-        if self.unit not in [
-            "angstrom",
-            "bohr",
-        ]:
-            raise ValueError(f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'.")
+        _valid_units = get_args(self.__annotations__["unit"])
+        if self.unit not in _valid_units:
+            raise ValueError(
+                f"System.unit must be one of {_valid_units}, but got {self.unit}"
+            )
         if self.overlap_ortho_rtol < 0:
             raise ValueError("overlap_ortho_rtol must be non-negative.")
         if self.df_ortho_rtol is not None and self.df_ortho_rtol < 0:
@@ -153,9 +160,33 @@ class System:
             raise ValueError("cholesky_tol must be non-negative.")
         if self.symmetry_tol < 0:
             raise ValueError("symmetry_tol must be non-negative.")
+        if self.x2c is not None and not isinstance(self.x2c, X2CParams):
+            raise ValueError(
+                f"x2c must be an X2CParams instance or None, but got {type(self.x2c)}."
+            )
+        _valid_backends = get_args(self.__annotations__["integral_backend"])
+        if self.integral_backend not in _valid_backends:
+            raise ValueError(
+                f"Invalid integral_backend: {self.integral_backend}. Must be one of {_valid_backends}."
+            )
 
-    def _common_init(self, skip_basis_init=False):
-        self._init_geometry()
+    @property
+    def x2c_type(self):
+        """Spin structure from :attr:`x2c` (``"sf"``, ``"so"``, or None)."""
+        return self.x2c.x2c_type if self.x2c is not None else None
+
+    @property
+    def x2c_model(self):
+        """Decoupling model from :attr:`x2c` (``"1e"``, ``"sap"``, or None)."""
+        return self.x2c.x2c_model if self.x2c is not None else None
+
+    @property
+    def snso_type(self):
+        """SNSO scaling from :attr:`x2c`, or None when not requested."""
+        return self.x2c.snso_type if self.x2c is not None else None
+
+    def _common_init(self, skip_basis_init=False, atoms=None):
+        self._init_geometry(atoms=atoms)
         if not skip_basis_init:
             self._init_basis()
         self._init_gaussian_charges()
@@ -167,6 +198,51 @@ class System:
         self.nmo = int(info["n_kept"])
         self.fock_builder = self._init_fock_builder()
         # The B tensors here are lazily evaluated, so no overhead if not used
+
+    def with_geometry(self, coordinates, unit="bohr"):
+        """
+        Return a copy of this system with the atoms moved to new positions.
+        The original System object is not modified.
+
+        Parameters
+        ----------
+        coordinates : array_like
+            New Cartesian coordinates, shape ``(natoms, 3)``. The atom ordering
+            must match :attr:`atomic_charges`.
+        unit : str, optional, default="bohr"
+            The unit of `coordinates`, either "bohr" or "angstrom".
+
+        Returns
+        -------
+        System
+            A new system at the requested geometry.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``symmetry=True``. Symmetry detection recenters the molecule on
+            its center of mass and reorients it along its principal axes, so the
+            returned system would not sit at the requested coordinates.
+        ValueError
+            If `coordinates` does not have shape ``(natoms, 3)``, or if `unit`
+            is not "bohr" or "angstrom".
+        """
+        if self.symmetry:
+            raise NotImplementedError(
+                "with_geometry requires symmetry=False: symmetry detection reorients "
+                "the molecule, so the new system would not be at the requested "
+                "coordinates."
+            )
+
+        atoms = coords_to_atoms(self.atomic_charges, coordinates, unit=unit)
+
+        # shallow copy of attributes only, the heavy attributes are
+        # rebuilt with _common_init
+        new = copy.copy(self)
+        new.xyz = coords_to_xyz(self.atomic_charges, [atom[1] for atom in atoms])
+        new.unit = "bohr"
+        new._common_init(atoms=atoms)
+        return new
 
     def save(self, filename):
         """
@@ -184,6 +260,9 @@ class System:
         d["basis_set"] = None
         d["auxiliary_basis_set"] = None
         d["minao_basis_set"] = None
+        # json.dump can't serialize an X2CParams instance; store its fields as a dict.
+        if self.x2c is not None:
+            d["x2c"] = asdict(self.x2c)
 
         res = {"init_args": d}
         res["basis_data"] = self.basis.serialize()
@@ -199,6 +278,8 @@ class System:
         with open(f"{filename}.json", "r", encoding="utf-8") as f:
             data = json.load(f)
             init_args = data["init_args"]
+            if isinstance(init_args.get("x2c"), dict):
+                init_args["x2c"] = X2CParams(**init_args["x2c"])
             system = cls.__new__(cls)
             for k, v in init_args.items():
                 setattr(system, k, v)
@@ -227,8 +308,8 @@ class System:
         system._common_init(skip_basis_init=True)
         return system
 
-    def _init_geometry(self):
-        self.atoms = parse_geometry(self.xyz, self.unit)
+    def _init_geometry(self, atoms=None):
+        self.atoms = parse_geometry(self.xyz, self.unit) if atoms is None else atoms
         self.geom_helper = GeometryHelper(
             self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol
         )
@@ -336,7 +417,11 @@ class System:
             logger.log_info1(
                 f"Memory threshold of {self.jk_mem_thres_mb} MB is too low to store the B tensor and metric. Using on-the-fly Fock builder."
             )
-            return FockBuilderOTF(self, jk_mem_thres_mb=self.jk_mem_thres_mb)
+            return FockBuilderOTF(
+                self,
+                jk_mem_thres_mb=self.jk_mem_thres_mb,
+                backend=self.integral_backend,
+            )
         elif 2 * b_tensor_size_mb + metric_size_mb > self.jk_mem_thres_mb:
             logger.log_info1(
                 f"Memory threshold of {self.jk_mem_thres_mb} MB is too low to store the transposed B tensor. Using in-core Fock builder without storing transposed B tensor."
@@ -405,7 +490,8 @@ class System:
         Args
         ----
         origin : tuple[float, float, float], optional
-            The origin point for the dipole calculation. If None, the center of mass of the system is used.
+            The origin point for the dipole calculation. If None, the Cartesian
+            coordinate origin (0, 0, 0) is used.
         unit : str, optional, default="debye"
             The unit for the dipole moment. Can be "debye" or "au".
 
@@ -416,7 +502,7 @@ class System:
         """
         assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
         charges = self.atomic_charges
-        positions = self.atomic_positions
+        positions = self.atomic_positions.copy()
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]
@@ -430,7 +516,8 @@ class System:
         Args
         ----
         origin : tuple[float, float, float], optional
-            The origin point for the quadrupole calculation. If None, the center of mass of the system is used.
+            The origin point for the quadrupole calculation. If None, the
+            Cartesian coordinate origin (0, 0, 0) is used.
         unit : str, optional, default="debye"
             The unit for the quadrupole moment. Can be "debye" or "au".
 
@@ -441,7 +528,7 @@ class System:
         """
         assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
         charges = self.atomic_charges
-        positions = self.atomic_positions
+        positions = self.atomic_positions.copy()
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]

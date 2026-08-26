@@ -32,6 +32,11 @@ class GHF(SCFBase):
 
     Parameters
     ----------
+    ms_guess : float, optional, default=None
+        Target spin projection (Ms) used only to build the initial guess
+        occupation (na_guess/nb_guess). Must be a multiple of 0.5 and
+        compatible with the electron count. If None, a default occupation is
+        used. Also gates whether ``guess_mix`` is applied.
     guess_mix : bool, optional, default=False
         If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if nel is even.
     alpha_beta_mix : bool, optional, default=False
@@ -52,6 +57,10 @@ class GHF(SCFBase):
     _diis_update = RHF._diis_update
     _assign_orbital_symmetries = RHF._assign_orbital_symmetries
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = True
+
     def __call__(self, system):
         system.two_component = True
         if self.j_adapt:
@@ -59,7 +68,9 @@ class GHF(SCFBase):
             self.Usph2j = np.vstack((ua, ub))
             S = system.ints_overlap()
             S_spinor = self.Usph2j.conj().T @ S @ self.Usph2j
-            self.Xorth_spinor, _, info = canonical_orth(S_spinor, system.overlap_ortho_rtol)
+            self.Xorth_spinor, _, info = canonical_orth(
+                S_spinor, system.overlap_ortho_rtol
+            )
             self.nmo_spinor = info["n_kept"]
         self = super().__call__(system)
         self._parse_state()
@@ -85,21 +96,16 @@ class GHF(SCFBase):
             ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
-        Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
-        nbf = Jaa.shape[0]
         if self.iter == 0 and self.ms_guess is not None:
             # Apply na/nb_guess
             mo_a, mo_b = self._guess_ms(self.C[0])
             occ = list(mo_a[: self.na_guess]) + list(mo_b[: self.nb_guess])
             occ = sorted(occ)
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K([self.C[0][:, occ]])
+            Cocc = self.C[0][:, occ]
         else:
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K([self.C[0][:, : self.nel]])
-        F = H.copy()
-        F[:nbf, :nbf] += Jaa + Jbb - Kaa
-        F[:nbf, nbf:] += -Kab
-        F[nbf:, :nbf] += -Kba
-        F[nbf:, nbf:] += Jaa + Jbb - Kbb
+            Cocc = self.C[0][:, : self.nel]
+        J, K = fock_builder.build_JK([Cocc])
+        F = H + J[0] - K[0]
 
         F_canon = F
 
@@ -133,13 +139,13 @@ class GHF(SCFBase):
         return np.block([[Daa, Dab], [Dba, Dbb]])
 
     def _apply_level_shift(self, F, S):
-        if self.level_shift is None or self.level_shift < 1e-4:
+        if self._current_level_shift is None or self._current_level_shift < 1e-4:
             return F
         Daa, Dab, Dba, Dbb = self.D
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         D_vir = S - S @ D_spinor @ S
 
-        return [F[0] + self.level_shift * D_vir]
+        return [F[0] + self._current_level_shift * D_vir]
 
     def _initial_guess(self, H, guess_type="minao"):
         C = RHF._initial_guess(self, H, guess_type)[0]
@@ -215,6 +221,16 @@ class GHF(SCFBase):
         )
         return energy.real
 
+    def gradient(self) -> np.ndarray:
+        """Compute the density-fitted GHF analytic nuclear gradient.
+
+        The SCF calculation is run automatically if needed. The returned
+        gradient has shape ``(natoms, 3)`` and is expressed in Hartree/Bohr.
+        """
+        from .ghf_grad import _compute_ghf_gradient
+
+        return _compute_ghf_gradient(self)
+
     def _get_occupation(self):
         self.nocc = self.nel
         self.nuocc = self.nmo * 2 - self.nocc
@@ -240,7 +256,9 @@ class GHF(SCFBase):
             idx = nocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _guess_ms(self, C):

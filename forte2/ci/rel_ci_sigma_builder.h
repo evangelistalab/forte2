@@ -3,6 +3,7 @@
 #include <functional>
 #include <vector>
 #include <cmath>
+#include <optional>
 #include <span>
 #include <complex>
 
@@ -18,8 +19,11 @@ namespace forte2 {
 class RelCISigmaBuilder {
   public:
     // == Class Constructor ==
+    /// @param algorithm The CI algorithm to use, fixed for the object's lifetime (default and
+    ///        only supported value is "hz"/"harrison-zarrabian"; Knowles-Handy is unported from
+    ///        the non-relativistic CISigmaBuilder, so "kh"/"knowles-handy" raises)
     RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H, np_tensor4_complex& V,
-                      int log_level = 3);
+                      int log_level = 3, const std::string& algorithm = "hz");
 
     // == Class Public Functions ==
 
@@ -27,17 +31,17 @@ class RelCISigmaBuilder {
     /// @param mb Memory size in megabytes (default is 1 GB)
     void set_memory(int mb);
 
-    /// @brief Set the CI algorithm to use for building the Hamiltonian
-    /// @param algorithm The CI algorithm to use (default is "knowles-handy")
-    /// Supported algorithms: "kh", "hz", "knowles-handy", "harrison-zarrabian"
-    void set_algorithm(const std::string& algorithm);
-
     /// @brief Get the name of the current sigma build algorithm
     /// @return The name of the current sigma build algorithm
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V);
+    /// @param E New scalar energy, or nullopt to keep the current value
+    /// @param H New one-electron integrals, or nullopt to keep the current value
+    /// @param V New two-electron integrals, or nullopt to keep the current value
+    void set_Hamiltonian(std::optional<double> E = std::nullopt,
+                         std::optional<np_matrix_complex> H = std::nullopt,
+                         std::optional<np_tensor4_complex> V = std::nullopt);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -62,6 +66,17 @@ class RelCISigmaBuilder {
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
     void Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const;
+
+    /// @brief Apply the scalar and one-electron part of the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector |sigma> = (E + sum_pq H_pq E_pq) |basis>
+    /// @note The one-electron integrals are not required to be Hermitian.
+    void sigma_one_electron(np_vector_complex basis, np_vector_complex sigma) const;
+
+    /// @brief Apply the two-electron part of the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector, the two-electron part of H |basis>
+    void sigma_two_electron(np_vector_complex basis, np_vector_complex sigma) const;
 
     /// @brief Compute the spin-dependent one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -116,15 +131,12 @@ class RelCISigmaBuilder {
     // == Class Private Variables ==
 
     /// @brief The CI algorithm to use for building the Hamiltonian
-    CIAlgorithm algorithm_ = CIAlgorithm::Knowles_Handy; // Default to Knowles-Handy algorithm
+    // Default to Harrison-Zarrabian: Knowles-Handy is unimplemented for this class.
+    CIAlgorithm algorithm_ = CIAlgorithm::Harrison_Zarrabian;
     /// @brief The CIStrings object containing the determinant classes and their properties
     const CIStrings& lists_;
     /// @brief The scalar energy
     double E_;
-    /// @brief One-electron integrals in the form of a matrix H[p][q] = <p|H|q> = h_pq
-    np_matrix_complex H_;
-    /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
-    np_tensor4_complex V_;
     /// @brief Object for computing the energy and Slater determinants
     RelSlaterRules rel_slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
@@ -158,6 +170,11 @@ class RelCISigmaBuilder {
     /// @brief Two-electron integrals: V[p][q][r][s] = <pq||rs> = (pr|qs) - (ps|qr)
     mutable std::vector<std::complex<double>> v_pr_qs;
 
+    /// @brief Rebuild h_hz from H. Depends only on H.
+    void update_h_hz(np_matrix_complex& H);
+    /// @brief Rebuild v_pr_qs from V. Depends only on V.
+    void update_v_hz(np_tensor4_complex& V);
+
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector
@@ -174,23 +191,8 @@ class RelCISigmaBuilder {
     void H2_hz_same_spin(std::span<std::complex<double>> basis,
                          std::span<std::complex<double>> sigma) const;
 
-    // -- Knowles-Handy Algorithm Functions/Data --
-
-    // Modified one-electron integrals used in the Knowles-Handy algorithm
-    mutable std::vector<std::complex<double>> h_kh;
-    // Modified two-electron integrals used in the Knowles-Handy algorithm
-    // mutable std::vector<std::complex<double>> v_ijkl_hk;
-
-    /// @brief Builds the one-electron contribution to the sigma vector using the Knowles-Handy
-    /// algorithm.
-    void H1_kh(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
-
-    /// @brief Builds the two-electron contribution to the sigma vector using the Knowles-Handy
-    /// algorithm.
-    void H2_kh(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
-
     std::tuple<std::span<std::complex<double>>, std::span<std::complex<double>>, size_t>
-    get_Kblock_spans(size_t dim, size_t maxKa) const;
+    get_Kblock_spans(size_t nrows, size_t ncols) const;
 };
 
 [[nodiscard]] std::span<std::complex<double>> gather_block(std::span<std::complex<double>> source,

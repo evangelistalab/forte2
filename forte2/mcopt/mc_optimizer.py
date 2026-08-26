@@ -1,35 +1,32 @@
-from abc import ABC
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
 
 
 from forte2.base_classes import (
+    ActiveSpaceSolver,
     CIBase,
     RelCIBase,
-    SystemMixin,
-    MOsMixin,
-    MOSpaceMixin,
+    Method,
 )
-from forte2.orbitals import (
-    NaturalOrbitals,
-    Semicanonicalizer,
-)
-from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
+from forte2.orbitals import FinalOrbitals, validate_final_orbitals
 from forte2.helpers import logger, LBFGS
 from forte2.system.basis_utils import BasisInfo
+from forte2.system import ModelSystem
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
     pretty_print_ci_nat_occ_numbers,
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
 )
+from forte2.symmetry import real_sph_to_j_adapted
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 @dataclass
-class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
+class MCOptimizerBase(Method):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -58,14 +55,15 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         Whether to compute and report transition dipole moments at the end of the optimization.
     final_orbitals : str, optional, default="semicanonical"
         Specify the type of final orbitals. Allowed values are:
+
         - "semicanonical": The average Fock matrix is diagonal within each orbital subspace.
         - "natural": Same as semicanonical, but the active orbitals are natural orbitals
-                     and diagonalize the spin- and state-averaged 1-RDM within the CAS
-                     subspace or within each of the GAS subspaces.
+          and diagonalize the spin- and state-averaged 1-RDM within the CAS
+          subspace or within each of the GAS subspaces.
         - "original": The orbitals are left in the original basis after the optimization.
-                      This option is only for debugging purposes and should generally be avoided
-                      as the active orbitals will not be uniquely defined and may not be suitable
-                      for subsequent calculations.
+          This option is only for debugging purposes and should generally be avoided
+          as the active orbitals will not be uniquely defined and may not be suitable
+          for subsequent calculations.
 
     Notes
     -----
@@ -86,13 +84,20 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     g_tol: float = 1e-7
     die_if_not_converged: bool = True
 
+    # Same sanity-check tolerance CIBase uses for its own final-orbital invariance
+    # check; not a dataclass field of MCOptimizerBase's own, so it stays in sync with
+    # ActiveSpaceSolver's single source of truth rather than duplicating the literal.
+    _final_orbital_energy_tol: ClassVar[float] = (
+        ActiveSpaceSolver._final_orbital_energy_tol
+    )
+
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
     max_rotation: float = 0.2
 
     ### Post-iteration
     do_transition_dipole: bool = False
-    final_orbitals: str = "semicanonical"
+    final_orbitals: FinalOrbitals = "semicanonical"
 
     ### Non-init attributes
     converged: bool = field(default=False, init=False)
@@ -102,17 +107,13 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
             raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
 
-        if self.final_orbitals not in [
-            "semicanonical",
-            "natural",
-            "original",
-        ]:
-            raise ValueError(
-                "final_orbitals must be either 'semicanonical', 'natural', or 'original'."
-            )
+        validate_final_orbitals(self.final_orbitals)
+
+        self.requires = {"system", "mos"}
+        self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, method):
-        self.parent_method = method
+        self._register_parent_method(method)
         # make sure we don't print the CI output at INFO1 level
         current_verbosity = logger.get_verbosity_level()
         # only log subproblem if the verbosity is higher than INFO1
@@ -122,12 +123,17 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             self.ci_solver_verbosity = current_verbosity + 1
         return self
 
+    def reset(self):
+        """Invalidate this optimizer and its ci_solver before a new run()."""
+        self.ci_solver.reset()
+        return super().reset()
+
     def _startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        self.system = self.parent_method.system
+        self.mos = self.parent_method.mos.copy()
         # make sure to register parent_method
         self.ci_solver = self.ci_solver(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
@@ -140,7 +146,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
-        self._C = self.C[0][:, perm].copy()
+        self._C = self.mos.C[0][:, perm].copy()
         # core slice does not include frozen orbitals!
         self.core = self.mo_space.docc
         # self.actv will be a list if multiple GASes are defined
@@ -239,8 +245,6 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         self.g1_act = self.make_average_1rdm()
         g2_act = self.make_average_2rdm()
-        # ci_maxiter_save = self.ci_solver.get_maxiter()
-        # self.ci_solver.set_maxiter(self.ci_maxiter)
 
         # Prepare the orbital optimizer
         self.orb_opt.set_rdms(self.g1_act, g2_act)
@@ -314,7 +318,6 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                     logger.log_warning(
                         f"Orbital optimization did not converge in {self.maxiter} iterations."
                     )
-        # self.ci_solver.set_maxiter(ci_maxiter_save)
         self.ci_solver.set_ints(
             self.orb_opt.Ecore + self.system.nuclear_repulsion,
             self.orb_opt.Fcore[self.actv, self.actv],
@@ -338,7 +341,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # undo _make_spaces_contiguous
         perm = self.mo_space.contig_to_orig
-        self.C[0] = self._C[:, perm].copy()
+        self.mos.C[0] = self._C[:, perm].copy()
 
         # optionally, rotate the final orbitals to semicanonical or natural orbitals
         self._rotate_final_orbitals()
@@ -351,7 +354,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             logger.log_warning(
                 f"CI solver did not converge for all roots: {convergence_status}"
             )
-            logger.log_warning("Consider increasing ci_maxiter.")
+            logger.log_warning("Consider increasing davidson_liu_params.maxiter.")
 
         self.executed = True
         return self
@@ -360,15 +363,16 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         pretty_print_ci_summary(self.ci_solver.sa_info, self.ci_solver.evals_per_solver)
         self.ci_solver.compute_natural_occupation_numbers()
         pretty_print_ci_nat_occ_numbers(
-            self.ci_solver.sa_info, self.mo_space, self.ci_solver.nat_occs
+            self.ci_solver.sa_info,
+            self.mo_space,
+            self.ci_solver.nat_occs,
+            getattr(self.ci_solver, "nat_occs_avg", None),
         )
         top_dets = self.ci_solver.get_top_determinants()
         pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)
-        if not self.system.two_component:
-            # TODO: enable AO composition for 2c
-            self._print_ao_composition()
+        self._print_ao_composition()
         if self.do_transition_dipole:
-            self.ci_solver.compute_transition_properties(self.C[0])
+            self.ci_solver.compute_transition_properties(self.mos.C[0])
             pretty_print_ci_transition_props(
                 self.ci_solver.sa_info,
                 self.ci_solver.transition_dipoles,
@@ -377,141 +381,49 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             )
 
     def _rotate_final_orbitals(self) -> None:
-        if self.final_orbitals not in ["semicanonical", "natural"]:
-            return  # no final orbital transformation requested
+        # point ci_solver's mos to self.mos
+        self.ci_solver.mos = self.mos
+        self.ci_solver._rotate_final_orbitals(self.final_orbitals)
 
-        C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
-        g1_act = self.make_average_1rdm()
-
-        # get the final orbitals in contiguous ordering
-        C_final = self._make_final_orbitals_contig(g1_act, C_contig)
-
-        # undo contiguous ordering
-        self.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
-
-        # rerun the CI solver in the final orbital basis to get the final energies
-        new_E_ci, new_E_avg = self._rerun_ci_in_current_basis()
-
-        if self.ci_solver.orbital_rotation_invariant:
-            self._check_final_orbital_energy_invariance(new_E_ci, new_E_avg)
-        else:
-            self._report_final_orbital_energy_change(
-                self.E_ci,
-                new_E_ci,
-            )
-        # update energies
-        self.E_ci = new_E_ci
-        self.E_avg = new_E_avg
+        self.E_ci = np.array(self.ci_solver.E)
+        self.E_avg = self.ci_solver.E_avg
         self.E = self.E_avg
 
     def _final_orbital_irrep_indices(self) -> NDArray:
         """Return the irrep indices of the final orbitals in contiguous ordering."""
 
-        return np.asarray(self.irrep_indices[0], dtype=int)[
+        return np.asarray(self.mos.irrep_indices[0], dtype=int)[
             self.mo_space.orig_to_contig
         ]
 
-    def _make_final_orbitals_contig(
-        self, g1_act: NDArray, C_contig: NDArray
-    ) -> NDArray:
-        """Make the final orbitals and return them in contiguous ordering."""
-
-        irrep_indices = self._final_orbital_irrep_indices()
-
-        # Semicanonicalize the orbital subspaces (except the CAS/GAS in the case of natural orbitals)
-        semi = Semicanonicalizer(
-            mo_space=self.mo_space,
-            system=self.system,
-            irrep_indices=irrep_indices,
-            mix_inactive=False,
-            mix_active=False,
-            do_active=(self.final_orbitals == "semicanonical"),
-        )
-        semi.semi_canonicalize(
-            g1=g1_act,
-            C_contig=C_contig,
-        )
-        C_final = semi.C_semican.copy()
-
-        # If natural orbitals are requested, diagonalize the spin- and state-averaged
-        # 1-RDM within each separate GAS subspace.
-        if self.final_orbitals == "natural":
-            natural_orbital = NaturalOrbitals(
-                self.mo_space,
-                irrep_indices=irrep_indices,
-            )
-            natural_orbital.make_natural_orbitals(
-                g1_act=g1_act,
-                C_contig=C_final,
-            )
-            C_final = natural_orbital.C_natural.copy()
-
-        return C_final
-
-    def _rerun_ci_in_current_basis(self) -> tuple[NDArray, float]:
-        """Rerun the CI solver in the current orbital basis and return the new CI eigenvalues and average energy."""
-        if self.system.two_component:
-            ints = SpinorbitalIntegrals(
-                system=self.system,
-                C=self.C[0],
-                spinorbitals=self.mo_space.active_indices,
-                core_spinorbitals=self.mo_space.docc_indices,
-            )
-        else:
-            ints = RestrictedMOIntegrals(
-                system=self.system,
-                C=self.C[0],
-                orbitals=self.mo_space.active_indices,
-                core_orbitals=self.mo_space.docc_indices,
-            )
-        self.ci_solver.set_ints(ints.E, ints.H, ints.V)
-
-        # due to the basis change, we can't restart from previous CI vectors
-        self.ci_solver.reset_eigensolver()
-        self.ci_solver.run()
-        return np.array(self.ci_solver.E), self.ci_solver.compute_average_energy()
-
-    def _check_final_orbital_energy_invariance(
-        self, new_E_ci: NDArray, new_E_avg: float
-    ) -> None:
-        # Sanity check: the new energies must be consistent with the previous ones
-        max_ci_de = np.max(np.abs(self.E_ci - new_E_ci))
-        avg_de = np.abs(self.E_avg - new_E_avg)
-        de = np.abs(self.E - new_E_avg)
-        max_de = max(max_ci_de, avg_de, de)
-        if max_de > self.e_tol * 10.0:  # account for near-threshold numerical noise
-            logger.log_warning(
-                f"After producing the final orbitals, the CI solver converged to different solutions: "
-                f"Final energies: E_CI = {new_E_ci}, E_avg = {new_E_avg:.10f}, E = {self.E:.10f}. "
-                f"max(abs(E_CI_i - E_CI_new_i)) = {max_ci_de:.4e}, "
-                f"abs(E_avg - E_avg_new) = {avg_de:.4e}, "
-                f"abs(E - E_avg_new) = {de:.4e}"
-            )
-            logger.log_warning("Consider increasing ci_maxiter.")
-
-            raise RuntimeError(
-                "After producing the final orbitals, the CI solver converged to different roots."
-            )
-
-    def _report_final_orbital_energy_change(
-        self,
-        old_E_ci,
-        new_E_ci,
-    ):
-        max_de = np.max(np.abs(old_E_ci - new_E_ci))
-
-        if max_de > self.e_tol:
-            logger.log_warning(
-                "The active-space solver is not invariant to final orbital "
-                f"rotations; the final-basis CI energies changed by up to {max_de:.4e}."
-            )
-
     def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            return
         basis_info = BasisInfo(self.system, self.system.basis)
-        logger.log_info1("\nAO Composition of core MOs:")
-        basis_info.print_ao_composition(self.C[0], self.mo_space.docc_indices)
-        logger.log_info1("\nAO Composition of active MOs:")
-        basis_info.print_ao_composition(self.C[0], self.mo_space.active_indices)
+        if getattr(self.system, "two_component", False):
+            if getattr(self.system, "x2c_type", None) == "so":
+                if not hasattr(self, "Usph2j"):
+                    ua, ub = real_sph_to_j_adapted(self.system.basis)
+                    self.Usph2j = np.vstack((ua, ub))
+                C = self.Usph2j.conj().T @ self.mos.C[0]
+                logger.log_info1("\nSpinor Composition of core MOs:")
+                basis_info.print_spinor_composition(C, self.mo_space.docc_indices)
+                logger.log_info1("\nSpinor Composition of active MOs:")
+                basis_info.print_spinor_composition(C, self.mo_space.active_indices)
+            else:
+                logger.log_info1("\nAO Composition of core MOs:")
+                basis_info.print_ao_composition(
+                    self.mos.C[0], self.mo_space.docc_indices, spinorbital=True
+                )
+                logger.log_info1("\nAO Composition of active MOs:")
+                basis_info.print_ao_composition(
+                    self.mos.C[0], self.mo_space.active_indices, spinorbital=True
+                )
+        else:
+            logger.log_info1("\nAO Composition of core MOs:")
+            basis_info.print_ao_composition(self.mos.C[0], self.mo_space.docc_indices)
+            logger.log_info1("\nAO Composition of active MOs:")
+            basis_info.print_ao_composition(self.mos.C[0], self.mo_space.active_indices)
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
@@ -628,16 +540,23 @@ class MCOptimizer(MCOptimizerBase):
     ) -> NDArray:
         return self.ci_solver.make_sf_2rdm(left_root, right_root)
 
-    def gradient(self) -> NDArray:
+    def gradient(self, root=None) -> NDArray:
         r"""
-        Compute a state-specific CASSCF/GASSCF analytic nuclear gradient.
+        Compute a target-root CASSCF/GASSCF analytic nuclear gradient.
 
-        This implementation supports only real, nonrelativistic,
-        state-specific CASSCF/GASSCF wave functions. State-averaged gradients,
-        frozen-core and frozen-virtual response, active-frozen rotations,
-        frozen inter-GAS rotations, X2C, and Gaussian nuclear charges are not
-        supported. Requesting any unsupported feature raises
+        This implementation supports real nonrelativistic and complex
+        two-component state-specific CASSCF/GASSCF wave functions, including
+        SF- and SO-X2C-1e Hamiltonians. It also supports individual roots of
+        real nonrelativistic SA-CASSCF/GASSCF wave functions when
+        ``final_orbitals='original'``. Frozen-core, frozen-virtual,
+        active-frozen orbital, and frozen inter-GAS orbital response are not
+        supported.
+        Point and Gaussian nuclear charge distributions are supported; Gaussian
+        charges require libcint. Requesting any unsupported feature raises
         ``NotImplementedError``.
+        Both the orbital optimization and all CI roots must be converged; an
+        unconverged wave function raises ``RuntimeError`` because the
+        stationary-gradient expression does not apply.
 
         The gradient is assembled in the same integral-layer form as the RHF
         and UHF gradients:
@@ -651,11 +570,16 @@ class MCOptimizer(MCOptimizerBase):
             + W_{PQ}(P|Q)^x.
 
         Here :math:`\Gamma_{\mu\nu}` is the full spin-free one-particle
-        density, :math:`W^S_{\mu\nu}` is the AO representation of the
-        symmetric CASSCF/GASSCF orbital Lagrangian, and
+        density, :math:`W^S_{\mu\nu}` is the AO energy-weighted density, and
         :math:`W^P_{\mu\nu}` and :math:`W_{PQ}` are the density-fitted
         two-electron derivative weights defined in
         ``docs/technical_notes/df_gradients.tex``.
+
+        Parameters
+        ----------
+        root : int or None, optional
+            Absolute target-root index. Required for a state-averaged wave
+            function and otherwise defaults to zero.
 
         Returns
         -------
@@ -664,4 +588,4 @@ class MCOptimizer(MCOptimizerBase):
         """
         from .mc_optimizer_grad import _compute_casscf_gradient
 
-        return _compute_casscf_gradient(self)
+        return _compute_casscf_gradient(self, root=root)

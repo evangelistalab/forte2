@@ -72,3 +72,15 @@ cmake_install.cmake
 *.bat
 vmd_cube_command
 vmd_mo_script.vmd
+
+# all latex intermediates and pdf files
+*.pdf
+*.aux
+*.bbl
+*.synctex.gz
+*.out
+*Notes.bib
+
+# claude-related files
+.claude
+CLAUDE.md

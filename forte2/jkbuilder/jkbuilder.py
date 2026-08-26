@@ -79,6 +79,68 @@ class FockBuilder:
             )
         return np.ascontiguousarray(self.B_Pmn.transpose((2, 0, 1)))
 
+    def _check_df_metric(self):
+        if isinstance(self.system, forte2.ModelSystem) or self.system.cholesky_tei:
+            raise NotImplementedError(
+                "Metric-inverted three-center integrals require density fitting."
+            )
+
+    def build_metric_inverted_density_contraction(self, D):
+        r"""Return the metric-inverted three-center tensor contracted with a
+        one-particle density, without forming the full three-center tensor.
+
+        .. math::
+
+            \rho^P=\sum_{\mu\nu}D_{\mu\nu}Z^P_{\mu\nu}
+            =\sum_Q X_{QP}\Big(\sum_{\mu\nu}D_{\mu\nu}B^Q_{\mu\nu}\Big).
+
+        Parameters
+        ----------
+        D : NDArray
+            A one-particle density with shape ``(nbf, nbf)``.
+
+        Returns
+        -------
+        NDArray
+            The vector ``rho`` with shape ``(naux,)``.
+        """
+        self._check_df_metric()
+        bP = np.einsum("Pmn,nm->P", self.B_Pmn, D, optimize=True)
+        return self.Mm12.T @ bP
+
+    def build_metric_inverted_mo_block(self, *pairs):
+        r"""Return the metric-inverted three-center tensor transformed into
+        one or more MO blocks, without forming the full three-center tensor.
+
+        .. math::
+
+            Z^P_{ij}=\sum_Q X_{QP}\sum_k\Big(\sum_{\mu\nu}
+            C^{\mathrm{bra},k}_{\mu i}B^Q_{\mu\nu}C^{\mathrm{ket},k}_{\nu j}\Big).
+
+        Every pair contributes to the same output block, so the raw
+        (pre-inversion) contractions are summed before the metric is
+        applied once.
+
+        Parameters
+        ----------
+        *pairs : tuple[NDArray, NDArray]
+            One or more ``(Cbra, Cket)`` coefficient matrix pairs, each with
+            shapes ``(nbf, ni)`` and ``(nbf, nj)``. All pairs must produce
+            the same ``(ni, nj)`` output shape. Callers are responsible for
+            conjugating ``Cbra`` where required.
+
+        Returns
+        -------
+        NDArray
+            The tensor ``Z`` with shape ``(naux, ni, nj)``.
+        """
+        self._check_df_metric()
+        raw = np.einsum("Pmn,mi,nj->Pij", self.B_Pmn, *pairs[0], optimize=True)
+        for Cbra, Cket in pairs[1:]:
+            raw += np.einsum("Pmn,mi,nj->Pij", self.B_Pmn, Cbra, Cket, optimize=True)
+        Z = np.einsum("QP,Qij->Pij", self.Mm12, raw, optimize=True)
+        return Z
+
     def _build_B_model_system(self):
         nbf = self.system.nbf
         eri = self.system.eri.reshape((nbf**2,) * 2)
@@ -148,6 +210,8 @@ class FockBuilder:
                 )
             # M^{-1/2} = L^{-T} L^{-1}, so L^{-1} can be considered as M^{-1/2}
             X = sp.linalg.solve_triangular(L, np.eye(naux), lower=True)
+
+        self.Mm12 = X
 
         # Compute the integrals (P|mn) with P in the auxiliary basis and m, n in the system basis
         Pmn = integrals.coulomb_3c(self.system, auxiliary_basis)
@@ -510,9 +574,6 @@ class FockBuilder:
         ----------
         C : NDArray
             Coefficient matrix for the set of spin-orbitals.
-        antisymmetrize : bool, optional, default=False
-            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
-            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------
@@ -663,9 +724,13 @@ class FockBuilderOTF:
 
         if self.backend == "auto":
             max_l = max(self.auxbasis.max_l, self.basis.max_l)
-            _backend = integrals._choose_backend(max_l)
+            if integrals.LIBCINT_AVAILABLE:
+                _backend = integrals._choose_backend(max_l, backend="libcint")
+            else:
+                _backend = integrals._choose_backend(max_l)
         else:
             _backend = self.backend
+
         if _backend == "libint2":
             self.compute_int3c2e_slice = libint2_compute
         else:  # libcint
@@ -780,6 +845,81 @@ class FockBuilderOTF:
         else:
             return _compute_Am1y_cholesky(self.L, y)
 
+    def build_metric_inverted_density_contraction(self, D):
+        r"""Return the metric-inverted three-center tensor contracted with a
+        one-particle density, without forming the full three-center tensor.
+
+        .. math::
+
+            \rho^P=\sum_{\mu\nu}D_{\mu\nu}Z^P_{\mu\nu}
+            =\sum_Q(M^{-1})_{PQ}\Big(\sum_{\mu\nu}D_{\mu\nu}(Q|\mu\nu)\Big).
+
+        Raw three-center integrals are regenerated in auxiliary-shell
+        batches and contracted immediately, consistent with the on-the-fly
+        builder's memory model.
+
+        Parameters
+        ----------
+        D : NDArray
+            A one-particle density with shape ``(nbf, nbf)``.
+
+        Returns
+        -------
+        NDArray
+            The vector ``rho`` with shape ``(naux,)``.
+        """
+        bP = np.zeros(self.naux, dtype=D.dtype)
+        pshell0 = 0
+        while pshell0 < self.nshaux:
+            pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+            _buf = self._fill_Pmn_buffer(pshell0, pshell1)
+            np.einsum("Pmn,nm->P", _buf, D, optimize=True, out=bP[pb0:pb1])
+            pshell0 = pshell1
+        return self._apply_Mm1(bP)
+
+    def build_metric_inverted_mo_block(self, *pairs):
+        r"""Return the metric-inverted three-center tensor transformed into
+        one or more MO blocks, without forming the full three-center tensor.
+
+        .. math::
+
+            Z^P_{ij}=\sum_Q(M^{-1})_{PQ}\sum_k\Big(\sum_{\mu\nu}
+            C^{\mathrm{bra},k}_{\mu i}(Q|\mu\nu)C^{\mathrm{ket},k}_{\nu j}\Big).
+
+        Raw three-center integrals are regenerated in auxiliary-shell
+        batches and contracted immediately, consistent with the on-the-fly
+        builder's memory model. Every pair contributes to the same output
+        block, so the raw (pre-inversion) contractions are summed before the
+        metric is applied once.
+
+        Parameters
+        ----------
+        *pairs : tuple[NDArray, NDArray]
+            One or more ``(Cbra, Cket)`` coefficient matrix pairs, each with
+            shapes ``(nbf, ni)`` and ``(nbf, nj)``. All pairs must produce
+            the same ``(ni, nj)`` output shape. Callers are responsible for
+            conjugating ``Cbra`` where required.
+
+        Returns
+        -------
+        NDArray
+            The tensor ``Z`` with shape ``(naux, ni, nj)``.
+        """
+        ni, nj = pairs[0][0].shape[1], pairs[0][1].shape[1]
+        dtype = np.result_type(*(np.result_type(Cbra, Cket) for Cbra, Cket in pairs))
+        raw = np.zeros((self.naux, ni, nj), dtype=dtype)
+        pshell0 = 0
+        while pshell0 < self.nshaux:
+            pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+            _buf = self._fill_Pmn_buffer(pshell0, pshell1)
+            for Cbra, Cket in pairs:
+                raw[pb0:pb1] += np.einsum(
+                    "Pmn,mi,nj->Pij", _buf, Cbra, Cket, optimize=True
+                )
+            pshell0 = pshell1
+        Z = self._apply_Mm1(raw.reshape(self.naux, -1))
+        return Z.reshape(raw.shape)
+
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0
         pshell1 = pshell0
@@ -793,6 +933,21 @@ class FockBuilderOTF:
 
     def _fill_Pmn_buffer(self, pshell0, pshell1):
         return self.compute_int3c2e_slice(pshell0, pshell1)
+
+    def _transpose_mPi(self, Pmi, n, scratch):
+        # reinterpretation of buffer, no new allocation
+        mPi = scratch.reshape(-1)[: self.nbf * self.naux * n].reshape(
+            self.nbf, self.naux, n
+        )
+        np.einsum("Pmi->mPi", Pmi, optimize=True, out=mPi)
+        return mPi
+
+    def _conjugate_mPi(self, mPi, n, scratch):
+        mPi_conj = scratch.reshape(-1)[: self.nbf * self.naux * n].reshape(
+            self.nbf, self.naux, n
+        )
+        np.conjugate(mPi, out=mPi_conj)
+        return mPi_conj
 
     def _J_kernel(self, D):
         # 1. Batch over the (raw) P index of (P|mn) integrals
@@ -851,12 +1006,10 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Pmi_buf[:, :, : i1 - i0],
             )
-            K += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Pmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
+            mPi = self._transpose_mPi(
+                self._Pmi_buf[:, :, : i1 - i0], i1 - i0, self._Qmi_buf
             )
+            K += np.einsum("mPi,nPi->mn", mPi, mPi, optimize=True)
             i0 = i1
         return K
 
@@ -910,27 +1063,21 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Qmi_buf[:, :, : i1 - i0],
             )
+
+            mPi_a = self._transpose_mPi(
+                self._Pmi_buf[:, :, : i1 - i0], i1 - i0, self._Qmi_buf2
+            )
+            mPi_b = self._transpose_mPi(
+                self._Qmi_buf[:, :, : i1 - i0], i1 - i0, self._Pmi_buf
+            )
+            mPi_a_conj = self._conjugate_mPi(mPi_a, i1 - i0, self._Qmi_buf)
             # aa contribution
-            K[0] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Pmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
-            )
+            K[0] += np.einsum("mPi,nPi->mn", mPi_a, mPi_a_conj, optimize=True)
+            mPi_b_conj = self._conjugate_mPi(mPi_b, i1 - i0, self._Qmi_buf)
             # ab contribution
-            K[1] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Qmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
-            )
+            K[1] += np.einsum("mPi,nPi->mn", mPi_a, mPi_b_conj, optimize=True)
             # bb contribution
-            K[2] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Qmi_buf[:, :, : i1 - i0],
-                self._Qmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
-            )
+            K[2] += np.einsum("mPi,nPi->mn", mPi_b, mPi_b_conj, optimize=True)
             i0 = i1
         return K
 
@@ -986,12 +1133,10 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Pmi_buf[:, :, : i1 - i0],
             )
-            K += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Pmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
+            mPi = self._transpose_mPi(
+                self._Pmi_buf[:, :, : i1 - i0], i1 - i0, self._Qmi_buf
             )
+            K += np.einsum("mPi,nPi->mn", mPi, mPi, optimize=True)
             if J_pass == 0:
                 bP = self._apply_Mm1(bP)
             J_pass += 1
@@ -1101,27 +1246,20 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Qmi_buf[:, :, : i1 - i0],
             )
-            # Kaa contribution
-            K[0] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Pmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
+            mPi_a = self._transpose_mPi(
+                self._Pmi_buf[:, :, : i1 - i0], i1 - i0, self._Qmi_buf2
             )
-            # Kab contribution
-            K[1] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Qmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
+            mPi_b = self._transpose_mPi(
+                self._Qmi_buf[:, :, : i1 - i0], i1 - i0, self._Pmi_buf
             )
-            # Kbb contribution
-            K[2] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Qmi_buf[:, :, : i1 - i0],
-                self._Qmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
-            )
+            mPi_a_conj = self._conjugate_mPi(mPi_a, i1 - i0, self._Qmi_buf)
+            # aa contribution
+            K[0] += np.einsum("mPi,nPi->mn", mPi_a, mPi_a_conj, optimize=True)
+            mPi_b_conj = self._conjugate_mPi(mPi_b, i1 - i0, self._Qmi_buf)
+            # ab contribution
+            K[1] += np.einsum("mPi,nPi->mn", mPi_a, mPi_b_conj, optimize=True)
+            # bb contribution
+            K[2] += np.einsum("mPi,nPi->mn", mPi_b, mPi_b_conj, optimize=True)
             if J_pass == 0:
                 bPa = self._apply_Mm1(bPa)
                 bPb = self._apply_Mm1(bPb)

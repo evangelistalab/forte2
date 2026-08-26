@@ -4,7 +4,75 @@ import numpy as np
 
 from forte2.helpers import logger
 from forte2.symmetry import rotation_mat, PGSymmetryDetector
-from forte2.data import ATOM_DATA, ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR
+from forte2.data import (
+    ATOM_DATA,
+    ATOM_SYMBOL_TO_Z,
+    ANGSTROM_TO_BOHR,
+    Z_TO_ATOM_SYMBOL,
+)
+
+
+def coords_to_atoms(atomic_charges, coordinates, unit="bohr"):
+    """
+    Build a parsed atom list from atomic numbers and Cartesian coordinates.
+
+    Parameters
+    ----------
+    atomic_charges : array_like
+        Atomic numbers, shape ``(natoms,)``.
+    coordinates : array_like
+        Cartesian coordinates, shape ``(natoms, 3)``.
+    unit : str, optional, default="bohr"
+        The unit of `coordinates`, either "bohr" or "angstrom".
+
+    Returns
+    -------
+    list[list[int, NDArray]]
+        A list of ``[atomic number, coordinates]`` pairs, in Bohr.
+    """
+    if unit not in ("bohr", "angstrom"):
+        raise ValueError(f"unit must be 'bohr' or 'angstrom', but got {unit}.")
+
+    atomic_charges = np.asarray(atomic_charges, dtype=int).reshape(-1)
+    coordinates = np.asarray(coordinates, dtype=float)
+    expected_shape = (atomic_charges.size, 3)
+    if coordinates.shape != expected_shape:
+        raise ValueError(
+            f"Expected coordinates of shape {expected_shape}, got {coordinates.shape}."
+        )
+
+    conv = 1.0 if unit == "bohr" else ANGSTROM_TO_BOHR
+    return [[int(Z), xyz * conv] for Z, xyz in zip(atomic_charges, coordinates)]
+
+
+def coords_to_xyz(atomic_charges, coordinates):
+    """
+    Format atomic numbers and Cartesian coordinates as an XYZ geometry string.
+
+    Parameters
+    ----------
+    atomic_charges : array_like
+        Atomic numbers, shape ``(natoms,)``.
+    coordinates : array_like
+        Cartesian coordinates, shape ``(natoms, 3)``.
+
+    Returns
+    -------
+    str
+        An XYZ geometry string, one atom per line.
+    """
+    atomic_charges = np.asarray(atomic_charges, dtype=int).reshape(-1)
+    coordinates = np.asarray(coordinates, dtype=float)
+    expected_shape = (atomic_charges.size, 3)
+    if coordinates.shape != expected_shape:
+        raise ValueError(
+            f"Expected coordinates of shape {expected_shape}, got {coordinates.shape}."
+        )
+
+    return "\n".join(
+        f"{Z_TO_ATOM_SYMBOL[int(Z)]} {xyz[0]:.16f} {xyz[1]:.16f} {xyz[2]:.16f}"
+        for Z, xyz in zip(atomic_charges, coordinates)
+    )
 
 
 def parse_geometry(geom, unit):
@@ -29,7 +97,8 @@ def parse_geometry(geom, unit):
     if not lines:
         raise ValueError("Empty geometry string provided.")
 
-    if re.match(r"^([A-Z][a-z]?)$", lines[0]):
+    # Z-matrix should have only the element name on the first line
+    if re.match(r"^([a-zA-Z][a-zA-Z]?)$", lines[0]):
         return parse_zmatrix(lines, unit)
     else:
         return parse_xyz(lines, unit)
@@ -73,7 +142,7 @@ def parse_xyz(lines, unit):
         # look for lines of the form "Li 0.0 0.0 0.0" or "N -10 0 0" and capture the element symbol and coordinates
         # Use regex to match the expected format
         m = re.match(
-            r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s*$",
+            r"^\s*([a-zA-Z][a-zA-Z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s*$",
             line,
         )
         # Skip lines that do not match the expected format
@@ -81,7 +150,7 @@ def parse_xyz(lines, unit):
             # Test if one or two coordinates are missing, e.g., "Li 0.0 0.0" or "Li 0.0"
             # This regex captures the element symbol and up to three coordinates
             check_missing_coordinate = re.match(
-                r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?\s*$",
+                r"^\s*([a-zA-Z][a-zA-Z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?\s*$",
                 line,
             )
             if check_missing_coordinate:
@@ -143,14 +212,16 @@ def parse_zmatrix(lines, unit):
     for i, line in enumerate(lines):
         if i == 0:
             # Atom with no internal coordinates
-            m = re.match(r"^([A-Z][a-z]?)$", line)
+            m = re.match(r"^([a-zA-Z][a-zA-Z]?)$", line)
             if not m:
                 raise ValueError(f"Invalid Z-matrix line {i+1}: {line}")
             symbol = m.group(1)
             coord = np.array([0.0, 0.0, 0.0])
         elif i == 1:
             # Atom with bond length
-            m = re.match(r"^([A-Z][a-z]?)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)$", line)
+            m = re.match(
+                r"^([a-zA-Z][a-zA-Z]?)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)$", line
+            )
             if not m:
                 raise ValueError(f"Invalid Z-matrix line {i+1}: {line}")
             symbol, i1, r = m.groups()
@@ -158,7 +229,7 @@ def parse_zmatrix(lines, unit):
         elif i == 2:
             # Atom with bond length and angle
             m = re.match(
-                r"^([A-Z][a-z]?)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)$",
+                r"^([a-zA-Z][a-zA-Z]?)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)$",
                 line,
             )
             if not m:
@@ -181,7 +252,7 @@ def parse_zmatrix(lines, unit):
             coord = c + p1
         else:
             m = re.match(
-                r"^([A-Z][a-z]?)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)"
+                r"^([a-zA-Z][a-zA-Z]?)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)"
                 r"\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)"
                 r"\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)$",
                 line,
@@ -272,4 +343,6 @@ class GeometryHelper:
             self.prinrot = np.eye(3)
             self.prin_atomic_positions = self.atomic_positions.copy()
             self.point_group = "C1"
-            logger.log_info1("Point group symmetry detection not performed. Running in C1 symmetry.")
+            logger.log_info1(
+                "Point group symmetry detection not performed. Running in C1 symmetry."
+            )

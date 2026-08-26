@@ -1,14 +1,14 @@
 import numpy as np
 import pytest
 
-import forte2
-from forte2 import GeometryOptimizer, System
-from forte2.optimize.geometry_optimizer import _project_previous_occupied_orbitals
+from forte2 import CISolver, GeometryOptimizer, MCOptimizer, State, System
 from forte2.scf import RHF
 from forte2.system import BSE_AVAILABLE
+from forte2.gradients import FDGradient
+from forte2.dsrg import DSRG_MRPT2
 
 
-def test_geometry_optimizer_relaxes_stretched_h2():
+def test_geometry_optimizer_h2():
     system = System(
         xyz="H 0 0 0\nH 0 0 2.4",
         basis_set="sto-3g",
@@ -27,14 +27,82 @@ def test_geometry_optimizer_relaxes_stretched_h2():
 
     bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
 
-    assert rhf.executed
-    assert optimizer.converged
-    assert optimizer.E < initial
+    assert optimizer.E == pytest.approx(-1.117530189001, abs=1.0e-8)
+    assert bond_length == pytest.approx(1.34590756, abs=1.0e-6)
+
+
+def test_geometry_optimizer_h2_fd():
+    system = System(
+        xyz="H 0 0 0\nH 0 0 2.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    fd = FDGradient()(rhf)
+
+    optimizer = GeometryOptimizer(
+        maxiter=25,
+        g_tol=1.0e-7,
+        max_step=0.5,
+    )(fd)
+    optimizer.run()
+
+    bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
+
     assert optimizer.E == pytest.approx(-1.117530189001, abs=1.0e-8)
     assert bond_length == pytest.approx(1.34590756, abs=1.0e-6)
     assert np.linalg.norm(optimizer.gradient) < 5.0e-7
-    assert optimizer.system is not None
-    assert optimizer.method is not None
+
+
+def test_geometry_optimizer_selects_matching_root_energy_and_gradient():
+    """Use the same absolute root for both parts of an SA objective."""
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        symmetry=False,
+    )
+    built_methods = []
+
+    class RootResolvedMethod:
+        def __init__(self, current_system):
+            self.system = current_system
+            self.executed = False
+            self.E = None
+            self.E_ci = None
+            self.gradient_roots = []
+
+        def run(self):
+            self.E = -1.0
+            self.E_ci = np.array([-0.9, -0.4])
+            self.executed = True
+            return self
+
+        def gradient(self, root=None):
+            self.gradient_roots.append(root)
+            return np.full((2, 3), float(root))
+
+    def build_method(current_system):
+        method = RootResolvedMethod(current_system)
+        built_methods.append(method)
+        return method
+
+    optimizer = GeometryOptimizer(
+        method_factory=build_method,
+        root=1,
+        project_orbitals=False,
+    )
+    objective, coordinates = optimizer._build_objective(system)
+
+    assert objective.evaluate(coordinates) == pytest.approx(-0.4)
+    assert objective.gradient(coordinates) == pytest.approx(np.ones(6))
+    assert built_methods[0].gradient_roots == [1]
+
+    with pytest.raises(TypeError, match="integer or None"):
+        GeometryOptimizer(root=True)
+    with pytest.raises(ValueError, match="nonnegative"):
+        GeometryOptimizer(root=-1)
 
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="basis_set_exchange not installed")
@@ -73,37 +141,135 @@ def test_geometry_optimizer_water_cc_pvdz():
     assert optimizer.E == pytest.approx(-76.027021264399, abs=1.0e-8)
 
 
-def test_project_previous_occupied_orbitals_to_new_geometry():
-    old_system = System(
-        xyz="H 0 0 0\nH 0 0 1.7",
+def _h2_casscf(bond_length):
+    system = System(
+        xyz=f"H 0 0 0\nH 0 0 {bond_length}",
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
     )
-    new_system = System(
-        xyz="H 0 0 0\nH 0 0 1.8",
+    ci_solver = CISolver(
+        State(system=system, multiplicity=1, ms=0.0), active_orbitals=[0, 1]
+    )
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    return MCOptimizer(ci_solver, e_tol=1.0e-12, g_tol=1.0e-9)(rhf)
+
+
+def test_geometry_optimizer_casscf():
+    # A chained method only acquires `system` when it runs, and rebuilding it at a
+    # new geometry means rebuilding every stage including the nested CI solver.
+    mc = _h2_casscf(1.7)
+
+    optimizer = GeometryOptimizer(maxiter=25, g_tol=1.0e-7, max_step=0.5)(mc)
+    optimizer.run()
+
+    bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
+
+    assert bond_length == pytest.approx(1.38862862, abs=1.0e-6)
+    assert optimizer.E == pytest.approx(-1.137332707937, abs=1.0e-8)
+    # The optimized chain is a rebuild, not the object that was passed in.
+    assert optimizer.method is not mc
+    assert isinstance(optimizer.method, MCOptimizer)
+
+
+def test_geometry_optimizer_casscf_fd():
+    # A chained method only acquires `system` when it runs, and rebuilding it at a
+    # new geometry means rebuilding every stage including the nested CI solver.
+    mc = _h2_casscf(1.7)
+    fd = FDGradient()(mc)
+
+    optimizer = GeometryOptimizer(maxiter=25, g_tol=1.0e-7, max_step=0.5)(fd)
+    optimizer.run()
+
+    bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
+
+    assert bond_length == pytest.approx(1.38862862, abs=1.0e-6)
+    assert optimizer.E == pytest.approx(-1.137332707937, abs=1.0e-8)
+
+
+@pytest.mark.parametrize("findiff", [True, False])
+def test_geometry_optimizer_sa_casscf_excited_root(findiff):
+    """Optimize an SA-CASSCF excited-root geometry with a fully active space.
+
+    active_orbitals=[0, 1] is FCI in sto-3g, so there are
+    no core or virtual orbitals, therefore nrot==0.
+    This regression-tests the SA-CASSCF gradient against that edge case.
+    """
+    system = System(
+        xyz="H 0 0 0\nH 0 0 2.0",
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
     )
-    old_rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10)(old_system)
-    old_rhf.run()
-    new_rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10)(new_system)
-
-    projected = _project_previous_occupied_orbitals(old_rhf, new_rhf)
-
-    assert projected is not None
-    assert len(projected) == 1
-    assert projected[0].shape == (new_system.nbf, new_system.nmo)
-
-    S = new_system.ints_overlap()
-    # Check that the projected orbitals are orthonormal in the new basis
-    np.testing.assert_allclose(
-        projected[0].T @ S @ projected[0], np.eye(new_system.nmo), atol=1.0e-10
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    ci_solver = CISolver(
+        State(system=system, multiplicity=1, ms=0.0),
+        active_orbitals=[0, 1],
+        nroots=2,
     )
-    # Check that the projected occupied orbital has a large overlap with the old one
-    S_cross = forte2.integrals.overlap(new_system, new_system.basis, old_system.basis)
-    occupied_overlap = (
-        projected[0][:, : new_rhf.na].T @ S_cross @ old_rhf.C[0][:, : old_rhf.na]
+    mc = MCOptimizer(
+        ci_solver, e_tol=1.0e-12, g_tol=1.0e-10, final_orbitals="original"
+    )(rhf)
+
+    if findiff:
+        fd = FDGradient(energy_accessor=lambda method: method.E_ci[1])(mc)
+        optimizer = GeometryOptimizer(
+            maxiter=25,
+            g_tol=1.0e-7,
+            max_step=0.5,
+        )(fd)
+        optimizer.run()
+    else:
+        optimizer = GeometryOptimizer(
+            maxiter=25,
+            root=1,
+            g_tol=1.0e-7,
+            max_step=0.5,
+        )(mc)
+        optimizer.run()
+
+    bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
+
+    assert bond_length == pytest.approx(2.84454998, abs=1.0e-6)
+    assert optimizer.E == pytest.approx(-0.431722721239, abs=1.0e-8)
+
+
+@pytest.mark.slow
+def test_fd_gradient_dsrg_mrpt2():
+    system = System(
+        xyz="H 0 0 0\nH 0 0 2.0",
+        basis_set="6-31g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
     )
-    assert abs(occupied_overlap[0, 0]) > 0.99
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    ci_solver = CISolver(
+        State(system=system, multiplicity=1, ms=0.0),
+        active_orbitals=[0, 1],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1.0e-12,
+        g_tol=1.0e-10,
+        final_orbitals="semicanonical",
+    )(rhf)
+    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference=True)(mc)
+
+    fd = FDGradient(
+        step=1.0e-3,
+        npoints=4,
+        energy_accessor=lambda method: method.E_relaxed_ref,
+    )(dsrg)
+
+    optimizer = GeometryOptimizer(
+        maxiter=25,
+        g_tol=1.0e-7,
+        max_step=0.5,
+    )(fd)
+    optimizer.run()
+
+    bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
+
+    assert optimizer.converged
+    assert optimizer.E == pytest.approx(-1.1492336391828861, abs=1.0e-7)
+    assert bond_length == pytest.approx(1.4140893807, abs=1.0e-6)

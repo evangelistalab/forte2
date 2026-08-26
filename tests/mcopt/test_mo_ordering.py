@@ -61,7 +61,7 @@ def test_mcoptimizer_ao_composition_uses_original_mo_indices(monkeypatch):
     )
     mc = object.__new__(MCOptimizerBase)
     mc.system = SimpleNamespace(basis=None)
-    mc.C = [np.eye(mo_space.nmo)]
+    mc.mos = SimpleNamespace(C=[np.eye(mo_space.nmo)])
     mc.mo_space = mo_space
     mc.core = mo_space.docc
     mc.actv = mo_space.actv

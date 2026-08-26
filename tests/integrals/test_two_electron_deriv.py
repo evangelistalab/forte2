@@ -5,6 +5,7 @@ import forte2
 from forte2.lib import ints
 import forte2.integrals
 from forte2.data.atom_data import ANGSTROM_TO_BOHR
+from forte2.gradients import finite_difference
 from forte2.helpers.comparisons import approx_abs
 
 rng = np.random.default_rng(seed=20240603)
@@ -19,17 +20,37 @@ def _make_system(xyz):
 
 
 def _h2_systems(delta=1.0e-5):
-    xyz0 = "H 0.0 0.0 0.0\nH 0.0 0.0 0.74"
-    xyzp = f"H 0.0 0.0 0.0\nH 0.0 0.0 {0.74 + delta:.10f}"
-    xyzm = f"H 0.0 0.0 0.0\nH 0.0 0.0 {0.74 - delta:.10f}"
-    return _make_system(xyz0), _make_system(xyzp), _make_system(xyzm), 5, delta
+    """Reference system and a factory shifting one coordinate by `t` angstrom."""
+
+    def displaced(t=0.0):
+        return _make_system(f"H 0.0 0.0 0.0\nH 0.0 0.0 {0.74 + t:.12f}")
+
+    return displaced(), displaced, 5, delta
 
 
 def _h2o_systems(delta=1.0e-5):
-    xyz0 = "O 0.0 0.0 0.0\nH 0.0 0.0 1.0\nH 0.0 1.0 0.0"
-    xyzp = f"O 0.0 {delta:.10f} 0.0\nH 0.0 0.0 1.0\nH 0.0 1.0 0.0"
-    xyzm = f"O 0.0 {-delta:.10f} 0.0\nH 0.0 0.0 1.0\nH 0.0 1.0 0.0"
-    return _make_system(xyz0), _make_system(xyzp), _make_system(xyzm), 1, delta
+    """Reference system and a factory shifting one coordinate by `t` angstrom."""
+
+    def displaced(t=0.0):
+        return _make_system(f"O 0.0 {t:.12f} 0.0\nH 0.0 0.0 1.0\nH 0.0 1.0 0.0")
+
+    return displaced(), displaced, 1, delta
+
+
+def _contracted_derivative(integral, displaced, weights, subscripts, delta):
+    """Derivative of ``einsum(subscripts, integral(system), weights)`` in Eh/Bohr.
+
+    The displacement is parameterized in angstrom, so the result is converted to
+    the atomic units the analytic derivatives use.
+    """
+
+    def contracted(t):
+        return np.einsum(subscripts, integral(displaced(t)), weights)
+
+    return (
+        float(finite_difference(contracted, 0.0, step=delta, npoints=2))
+        / ANGSTROM_TO_BOHR
+    )
 
 
 def _random_w3(system, complex_weights=False):
@@ -102,7 +123,7 @@ def test_coulomb_2c_deriv_rejects_bad_shape_and_centers():
 
 @pytest.mark.parametrize("systems", [_h2_systems, _h2o_systems])
 def test_coulomb_3c_deriv_finite_difference_real_weights(systems):
-    system0, systemp, systemm, component, delta = systems()
+    system0, displaced, component, delta = systems()
     W3 = _random_w3(system0)
 
     analytical = ints.coulomb_3c_deriv(
@@ -111,16 +132,16 @@ def test_coulomb_3c_deriv_finite_difference_real_weights(systems):
     wrapper = forte2.integrals.coulomb_3c_deriv(system0, W3)
     assert np.linalg.norm(analytical - wrapper) < 1.0e-12
 
-    intp = forte2.integrals.coulomb_3c(systemp)
-    intm = forte2.integrals.coulomb_3c(systemm)
-    numerical = np.einsum("Pmn,Pmn->", intp - intm, W3) / (2 * delta * ANGSTROM_TO_BOHR)
+    numerical = _contracted_derivative(
+        forte2.integrals.coulomb_3c, displaced, W3, "Pmn,Pmn->", delta
+    )
 
     assert analytical[component] == approx_abs(numerical, atol=1.0e-6)
 
 
 @pytest.mark.parametrize("systems", [_h2_systems, _h2o_systems])
 def test_coulomb_2c_deriv_finite_difference_real_weights(systems):
-    system0, systemp, systemm, component, delta = systems()
+    system0, displaced, component, delta = systems()
     W2 = _random_w2(system0)
 
     analytical = ints.coulomb_2c_deriv(
@@ -129,24 +150,22 @@ def test_coulomb_2c_deriv_finite_difference_real_weights(systems):
     wrapper = forte2.integrals.coulomb_2c_deriv(system0, W2)
     assert np.linalg.norm(analytical - wrapper) < 1.0e-12
 
-    intp = forte2.integrals.coulomb_2c(systemp)
-    intm = forte2.integrals.coulomb_2c(systemm)
-    numerical = np.einsum("PQ,PQ->", intp - intm, W2) / (2 * delta * ANGSTROM_TO_BOHR)
+    numerical = _contracted_derivative(
+        forte2.integrals.coulomb_2c, displaced, W2, "PQ,PQ->", delta
+    )
 
     assert analytical[component] == approx_abs(numerical, atol=1.0e-6)
 
 
 def test_coulomb_derivs_accept_complex_weights_and_use_real_part():
-    system0, systemp, systemm, component, delta = _h2_systems()
+    system0, displaced, component, delta = _h2_systems()
 
     W3 = _random_w3(system0, complex_weights=True)
     grad3 = ints.coulomb_3c_deriv(
         system0.auxiliary_basis, system0.basis, system0.basis, W3, system0.atoms
     )
-    int3p = forte2.integrals.coulomb_3c(systemp)
-    int3m = forte2.integrals.coulomb_3c(systemm)
-    num3 = np.einsum("Pmn,Pmn->", int3p - int3m, W3.real) / (
-        2 * delta * ANGSTROM_TO_BOHR
+    num3 = _contracted_derivative(
+        forte2.integrals.coulomb_3c, displaced, W3.real, "Pmn,Pmn->", delta
     )
     assert np.isrealobj(grad3)
     assert grad3[component] == approx_abs(num3, atol=1.0e-6)
@@ -155,9 +174,9 @@ def test_coulomb_derivs_accept_complex_weights_and_use_real_part():
     grad2 = ints.coulomb_2c_deriv(
         system0.auxiliary_basis, system0.auxiliary_basis, W2, system0.atoms
     )
-    int2p = forte2.integrals.coulomb_2c(systemp)
-    int2m = forte2.integrals.coulomb_2c(systemm)
-    num2 = np.einsum("PQ,PQ->", int2p - int2m, W2.real) / (2 * delta * ANGSTROM_TO_BOHR)
+    num2 = _contracted_derivative(
+        forte2.integrals.coulomb_2c, displaced, W2.real, "PQ,PQ->", delta
+    )
     assert np.isrealobj(grad2)
     assert grad2[component] == approx_abs(num2, atol=1.0e-6)
 

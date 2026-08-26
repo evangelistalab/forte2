@@ -101,8 +101,11 @@ def pretty_print_ci_summary(
 
 
 def pretty_print_ci_nat_occ_numbers(
-    sa_info: StateAverageInfo, mo_space: MOSpace, nat_occs: np.ndarray
-):
+    sa_info: StateAverageInfo,
+    mo_space: MOSpace,
+    nat_occs: np.ndarray,
+    nat_occs_avg: np.ndarray | None = None,
+) -> None:
     """
     Pretty print the natural occupation numbers for the CI states.
     Roots are rows, orbitals are columns.
@@ -116,6 +119,10 @@ def pretty_print_ci_nat_occ_numbers(
     nat_occs : np.ndarray
         A 2D numpy array containing the natural occupation numbers for each root and orbital.
         This should be calculated from CISolver.compute_natural_occupation_numbers.
+    nat_occs_avg : np.ndarray, optional
+        A 1D numpy array containing the state-averaged natural occupation numbers,
+        computed from the state-averaged 1-RDM. Only meaningful (and printed) when
+        more than one root is present.
     """
     nroots = sa_info.nroots_sum
     norb = mo_space.nactv
@@ -136,10 +143,10 @@ def pretty_print_ci_nat_occ_numbers(
         line += "".join([f"{nat_occs[i, j]:<11.6f}" for i in range(norb)])
         logger.log_info1(line)
     # if state-averaging, also print the average natural occupation numbers from the average 1-RDM
-    if nroots > 1:
+    if nroots > 1 and nat_occs_avg is not None:
         logger.log_info1("-" * width)
         avg_line = "Avg     " + "".join(
-            [f"{nat_occs[i, -1]:<11.6f}" for i in range(norb)]
+            [f"{nat_occs_avg[i]:<11.6f}" for i in range(norb)]
         )
         logger.log_info1(avg_line)
 
@@ -310,8 +317,8 @@ def make_3cumulant_so(gamma1, gamma2, gamma3):
     ----------
     gamma1 : np.ndarray
         The one-particle reduced density matrix (1-RDM).
-    lambda2 : np.ndarray
-        The two-particle reduced density cumulant.
+    gamma2 : np.ndarray
+        The two-particle reduced density matrix (2-RDM).
     gamma3 : np.ndarray
         The three-particle reduced density matrix (3-RDM).
 

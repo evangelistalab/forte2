@@ -62,6 +62,10 @@ class RelDSRG_MRPT2(DSRGBase):
            J. Chem. Phys. 2018, 148, 124106.
     """
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.requires_attrs.update({"two_component": True})
+
     def get_integrals(self):
         g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
@@ -236,7 +240,7 @@ class RelDSRG_MRPT2(DSRGBase):
             optimize=True,
         )
 
-        # _hbar2_canon is already antisymmetric (<pq||rs>), 
+        # _hbar2_canon is already antisymmetric (<pq||rs>),
         # the CI solver antisymmetrizes it again, doubling it, hence the 0.5
         self.ci_solver.set_ints(_e_scalar, _hbar1_canon, 0.5 * _hbar2_canon)
         self.ci_solver.run()

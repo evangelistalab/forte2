@@ -30,21 +30,70 @@ pt.run()                                       # lazily runs the whole chain
   parent_method.executed`, then does the work. Calling `run()` on the last object executes the entire
   pipeline; the `executed` flag prevents recomputation.
 
-State flows down the chain via mixins in `forte2/base_classes/mixins.py`, each with a
-`copy_from_upstream` classmethod: `SystemMixin` (`system`), `MOsMixin` (MO coefficients `C`, irrep
-info), `MOSpaceMixin` (`mo_space` = core/active/virtual partition). `base_classes/active_space_solver.py`
-and `ci_base.py` are the bases for CI-type solvers (active-space resolution, state-averaged RDMs/cumulants).
+Every method derives from `Method` (`forte2/base_classes/method.py`), which declares the data-flow
+contract between links in the chain as three attributes set in `__post_init__`:
+- `requires` — names this method needs the parent to supply (checked against the parent's `provides`).
+- `provides` — names this method supplies downstream (e.g. `{"system", "mos", "mo_space"}`).
+- `requires_attrs` — a **dict** of parent attributes, `{name: required_value}`, with `None` meaning
+  "must exist" (e.g. `{"two_component": True}`). Because it is keyed by name, subclasses compose with
+  `|=` and override an inherited requirement by re-stating its key. Never assign it with `=`: that
+  silently drops requirements set by a base class.
+
+`_register_parent_method` enforces all three at bind time (`__call__`), so incompatible pipelines fail
+at construction rather than mid-run. MO coefficients travel as an `MO` value object (`base_classes/mo.py`),
+reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`.
+
+`base_classes/active_space_solver.py` and `ci_base.py` are the bases for CI-type solvers.
+`CIBase` owns everything representation-agnostic: the `_startup`/`run` skeletons, sub-solver fan-out,
+state-averaged RDMs and cumulants, transition properties, and the `final_orbitals` rotation. Concrete
+solvers supply two class-level hooks — `_integrals_cls` (`RestrictedMOIntegrals` vs
+`SpinorbitalIntegrals`) and `_ss_solver_cls` (the per-state single-state solver).
 
 Two chain-specific behaviors to watch:
 - **MCSCF re-binds its `ci_solver`.** `MCOptimizer(ci_solver)(parent)` re-invokes the solver against
   `parent` in `_startup`, then alternates orbital optimization (L-BFGS) with `ci_solver.run()`.
-- **DSRG requires semicanonical orbitals.** `DSRG_MRPT2.__call__` asserts
-  `parent.final_orbitals == "semicanonical"` and consumes the active-space integral triple `E` (frozen-core
-  energy), `H` (one-electron), `V` (antisymmetrized two-electron) plus cumulants from the upstream solver.
-  Use `forte2/orbitals/semicanonicalizer.py` if a reference isn't already semicanonical.
+- **DSRG requires semicanonical orbitals.** `DSRGBase` declares
+  `requires_attrs.update({"final_orbitals": "semicanonical"})` and consumes the active-space integral triple
+  `E` (frozen-core energy), `H` (one-electron), `V` (antisymmetrized two-electron) plus cumulants from
+  the upstream solver. Use `forte2/orbitals/semicanonicalizer.py` if a reference isn't already
+  semicanonical.
 
 Relativistic (two-component) variants are subclasses that set `dtype = complex` and
 `two_component = True` (e.g. `RelActiveSpaceSolver`, `RelCISolver`); non-rel uses `float`.
+`RelCIBase(RelActiveSpaceSolver, CIBase)` inherits the shared orchestration rather than re-binding
+methods by hand. **Base order matters**: `dataclasses` collects fields in reverse-MRO order and
+`CIBase` still carries an undefaulted `states` from `ActiveSpaceSolver`, so listing `CIBase` first
+would clobber the `states = None` default that `nel`-based construction relies on.
+
+The `final_orbitals` option (`"original"` / `"semicanonical"` / `"natural"`) is shared by the four CI
+solvers and `MCOptimizer` via `forte2/orbitals/final_orbitals.py` — a free function plus a validator,
+not a mixin, since the field's default legitimately differs per class.
+
+### Rebuilding a chain at a new geometry
+`forte2/base_classes/rebuild.py` reconstructs or rebinds an entire method chain against a displaced
+`System`, and is what `GeometryOptimizer` and `FDGradient` (`forte2/gradients/fd_gradient.py`) are
+built on:
+- `rebuild_method_chain(method, new_system)` walks root-to-leaf and calls `type(stage)(**kwargs)` per
+  stage, with `kwargs` read straight from `dataclasses.fields()`. That means **every init field must
+  survive being fed back into the constructor unchanged** — a field that a method overwrites with a
+  derived value in `__post_init__`/`_startup` (e.g. an `MOSpace` built from `active_orbitals`) breaks
+  this silently. The fix is to give the derived value its own `init=False` field rather than mutating
+  the input field, as `ActiveSpaceSolver` does: the raw constructor arg is `mo_space_override`, and the
+  resolved space consumed downstream is the separate, non-init `mo_space`.
+- `rebind_method_chain(method, new_system)` reuses the same objects instead: `stage.reset()` then
+  re-`__call__` per stage. The base `Method.reset()` only flips `executed`/`converged`; any state a
+  method mutates *in place* across repeated `run()` calls (a list `.append()`ed to then swapped for an
+  array, a cache dict, ...) has to be rebuilt in that method's own `_startup()`, or a second `run()` on
+  the same object corrupts silently or crashes outright — see `DSRGBase._startup()` resetting
+  `relax_eigvals_history` for exactly this reason.
+- `project_scf_guess(source_method, method)` and `forte2/orbitals/orbital_overlap.py`
+  (`mo_overlap`/`project_orbitals`/`project_occupied_orbitals`) project occupied orbitals from a
+  converged method onto a rebuilt chain's SCF root as an initial guess, including across two-component
+  (GHF) chains. When checking whether source and target agree on representation, compare
+  `source_method.mos.spinorbital` (frozen when its `MO` was built) against the target's own
+  `two_component` attribute — never `System.two_component` directly: `RHF`/`UHF`/`GHF.__call__` all
+  mutate that flag in place on the (possibly shared) `System` object, so it can read stale for a method
+  that finished running earlier against the same `System`.
 
 ### C++ / Python boundary
 - `forte2.lib` is the compiled nanobind module. C++ sources live **inline inside the package**
@@ -55,6 +104,15 @@ Relativistic (two-component) variants are subclasses that set `dtype = complex` 
 - **C++** holds performance kernels: integral evaluation, CI string/sigma builds and RDMs, selected-CI
   (HCI), determinant/Slater-rules machinery, sparse operators/states. **Python** holds all orchestration:
   SCF loop, MCSCF optimizer, DSRG, AVAS, gradients, geometry optimization, properties, J/K building.
+
+### Threading model
+All parallel C++ code determines its thread count through `forte2/helpers/parallel.h::get_num_threads()`
+— never accept a thread-count constructor/setter argument on a class or function; call
+`get_num_threads()` directly, or use the `parallel_for*` helpers in the same header, which already do.
+Precedence: `FORTE_NUM_THREADS_OVERRIDE` if set, otherwise the smallest of
+`std::thread::hardware_concurrency()` (logical CPUs, including SMT/hyperthreads — *not* physical
+cores), the process's CPU affinity mask, `OMP_NUM_THREADS`, `OMP_THREAD_LIMIT`, and
+`SLURM_CPUS_PER_TASK` (whichever are set). The effective count is printed once at `import forte2`
 
 ### Integrals
 All two-electron integrals are **density-fitted or Cholesky-decomposed** — there is no conventional
@@ -72,7 +130,9 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 - `dsrg` — DSRG-MRPT2 and its relativistic variant.
 - `x2c` — exact two-component relativistic transform (`sf` scalar, `so` spin-orbit); gated by `System.x2c_type`.
 - `orbitals` — AVAS, ASET embedding, IAO/IBO, semicanonicalizer, cube generation, `SpinorUpcaster`.
-- `props`, `gradients`, `optimize` — 1e-properties/populations, DF-based analytic gradients, `GeometryOptimizer`.
+- `props`, `gradients`, `optimize` — 1e-properties/populations; DF-based analytic gradients plus
+  `FDGradient`, which differentiates *any* rebuildable method's energy by finite differences (see
+  "Rebuilding a chain at a new geometry" above); `GeometryOptimizer` drives either.
 - `state`, `symmetry` — `State`/`RelState`/`MOSpace`/state-averaging; point-group MO symmetry detection.
 
 ## Environment And Build
