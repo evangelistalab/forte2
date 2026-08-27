@@ -1,4 +1,5 @@
 #include "sparse/sparse_normal_order.h"
+#include "sparse/sparse_normal_order_internal.h"
 
 #include <algorithm>
 #include <cmath>
@@ -25,6 +26,7 @@ struct NormalOp {
 
 using NormalOrderExpansion = std::vector<std::pair<NormalOrderedString, sparse_scalar_t>>;
 using SparseExpansion = std::vector<std::pair<SQOperatorString, sparse_scalar_t>>;
+using GeneralizedNormalOrderExpansion = std::vector<std::pair<SQOperatorString, sparse_scalar_t>>;
 
 struct NormalOrderCacheKey {
     Determinant reference;
@@ -297,31 +299,15 @@ int subset_to_front_phase(const std::vector<size_t>& selected, size_t /* nops */
     return inversions % 2 == 0 ? 1 : -1;
 }
 
-std::vector<NormalOp> select_ops(const std::vector<NormalOp>& ops,
-                                 const std::vector<size_t>& selected) {
-    std::vector<NormalOp> result;
-    result.reserve(selected.size());
+SQOperatorString sparse_string_from_selected_ops(const std::vector<NormalOp>& ops,
+                                                 const std::vector<size_t>& selected) {
+    auto cre = Determinant::zero();
+    auto ann = Determinant::zero();
     for (const auto pos : selected) {
-        result.push_back(ops[pos]);
+        const auto& op = ops[pos];
+        (op.creation ? cre : ann).set_bit(spin_orbital_index(op), true);
     }
-    return result;
-}
-
-std::vector<NormalOp> remove_selected_ops(const std::vector<NormalOp>& ops,
-                                          const std::vector<size_t>& selected) {
-    std::vector<bool> is_selected(ops.size(), false);
-    for (const auto pos : selected) {
-        is_selected[pos] = true;
-    }
-
-    std::vector<NormalOp> result;
-    result.reserve(ops.size() - selected.size());
-    for (size_t i = 0; i < ops.size(); ++i) {
-        if (not is_selected[i]) {
-            result.push_back(ops[i]);
-        }
-    }
-    return result;
+    return SQOperatorString(cre, ann);
 }
 
 SparseState apply_ops_to_state(const std::vector<NormalOp>& ops, const SparseState& state,
@@ -371,12 +357,12 @@ class VacuumExpectationCache {
 
     const Determinant& occupied_support() const { return occupied_support_; }
 
-    sparse_scalar_t expectation(const std::vector<NormalOp>& ops) {
-        auto sqop = sparse_string_from_ops(ops);
+    sparse_scalar_t expectation(const SQOperatorString& sqop) {
         if (const auto it = cache_.find(sqop); it != cache_.end()) {
             return it->second;
         }
 
+        const auto ops = to_normal_ops(sqop.op_tuple());
         const auto ket = apply_ops_to_state(ops, vacuum_, screen_thresh_);
         sparse_scalar_t value = 0.0;
         for (const auto& [det, coefficient] : ket.elements()) {
@@ -386,7 +372,7 @@ class VacuumExpectationCache {
             }
         }
         value /= norm_;
-        cache_.emplace(std::move(sqop), value);
+        cache_.emplace(sqop, value);
         return value;
     }
 
@@ -487,13 +473,14 @@ void sparse_expansion_of_generalized_normal_term(VacuumExpectationCache& expecta
         ops, max_cumulant,
         [&](const std::vector<size_t>& selected) {
             const int phase = subset_to_front_phase(selected, ops.size());
-            const auto contracted = select_ops(ops, selected);
+            const auto contracted = sparse_string_from_selected_ops(ops, selected);
             const auto contraction = expectation_cache.expectation(contracted);
             if (std::abs(contraction) <= screen_thresh) {
                 return;
             }
 
-            const auto remainder = sparse_string_from_ops(remove_selected_ops(ops, selected));
+            const auto remainder =
+                SQOperatorString(term.cre() - contracted.cre(), term.ann() - contracted.ann());
             sparse_expansion_of_generalized_normal_term(
                 expectation_cache, max_cumulant, remainder, result,
                 -coefficient * static_cast<double>(phase) * contraction, screen_thresh);
@@ -502,6 +489,128 @@ void sparse_expansion_of_generalized_normal_term(VacuumExpectationCache& expecta
 }
 
 } // namespace
+
+struct GeneralizedNormalOrderComputer::Impl {
+    Impl(const SparseState& vacuum, std::size_t norb, int max_cumulant, double screen_thresh,
+         int max_rank)
+        : vacuum(vacuum), norb(norb), max_cumulant(max_cumulant), screen_thresh(screen_thresh),
+          max_rank(max_rank), expectation_cache(vacuum, screen_thresh) {}
+
+    const GeneralizedNormalOrderExpansion& expansion(const SQOperatorString& sqop) {
+        if (const auto it = expansion_cache.find(sqop); it != expansion_cache.end()) {
+            return it->second;
+        }
+        constexpr std::size_t max_cache_size = 250000;
+        if (expansion_cache.size() >= max_cache_size) {
+            expansion_cache.clear();
+        }
+
+        auto [it, inserted] = expansion_cache.emplace(sqop, GeneralizedNormalOrderExpansion{});
+        GeneralizedNormalOrderedSparseOperator ordered(vacuum, norb, max_cumulant);
+        const auto ops = to_normal_ops(sqop.op_tuple());
+        if (max_rank < 0 or sqop.count() <= 2 * max_rank) {
+            ordered.add(sqop, sparse_scalar_t{1.0});
+        }
+
+        const size_t min_selected_count =
+            max_rank < 0 ? 1 : std::max(1, sqop.count() - 2 * max_rank);
+        enumerate_generalized_contractions(
+            ops, max_cumulant,
+            [&](const std::vector<size_t>& selected) {
+                const int phase = subset_to_front_phase(selected, ops.size());
+                const auto contracted = sparse_string_from_selected_ops(ops, selected);
+                const auto contraction = expectation_cache.expectation(contracted);
+                if (std::abs(contraction) <= screen_thresh) {
+                    return;
+                }
+                const auto remainder =
+                    SQOperatorString(sqop.cre() - contracted.cre(), sqop.ann() - contracted.ann());
+                ordered.add(remainder, static_cast<double>(phase) * contraction);
+            },
+            min_selected_count, &expectation_cache.occupied_support());
+
+        auto& result = it->second;
+        result.reserve(ordered.size());
+        for (const auto& [term, coefficient] : ordered.elements()) {
+            if (coefficient != sparse_scalar_t{0.0}) {
+                result.emplace_back(term, coefficient);
+            }
+        }
+        return result;
+    }
+
+    const SparseState& vacuum;
+    std::size_t norb;
+    int max_cumulant;
+    double screen_thresh;
+    int max_rank;
+    VacuumExpectationCache expectation_cache;
+    std::unordered_map<SQOperatorString, GeneralizedNormalOrderExpansion, SQOperatorString::Hash>
+        expansion_cache;
+};
+
+GeneralizedNormalOrderComputer::GeneralizedNormalOrderComputer(const SparseState& vacuum,
+                                                               std::size_t norb, int max_cumulant,
+                                                               double screen_thresh, int max_rank)
+    : impl_(std::make_unique<Impl>(vacuum, norb, max_cumulant, screen_thresh, max_rank)) {
+    if (screen_thresh < 0.0) {
+        throw std::invalid_argument(
+            "GeneralizedNormalOrderComputer: screen_thresh must be non-negative");
+    }
+    if (max_cumulant < -1) {
+        throw std::invalid_argument(
+            "GeneralizedNormalOrderComputer: max_cumulant must be non-negative or -1");
+    }
+    if (max_rank < -1) {
+        throw std::invalid_argument(
+            "GeneralizedNormalOrderComputer: max_rank must be non-negative or -1");
+    }
+}
+
+GeneralizedNormalOrderComputer::~GeneralizedNormalOrderComputer() = default;
+GeneralizedNormalOrderComputer::GeneralizedNormalOrderComputer(
+    GeneralizedNormalOrderComputer&&) noexcept = default;
+GeneralizedNormalOrderComputer&
+GeneralizedNormalOrderComputer::operator=(GeneralizedNormalOrderComputer&&) noexcept = default;
+
+void GeneralizedNormalOrderComputer::add_term(const SQOperatorString& term,
+                                              sparse_scalar_t coefficient,
+                                              GeneralizedNormalOrderedSparseOperator& result) {
+    if (coefficient == sparse_scalar_t{0.0}) {
+        return;
+    }
+    for (const auto& [ordered_term, factor] : impl_->expansion(term)) {
+        result.add(ordered_term, coefficient * factor);
+    }
+}
+
+bool GeneralizedNormalOrderComputer::could_contribute(const SQOperatorString& term) const {
+    if (impl_->max_rank < 0 or term.count() <= 2 * impl_->max_rank) {
+        return true;
+    }
+
+    const int min_contraction_rank = (term.count() - 2 * impl_->max_rank + 1) / 2;
+    if (impl_->max_cumulant >= 0 and min_contraction_rank > impl_->max_cumulant) {
+        return false;
+    }
+    const auto& support = impl_->expectation_cache.occupied_support();
+    const int available_rank =
+        std::min(term.cre().intersection_count(support), term.ann().intersection_count(support));
+    return available_rank >= min_contraction_rank;
+}
+
+GeneralizedNormalOrderedSparseOperator
+GeneralizedNormalOrderComputer::clean(const GeneralizedNormalOrderedSparseOperator& result) const {
+    GeneralizedNormalOrderedSparseOperator cleaned(impl_->vacuum, impl_->norb, impl_->max_cumulant);
+    cleaned.reserve(result.size());
+    for (const auto& [term, coefficient] : result.elements()) {
+        if ((impl_->max_rank < 0 or term.count() <= 2 * impl_->max_rank) and
+            std::abs(coefficient) > impl_->screen_thresh) {
+            cleaned.add(term, coefficient);
+        }
+    }
+    return cleaned;
+}
 
 NormalOrderedString::NormalOrderedString() = default;
 
@@ -887,43 +996,15 @@ generalized_normal_order(const SparseOperator& op, const SparseState& vacuum, st
             "generalized_normal_order: max_rank must be non-negative or -1");
     }
 
-    VacuumExpectationCache expectation_cache(vacuum, screen_thresh);
+    GeneralizedNormalOrderComputer computer(vacuum, norb, max_cumulant, screen_thresh, max_rank);
     GeneralizedNormalOrderedSparseOperator result(vacuum, norb, max_cumulant);
     for (const auto& [sqop, coefficient] : op.elements()) {
         if (std::abs(coefficient) <= screen_thresh) {
             continue;
         }
-
-        const auto ops = to_normal_ops(sqop.op_tuple());
-        if (max_rank < 0 or sqop.count() <= 2 * max_rank) {
-            result.add(sqop, coefficient);
-        }
-        const size_t min_selected_count =
-            max_rank < 0 ? 1 : std::max(1, sqop.count() - 2 * max_rank);
-        enumerate_generalized_contractions(
-            ops, max_cumulant,
-            [&](const std::vector<size_t>& selected) {
-                const int phase = subset_to_front_phase(selected, ops.size());
-                const auto contracted = select_ops(ops, selected);
-                const auto contraction = expectation_cache.expectation(contracted);
-                if (std::abs(contraction) <= screen_thresh) {
-                    return;
-                }
-                const auto remainder_ops = remove_selected_ops(ops, selected);
-                result.add(sparse_string_from_ops(remainder_ops),
-                           coefficient * static_cast<double>(phase) * contraction);
-            },
-            min_selected_count, &expectation_cache.occupied_support());
+        computer.add_term(sqop, coefficient, result);
     }
-
-    GeneralizedNormalOrderedSparseOperator cleaned(vacuum, norb, max_cumulant);
-    for (const auto& [term, coefficient] : result.elements()) {
-        if ((max_rank < 0 or term.count() <= 2 * max_rank) and
-            (std::abs(coefficient) > screen_thresh)) {
-            cleaned.add(term, coefficient);
-        }
-    }
-    return cleaned;
+    return computer.clean(result);
 }
 
 } // namespace forte2

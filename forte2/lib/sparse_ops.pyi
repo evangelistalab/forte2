@@ -724,6 +724,9 @@ class GeneralizedNormalOrderedSparseOperator:
     def norm(self) -> float:
         """Compute the norm of the generalized normal-ordered operator"""
 
+    def commutator(self, rhs: GeneralizedNormalOrderedSparseOperator, max_rank: int, screen_thresh: float = 1e-12) -> GeneralizedNormalOrderedSparseOperator:
+        """Compute a generalized normal-ordered commutator truncated to max_rank"""
+
     def to_sparse_operator(self, screen_thresh: float = 1e-12) -> SparseOperator:
         """
         Convert this generalized normal-ordered operator back to a SparseOperator

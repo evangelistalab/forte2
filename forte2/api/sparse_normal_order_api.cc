@@ -7,6 +7,7 @@
 
 #include "helpers/string_algorithms.h"
 
+#include "sparse/sparse_generalized_normal_order_product.h"
 #include "sparse/sparse_normal_order.h"
 #include "sparse/sparse_normal_order_product.h"
 #include "sparse/sparse_state.h"
@@ -251,6 +252,15 @@ void export_sparse_normal_order_api(nb::module_& m) {
         .def(
             "norm", [](const GeneralizedNormalOrderedSparseOperator& op) { return op.norm(); },
             "Compute the norm of the generalized normal-ordered operator")
+        .def(
+            "commutator",
+            [](const GeneralizedNormalOrderedSparseOperator& lhs,
+               const GeneralizedNormalOrderedSparseOperator& rhs, int max_rank,
+               double screen_thresh) {
+                return generalized_normal_ordered_commutator(lhs, rhs, max_rank, screen_thresh);
+            },
+            "rhs"_a, "max_rank"_a, "screen_thresh"_a = 1.0e-12,
+            "Compute a generalized normal-ordered commutator truncated to max_rank")
         .def("to_sparse_operator", &GeneralizedNormalOrderedSparseOperator::to_sparse_operator,
              "screen_thresh"_a = 1.0e-12,
              "Convert this generalized normal-ordered operator back to a SparseOperator")

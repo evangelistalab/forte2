@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "basis": "cc-pVDZ",
+    "bond_length_angstrom": 0.75,
+    "molecule": "H2",
+    "screen_thresh": 1e-12,
+    "threads": 10
+  },
+  "commutator": {
+    "2": {
+      "bare_commutator_terms": 786278,
+      "coefficient_error": 5.707232441958517e-17,
+      "fused_seconds": 0.10539924999466166,
+      "reference_seconds": 0.5050773320253938,
+      "result_terms": 13539,
+      "speedup": 4.792039146872254
+    },
+    "3": {
+      "bare_commutator_terms": 3646563,
+      "coefficient_error": 1.7797515795297386e-16,
+      "fused_seconds": 1.2173593750339933,
+      "reference_seconds": 3.3259929179912433,
+      "result_terms": 279491,
+      "speedup": 2.7321372687489007
+    },
+    "4": {
+      "bare_commutator_terms": 6620723,
+      "coefficient_error": 3.2404658820377475e-16,
+      "fused_seconds": 3.2504554170300253,
+      "reference_seconds": 8.600283125997521,
+      "result_terms": 1689740,
+      "speedup": 2.6458702005073764
+    }
+  },
+  "short_mr_ldsrg2_solve": {
+    "energy_error_hartree": 0.0,
+    "fused_energy_hartree": -1.163645527652239,
+    "fused_seconds": 0.29508095799246803,
+    "iterations": 3,
+    "reference_energy_hartree": -1.163645527652239,
+    "reference_seconds": 1.1828829999431036,
+    "speedup": 4.008672765571328
+  }
+}

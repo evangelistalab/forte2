@@ -54,6 +54,16 @@ def assert_sparse_state_close(lhs, rhs, abs=1.0e-12):
         assert lhs[d] == pytest.approx(rhs[d], abs=abs)
 
 
+def assert_gno_close(lhs, rhs, abs=1.0e-11):
+    lhs_terms = {term.str(): coefficient for term, coefficient in lhs}
+    rhs_terms = {term.str(): coefficient for term, coefficient in rhs}
+    terms = set(lhs_terms) | set(rhs_terms)
+    for term in terms:
+        assert lhs_terms.get(term, 0.0) == pytest.approx(
+            rhs_terms.get(term, 0.0), abs=abs
+        )
+
+
 def test_generalized_one_body_number_operator_uses_fractional_active_density():
     vacuum = correlated_singlet_vacuum(weight0=0.7)
     op = sparse_ops.sparse_operator("[0a+ 0a-]", 1.0)
@@ -169,15 +179,90 @@ def test_generalized_normal_order_truncation_keeps_only_supported_contractions()
     vacuum = sparse_ops.SparseState({det("200"): 1.0})
     op = sparse_ops.sparse_operator("[0a+ 2b+ 2b- 0a-]", 1.0)
 
-    no_op = generalized_normal_order(
-        op, vacuum, norb=3, max_cumulant=2, max_rank=-1
-    )
-    one_body = generalized_normal_order(
-        op, vacuum, norb=3, max_cumulant=2, max_rank=1
-    )
+    no_op = generalized_normal_order(op, vacuum, norb=3, max_cumulant=2, max_rank=-1)
+    one_body = generalized_normal_order(op, vacuum, norb=3, max_cumulant=2, max_rank=1)
 
     assert one_body == no_op.truncate(1)
-    assert generalized_normal_order_dict(one_body) == {
-        "[2b+ 2b-]": pytest.approx(1.0)
-    }
+    assert generalized_normal_order_dict(one_body) == {"[2b+ 2b-]": pytest.approx(1.0)}
     assert no_op.to_sparse_operator() == op
+
+
+@pytest.mark.parametrize("max_rank", [0, 1, 2, 3])
+def test_fused_generalized_commutator_matches_bare_commutator_route(max_rank):
+    vacuum = correlated_singlet_vacuum(weight0=0.63)
+    lhs_sparse = sparse_ops.sparse_operator(
+        [
+            ("[]", 0.2),
+            ("[0a+ 0a-]", 0.7 - 0.1j),
+            ("[1b+ 0b-]", -0.3 + 0.2j),
+            ("[0a+ 1b+ 0b- 1a-]", 0.4),
+        ]
+    )
+    rhs_sparse = sparse_ops.sparse_operator(
+        [
+            ("[1a+ 0a-]", -0.5j),
+            ("[0b+ 1b-]", 0.6),
+            ("[1a+ 1b+ 0b- 0a-]", -0.2 + 0.1j),
+        ]
+    )
+    lhs = generalized_normal_order(lhs_sparse, vacuum, max_cumulant=2)
+    rhs = generalized_normal_order(rhs_sparse, vacuum, max_cumulant=2)
+
+    reference = generalized_normal_order(
+        lhs.to_sparse_operator(1.0e-14).commutator(rhs.to_sparse_operator(1.0e-14)),
+        vacuum,
+        max_cumulant=2,
+        max_rank=max_rank,
+    )
+    fused = lhs.commutator(rhs, max_rank=max_rank, screen_thresh=1.0e-14)
+
+    assert all(term.count() <= 2 * max_rank for term, _ in fused)
+    assert_gno_close(fused, reference)
+
+
+def test_fused_generalized_commutator_rejects_incompatible_vacua():
+    lhs_vacuum = correlated_singlet_vacuum(weight0=0.7)
+    rhs_vacuum = correlated_singlet_vacuum(weight0=0.6)
+    op = sparse_ops.sparse_operator("[1a+ 0a-]", 1.0)
+    lhs = generalized_normal_order(op, lhs_vacuum)
+    rhs = generalized_normal_order(op, rhs_vacuum)
+
+    with pytest.raises(ValueError, match="vacua must match"):
+        lhs.commutator(rhs, max_rank=2)
+
+
+def test_fused_generalized_commutator_merges_parallel_blocks():
+    vacuum = correlated_singlet_vacuum(weight0=0.61)
+    lhs_terms = []
+    for p in range(10):
+        for q in range(10):
+            lhs_terms.append((f"[{p}a+ {q}a-]", 1.0e-3 * (1 + p + 2 * q)))
+            lhs_terms.append((f"[{p}b+ {q}b-]", -1.0e-3 * (1 + 2 * p + q)))
+    for p in range(8):
+        for q in range(8):
+            for r in range(8):
+                s = (p + 2 * q + 3 * r) % 10
+                lhs_terms.append(
+                    (f"[{p}a+ {q}b+ {r}b- {s}a-]", 1.0e-5 * (1 + p + q + r))
+                )
+    lhs_sparse = sparse_ops.sparse_operator(lhs_terms)
+    rhs_sparse = sparse_ops.sparse_operator(
+        [
+            ("[1a+ 0a-]", 0.3),
+            ("[2b+ 1b-]", -0.2j),
+        ]
+    )
+    lhs = generalized_normal_order(lhs_sparse, vacuum, norb=10, max_cumulant=2)
+    rhs = generalized_normal_order(rhs_sparse, vacuum, norb=10, max_cumulant=2)
+    assert len(lhs.to_sparse_operator()) > 512
+
+    reference = generalized_normal_order(
+        lhs.to_sparse_operator(1.0e-14).commutator(rhs.to_sparse_operator(1.0e-14)),
+        vacuum,
+        norb=10,
+        max_cumulant=2,
+        max_rank=2,
+    )
+    fused = lhs.commutator(rhs, max_rank=2, screen_thresh=1.0e-14)
+
+    assert_gno_close(fused, reference)

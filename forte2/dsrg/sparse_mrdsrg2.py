@@ -275,17 +275,7 @@ def _gno_commutator(
     max_rank: int,
     screen_thresh: float,
 ) -> _ft.GeneralizedNormalOrderedSparseOperator:
-    commutator = lhs.to_sparse_operator(screen_thresh).commutator(
-        rhs.to_sparse_operator(screen_thresh)
-    )
-    return _ft.generalized_normal_order(
-        commutator,
-        vacuum,
-        norb,
-        max_cumulant=max_cumulant,
-        screen_thresh=screen_thresh,
-        max_rank=max_rank,
-    )
+    return lhs.commutator(rhs, max_rank=max_rank, screen_thresh=screen_thresh)
 
 
 def _bch_hbar(
