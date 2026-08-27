@@ -745,3 +745,46 @@ def generalized_normal_order(op: SparseOperator, vacuum: SparseState, norb: int,
     """
     Generalized normal order a SparseOperator with respect to a sparse CI vacuum
     """
+
+class CumulantReference:
+    """
+    Spin-orbital density cumulants for a sparse multiconfigurational reference
+    """
+
+    def __init__(self, vacuum: SparseState, norb: int, max_cumulant: int = 2, screen_thresh: float = 1e-12) -> None: ...
+
+    def vacuum(self) -> SparseState:
+        """Get the source sparse reference state"""
+
+    def norb(self) -> int:
+        """Get the number of spatial orbitals"""
+
+    def max_cumulant(self) -> int:
+        """Get the largest available cumulant rank"""
+
+    def screen_thresh(self) -> float:
+        """Get the construction threshold"""
+
+    def core_modes(self) -> forte2.lib.det.Determinant:
+        """Get the fixed occupied spin-orbital mask"""
+
+    def active_modes(self) -> forte2.lib.det.Determinant:
+        """Get the variably occupied spin-orbital mask"""
+
+    def virtual_modes(self) -> forte2.lib.det.Determinant:
+        """Get the unoccupied spin-orbital mask"""
+
+    def gamma(self, p: int, p_alpha: bool, q: int, q_alpha: bool) -> complex:
+        """Return gamma^p_q = <a^+_p a_q>"""
+
+    def eta(self, p: int, p_alpha: bool, q: int, q_alpha: bool) -> complex:
+        """Return eta^p_q = delta^p_q - gamma^p_q"""
+
+    def rdm(self, cre: forte2.lib.det.Determinant, ann: forte2.lib.det.Determinant) -> complex:
+        """Return an RDM element encoded by determinant bit strings"""
+
+    def cumulant(self, cre: forte2.lib.det.Determinant, ann: forte2.lib.det.Determinant) -> complex:
+        """Return a density cumulant encoded by determinant bit strings"""
+
+    def cumulant_size(self, rank: int) -> int:
+        """Get the number of explicitly stored nonzero cumulants at a rank"""

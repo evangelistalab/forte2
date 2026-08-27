@@ -23,6 +23,7 @@ using namespace nb::literals;
 namespace forte2 {
 
 void export_sparse_normal_order_api(nb::module_& m);
+void export_cumulant_wick_api(nb::module_& m);
 
 namespace {
 void export_sq_operator_string_api(nb::module_& m);
@@ -50,6 +51,8 @@ void export_sparse_ops_api(nb::module_& m) {
     export_sparse_fact_exp_api(sub_m);
 
     export_sparse_normal_order_api(sub_m);
+
+    export_cumulant_wick_api(sub_m);
 }
 
 namespace {

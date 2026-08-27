@@ -105,6 +105,7 @@ nanobind_add_module(
   api/dsrg_utils_api.cc
   api/sparse_ops_api.cc
   api/sparse_normal_order_api.cc
+  api/cumulant_wick_api.cc
   api/rdms_api.cc
   helpers/combinatorial.cc
   helpers/string_algorithms.cc
@@ -155,6 +156,7 @@ nanobind_add_module(
   sparse/sparse_operator_product.cc
   sparse/sparse_normal_order_product.cc
   sparse/sparse_generalized_normal_order_product.cc
+  sparse/cumulant_reference.cc
   sparse/sparse_normal_order.cc
   sparse/sparse_state_functions.cc
   sparse/sparse_state.cc
