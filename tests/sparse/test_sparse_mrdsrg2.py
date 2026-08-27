@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import forte2
+from forte2.dsrg.sparse_mrdsrg2 import _gno_commutator
 from forte2.lib import sparse_ops
 from forte2.lib.det import Determinant
 
@@ -243,6 +244,42 @@ def test_sparse_mrdsrg_rejects_unsupported_cumulant_backend_options():
             [],
             max_cumulant=5,
             gno_backend="cumulant",
+        )
+
+
+def test_sparse_mrdsrg_validation_rejects_inequivalent_cumulant_truncation():
+    vacuum = correlated_singlet_vacuum()
+    lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        2,
+        3,
+        sparse_ops.sqop("[0a+ 1a+ 0b+ 1b- 0b- 0a-]")[0],
+        1.0,
+    )
+    rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        2,
+        3,
+        sparse_ops.sqop("[1a+ 0b+ 0b- 0a-]")[0],
+        1.0,
+    )
+    engine = sparse_ops.CumulantWickEngine(
+        sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3),
+        3,
+        1.0e-14,
+    )
+
+    with pytest.raises(RuntimeError, match="validation requires max_cumulant >= 4"):
+        _gno_commutator(
+            lhs,
+            rhs,
+            vacuum,
+            2,
+            3,
+            3,
+            1.0e-14,
+            gno_backend="validate",
+            cumulant_engine=engine,
         )
 
 

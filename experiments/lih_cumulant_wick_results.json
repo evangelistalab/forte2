@@ -66,12 +66,15 @@
       "n_excitations": 1201,
       "wall_seconds": 1032.862450250017,
       "seconds_per_iteration": 86.07186250349817,
+      "direct_backend_status": "usable",
       "validation_failure": {
         "bch_order": 2,
         "term": "[]",
         "coefficient_difference": 0.0007048,
-        "tolerance": 1e-8
-      }
+        "tolerance": 1e-8,
+        "interpretation": "not a direct-engine error: max_cumulant=3 makes the legacy RDM and direct cumulant paths inequivalent at this operand rank"
+      },
+      "validation_status": "not_applicable_to_legacy_sparse_backend"
     }
   ],
   "optimization_run": {
@@ -98,8 +101,9 @@
       "speedup": 8.556267063265794,
       "energy": -7.879833811667,
       "validated_first_commutator": true,
-      "full_solver_valid": false
+      "direct_backend_status": "usable",
+      "legacy_cross_validation_applicable": false
     },
-    "tests": "891 passed, 3 skipped, 37 deselected"
+    "tests": "894 passed, 3 skipped, 37 deselected"
   }
 }

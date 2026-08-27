@@ -8,8 +8,8 @@ namespace forte2 {
 /// @brief Direct generalized Wick products using explicit spin-orbital density cumulants.
 ///
 /// This engine is independent of GeneralizedNormalOrderedProductComputer. It does not convert its
-/// operands to bare SparseOperator objects and is initially limited to rank-two input terms and
-/// cumulants through lambda_3.
+/// operands to bare SparseOperator objects and supports input terms and density cumulants through
+/// rank four.
 class CumulantWickEngine {
   public:
     CumulantWickEngine(const CumulantReference& reference, int max_rank,

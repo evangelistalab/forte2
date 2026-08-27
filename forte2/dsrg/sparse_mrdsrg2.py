@@ -279,6 +279,29 @@ def _gno_commutator(
     cumulant_engine: _ft.CumulantWickEngine | None = None,
     validation_tol: float = 1.0e-11,
 ) -> _ft.GeneralizedNormalOrderedSparseOperator:
+    if gno_backend == "validate":
+        lhs_rank = max(
+            (max(term.cre().count(), term.ann().count()) for term, _ in lhs),
+            default=0,
+        )
+        rhs_rank = max(
+            (max(term.cre().count(), term.ann().count()) for term, _ in rhs),
+            default=0,
+        )
+        # In a number-conserving commutator the highest-rank joint moment cancels, so
+        # equivalence between the legacy RDM expansion and a cumulant expansion requires
+        # moments/cumulants through at least r(lhs) + r(rhs) - 1. Below that rank the two
+        # backends implement different truncation schemes and are not valid mutual oracles.
+        required_cumulant = max(0, lhs_rank + rhs_rank - 1)
+        if max_cumulant < required_cumulant:
+            raise RuntimeError(
+                "cannot validate the cumulant Wick backend for operand ranks "
+                f"{lhs_rank} and {rhs_rank} with max_cumulant={max_cumulant}; "
+                f"validation requires max_cumulant >= {required_cumulant} because "
+                "the sparse and cumulant backends otherwise define different "
+                "truncation approximations"
+            )
+
     sparse_result = None
     if gno_backend in {"sparse", "validate"}:
         sparse_result = lhs.commutator(
@@ -391,13 +414,14 @@ def _select_reported_energy(
 class SparseMRDSRG:
     """Sparse-reference MR-DSRG(n) fixed-point solver.
 
-    The ``sparse`` generalized-normal-ordering backend is the exact reference
-    route for small active spaces. The optional ``cumulant`` backend evaluates
-    Wick contractions directly from cached reference cumulants, while
-    ``validate`` runs both backends and compares their coefficients. The
-    generalized normal-ordering cumulant expansion defaults to rank 3, but
-    higher available sparse-state cumulant ranks can be requested with
-    ``max_cumulant`` when using the sparse backend.
+    The ``sparse`` generalized-normal-ordering backend evaluates products by a
+    bare-operator expansion truncated in reference density moments. The
+    ``cumulant`` backend evaluates generalized Wick contractions directly and
+    truncates density cumulants at ``max_cumulant``. These are different
+    approximations when the available cumulant rank is lower than a
+    commutator's contraction rank. The ``validate`` backend compares them only
+    when ``max_cumulant`` is high enough for the two expansions to be
+    equivalent. Cumulants through rank 3 are used by default.
     """
 
     hamiltonian: _ft.SparseOperator

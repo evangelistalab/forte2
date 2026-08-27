@@ -49,6 +49,33 @@ def reference_product(lhs, rhs, vacuum, max_rank):
     )
 
 
+def exact_reference_product(lhs, rhs, vacuum, max_rank):
+    bare = sparse_ops.new_product(
+        lhs.to_sparse_operator(1.0e-14), rhs.to_sparse_operator(1.0e-14)
+    )
+    return gno(
+        bare,
+        vacuum,
+        max_rank=max_rank,
+        max_cumulant=-1,
+        norb=lhs.norb(),
+    )
+
+
+def exact_reference_commutator(lhs, rhs, vacuum, max_rank):
+    lhs_bare = lhs.to_sparse_operator(1.0e-14)
+    rhs_bare = rhs.to_sparse_operator(1.0e-14)
+    bare = sparse_ops.new_product(lhs_bare, rhs_bare)
+    bare -= sparse_ops.new_product(rhs_bare, lhs_bare)
+    return gno(
+        bare,
+        vacuum,
+        max_rank=max_rank,
+        max_cumulant=-1,
+        norb=lhs.norb(),
+    )
+
+
 @pytest.mark.parametrize("max_rank", [0, 1, 2])
 def test_cumulant_wick_product_matches_sparse_route(max_rank):
     vacuum = correlated_vacuum()
@@ -216,6 +243,76 @@ def test_cumulant_wick_contracts_rank_three_cumulant():
     reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3)
     lambda3 = reference.cumulant(det("2a"), det("2a"))
     assert scalar_coefficients[3] - scalar_coefficients[2] == pytest.approx(lambda3)
+
+
+def test_cumulant_wick_rank_three_core_active_virtual_product_is_exact():
+    vacuum = sparse_ops.SparseState(
+        {
+            det("2200"): math.sqrt(0.61),
+            det("2020"): math.sqrt(0.39),
+        }
+    )
+    reference = sparse_ops.CumulantReference(vacuum, 4, max_cumulant=3)
+    engine = sparse_ops.CumulantWickEngine(reference, 3, 1.0e-14)
+    lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        4,
+        3,
+        sparse_ops.sqop("[0a+ 3a+ 0b+ 0b- 1a- 0a-]")[0],
+        1.0,
+    )
+    rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        4,
+        3,
+        sparse_ops.sqop("[1a+ 1b+ 1b- 3a-]")[0],
+        1.0,
+    )
+
+    direct = engine.product(rhs, lhs)
+    exact = exact_reference_product(rhs, lhs, vacuum, 3)
+
+    assert_gno_close(direct, exact)
+    assert_gno_close(
+        engine.commutator(lhs, rhs),
+        exact_reference_commutator(lhs, rhs, vacuum, 3),
+    )
+    assert {term.str(): value for term, value in direct}.get(
+        "[]", 0.0
+    ) == pytest.approx(0.0)
+
+
+def test_cumulant_wick_rank_four_mixed_space_algebra_is_exact():
+    vacuum = sparse_ops.SparseState(
+        {
+            det("2200"): math.sqrt(0.61),
+            det("2020"): math.sqrt(0.39),
+        }
+    )
+    reference = sparse_ops.CumulantReference(vacuum, 4, max_cumulant=4)
+    engine = sparse_ops.CumulantWickEngine(reference, 4, 1.0e-14)
+    lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        4,
+        4,
+        sparse_ops.sqop("[1a+ 2a+ 1b+ 3b+ 2b- 1b- 2a- 1a-]")[0],
+        0.4 - 0.1j,
+    )
+    rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        4,
+        4,
+        sparse_ops.sqop("[2b+ 3b+ 3b- 0a-]")[0],
+        -0.2 + 0.3j,
+    )
+
+    assert_gno_close(
+        engine.product(lhs, rhs), exact_reference_product(lhs, rhs, vacuum, 4)
+    )
+    assert_gno_close(
+        engine.commutator(lhs, rhs),
+        exact_reference_commutator(lhs, rhs, vacuum, 4),
+    )
 
 
 def test_cumulant_wick_rank_four_inputs_match_sparse_route():
