@@ -164,46 +164,46 @@ bool unique_modes(const WickLegList& legs, const LegPositions& positions) {
     return true;
 }
 
+ElementaryContraction make_one_body_contraction(const CumulantReference& reference,
+                                                const WickLegList& legs, std::size_t creator,
+                                                std::size_t annihilator) {
+    ElementaryContraction contraction;
+    if (legs[creator].lhs == legs[annihilator].lhs) {
+        return contraction;
+    }
+
+    const auto creator_mode = legs[creator].mode;
+    const auto annihilator_mode = legs[annihilator].mode;
+    contraction.selected = static_cast<std::uint16_t>((1U << creator) | (1U << annihilator));
+    contraction.canonical_positions.push_back(creator);
+    contraction.canonical_positions.push_back(annihilator);
+    contraction.eta = creator > annihilator;
+
+    if (reference.active_modes().get_bit(creator_mode) and
+        reference.active_modes().get_bit(annihilator_mode)) {
+        auto cre = Determinant::zero();
+        auto ann = Determinant::zero();
+        cre.set_bit(creator_mode, true);
+        ann.set_bit(annihilator_mode, true);
+        const auto gamma = reference.cumulant(cre, ann);
+        contraction.value =
+            contraction.eta ? sparse_scalar_t{creator_mode == annihilator_mode ? 1.0 : 0.0} - gamma
+                            : gamma;
+    } else if (creator_mode == annihilator_mode) {
+        contraction.value =
+            contraction.eta
+                ? sparse_scalar_t{reference.virtual_modes().get_bit(creator_mode) ? 1.0 : 0.0}
+                : sparse_scalar_t{reference.core_modes().get_bit(creator_mode) ? 1.0 : 0.0};
+    }
+    return contraction;
+}
+
 ElementaryContraction make_elementary_contraction(const CumulantReference& reference,
                                                   const WickLegList& legs,
                                                   const LegPositions& creators,
                                                   const LegPositions& annihilators) {
     ElementaryContraction contraction;
     if (not unique_modes(legs, creators) or not unique_modes(legs, annihilators)) {
-        return contraction;
-    }
-
-    if (creators.size() == 1) {
-        const auto creator = creators[0];
-        const auto annihilator = annihilators[0];
-        if (legs[creator].lhs == legs[annihilator].lhs) {
-            return contraction;
-        }
-
-        const auto creator_mode = legs[creator].mode;
-        const auto annihilator_mode = legs[annihilator].mode;
-        contraction.selected = static_cast<std::uint16_t>((1U << creator) | (1U << annihilator));
-        contraction.canonical_positions.push_back(creator);
-        contraction.canonical_positions.push_back(annihilator);
-        contraction.eta = creator > annihilator;
-
-        if (reference.active_modes().get_bit(creator_mode) and
-            reference.active_modes().get_bit(annihilator_mode)) {
-            auto cre = Determinant::zero();
-            auto ann = Determinant::zero();
-            cre.set_bit(creator_mode, true);
-            ann.set_bit(annihilator_mode, true);
-            const auto gamma = reference.cumulant(cre, ann);
-            contraction.value =
-                contraction.eta
-                    ? sparse_scalar_t{creator_mode == annihilator_mode ? 1.0 : 0.0} - gamma
-                    : gamma;
-        } else if (creator_mode == annihilator_mode) {
-            contraction.value =
-                contraction.eta
-                    ? sparse_scalar_t{reference.virtual_modes().get_bit(creator_mode) ? 1.0 : 0.0}
-                    : sparse_scalar_t{reference.core_modes().get_bit(creator_mode) ? 1.0 : 0.0};
-        }
         return contraction;
     }
 
@@ -257,15 +257,14 @@ std::vector<ElementaryContraction> elementary_contractions(const CumulantReferen
     }
 
     std::vector<ElementaryContraction> contractions;
-    enumerate_combinations(creators, 1, [&](const auto& selected_cre) {
-        enumerate_combinations(annihilators, 1, [&](const auto& selected_ann) {
-            auto contraction =
-                make_elementary_contraction(reference, legs, selected_cre, selected_ann);
+    for (const auto creator : creators) {
+        for (const auto annihilator : annihilators) {
+            auto contraction = make_one_body_contraction(reference, legs, creator, annihilator);
             if (contraction.selected != 0 and contraction.value != sparse_scalar_t{0.0}) {
                 contractions.push_back(std::move(contraction));
             }
-        });
-    });
+        }
+    }
 
     LegPositions active_creators;
     LegPositions active_annihilators;
