@@ -224,6 +224,16 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
         387.5233440732472, rel=1e-4
     )
 
+    # diagonalizing hbar should reproduce most recent relaxed energy
+    hbar0 = dsrg.hbar0
+    hbar1 = dsrg.hbar1_canon
+    hbar2 = dsrg.hbar2_canon
+    ci_solver.set_ints(hbar0, hbar1, hbar2)
+    ci_solver.run()
+    assert (ci_solver.E[5] - ci_solver.E[4]) * EH_TO_WN == pytest.approx(
+        387.5233440732472, rel=1e-4
+    )
+
 
 @pytest.mark.slow
 def test_mrpt2_sh_with_slow():
