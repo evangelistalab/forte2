@@ -306,9 +306,9 @@ $\pi$.
 $U_{\mathbf{A}}$ and $V_{\mathbf{A}}$ are orthogonal but may be \emph{improper}
 ($\det = -1$), which has no real logarithm at all, since
 $\det(\exp\kappa)=\exp(\Tr\kappa)>0$ for real $\kappa$. Such a factor is split
-as $U = FR$ with $F$ flipping the sign of active orbital 0 and $R$ proper.
-$F$'s CI action is exact and closed-form --- multiply each coefficient by
-$(-1)^{n_0}$ --- and $R$ is logged from its real Schur form, reading each
+as $U = FR$ with $F$ flipping the sign of active orbital 0 and $R$ is a proper rotation.
+$F$'s CI action is exact: multiply each coefficient by
+$(-1)^{n_0}$, and $R$ is logged from its real Schur form, reading each
 $2\times2$ block's angle with \texttt{arctan2}. That is branch-free over the
 full range, unlike \texttt{scipy.linalg.logm}, whose principal branch returns
 a spuriously complex result for rotations near $\pi$. By \cref{eq:anti} the
@@ -316,13 +316,54 @@ reflection is applied before $R$'s generator.
 
 \subsection{Applying the generator}
 
-\texttt{transform\_ci\_vector\_direct} evaluates $\exp(-T)c$ by
-scaling-and-squaring: halve the generator $m$ times until its spectral norm
-falls below a threshold, Taylor-expand that well-conditioned exponential, and
-apply the result $2^m$ times, which is exact since
-$\exp(-T)=\big(\exp(-T/2^m)\big)^{2^m}$. Each application is a one-electron
-sigma build (\texttt{CISigmaBuilder.sigma\_one\_electron} with $V=0$), the
-same machinery every CI run already uses. Note that this is not Malmqvist's
+The generator here lives entirely in the active space: $M$ is one of
+$U_{\mathbf{A}}$, $V_{\mathbf{A}}$, or --- after the improper-rotation split above
+--- the proper factor $R$, each an $n_{\mathbf{A}}\times n_{\mathbf{A}}$ matrix, and
+$t=\log M$ is its generator (real for the nonrelativistic case, complex for
+two-component). Restricting \cref{eq:rho-def} to the active block,
+\begin{equation}
+ \hat{\rho}[M] = \exp(-\hat{T}), \qquad
+ \hat{T} = \sum_{p,q\in\mathbf{A}} t_{pq}\hat{E}_{pq}.
+ \label{eq:that-def}
+\end{equation}
+
+\textbf{The one-electron sigma build, concretely.} Acting on a CI vector with
+coefficients $c_\nu$ in the determinant basis, $\hat{T}$'s matrix elements are
+exactly Malmqvist's one-electron coupling coefficients:
+\begin{equation}
+ (\hat{T}c)_\mu = \sum_\nu T_{\mu\nu}\,c_\nu,
+ \qquad T_{\mu\nu} = \sum_{p,q\in\mathbf{A}} t_{pq}\,A^{\mu\nu}_{pq},
+ \qquad A^{\mu\nu}_{pq} = \braket{\Phi_\mu|\hat{E}_{pq}|\Phi_\nu}.
+\end{equation}
+This is exactly the quantity every direct-CI one-electron sigma build already
+contracts against a Hamiltonian's one-electron integrals ---
+\texttt{sigma\_one\_electron} computes precisely this contraction,
+string-by-string, without ever forming the dense $n_{\det}\times n_{\det}$
+matrix $T_{\mu\nu}$. Calling it with $t$ in place of one-electron integrals
+and $V=0$ (so \texttt{sigma\_two\_electron}'s contribution is skipped
+entirely) is therefore exact, not an approximation: $\hat{T}$ genuinely is a
+one-body operator, so no two-electron machinery is needed no matter how large
+$t$ is.
+
+\textbf{Scaling-and-squaring.} \texttt{transform\_ci\_vector\_direct}
+evaluates $\exp(-\hat{T})c$ by first halving the generator $m$ times, to
+$t_m = t/2^m$, until $\lVert t_m\rVert_2$ falls below a threshold. The
+resulting well-conditioned small-angle exponential is then built as a Taylor
+series, recursively and exactly matching the code:
+\begin{equation}
+ c^{(0)} = c, \qquad
+ c^{(k)} = -\frac{1}{k}\,\hat{T}_m\,c^{(k-1)}
+ \;\Big(=\tfrac{(-1)^k}{k!}\hat{T}_m^{\,k}c\Big),
+ \qquad
+ \exp(-\hat{T}_m)\,c \approx \sum_{k=0}^{K} c^{(k)},
+\end{equation}
+with $\hat{T}_m=\sum_{pq}(t_m)_{pq}\hat{E}_{pq}$ --- one
+\texttt{sigma\_one\_electron} call per term $c^{(k)}$, summed until $c^{(k)}$
+is negligible relative to the running total. That converged small-angle
+result is then applied $2^m$ times in sequence, which is exact since
+$\exp(-\hat{T})=\big(\exp(-\hat{T}_m)\big)^{2^m}$.
+
+Note that this is not Malmqvist's
 own recommendation: his Sec.~IV gives an exact finite algorithm via an LU
 partitioning and a sequence of single-orbital transformations, costing
 $O(n_{\mathbf{A}})$ operations with no logarithm anywhere. The exponential route is
