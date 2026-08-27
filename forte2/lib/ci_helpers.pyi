@@ -130,9 +130,9 @@ class CIStrings:
     def make_determinants(self) -> DeterminantVector: ...
 
 class CISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3, build_two_electron: bool = True) -> None:
         """
-        Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
+        Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals. Pass build_two_electron=False to skip the O(norb^4) two-electron scratch tables when only sigma_one_electron() will be used.
         """
 
     def set_algorithm(self, algorithm: str) -> None:
@@ -164,7 +164,7 @@ class CISigmaBuilder:
     def sigma_two_electron(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
         """Apply the two-electron part of the Hamiltonian to the wave function"""
 
-    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
+    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], build_two_electron: bool = True) -> None:
         """
         Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers
         """
@@ -315,9 +315,9 @@ class CISpinAdapter:
         """Set the logging level for the class"""
 
 class RelCISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, build_two_electron: bool = True) -> None:
         """
-        Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
+        Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals. Pass build_two_electron=False to skip the O(norb^4) two-electron scratch table when only sigma_one_electron() will be used.
         """
 
     def set_algorithm(self, algorithm: str) -> None:
@@ -343,7 +343,7 @@ class RelCISigmaBuilder:
     def sigma_two_electron(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None:
         """Apply the two-electron part of the Hamiltonian to the wave function"""
 
-    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]) -> None:
+    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], build_two_electron: bool = True) -> None:
         """
         Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers
         """

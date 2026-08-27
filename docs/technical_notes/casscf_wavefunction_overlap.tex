@@ -233,9 +233,10 @@ move the opposite way to compensate, so $c'=\exp(-\hat{t})\,c$.
 
 \subsection{The core block is a scalar}
 
-$M$ is block upper-triangular, and for such a matrix any analytic function ---
-$\log$ included --- is block upper-triangular with the same zero block and
-with $(\log M)_{\mathbf{C}\mathbf{C}} = \log M_{\mathbf{C}\mathbf{C}}$. Two consequences, given that every
+$M$ is block upper-triangular, and for such a matrix any analytic function,
+including $\log$, is block upper-triangular with the same zero block and
+with $(\log M)_{\mathbf{C}\mathbf{C}} = \log (M_{\mathbf{C}\mathbf{C}})$. 
+Two consequences, given that every
 determinant in a CAS expansion has the core block completely full:
 
 \begin{itemize}
@@ -243,17 +244,22 @@ determinant in a CAS expansion has the core block completely full:
 out of the core space, so the transformed wavefunction stays inside the
 same CAS manifold. This is exactly the closure property of Malmqvist's
 Sec.~V subgroup.
-\item Every off-diagonal one-body term with a core creation index is
-Pauli-blocked: the target core orbital is already full. Only the diagonal
-number operators survive.
+\item Every off-diagonal one-body term with a core creation index will have 
+no effect on the wavefunction, only the diagonal number operators survive. 
+The nonzero $(\mathbf{C},\mathbf{A})$ block belongs to this class as well.
+
 \end{itemize}
 
 So the entire core block contributes one state-independent scalar,
 \begin{equation}
- \rho[M]\big|_{\mathbf{C}}
- = \exp\!\Big(-\sum_{p\in \mathbf{C}} t_{pp}\, n_p\Big)
- = \det(M_{\mathbf{C}\mathbf{C}})^{-n_\mathrm{ch}},
+\begin{aligned}
+\rho[M]\big|_{\mathbf{C}}&=\exp\!\Big(-\sum_{p\in \mathbf{C}} t_{pp}\, n_p\Big)\\
+&=\exp\left(-n_{\mathrm{ch}}\sum_{p\in\mathbf{C}}(\log M)_{pp}\right)\\
+&=\exp\left(-n_{\mathrm{ch}}\Tr(\log{M}_{\mathbf{CC}})\right)\\
+&=\exp\left(-n_{\mathrm{ch}}\log(\det{M}_{\mathbf{CC}})\right)\\
+& =\det(M_{\mathbf{C}\mathbf{C}})^{-n_\mathrm{ch}},
  \label{eq:docc-scalar}
+\end{aligned}
 \end{equation}
 where $n_\mathrm{ch}$ counts occupied second-quantized channels per core
 orbital: $n_\mathrm{ch}=2$ nonrelativistically (a doubly occupied spatial

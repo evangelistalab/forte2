@@ -87,9 +87,11 @@ void export_ci_strings_api(nb::module_& sub_m) {
 
 void export_ci_sigma_builder_api(nb::module_& sub_m) {
     nb::class_<CISigmaBuilder>(sub_m, "CISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int>(), "lists"_a, "E"_a,
-             "H"_a, "V"_a, "log_level"_a = 3,
-             "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
+        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int, bool>(), "lists"_a,
+             "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "build_two_electron"_a = true,
+             "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals. "
+             "Pass build_two_electron=False to skip the O(norb^4) two-electron scratch tables "
+             "when only sigma_one_electron() will be used.")
         .def("set_algorithm", &CISigmaBuilder::set_algorithm, "algorithm"_a,
              "Set the sigma build algorithm (options = kh, hz)")
         .def("get_algorithm", &CISigmaBuilder::get_algorithm,
@@ -110,6 +112,7 @@ void export_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("sigma_two_electron", &CISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
              "Apply the two-electron part of the Hamiltonian to the wave function")
         .def("set_Hamiltonian", &CISigmaBuilder::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
+             "build_two_electron"_a = true,
              "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
              "scratch buffers")
         .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a, "threshold"_a = 1e-12,
@@ -209,9 +212,12 @@ void export_ci_spin_adapter_api(nb::module_& sub_m) {
 
 void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
     nb::class_<RelCISigmaBuilder>(sub_m, "RelCISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int>(),
-             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
-             "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
+        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int,
+                      bool>(),
+             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "build_two_electron"_a = true,
+             "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals. "
+             "Pass build_two_electron=False to skip the O(norb^4) two-electron scratch table "
+             "when only sigma_one_electron() will be used.")
         .def("set_algorithm", &RelCISigmaBuilder::set_algorithm, "algorithm"_a,
              "Set the sigma build algorithm (options = kh, hz)")
         .def("get_algorithm", &RelCISigmaBuilder::get_algorithm,
@@ -226,6 +232,7 @@ void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("sigma_two_electron", &RelCISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
              "Apply the two-electron part of the Hamiltonian to the wave function")
         .def("set_Hamiltonian", &RelCISigmaBuilder::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
+             "build_two_electron"_a = true,
              "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
              "scratch buffers")
         .def("so_1rdm", &RelCISigmaBuilder::compute_1rdm, "C_left"_a, "C_right"_a,

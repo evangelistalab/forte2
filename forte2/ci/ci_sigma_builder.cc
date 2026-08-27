@@ -27,9 +27,8 @@ double transpose_1_time = 0.0;
 double transpose_2_time = 0.0;
 
 CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
-                               int log_level)
-    : lists_(lists), E_(E), H_(H), V_(V), slater_rules_(lists.norb(), E, H, V),
-      log_level_(log_level) {
+                               int log_level, bool build_two_electron)
+    : lists_(lists), E_(E), H_(H), V_(V), log_level_(log_level) {
     // Find the size of the largest symmetry block
     size_t max_size = 0;
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
@@ -43,7 +42,7 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
     TR.resize(max_size);
     TL.resize(max_size);
 
-    set_Hamiltonian(E, H, V);
+    set_Hamiltonian(E, H, V, build_two_electron);
 }
 
 void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
@@ -99,7 +98,7 @@ size_t CISigmaBuilder::max_composite_hole_dimension(const StringAddress& alpha_a
     return max_alpha * max_beta;
 }
 
-void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
+void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V, bool build_two_electron) {
     E_ = E;
 
     if (H.ndim() != 2) {
@@ -127,7 +126,6 @@ void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
         }
     }
 
-    // Initialize the two-electron integrals v_pr_qs and v_pr_qs_a
     if (V.ndim() != 4) {
         throw std::runtime_error("V must be a 4D tensor.");
     }
@@ -137,6 +135,20 @@ void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
     }
     V_ = V;
 
+    two_electron_built_ = build_two_electron;
+    if (!build_two_electron) {
+        // Only sigma_one_electron() (via h_hz/h_kh above) will be used on this builder; skip the
+        // O(norb^4) two-electron scratch tables below and the SlaterRules copy of V, both of
+        // which Hamiltonian()/sigma_two_electron()/the CSF-related methods need but
+        // sigma_one_electron() does not.
+        v_pr_qs.clear();
+        v_pr_qs_a.clear();
+        v_ijkl_hk.clear();
+        slater_rules_.reset();
+        return;
+    }
+
+    // Initialize the two-electron integrals v_pr_qs and v_pr_qs_a
     const size_t norb2 = norb * norb;
     const size_t npairs = (norb * (norb - 1)) / 2;    // Number of pairs (p, r) with p > r
     const size_t ngeqpairs = (norb * (norb + 1)) / 2; // Number of pairs (p, r) with p >= r
@@ -182,9 +194,18 @@ void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
             }
         }
     }
+
+    // SlaterRules keeps its own O(norb^4) copies of V (v_, va_) plus f_J_/f_JK_; only needed for
+    // the CSF-related methods (form_H_csf, slater_rules_csf, energy_csf, form_Hdiag_csf).
+    slater_rules_.emplace(lists_.norb(), E, H, V);
 }
 
 void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
+    if (!two_electron_built_) {
+        throw std::runtime_error(
+            "This CISigmaBuilder was constructed with build_two_electron=false; call "
+            "sigma_one_electron() instead, or reconstruct with build_two_electron=true.");
+    }
     local_timer t;
     vector::zero<double>(sigma);
     auto b_span = vector::as_span<double>(basis);
@@ -233,6 +254,11 @@ void CISigmaBuilder::sigma_one_electron(np_vector basis, np_vector sigma) const 
 }
 
 void CISigmaBuilder::sigma_two_electron(np_vector basis, np_vector sigma) const {
+    if (!two_electron_built_) {
+        throw std::runtime_error(
+            "This CISigmaBuilder was constructed with build_two_electron=false, so no "
+            "two-electron integrals are available; reconstruct with build_two_electron=true.");
+    }
     vector::zero<double>(sigma);
     auto b_span = vector::as_span<double>(basis);
     auto s_span = vector::as_span<double>(sigma);
@@ -248,6 +274,16 @@ void CISigmaBuilder::sigma_two_electron(np_vector basis, np_vector sigma) const 
 
 void CISigmaBuilder::H0(std::span<double> basis, std::span<double> sigma) const {
     add(basis.size(), E_, basis.data(), 1, sigma.data(), 1);
+}
+
+const SlaterRules& CISigmaBuilder::require_slater_rules() const {
+    if (!slater_rules_) {
+        throw std::runtime_error(
+            "This CISigmaBuilder was constructed with build_two_electron=false; CSF-related "
+            "methods (form_H_csf, slater_rules_csf, energy_csf, form_Hdiag_csf) are unavailable. "
+            "Reconstruct with build_two_electron=true to use them.");
+    }
+    return *slater_rules_;
 }
 
 std::span<double> gather_block(std::span<double> source, std::span<double> dest, Spin spin,
@@ -315,10 +351,11 @@ double CISigmaBuilder::slater_rules_csf(const std::vector<Determinant>& dets,
     for (const auto& [det_add_I, c_I] : spin_adapter.csf(I)) {
         for (const auto& [det_add_J, c_J] : spin_adapter.csf(J)) {
             if (det_add_I == det_add_J) {
-                matrix_element += c_I * c_J * slater_rules_.energy(dets[det_add_I]);
+                matrix_element += c_I * c_J * require_slater_rules().energy(dets[det_add_I]);
             } else if (c_I * c_J != 0.0) {
                 matrix_element +=
-                    c_I * c_J * slater_rules_.slater_rules(dets[det_add_I], dets[det_add_J]);
+                    c_I * c_J *
+                    require_slater_rules().slater_rules(dets[det_add_I], dets[det_add_J]);
             }
         }
     }
@@ -331,11 +368,12 @@ double CISigmaBuilder::energy_csf(const std::vector<Determinant>& dets,
     for (const auto& [det_add_I, c_I] : spin_adapter.csf(I)) {
         for (const auto& [det_add_J, c_J] : spin_adapter.csf(I)) {
             if (det_add_I == det_add_J) {
-                matrix_element += c_I * c_J * slater_rules_.energy(dets[det_add_I]);
+                matrix_element += c_I * c_J * require_slater_rules().energy(dets[det_add_I]);
             } else if (det_add_I < det_add_J) {
                 if (c_I * c_J != 0.0) {
-                    matrix_element += 2.0 * c_I * c_J *
-                                      slater_rules_.slater_rules(dets[det_add_I], dets[det_add_J]);
+                    matrix_element +=
+                        2.0 * c_I * c_J *
+                        require_slater_rules().slater_rules(dets[det_add_I], dets[det_add_J]);
                 }
             }
         }
@@ -370,7 +408,7 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
                 for (size_t i{csf_start}; i < csf_end; ++i) {
                     double energy = 0.0;
                     for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
-                        energy += c_I * c_I * slater_rules_.energy(dets[det_add_I]);
+                        energy += c_I * c_I * require_slater_rules().energy(dets[det_add_I]);
                     }
                     Hdiag_span[i] = energy;
                 }
@@ -385,7 +423,8 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
                         if (auto it = det_energies.find(det_add_I); it != det_energies.end()) {
                             energy += c_I * c_I * it->second;
                         } else {
-                            const double det_energy = slater_rules_.energy(dets[det_add_I]);
+                            const double det_energy =
+                                require_slater_rules().energy(dets[det_add_I]);
                             det_energies[det_add_I] = det_energy;
                             energy += c_I * c_I * det_energy;
                         }

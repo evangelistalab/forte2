@@ -13,7 +13,7 @@
 namespace forte2 {
 
 RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H,
-                                     np_tensor4_complex& V, int log_level)
+                                     np_tensor4_complex& V, int log_level, bool build_two_electron)
     : lists_(lists), E_(E), H_(H), V_(V), rel_slater_rules_(lists.norb(), E, H, V),
       log_level_(log_level) {
     // Two-component (relativistic) CI treats every electron as an alpha spinor, so the beta space
@@ -36,7 +36,7 @@ RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix
     TR.resize(max_size);
     TL.resize(max_size);
 
-    set_Hamiltonian(E, H, V);
+    set_Hamiltonian(E, H, V, build_two_electron);
 }
 
 void RelCISigmaBuilder::set_algorithm(const std::string& algorithm) {
@@ -68,7 +68,8 @@ void RelCISigmaBuilder::set_memory(int mb) {
     std::vector<std::complex<double>>{}.swap(Kblock2_);
 }
 
-void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V) {
+void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V,
+                                        bool build_two_electron) {
     E_ = E;
 
     if (H.ndim() != 2) {
@@ -91,7 +92,6 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
         }
     }
 
-    // Initialize the two-electron integrals v_pr_qs and v_pr_qs_a
     if (V.ndim() != 4) {
         throw std::runtime_error("V must be a 4D tensor.");
     }
@@ -101,6 +101,16 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
     }
     V_ = V;
 
+    two_electron_built_ = build_two_electron;
+    if (!build_two_electron) {
+        // Only sigma_one_electron() (via h_hz above) will be used on this builder; skip the
+        // O(norb^4) two-electron scratch table below, needed only by Hamiltonian() and
+        // sigma_two_electron().
+        v_pr_qs.clear();
+        return;
+    }
+
+    // Initialize the two-electron integral table v_pr_qs
     const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
     v_pr_qs.resize(npairs * npairs);
 
@@ -120,6 +130,11 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
 }
 
 void RelCISigmaBuilder::Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const {
+    if (!two_electron_built_) {
+        throw std::runtime_error(
+            "This RelCISigmaBuilder was constructed with build_two_electron=false; call "
+            "sigma_one_electron() instead, or reconstruct with build_two_electron=true.");
+    }
     vector::zero<std::complex<double>>(sigma);
     auto b_span = vector::as_span<std::complex<double>>(basis);
     auto s_span = vector::as_span<std::complex<double>>(sigma);
@@ -139,6 +154,11 @@ void RelCISigmaBuilder::sigma_one_electron(np_vector_complex basis, np_vector_co
 }
 
 void RelCISigmaBuilder::sigma_two_electron(np_vector_complex basis, np_vector_complex sigma) const {
+    if (!two_electron_built_) {
+        throw std::runtime_error(
+            "This RelCISigmaBuilder was constructed with build_two_electron=false, so no "
+            "two-electron integrals are available; reconstruct with build_two_electron=true.");
+    }
     vector::zero<std::complex<double>>(sigma);
     auto b_span = vector::as_span<std::complex<double>>(basis);
     auto s_span = vector::as_span<std::complex<double>>(sigma);

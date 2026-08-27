@@ -4,7 +4,7 @@ from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.linalg import logm, schur
+from scipy.linalg import det, logm, schur
 
 from .orbital_overlap import mo_overlap
 
@@ -592,7 +592,10 @@ def transform_ci_vector_direct(
         m = 0
     t_scaled = t_actv / (2**m)
 
-    builder = builder_cls(ci_strings, 0.0, t_scaled, V_zero)
+    # Only sigma_one_electron() is ever called below; skip the builder's O(norb^4)
+    # two-electron scratch tables, which would otherwise be rebuilt from this all-zero
+    # V on every call (this function runs repeatedly, e.g. across a geometry/state scan).
+    builder = builder_cls(ci_strings, 0.0, t_scaled, V_zero, build_two_electron=False)
 
     def apply_T(vec: NDArray) -> NDArray:
         sigma = np.empty_like(vec)
@@ -619,7 +622,9 @@ def transform_ci_vector_direct(
     for _ in range(2**m):
         vec = taylor_exp_neg_T(vec)
 
-    return complex(docc_scale) * vec if docc_scale != 1.0 else vec
+    # docc_scale is real for the nonrelativistic (real) path; avoid forcing a complex cast
+    # there, which would double the memory/compute of this O(ndet) scaling step.
+    return docc_scale * vec if docc_scale != 1.0 else vec
 
 
 def _transform_side_direct(
@@ -695,7 +700,9 @@ def _transform_side_direct(
 
     if d_actv is not None:
         vec = _apply_active_scaling(ci_strings, vec, d_actv)
-    return complex(docc_scale) * vec if docc_scale != 1.0 else vec
+    # docc_scale is real for the nonrelativistic (real) path; avoid forcing a complex cast
+    # there, which would double the memory/compute of this O(ndet) scaling step.
+    return docc_scale * vec if docc_scale != 1.0 else vec
 
 
 # -- Dispatcher --------------------------------------------------------------
@@ -934,15 +941,15 @@ def casscf_wavefunction_overlap(
     # electrons live in the alpha (spinor) string"), so only one power applies.
     # This is Malmqvist's factor prod_i (t_ii)^2, p. 489 and Eq. (10) on p. 492.
     docc_power = 1 if two_component else 2
+    # scipy.linalg.det, not np.linalg.det: for a well-conditioned but structurally singular-
+    # looking block (e.g. an antidiagonal permutation, which occurs for Kramers-degenerate
+    # two-component docc spinors), np.linalg.det's internal log/exp path spuriously raises
+    # "divide by zero"/"invalid value" RuntimeWarnings despite returning the correct value.
     docc_scale_1 = (
-        1.0 / np.linalg.det(bio.C_XA[:ndocc_eff, :ndocc_eff]) ** docc_power
-        if ndocc_eff
-        else 1.0
+        1.0 / det(bio.C_XA[:ndocc_eff, :ndocc_eff]) ** docc_power if ndocc_eff else 1.0
     )
     docc_scale_2 = (
-        1.0 / np.linalg.det(bio.C_YB[:ndocc_eff, :ndocc_eff]) ** docc_power
-        if ndocc_eff
-        else 1.0
+        1.0 / det(bio.C_YB[:ndocc_eff, :ndocc_eff]) ** docc_power if ndocc_eff else 1.0
     )
 
     if backend == "direct":

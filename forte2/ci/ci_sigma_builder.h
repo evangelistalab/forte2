@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <cmath>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <tuple>
@@ -31,8 +32,12 @@ enum class CIAlgorithm {
 class CISigmaBuilder {
   public:
     // == Class Constructor ==
-    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
-                   int log_level = 3);
+    /// @param build_two_electron If false, skip building the O(norb^4) two-electron scratch
+    ///        tables (v_pr_qs, v_pr_qs_a, v_ijkl_hk). Use when only sigma_one_electron() will
+    ///        ever be called on this builder (e.g. applying a pure orbital-rotation generator);
+    ///        Hamiltonian() and sigma_two_electron() throw if called on such a builder.
+    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V, int log_level = 3,
+                   bool build_two_electron = true);
 
     // == Class Public Functions ==
 
@@ -50,7 +55,9 @@ class CISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
+    /// @param build_two_electron If false, skip building the O(norb^4) two-electron scratch
+    ///        tables; see the constructor.
+    void set_Hamiltonian(double E, np_matrix H, np_tensor4 V, bool build_two_electron = true);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -311,8 +318,13 @@ class CISigmaBuilder {
     np_matrix H_;
     /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
     np_tensor4 V_;
-    /// @brief Object for computing the energy and Slater determinants
-    SlaterRules slater_rules_;
+    /// @brief Whether the O(norb^4) two-electron scratch tables were built by the most recent
+    /// set_Hamiltonian() call; guards Hamiltonian() and sigma_two_electron().
+    bool two_electron_built_ = false;
+    /// @brief Object for computing the energy and Slater determinants. Built by
+    /// set_Hamiltonian() only when build_two_electron is true (it duplicates V into its own
+    /// O(norb^4) tables); empty otherwise. Access via require_slater_rules().
+    std::optional<SlaterRules> slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
     size_t memory_size_ = 1073741824;
     /// @brief logging level for the class
@@ -345,6 +357,10 @@ class CISigmaBuilder {
 
     /// @brief Scalar contribution to the sigma vector |sigma> = E |basis>
     void H0(std::span<double> basis, std::span<double> sigma) const;
+
+    /// @brief Access slater_rules_, throwing if this builder was constructed with
+    /// build_two_electron=false (see the constructor).
+    const SlaterRules& require_slater_rules() const;
 
     // -- Harrison-Zarrabian Algorithm Functions/Data ---
 

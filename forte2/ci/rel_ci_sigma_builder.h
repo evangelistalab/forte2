@@ -18,8 +18,12 @@ namespace forte2 {
 class RelCISigmaBuilder {
   public:
     // == Class Constructor ==
+    /// @param build_two_electron If false, skip building the O(norb^4) two-electron scratch
+    ///        table (v_pr_qs). Use when only sigma_one_electron() will ever be called on this
+    ///        builder (e.g. applying a pure orbital-rotation generator); Hamiltonian() and
+    ///        sigma_two_electron() throw if called on such a builder.
     RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H, np_tensor4_complex& V,
-                      int log_level = 3);
+                      int log_level = 3, bool build_two_electron = true);
 
     // == Class Public Functions ==
 
@@ -39,7 +43,10 @@ class RelCISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V);
+    /// @param build_two_electron If false, skip building the O(norb^4) two-electron scratch
+    ///        table; see the constructor.
+    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V,
+                         bool build_two_electron = true);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -141,7 +148,12 @@ class RelCISigmaBuilder {
     np_matrix_complex H_;
     /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
     np_tensor4_complex V_;
-    /// @brief Object for computing the energy and Slater determinants
+    /// @brief Whether the O(norb^4) two-electron scratch table (v_pr_qs) was built by the most
+    /// recent set_Hamiltonian() call; guards Hamiltonian() and sigma_two_electron().
+    bool two_electron_built_ = false;
+    /// @brief Object for computing the energy and Slater determinants. Cheap to construct
+    /// (RelSlaterRules stores views rather than copying V), so always built regardless of
+    /// build_two_electron.
     RelSlaterRules rel_slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
     size_t memory_size_ = 1073741824;
