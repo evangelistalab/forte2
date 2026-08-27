@@ -181,6 +181,71 @@ def test_sparse_mrdsrg2_iterates_tiny_multireference_model():
     assert result.history[-1].rms_update < 1.0e-7
 
 
+def test_sparse_mrdsrg2_cumulant_backend_matches_and_validates_sparse_engine():
+    vacuum = one_alpha_active_vacuum()
+    ham = sparse_ops.sparse_operator(
+        [
+            ("[1a+ 1a-]", 0.2),
+            ("[2a+ 2a-]", 1.0),
+            ("[2a+ 0a-]", 0.001),
+            ("[0a+ 2a-]", 0.001),
+            ("[2a+ 1a-]", 0.001),
+            ("[1a+ 2a-]", 0.001),
+        ]
+    )
+    excitations = forte2.enumerate_mrdsrg_excitations(
+        core_orbitals=[],
+        active_orbitals=[0, 1],
+        virtual_orbitals=[2],
+        orbital_energies=[0.0, 0.2, 1.0],
+        max_rank=1,
+    )
+    options = dict(
+        flow_param=0.1,
+        maxiter=3,
+        max_commutators=4,
+        do_diis=False,
+    )
+
+    sparse = forte2.solve_sparse_mrdsrg2(
+        ham, vacuum, 3, excitations, gno_backend="sparse", **options
+    )
+    cumulant = forte2.solve_sparse_mrdsrg2(
+        ham, vacuum, 3, excitations, gno_backend="cumulant", **options
+    )
+    validated = forte2.solve_sparse_mrdsrg2(
+        ham, vacuum, 3, excitations, gno_backend="validate", **options
+    )
+
+    assert sparse.gno_backend == "sparse"
+    assert cumulant.gno_backend == "cumulant"
+    assert validated.gno_backend == "validate"
+    assert cumulant.energy == pytest.approx(sparse.energy, abs=1.0e-11)
+    assert validated.energy == pytest.approx(sparse.energy, abs=1.0e-11)
+    assert [entry.energy for entry in cumulant.history] == pytest.approx(
+        [entry.energy for entry in sparse.history], abs=1.0e-11
+    )
+
+
+def test_sparse_mrdsrg_rejects_unsupported_cumulant_backend_options():
+    vacuum = correlated_singlet_vacuum()
+    ham = sparse_ops.sparse_operator("[]", 1.0)
+
+    with pytest.raises(ValueError, match="gno_backend"):
+        forte2.SparseMRDSRG(ham, vacuum, 2, [], gno_backend="unknown")
+    with pytest.raises(ValueError, match="max_rank"):
+        forte2.SparseMRDSRG(ham, vacuum, 2, [], max_rank=3, gno_backend="cumulant")
+    with pytest.raises(ValueError, match="max_cumulant"):
+        forte2.SparseMRDSRG(
+            ham,
+            vacuum,
+            2,
+            [],
+            max_cumulant=4,
+            gno_backend="cumulant",
+        )
+
+
 def test_sparse_mrdsrg_supports_rank_three_and_four_truncations():
     vacuum = sparse_ops.SparseState({det("2200"): 1.0})
     ham = sparse_ops.sparse_operator(

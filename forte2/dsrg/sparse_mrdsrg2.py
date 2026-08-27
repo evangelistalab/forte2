@@ -50,6 +50,7 @@ class SparseMRDSRGResult:
     iterations: int
     max_rank: int
     max_cumulant: int
+    gno_backend: str
     amplitudes: np.ndarray
     excitations: tuple[SparseMRDSRGExcitation, ...]
     history: tuple[SparseMRDSRGIteration, ...]
@@ -274,8 +275,35 @@ def _gno_commutator(
     max_cumulant: int,
     max_rank: int,
     screen_thresh: float,
+    gno_backend: str = "sparse",
+    cumulant_engine: _ft.CumulantWickEngine | None = None,
+    validation_tol: float = 1.0e-11,
 ) -> _ft.GeneralizedNormalOrderedSparseOperator:
-    return lhs.commutator(rhs, max_rank=max_rank, screen_thresh=screen_thresh)
+    sparse_result = None
+    if gno_backend in {"sparse", "validate"}:
+        sparse_result = lhs.commutator(
+            rhs, max_rank=max_rank, screen_thresh=screen_thresh
+        )
+    if gno_backend == "sparse":
+        return sparse_result
+
+    if cumulant_engine is None:
+        raise RuntimeError("the cumulant Wick backend was not initialized")
+    cumulant_result = cumulant_engine.commutator(lhs, rhs)
+    if gno_backend == "cumulant":
+        return cumulant_result
+
+    sparse_terms = {term.str(): coefficient for term, coefficient in sparse_result}
+    cumulant_terms = {term.str(): coefficient for term, coefficient in cumulant_result}
+    for term in sparse_terms.keys() | cumulant_terms.keys():
+        difference = abs(sparse_terms.get(term, 0.0) - cumulant_terms.get(term, 0.0))
+        if difference > validation_tol:
+            raise RuntimeError(
+                "cumulant Wick backend mismatch for "
+                f"{term}: coefficient difference {difference:.3e} exceeds "
+                f"{validation_tol:.3e}"
+            )
+    return cumulant_result
 
 
 def _bch_hbar(
@@ -288,6 +316,9 @@ def _bch_hbar(
     max_commutators: int,
     screen_thresh: float,
     commutator_threshold: float,
+    gno_backend: str = "sparse",
+    cumulant_engine: _ft.CumulantWickEngine | None = None,
+    validation_tol: float = 1.0e-11,
 ) -> tuple[_ft.GeneralizedNormalOrderedSparseOperator, tuple[float, ...]]:
     hbar = _copy_gno(h0)
     nested = _copy_gno(h0)
@@ -295,7 +326,16 @@ def _bch_hbar(
 
     for ncomm in range(1, max_commutators + 1):
         nested = _gno_commutator(
-            nested, a_op, vacuum, norb, max_cumulant, max_rank, screen_thresh
+            nested,
+            a_op,
+            vacuum,
+            norb,
+            max_cumulant,
+            max_rank,
+            screen_thresh,
+            gno_backend,
+            cumulant_engine,
+            validation_tol,
         )
         contribution = nested * (1.0 / math.factorial(ncomm))
         hbar += contribution
@@ -351,11 +391,13 @@ def _select_reported_energy(
 class SparseMRDSRG:
     """Sparse-reference MR-DSRG(n) fixed-point solver.
 
-    This implementation uses generalized normal ordering with direct sparse-state
-    contractions. It is intended as an exact/reference route for small active
-    spaces, not as the final tensor implementation. The generalized normal
-    ordering cumulant expansion defaults to rank 3, but higher available sparse
-    state cumulant ranks can be requested with ``max_cumulant``.
+    The ``sparse`` generalized-normal-ordering backend is the exact reference
+    route for small active spaces. The optional ``cumulant`` backend evaluates
+    Wick contractions directly from cached reference cumulants, while
+    ``validate`` runs both backends and compares their coefficients. The
+    generalized normal-ordering cumulant expansion defaults to rank 3, but
+    higher available sparse-state cumulant ranks can be requested with
+    ``max_cumulant`` when using the sparse backend.
     """
 
     hamiltonian: _ft.SparseOperator
@@ -365,6 +407,8 @@ class SparseMRDSRG:
     flow_param: float = 0.5
     max_cumulant: int = 3
     max_rank: int = 2
+    gno_backend: str = "sparse"
+    gno_validation_tol: float = 1.0e-11
     max_commutators: int = 20
     maxiter: int = 50
     e_tol: float = 1.0e-10
@@ -385,6 +429,20 @@ class SparseMRDSRG:
             raise ValueError("max_rank must be positive")
         if self.max_cumulant < -1:
             raise ValueError("max_cumulant must be non-negative or -1")
+        if self.gno_backend not in {"sparse", "cumulant", "validate"}:
+            raise ValueError(
+                "gno_backend must be one of 'sparse', 'cumulant', or 'validate'"
+            )
+        if self.gno_backend != "sparse" and self.max_rank > 2:
+            raise ValueError(
+                "the cumulant Wick backend currently supports max_rank <= 2"
+            )
+        if self.gno_backend != "sparse" and not 1 <= self.max_cumulant <= 3:
+            raise ValueError(
+                "the cumulant Wick backend currently supports max_cumulant from 1 to 3"
+            )
+        if self.gno_validation_tol < 0.0:
+            raise ValueError("gno_validation_tol must be non-negative")
         if self.flow_param < 0.0:
             raise ValueError("flow_param must be non-negative")
         if self.screen_thresh < 0.0:
@@ -446,6 +504,7 @@ class SparseMRDSRG:
                 iterations=0,
                 max_rank=self.max_rank,
                 max_cumulant=self.max_cumulant,
+                gno_backend=self.gno_backend,
                 amplitudes=np.zeros(0, dtype=complex),
                 excitations=tuple(),
                 history=tuple(),
@@ -459,6 +518,19 @@ class SparseMRDSRG:
             else self.excitations
         )
         amplitudes = self._initial_amplitudes(h0, excitations)
+        cumulant_engine = None
+        if self.gno_backend != "sparse":
+            cumulant_reference = _ft.CumulantReference(
+                self.vacuum,
+                self.norb,
+                max_cumulant=self.max_cumulant,
+                screen_thresh=self.screen_thresh,
+            )
+            cumulant_engine = _ft.CumulantWickEngine(
+                cumulant_reference,
+                self.max_rank,
+                screen_thresh=self.screen_thresh,
+            )
         diis = DIIS(
             diis_start=self.diis_start,
             diis_nvec=self.diis_nvec,
@@ -489,6 +561,9 @@ class SparseMRDSRG:
                 self.max_commutators,
                 self.screen_thresh,
                 self.commutator_threshold,
+                self.gno_backend,
+                cumulant_engine,
+                self.gno_validation_tol,
             )
             scalar_energy = float(hbar.coefficient(identity).real)
             model_space_energies = _effective_hamiltonian_energies(
@@ -545,6 +620,7 @@ class SparseMRDSRG:
             iterations=len(self.history),
             max_rank=self.max_rank,
             max_cumulant=self.max_cumulant,
+            gno_backend=self.gno_backend,
             amplitudes=amplitudes,
             excitations=tuple(excitations),
             history=tuple(self.history),
