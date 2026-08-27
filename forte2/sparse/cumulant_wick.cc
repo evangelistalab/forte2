@@ -26,7 +26,7 @@ struct PreparedLeg {
 };
 
 struct PreparedTerm {
-    std::array<PreparedLeg, 6> legs;
+    std::array<PreparedLeg, 8> legs;
     std::size_t count = 0;
     Determinant support = Determinant::zero();
     bool even = true;
@@ -39,7 +39,7 @@ struct PreparedOperatorTerm {
 };
 
 struct WickLegList {
-    std::array<WickLeg, 12> legs;
+    std::array<WickLeg, 16> legs;
     std::size_t count = 0;
 
     const WickLeg& operator[](std::size_t index) const { return legs[index]; }
@@ -305,9 +305,9 @@ void add_prepared_term_product(const CumulantReference& reference, const Prepare
                                double screen_thresh, GeneralizedNormalOrderedSparseOperator& result,
                                bool include_uncontracted = true) {
     const auto legs = product_legs(lhs, rhs);
-    if (legs.size() > 12) {
+    if (legs.size() > 16) {
         throw std::invalid_argument(
-            "CumulantWickEngine: rank-three input terms may contain at most twelve legs");
+            "CumulantWickEngine: rank-four input terms may contain at most sixteen legs");
     }
     const auto contractions = elementary_contractions(reference, legs, screen_thresh);
 
@@ -364,9 +364,9 @@ CumulantWickEngine::CumulantWickEngine(const CumulantReference& reference, int m
     if (screen_thresh_ < 0.0) {
         throw std::invalid_argument("CumulantWickEngine: screen_thresh must be non-negative");
     }
-    if (reference_.max_cumulant() > 3) {
+    if (reference_.max_cumulant() > 4) {
         throw std::invalid_argument(
-            "CumulantWickEngine: the current implementation supports cumulants through rank three");
+            "CumulantWickEngine: the current implementation supports cumulants through rank four");
     }
 }
 
@@ -389,9 +389,9 @@ void CumulantWickEngine::validate_operand(const GeneralizedNormalOrderedSparseOp
     }
     for (const auto& [term, coefficient] : op.elements()) {
         (void)coefficient;
-        if (term.count() > 6) {
+        if (term.count() > 8) {
             throw std::invalid_argument(
-                "CumulantWickEngine: the current implementation supports rank-three input terms");
+                "CumulantWickEngine: the current implementation supports rank-four input terms");
         }
     }
 }

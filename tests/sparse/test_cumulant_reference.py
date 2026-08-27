@@ -46,9 +46,7 @@ def test_cumulant_reference_two_body_values_match_rdm_decomposition():
     pair1 = det("0" + "0" + "2")
 
     assert reference.rdm(pair0, pair0) == pytest.approx(weight)
-    assert reference.cumulant(pair0, pair0) == pytest.approx(
-        weight - weight**2
-    )
+    assert reference.cumulant(pair0, pair0) == pytest.approx(weight - weight**2)
     assert reference.cumulant(pair0, pair1) == pytest.approx(
         math.sqrt(weight * (1.0 - weight))
     )
@@ -75,11 +73,35 @@ def test_rank_three_cumulants_follow_spin_orbital_index_conventions():
     assert reference.cumulant(det("a2"), det("a2")) == pytest.approx(-0.048)
 
 
+def test_rank_four_cumulant_uses_fermionic_moment_cumulant_recurrence():
+    weight = 0.61
+    vacuum = sparse_ops.SparseState(
+        {det("20"): math.sqrt(weight), det("02"): math.sqrt(1.0 - weight)}
+    )
+    reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=4)
+
+    assert reference.rdm(det("22"), det("22")) == pytest.approx(0.0)
+    assert reference.cumulant_size(4) == 1
+    assert reference.cumulant(det("22"), det("22")) == pytest.approx(-0.33957846)
+
+    complex_vacuum = sparse_ops.SparseState(
+        {
+            det("200"): math.sqrt(0.5),
+            det("020"): math.sqrt(0.3),
+            det("002"): 1j * math.sqrt(0.2),
+        }
+    )
+    complex_reference = sparse_ops.CumulantReference(complex_vacuum, 3, max_cumulant=4)
+    assert complex_reference.cumulant(det("220"), det("202")) == pytest.approx(
+        -0.1224744871391589j
+    )
+
+
 def test_cumulant_reference_validates_inputs():
     vacuum = sparse_ops.SparseState({det("20"): 1.0})
 
     with pytest.raises(ValueError, match="max_cumulant"):
-        sparse_ops.CumulantReference(vacuum, 2, max_cumulant=4)
+        sparse_ops.CumulantReference(vacuum, 2, max_cumulant=5)
     with pytest.raises(ValueError, match="nonzero norm"):
         sparse_ops.CumulantReference(sparse_ops.SparseState(), 2)
     with pytest.raises(IndexError, match="outside"):

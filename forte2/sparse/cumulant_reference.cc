@@ -26,6 +26,33 @@ int canonicalize_modes(std::vector<std::size_t>& modes) {
     return phase;
 }
 
+int selection_to_front_phase(const std::vector<std::size_t>& selected) {
+    std::size_t inversions = 0;
+    for (std::size_t index = 0; index < selected.size(); ++index) {
+        inversions += selected[index] - index;
+    }
+    return inversions % 2 == 0 ? 1 : -1;
+}
+
+template <typename Func>
+void enumerate_index_combinations(std::size_t size, std::size_t count, Func&& func) {
+    std::vector<std::size_t> selected;
+    selected.reserve(count);
+    auto visit = [&](auto&& self, std::size_t begin) -> void {
+        if (selected.size() == count) {
+            func(selected);
+            return;
+        }
+        const auto needed = count - selected.size();
+        for (std::size_t index = begin; index + needed <= size; ++index) {
+            selected.push_back(index);
+            self(self, index + 1);
+            selected.pop_back();
+        }
+    };
+    visit(visit, 0);
+}
+
 } // namespace
 
 CumulantReference::CumulantReference(const SparseState& vacuum, std::size_t norb, int max_cumulant,
@@ -35,9 +62,9 @@ CumulantReference::CumulantReference(const SparseState& vacuum, std::size_t norb
         throw std::invalid_argument("CumulantReference: norb must be between 1 and " +
                                     std::to_string(Determinant::norb()));
     }
-    if (max_cumulant_ < 1 or max_cumulant_ > 3) {
+    if (max_cumulant_ < 1 or max_cumulant_ > 4) {
         throw std::invalid_argument(
-            "CumulantReference: the current implementation supports max_cumulant 1, 2, or 3");
+            "CumulantReference: the current implementation supports max_cumulant from 1 to 4");
     }
     if (screen_thresh_ < 0.0) {
         throw std::invalid_argument("CumulantReference: screen_thresh must be non-negative");
@@ -60,6 +87,9 @@ CumulantReference::CumulantReference(const SparseState& vacuum, std::size_t norb
     }
     if (max_cumulant_ >= 3) {
         build_three_body_cumulant();
+    }
+    if (max_cumulant_ >= 4) {
+        build_four_body_cumulant();
     }
 }
 
@@ -226,6 +256,30 @@ sparse_scalar_t CumulantReference::rdm_modes(std::vector<std::size_t> upper,
     return static_cast<double>(upper_phase * lower_phase) * rdm(cre, ann);
 }
 
+sparse_scalar_t CumulantReference::cumulant_modes(std::vector<std::size_t> upper,
+                                                  std::vector<std::size_t> lower) const {
+    if (upper.size() != lower.size()) {
+        throw std::invalid_argument("CumulantReference: cumulant upper and lower ranks must match");
+    }
+    if (upper.empty()) {
+        return sparse_scalar_t{1.0};
+    }
+    const auto upper_phase = canonicalize_modes(upper);
+    const auto lower_phase = canonicalize_modes(lower);
+    if (upper_phase == 0 or lower_phase == 0) {
+        return sparse_scalar_t{0.0};
+    }
+    auto cre = Determinant::zero();
+    auto ann = Determinant::zero();
+    for (const auto mode : upper) {
+        cre.set_bit(mode, true);
+    }
+    for (const auto mode : lower) {
+        ann.set_bit(mode, true);
+    }
+    return static_cast<double>(upper_phase * lower_phase) * cumulant(cre, ann);
+}
+
 void CumulantReference::build_orbital_spaces() {
     for (std::size_t p = 0; p < norb_; ++p) {
         all_modes_.set_na(p, true);
@@ -380,6 +434,90 @@ void CumulantReference::build_three_body_cumulant() {
             }
         }
     }
+}
+
+void CumulantReference::build_four_body_cumulant() {
+    std::vector<std::size_t> active(active_modes_.count_all());
+    std::size_t nactive = 0;
+    active_modes_.find_set_bits(active, nactive);
+    auto& rdm4 = rdms_[4];
+    auto& lambda4 = cumulants_[4];
+
+    enumerate_index_combinations(active.size(), 4, [&](const auto& upper_indices) {
+        std::vector<std::size_t> upper;
+        upper.reserve(4);
+        auto cre = Determinant::zero();
+        for (const auto index : upper_indices) {
+            upper.push_back(active[index]);
+            cre.set_bit(active[index], true);
+        }
+
+        enumerate_index_combinations(active.size(), 4, [&](const auto& lower_indices) {
+            std::vector<std::size_t> lower;
+            lower.reserve(4);
+            auto ann = Determinant::zero();
+            for (const auto index : lower_indices) {
+                lower.push_back(active[index]);
+                ann.set_bit(active[index], true);
+            }
+
+            const auto term = SQOperatorString(cre, ann);
+            const auto moment = expectation(term);
+            if (std::abs(moment) > screen_thresh_) {
+                rdm4.emplace(term, moment);
+            }
+
+            sparse_scalar_t disconnected = 0.0;
+            for (std::size_t block_rank = 1; block_rank < 4; ++block_rank) {
+                enumerate_index_combinations(
+                    3, block_rank - 1, [&](const auto& selected_upper_tail) {
+                        std::vector<std::size_t> selected_upper{0};
+                        selected_upper.reserve(block_rank);
+                        for (const auto index : selected_upper_tail) {
+                            selected_upper.push_back(index + 1);
+                        }
+
+                        enumerate_index_combinations(
+                            4, block_rank, [&](const auto& selected_lower) {
+                                std::vector<std::size_t> block_upper;
+                                std::vector<std::size_t> block_lower;
+                                std::vector<std::size_t> remainder_upper;
+                                std::vector<std::size_t> remainder_lower;
+                                block_upper.reserve(block_rank);
+                                block_lower.reserve(block_rank);
+                                remainder_upper.reserve(4 - block_rank);
+                                remainder_lower.reserve(4 - block_rank);
+
+                                for (std::size_t index = 0; index < 4; ++index) {
+                                    if (std::binary_search(selected_upper.begin(),
+                                                           selected_upper.end(), index)) {
+                                        block_upper.push_back(upper[index]);
+                                    } else {
+                                        remainder_upper.push_back(upper[index]);
+                                    }
+                                    if (std::binary_search(selected_lower.begin(),
+                                                           selected_lower.end(), index)) {
+                                        block_lower.push_back(lower[index]);
+                                    } else {
+                                        remainder_lower.push_back(lower[index]);
+                                    }
+                                }
+
+                                const auto phase = selection_to_front_phase(selected_upper) *
+                                                   selection_to_front_phase(selected_lower);
+                                disconnected += static_cast<double>(phase) *
+                                                cumulant_modes(block_upper, block_lower) *
+                                                rdm_modes(remainder_upper, remainder_lower);
+                            });
+                    });
+            }
+
+            const auto value = moment - disconnected;
+            if (std::abs(value) > screen_thresh_) {
+                lambda4.emplace(term, value);
+            }
+        });
+    });
 }
 
 } // namespace forte2

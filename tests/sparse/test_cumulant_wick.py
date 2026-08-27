@@ -16,11 +16,11 @@ def correlated_vacuum(weight=0.63):
     )
 
 
-def gno(op, vacuum, max_rank=-1, max_cumulant=2):
+def gno(op, vacuum, max_rank=-1, max_cumulant=2, norb=2):
     return sparse_ops.generalized_normal_order(
         op,
         vacuum,
-        2,
+        norb,
         max_cumulant=max_cumulant,
         max_rank=max_rank,
         screen_thresh=1.0e-14,
@@ -45,6 +45,7 @@ def reference_product(lhs, rhs, vacuum, max_rank):
         vacuum,
         max_rank=max_rank,
         max_cumulant=lhs.max_cumulant(),
+        norb=lhs.norb(),
     )
 
 
@@ -144,7 +145,7 @@ def test_cumulant_wick_handles_gamma_and_eta_orientations():
     assert_gno_close(eta_product, reference_product(annihilator, creator, vacuum, 1))
 
 
-def test_cumulant_wick_rejects_incompatible_operands_and_rank_four_terms():
+def test_cumulant_wick_rejects_incompatible_operands_and_rank_five_terms():
     vacuum = correlated_vacuum()
     reference = sparse_ops.CumulantReference(vacuum, 2)
     engine = sparse_ops.CumulantWickEngine(reference, 2)
@@ -155,15 +156,15 @@ def test_cumulant_wick_rejects_incompatible_operands_and_rank_four_terms():
     with pytest.raises(ValueError, match="vacua must match"):
         engine.product(compatible, incompatible)
 
-    rank_four = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+    rank_five = sparse_ops.GeneralizedNormalOrderedSparseOperator(
         vacuum,
         2,
         2,
-        sparse_ops.sqop("[0a+ 1a+ 0b+ 1b+ 1b- 0b- 1a- 0a-]")[0],
+        sparse_ops.sqop("[0a+ 1a+ 2a+ 0b+ 1b+ 1b- 0b- 2a- 1a- 0a-]")[0],
         1.0,
     )
-    with pytest.raises(ValueError, match="rank-three input"):
-        engine.product(rank_four, compatible)
+    with pytest.raises(ValueError, match="rank-four input"):
+        engine.product(rank_five, compatible)
 
 
 def test_cumulant_wick_rank_three_inputs_match_sparse_route():
@@ -215,6 +216,93 @@ def test_cumulant_wick_contracts_rank_three_cumulant():
     reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3)
     lambda3 = reference.cumulant(det("2a"), det("2a"))
     assert scalar_coefficients[3] - scalar_coefficients[2] == pytest.approx(lambda3)
+
+
+def test_cumulant_wick_rank_four_inputs_match_sparse_route():
+    vacuum = correlated_vacuum(0.61)
+    reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=4)
+    engine = sparse_ops.CumulantWickEngine(reference, 4, 1.0e-14)
+    lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        2,
+        4,
+        sparse_ops.sqop("[0a+ 1a+ 0b+ 1b+ 1b- 0b- 1a- 0a-]")[0],
+        0.4 - 0.1j,
+    )
+    rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        2,
+        4,
+        sparse_ops.sqop("[0a+ 1b+ 1b- 0a-]")[0],
+        -0.2 + 0.3j,
+    )
+
+    assert_gno_close(engine.product(lhs, rhs), reference_product(lhs, rhs, vacuum, 4))
+    assert_gno_close(
+        engine.commutator(lhs, rhs),
+        lhs.commutator(rhs, max_rank=4, screen_thresh=1.0e-14),
+    )
+
+
+def test_cumulant_wick_contracts_rank_four_cumulant():
+    vacuum = correlated_vacuum(0.61)
+    lhs_term = sparse_ops.sqop("[0a+ 0a-]")[0]
+    rhs_term = sparse_ops.sqop("[1a+ 0b+ 1b+ 1b- 0b- 1a-]")[0]
+    scalar_coefficients = {}
+
+    for max_cumulant in (3, 4):
+        reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=max_cumulant)
+        engine = sparse_ops.CumulantWickEngine(reference, 4, 1.0e-14)
+        lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+            vacuum, 2, max_cumulant, lhs_term, 1.0
+        )
+        rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+            vacuum, 2, max_cumulant, rhs_term, 1.0
+        )
+        product = engine.product(lhs, rhs)
+        scalar_coefficients[max_cumulant] = {
+            term.str(): coefficient for term, coefficient in product
+        }.get("[]", 0.0)
+
+    reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=4)
+    lambda4 = reference.cumulant(det("22"), det("22"))
+    assert abs(scalar_coefficients[4] - scalar_coefficients[3]) == pytest.approx(
+        abs(lambda4)
+    )
+
+
+def test_cumulant_wick_contracts_complex_off_diagonal_rank_four_cumulant():
+    vacuum = sparse_ops.SparseState(
+        {
+            det("200"): math.sqrt(0.5),
+            det("020"): math.sqrt(0.3),
+            det("002"): 1j * math.sqrt(0.2),
+        }
+    )
+    lhs_term = sparse_ops.SQOperatorString(det("a00"), det("a00"))
+    rhs_term = sparse_ops.SQOperatorString(det("b20"), det("b02"))
+    products = {}
+
+    for max_cumulant in (3, 4):
+        reference = sparse_ops.CumulantReference(vacuum, 3, max_cumulant=max_cumulant)
+        engine = sparse_ops.CumulantWickEngine(reference, 4, 1.0e-14)
+        lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+            vacuum, 3, max_cumulant, lhs_term, 1.0
+        )
+        rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+            vacuum, 3, max_cumulant, rhs_term, 1.0
+        )
+        products[max_cumulant] = engine.product(lhs, rhs)
+
+    scalar3 = {term.str(): value for term, value in products[3]}.get("[]", 0.0)
+    scalar4 = {term.str(): value for term, value in products[4]}.get("[]", 0.0)
+    reference = sparse_ops.CumulantReference(vacuum, 3, max_cumulant=4)
+    lambda4 = reference.cumulant(det("220"), det("202"))
+
+    assert scalar4 - scalar3 == pytest.approx(lambda4)
+    lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(vacuum, 3, 4, lhs_term, 1.0)
+    rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(vacuum, 3, 4, rhs_term, 1.0)
+    assert_gno_close(products[4], reference_product(lhs, rhs, vacuum, 4))
 
 
 def test_cumulant_wick_exhaustive_small_term_commutators():

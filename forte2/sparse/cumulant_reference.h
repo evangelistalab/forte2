@@ -64,10 +64,13 @@ class CumulantReference {
     sparse_scalar_t expectation(const SQOperatorString& term) const;
     sparse_scalar_t gamma_mode(std::size_t p, std::size_t q) const;
     sparse_scalar_t rdm_modes(std::vector<std::size_t> upper, std::vector<std::size_t> lower) const;
+    sparse_scalar_t cumulant_modes(std::vector<std::size_t> upper,
+                                   std::vector<std::size_t> lower) const;
     void build_orbital_spaces();
     void build_one_body_density();
     void build_two_body_cumulant();
     void build_three_body_cumulant();
+    void build_four_body_cumulant();
 
     SparseState vacuum_;
     std::size_t norb_ = 0;
