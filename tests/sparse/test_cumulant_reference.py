@@ -63,11 +63,23 @@ def test_determinant_reference_has_zero_higher_cumulants():
     assert reference.cumulant_size(2) == 0
 
 
+def test_rank_three_cumulants_follow_spin_orbital_index_conventions():
+    weight = 0.6
+    vacuum = sparse_ops.SparseState(
+        {det("20"): math.sqrt(weight), det("02"): 1j * math.sqrt(1.0 - weight)}
+    )
+    reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3)
+
+    assert reference.cumulant_size(3) == 4
+    assert reference.cumulant(det("2a"), det("2a")) == pytest.approx(0.048)
+    assert reference.cumulant(det("a2"), det("a2")) == pytest.approx(-0.048)
+
+
 def test_cumulant_reference_validates_inputs():
     vacuum = sparse_ops.SparseState({det("20"): 1.0})
 
     with pytest.raises(ValueError, match="max_cumulant"):
-        sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3)
+        sparse_ops.CumulantReference(vacuum, 2, max_cumulant=4)
     with pytest.raises(ValueError, match="nonzero norm"):
         sparse_ops.CumulantReference(sparse_ops.SparseState(), 2)
     with pytest.raises(IndexError, match="outside"):

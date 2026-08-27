@@ -289,9 +289,9 @@ CumulantWickEngine::CumulantWickEngine(const CumulantReference& reference, int m
     if (screen_thresh_ < 0.0) {
         throw std::invalid_argument("CumulantWickEngine: screen_thresh must be non-negative");
     }
-    if (reference_.max_cumulant() > 2) {
+    if (reference_.max_cumulant() > 3) {
         throw std::invalid_argument(
-            "CumulantWickEngine: the current implementation supports cumulants through rank two");
+            "CumulantWickEngine: the current implementation supports cumulants through rank three");
     }
 }
 

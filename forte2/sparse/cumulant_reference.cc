@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <stdexcept>
@@ -7,6 +8,25 @@
 #include "sparse/cumulant_reference.h"
 
 namespace forte2 {
+namespace {
+
+int canonicalize_modes(std::vector<std::size_t>& modes) {
+    int phase = 1;
+    for (std::size_t i = 0; i < modes.size(); ++i) {
+        for (std::size_t j = i + 1; j < modes.size(); ++j) {
+            if (modes[i] == modes[j]) {
+                return 0;
+            }
+            if (modes[i] > modes[j]) {
+                phase = -phase;
+            }
+        }
+    }
+    std::sort(modes.begin(), modes.end());
+    return phase;
+}
+
+} // namespace
 
 CumulantReference::CumulantReference(const SparseState& vacuum, std::size_t norb, int max_cumulant,
                                      double screen_thresh)
@@ -15,9 +35,9 @@ CumulantReference::CumulantReference(const SparseState& vacuum, std::size_t norb
         throw std::invalid_argument("CumulantReference: norb must be between 1 and " +
                                     std::to_string(Determinant::norb()));
     }
-    if (max_cumulant_ < 1 or max_cumulant_ > 2) {
+    if (max_cumulant_ < 1 or max_cumulant_ > 3) {
         throw std::invalid_argument(
-            "CumulantReference: the current implementation supports max_cumulant 1 or 2");
+            "CumulantReference: the current implementation supports max_cumulant 1, 2, or 3");
     }
     if (screen_thresh_ < 0.0) {
         throw std::invalid_argument("CumulantReference: screen_thresh must be non-negative");
@@ -31,11 +51,15 @@ CumulantReference::CumulantReference(const SparseState& vacuum, std::size_t norb
         throw std::invalid_argument("CumulantReference: vacuum must have nonzero norm");
     }
 
+    rdms_.resize(static_cast<std::size_t>(max_cumulant_ + 1));
     cumulants_.resize(static_cast<std::size_t>(max_cumulant_ + 1));
     build_orbital_spaces();
     build_one_body_density();
     if (max_cumulant_ >= 2) {
         build_two_body_cumulant();
+    }
+    if (max_cumulant_ >= 3) {
+        build_three_body_cumulant();
     }
 }
 
@@ -96,6 +120,21 @@ sparse_scalar_t CumulantReference::rdm(const Determinant& cre, const Determinant
     validate_indices(cre, ann);
     if (cre.count_all() == 0) {
         return sparse_scalar_t{1.0};
+    }
+    const auto rank = static_cast<int>(cre.count_all());
+    if (rank == 1) {
+        std::vector<std::size_t> cre_modes(1);
+        std::vector<std::size_t> ann_modes(1);
+        std::size_t ncre = 0;
+        std::size_t nann = 0;
+        cre.find_set_bits(cre_modes, ncre);
+        ann.find_set_bits(ann_modes, nann);
+        return gamma_mode(cre_modes[0], ann_modes[0]);
+    }
+    if (rank <= max_cumulant_) {
+        const auto& values = rdms_[static_cast<std::size_t>(rank)];
+        const auto it = values.find(SQOperatorString(cre, ann));
+        return it == values.end() ? sparse_scalar_t{0.0} : it->second;
     }
     return expectation(SQOperatorString(cre, ann));
 }
@@ -161,6 +200,30 @@ sparse_scalar_t CumulantReference::gamma_mode(std::size_t p, std::size_t q) cons
     const auto cp = compact_mode(p);
     const auto cq = compact_mode(q);
     return gamma_[cp * (2 * norb_) + cq];
+}
+
+sparse_scalar_t CumulantReference::rdm_modes(std::vector<std::size_t> upper,
+                                             std::vector<std::size_t> lower) const {
+    if (upper.size() != lower.size()) {
+        throw std::invalid_argument("CumulantReference: RDM upper and lower ranks must match");
+    }
+    const auto upper_phase = canonicalize_modes(upper);
+    const auto lower_phase = canonicalize_modes(lower);
+    if (upper_phase == 0 or lower_phase == 0) {
+        return sparse_scalar_t{0.0};
+    }
+    if (upper.size() == 1) {
+        return static_cast<double>(upper_phase * lower_phase) * gamma_mode(upper[0], lower[0]);
+    }
+    auto cre = Determinant::zero();
+    auto ann = Determinant::zero();
+    for (const auto mode : upper) {
+        cre.set_bit(mode, true);
+    }
+    for (const auto mode : lower) {
+        ann.set_bit(mode, true);
+    }
+    return static_cast<double>(upper_phase * lower_phase) * rdm(cre, ann);
 }
 
 void CumulantReference::build_orbital_spaces() {
@@ -237,12 +300,81 @@ void CumulantReference::build_two_body_cumulant() {
                     ann.set_bit(active[ri], true);
                     ann.set_bit(active[si], true);
                     const auto moment = expectation(SQOperatorString(cre, ann));
+                    if (std::abs(moment) > screen_thresh_) {
+                        rdms_[2].emplace(SQOperatorString(cre, ann), moment);
+                    }
                     const auto disconnected =
                         gamma_mode(active[pi], active[ri]) * gamma_mode(active[qi], active[si]) -
                         gamma_mode(active[pi], active[si]) * gamma_mode(active[qi], active[ri]);
                     const auto value = moment - disconnected;
                     if (std::abs(value) > screen_thresh_) {
                         lambda2.emplace(SQOperatorString(cre, ann), value);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void CumulantReference::build_three_body_cumulant() {
+    std::vector<std::size_t> active(active_modes_.count_all());
+    std::size_t nactive = 0;
+    active_modes_.find_set_bits(active, nactive);
+    auto& rdm3 = rdms_[3];
+    auto& lambda3 = cumulants_[3];
+
+    const auto gamma = [&](std::size_t p, std::size_t q) { return gamma_mode(p, q); };
+    const auto rdm2 = [&](std::size_t p, std::size_t q, std::size_t r, std::size_t s) {
+        return rdm_modes({p, q}, {r, s});
+    };
+
+    for (std::size_t pi = 0; pi < active.size(); ++pi) {
+        for (std::size_t qi = pi + 1; qi < active.size(); ++qi) {
+            for (std::size_t ri = qi + 1; ri < active.size(); ++ri) {
+                const auto p = active[pi];
+                const auto q = active[qi];
+                const auto r = active[ri];
+                auto cre = Determinant::zero();
+                cre.set_bit(p, true);
+                cre.set_bit(q, true);
+                cre.set_bit(r, true);
+                for (std::size_t si = 0; si < active.size(); ++si) {
+                    for (std::size_t ti = si + 1; ti < active.size(); ++ti) {
+                        for (std::size_t ui = ti + 1; ui < active.size(); ++ui) {
+                            const auto s = active[si];
+                            const auto t = active[ti];
+                            const auto u = active[ui];
+                            auto ann = Determinant::zero();
+                            ann.set_bit(s, true);
+                            ann.set_bit(t, true);
+                            ann.set_bit(u, true);
+
+                            const auto moment = expectation(SQOperatorString(cre, ann));
+                            if (std::abs(moment) > screen_thresh_) {
+                                rdm3.emplace(SQOperatorString(cre, ann), moment);
+                            }
+
+                            auto value = moment;
+                            value -= gamma(p, s) * rdm2(q, r, t, u);
+                            value += gamma(p, t) * rdm2(q, r, s, u);
+                            value += gamma(p, u) * rdm2(q, r, t, s);
+                            value -= gamma(q, t) * rdm2(p, r, s, u);
+                            value += gamma(q, s) * rdm2(p, r, t, u);
+                            value += gamma(q, u) * rdm2(p, r, s, t);
+                            value -= gamma(r, u) * rdm2(p, q, s, t);
+                            value += gamma(r, s) * rdm2(p, q, u, t);
+                            value += gamma(r, t) * rdm2(p, q, s, u);
+                            value += 2.0 * (gamma(p, s) * gamma(q, t) * gamma(r, u) +
+                                            gamma(p, t) * gamma(q, u) * gamma(r, s) +
+                                            gamma(p, u) * gamma(q, s) * gamma(r, t));
+                            value -= 2.0 * (gamma(p, s) * gamma(q, u) * gamma(r, t) +
+                                            gamma(p, u) * gamma(q, t) * gamma(r, s) +
+                                            gamma(p, t) * gamma(q, s) * gamma(r, u));
+
+                            if (std::abs(value) > screen_thresh_) {
+                                lambda3.emplace(SQOperatorString(cre, ann), value);
+                            }
+                        }
                     }
                 }
             }

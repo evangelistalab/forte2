@@ -16,12 +16,12 @@ def correlated_vacuum(weight=0.63):
     )
 
 
-def gno(op, vacuum, max_rank=-1):
+def gno(op, vacuum, max_rank=-1, max_cumulant=2):
     return sparse_ops.generalized_normal_order(
         op,
         vacuum,
         2,
-        max_cumulant=2,
+        max_cumulant=max_cumulant,
         max_rank=max_rank,
         screen_thresh=1.0e-14,
     )
@@ -167,7 +167,7 @@ def test_cumulant_wick_rejects_incompatible_operands_and_rank_three_terms():
 
 def test_cumulant_wick_exhaustive_small_term_commutators():
     vacuum = correlated_vacuum(0.58)
-    reference = sparse_ops.CumulantReference(vacuum, 2)
+    reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3)
     engine = sparse_ops.CumulantWickEngine(reference, 2, 1.0e-14)
     terms = [
         "[0a+ 0a-]",
@@ -182,11 +182,11 @@ def test_cumulant_wick_exhaustive_small_term_commutators():
 
     for lhs_string in terms:
         lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
-            vacuum, 2, 2, sparse_ops.sqop(lhs_string)[0], 1.0
+            vacuum, 2, 3, sparse_ops.sqop(lhs_string)[0], 1.0
         )
         for rhs_string in terms:
             rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
-                vacuum, 2, 2, sparse_ops.sqop(rhs_string)[0], 1.0
+                vacuum, 2, 3, sparse_ops.sqop(rhs_string)[0], 1.0
             )
             assert_gno_close(
                 engine.commutator(lhs, rhs),
@@ -198,27 +198,20 @@ def test_cumulant_wick_complex_reference_cumulants():
     vacuum = sparse_ops.SparseState(
         {det("20"): math.sqrt(0.6), det("02"): 1j * math.sqrt(0.4)}
     )
-    reference = sparse_ops.CumulantReference(vacuum, 2)
+    reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3)
     engine = sparse_ops.CumulantWickEngine(reference, 2, 1.0e-14)
     lhs = gno(
-        sparse_ops.sparse_operator("[0a+ 0b+ 1b- 1a-]", 0.7 - 0.2j), vacuum
+        sparse_ops.sparse_operator("[0a+ 0b+ 1b- 1a-]", 0.7 - 0.2j),
+        vacuum,
+        max_cumulant=3,
     )
     rhs = gno(
-        sparse_ops.sparse_operator("[1a+ 1b+ 0b- 0a-]", -0.3j), vacuum
+        sparse_ops.sparse_operator("[1a+ 1b+ 0b- 0a-]", -0.3j),
+        vacuum,
+        max_cumulant=3,
     )
 
-    direct = {
-        term.str(): coefficient
-        for term, coefficient in engine.commutator(lhs, rhs)
-        if not term.is_identity()
-    }
-    expected = {
-        term.str(): coefficient
-        for term, coefficient in lhs.commutator(
-            rhs, max_rank=2, screen_thresh=1.0e-14
-        )
-        if not term.is_identity()
-    }
-    assert direct.keys() == expected.keys()
-    for term in direct:
-        assert direct[term] == pytest.approx(expected[term], abs=1.0e-11)
+    assert_gno_close(
+        engine.commutator(lhs, rhs),
+        lhs.commutator(rhs, max_rank=2, screen_thresh=1.0e-14),
+    )

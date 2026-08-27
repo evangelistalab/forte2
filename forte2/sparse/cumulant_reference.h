@@ -63,9 +63,11 @@ class CumulantReference {
     void validate_indices(const Determinant& cre, const Determinant& ann) const;
     sparse_scalar_t expectation(const SQOperatorString& term) const;
     sparse_scalar_t gamma_mode(std::size_t p, std::size_t q) const;
+    sparse_scalar_t rdm_modes(std::vector<std::size_t> upper, std::vector<std::size_t> lower) const;
     void build_orbital_spaces();
     void build_one_body_density();
     void build_two_body_cumulant();
+    void build_three_body_cumulant();
 
     SparseState vacuum_;
     std::size_t norb_ = 0;
@@ -77,6 +79,8 @@ class CumulantReference {
     Determinant active_modes_ = Determinant::zero();
     Determinant virtual_modes_ = Determinant::zero();
     std::vector<sparse_scalar_t> gamma_;
+    std::vector<std::unordered_map<SQOperatorString, sparse_scalar_t, SQOperatorString::Hash>>
+        rdms_;
     std::vector<std::unordered_map<SQOperatorString, sparse_scalar_t, SQOperatorString::Hash>>
         cumulants_;
 };
