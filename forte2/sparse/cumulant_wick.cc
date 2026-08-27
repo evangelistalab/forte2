@@ -173,6 +173,40 @@ ElementaryContraction make_elementary_contraction(const CumulantReference& refer
         return contraction;
     }
 
+    if (creators.size() == 1) {
+        const auto creator = creators[0];
+        const auto annihilator = annihilators[0];
+        if (legs[creator].lhs == legs[annihilator].lhs) {
+            return contraction;
+        }
+
+        const auto creator_mode = legs[creator].mode;
+        const auto annihilator_mode = legs[annihilator].mode;
+        contraction.selected = static_cast<std::uint16_t>((1U << creator) | (1U << annihilator));
+        contraction.canonical_positions.push_back(creator);
+        contraction.canonical_positions.push_back(annihilator);
+        contraction.eta = creator > annihilator;
+
+        if (reference.active_modes().get_bit(creator_mode) and
+            reference.active_modes().get_bit(annihilator_mode)) {
+            auto cre = Determinant::zero();
+            auto ann = Determinant::zero();
+            cre.set_bit(creator_mode, true);
+            ann.set_bit(annihilator_mode, true);
+            const auto gamma = reference.cumulant(cre, ann);
+            contraction.value =
+                contraction.eta
+                    ? sparse_scalar_t{creator_mode == annihilator_mode ? 1.0 : 0.0} - gamma
+                    : gamma;
+        } else if (creator_mode == annihilator_mode) {
+            contraction.value =
+                contraction.eta
+                    ? sparse_scalar_t{reference.virtual_modes().get_bit(creator_mode) ? 1.0 : 0.0}
+                    : sparse_scalar_t{reference.core_modes().get_bit(creator_mode) ? 1.0 : 0.0};
+        }
+        return contraction;
+    }
+
     auto cre = Determinant::zero();
     auto ann = Determinant::zero();
     bool touches_lhs = false;
@@ -209,14 +243,7 @@ ElementaryContraction make_elementary_contraction(const CumulantReference& refer
         contraction.canonical_positions.push_back(position);
     }
 
-    if (cre.count_all() == 1) {
-        contraction.eta = creators[0] > annihilators[0];
-        const auto gamma = reference.cumulant(cre, ann);
-        contraction.value =
-            contraction.eta ? sparse_scalar_t{cre == ann ? 1.0 : 0.0} - gamma : gamma;
-    } else {
-        contraction.value = reference.cumulant(cre, ann);
-    }
+    contraction.value = reference.cumulant(cre, ann);
     return contraction;
 }
 
