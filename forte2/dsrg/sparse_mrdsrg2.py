@@ -433,9 +433,9 @@ class SparseMRDSRG:
             raise ValueError(
                 "gno_backend must be one of 'sparse', 'cumulant', or 'validate'"
             )
-        if self.gno_backend != "sparse" and self.max_rank > 2:
+        if self.gno_backend != "sparse" and self.max_rank > 3:
             raise ValueError(
-                "the cumulant Wick backend currently supports max_rank <= 2"
+                "the cumulant Wick backend currently supports max_rank <= 3"
             )
         if self.gno_backend != "sparse" and not 1 <= self.max_cumulant <= 3:
             raise ValueError(

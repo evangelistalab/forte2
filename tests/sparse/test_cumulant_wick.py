@@ -40,7 +40,12 @@ def reference_product(lhs, rhs, vacuum, max_rank):
     bare = sparse_ops.new_product(
         lhs.to_sparse_operator(1.0e-14), rhs.to_sparse_operator(1.0e-14)
     )
-    return gno(bare, vacuum, max_rank=max_rank)
+    return gno(
+        bare,
+        vacuum,
+        max_rank=max_rank,
+        max_cumulant=lhs.max_cumulant(),
+    )
 
 
 @pytest.mark.parametrize("max_rank", [0, 1, 2])
@@ -135,34 +140,81 @@ def test_cumulant_wick_handles_gamma_and_eta_orientations():
     assert {term.str(): value for term, value in eta_product}["[]"] == pytest.approx(
         0.3
     )
-    assert_gno_close(
-        gamma_product, reference_product(creator, annihilator, vacuum, 1)
-    )
+    assert_gno_close(gamma_product, reference_product(creator, annihilator, vacuum, 1))
     assert_gno_close(eta_product, reference_product(annihilator, creator, vacuum, 1))
 
 
-def test_cumulant_wick_rejects_incompatible_operands_and_rank_three_terms():
+def test_cumulant_wick_rejects_incompatible_operands_and_rank_four_terms():
     vacuum = correlated_vacuum()
     reference = sparse_ops.CumulantReference(vacuum, 2)
     engine = sparse_ops.CumulantWickEngine(reference, 2)
     compatible = gno(sparse_ops.sparse_operator("[0a+ 0a-]", 1.0), vacuum)
     other_vacuum = correlated_vacuum(0.5)
-    incompatible = gno(
-        sparse_ops.sparse_operator("[0a+ 0a-]", 1.0), other_vacuum
-    )
+    incompatible = gno(sparse_ops.sparse_operator("[0a+ 0a-]", 1.0), other_vacuum)
 
     with pytest.raises(ValueError, match="vacua must match"):
         engine.product(compatible, incompatible)
 
-    rank_three = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+    rank_four = sparse_ops.GeneralizedNormalOrderedSparseOperator(
         vacuum,
         2,
         2,
-        sparse_ops.sqop("[0a+ 1a+ 0b+ 1b- 1a- 0a-]")[0],
+        sparse_ops.sqop("[0a+ 1a+ 0b+ 1b+ 1b- 0b- 1a- 0a-]")[0],
         1.0,
     )
-    with pytest.raises(ValueError, match="rank-two input"):
-        engine.product(rank_three, compatible)
+    with pytest.raises(ValueError, match="rank-three input"):
+        engine.product(rank_four, compatible)
+
+
+def test_cumulant_wick_rank_three_inputs_match_sparse_route():
+    vacuum = correlated_vacuum(0.61)
+    reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3)
+    engine = sparse_ops.CumulantWickEngine(reference, 3, 1.0e-14)
+    lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        2,
+        3,
+        sparse_ops.sqop("[0a+ 1a+ 0b+ 1b- 0b- 0a-]")[0],
+        0.7 - 0.2j,
+    )
+    rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+        vacuum,
+        2,
+        3,
+        sparse_ops.sqop("[1a+ 0b+ 1b+ 1b- 1a- 0a-]")[0],
+        -0.3 + 0.1j,
+    )
+
+    assert_gno_close(engine.product(lhs, rhs), reference_product(lhs, rhs, vacuum, 3))
+    assert_gno_close(
+        engine.commutator(lhs, rhs),
+        lhs.commutator(rhs, max_rank=3, screen_thresh=1.0e-14),
+    )
+
+
+def test_cumulant_wick_contracts_rank_three_cumulant():
+    vacuum = correlated_vacuum(0.61)
+    lhs_term = sparse_ops.sqop("[0a+ 0a-]")[0]
+    rhs_term = sparse_ops.sqop("[1a+ 0b+ 0b- 1a-]")[0]
+    scalar_coefficients = {}
+
+    for max_cumulant in (2, 3):
+        reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=max_cumulant)
+        engine = sparse_ops.CumulantWickEngine(reference, 3, 1.0e-14)
+        lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+            vacuum, 2, max_cumulant, lhs_term, 1.0
+        )
+        rhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+            vacuum, 2, max_cumulant, rhs_term, 1.0
+        )
+        product = engine.product(lhs, rhs)
+        scalar_coefficients[max_cumulant] = {
+            term.str(): coefficient for term, coefficient in product
+        }.get("[]", 0.0)
+
+    reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3)
+    lambda3 = reference.cumulant(det("2a"), det("2a"))
+    assert scalar_coefficients[3] - scalar_coefficients[2] == pytest.approx(lambda3)
 
 
 def test_cumulant_wick_exhaustive_small_term_commutators():

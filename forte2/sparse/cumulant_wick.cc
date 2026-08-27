@@ -26,7 +26,7 @@ struct PreparedLeg {
 };
 
 struct PreparedTerm {
-    std::array<PreparedLeg, 4> legs;
+    std::array<PreparedLeg, 6> legs;
     std::size_t count = 0;
     Determinant support = Determinant::zero();
     bool even = true;
@@ -39,7 +39,7 @@ struct PreparedOperatorTerm {
 };
 
 struct WickLegList {
-    std::array<WickLeg, 8> legs;
+    std::array<WickLeg, 12> legs;
     std::size_t count = 0;
 
     const WickLeg& operator[](std::size_t index) const { return legs[index]; }
@@ -305,9 +305,9 @@ void add_prepared_term_product(const CumulantReference& reference, const Prepare
                                double screen_thresh, GeneralizedNormalOrderedSparseOperator& result,
                                bool include_uncontracted = true) {
     const auto legs = product_legs(lhs, rhs);
-    if (legs.size() > 16) {
+    if (legs.size() > 12) {
         throw std::invalid_argument(
-            "CumulantWickEngine: rank-two input terms may contain at most eight legs");
+            "CumulantWickEngine: rank-three input terms may contain at most twelve legs");
     }
     const auto contractions = elementary_contractions(reference, legs, screen_thresh);
 
@@ -389,9 +389,9 @@ void CumulantWickEngine::validate_operand(const GeneralizedNormalOrderedSparseOp
     }
     for (const auto& [term, coefficient] : op.elements()) {
         (void)coefficient;
-        if (term.count() > 4) {
+        if (term.count() > 6) {
             throw std::invalid_argument(
-                "CumulantWickEngine: the current implementation supports rank-two input terms");
+                "CumulantWickEngine: the current implementation supports rank-three input terms");
         }
     }
 }

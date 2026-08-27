@@ -234,7 +234,7 @@ def test_sparse_mrdsrg_rejects_unsupported_cumulant_backend_options():
     with pytest.raises(ValueError, match="gno_backend"):
         forte2.SparseMRDSRG(ham, vacuum, 2, [], gno_backend="unknown")
     with pytest.raises(ValueError, match="max_rank"):
-        forte2.SparseMRDSRG(ham, vacuum, 2, [], max_rank=3, gno_backend="cumulant")
+        forte2.SparseMRDSRG(ham, vacuum, 2, [], max_rank=4, gno_backend="cumulant")
     with pytest.raises(ValueError, match="max_cumulant"):
         forte2.SparseMRDSRG(
             ham,
