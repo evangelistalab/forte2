@@ -1,0 +1,105 @@
+{
+  "metadata": {
+    "system": "LiH",
+    "bond_length_angstrom": 1.6,
+    "basis": "sto-3g",
+    "reference": "frozen-core CAS(2e,2o)",
+    "core_orbitals": [0],
+    "active_orbitals": [1, 2],
+    "virtual_orbitals": [3, 4, 5],
+    "norb": 6,
+    "max_cumulant": 3,
+    "flow_param": 5.0,
+    "screen_thresh": 1e-12,
+    "commutator_threshold": 1e-12,
+    "validation_tolerance": 1e-8,
+    "e_tol": 1e-10,
+    "r_tol": 1e-5,
+    "maxiter": 50,
+    "max_commutators": 20,
+    "diis": true,
+    "threads": 10,
+    "rhf_energy": -7.8618647838398585,
+    "cas22_reference_energy": -7.8621288474335875
+  },
+  "results": [
+    {
+      "rank": 2,
+      "backend": "sparse",
+      "validated": true,
+      "converged": true,
+      "energy": -7.881822683103077,
+      "iterations": 12,
+      "n_excitations": 289,
+      "wall_seconds": 1.6901203750167042,
+      "seconds_per_iteration": 0.14083928824887457
+    },
+    {
+      "rank": 2,
+      "backend": "cumulant",
+      "validated": true,
+      "converged": true,
+      "energy": -7.8818226830833025,
+      "iterations": 12,
+      "n_excitations": 289,
+      "wall_seconds": 10.696263665973675,
+      "seconds_per_iteration": 0.8913505624999137
+    },
+    {
+      "rank": 3,
+      "backend": "sparse",
+      "validated": true,
+      "converged": true,
+      "energy": -7.880592969469248,
+      "iterations": 15,
+      "n_excitations": 1201,
+      "wall_seconds": 75.91453570796875,
+      "seconds_per_iteration": 5.060962372199477
+    },
+    {
+      "rank": 3,
+      "backend": "cumulant",
+      "validated": false,
+      "converged": true,
+      "energy": -7.882338532153218,
+      "iterations": 12,
+      "n_excitations": 1201,
+      "wall_seconds": 1032.862450250017,
+      "seconds_per_iteration": 86.07186250349817,
+      "validation_failure": {
+        "bch_order": 2,
+        "term": "[]",
+        "coefficient_difference": 0.0007048,
+        "tolerance": 1e-8
+      }
+    }
+  ],
+  "optimization_run": {
+    "accepted_commits": [
+      "9f656230 Avoid heap allocations in cumulant Wick contractions",
+      "9b2d9370 Exploit orbital spaces in one-body Wick contractions",
+      "25751dd3 Specialize one-body cumulant Wick enumeration",
+      "e5e874d6 Use dense one-body cumulants in Wick contractions"
+    ],
+    "mrdsrg2": {
+      "fresh_cumulant_baseline_seconds": 10.626432,
+      "optimized_sparse_seconds": 1.657336,
+      "optimized_cumulant_seconds": 1.316018,
+      "cumulant_speedup_vs_baseline": 8.074685908551404,
+      "cumulant_speedup_vs_sparse": 1.2593566349396437,
+      "sparse_energy": -7.881822683103,
+      "cumulant_energy": -7.881822683083,
+      "iterations": 12,
+      "validated": true
+    },
+    "mrdsrg3_first_bch_iteration": {
+      "baseline_seconds": 13.025,
+      "optimized_seconds": 1.522276,
+      "speedup": 8.556267063265794,
+      "energy": -7.879833811667,
+      "validated_first_commutator": true,
+      "full_solver_valid": false
+    },
+    "tests": "891 passed, 3 skipped, 37 deselected"
+  }
+}
