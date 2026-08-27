@@ -352,7 +352,6 @@ void RelSelectedCIHelper::select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap&
     norb_mask.fill_up_to(norb_);
 
     Determinant new_det;
-    auto hash = String::Hash();
     // Loop over all unique alpha strings. With nb == 0 each alpha string maps to exactly one
     // determinant (the beta string is the single empty spectator), so the per-alpha-string
     // coefficient "block" of the general helper collapses to one coefficient vector and the
@@ -391,7 +390,7 @@ void RelSelectedCIHelper::select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap&
                 // *_unchecked avoids checking if i and a are already occupied/unoccupied
                 auto [new_a_str, sign] = create_single_excitation_unchecked(a_str, i, a);
                 // determine if this determinant belongs to the current batch
-                if (hash(new_a_str) % num_batches != batch_id) {
+                if (batch_of(new_a_str, num_batches) != batch_id) {
                     continue;
                 }
                 new_det.set_alpha_string(new_a_str);
@@ -428,7 +427,7 @@ void RelSelectedCIHelper::select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap&
 
                     auto [new_a_str, sign] = create_double_excitation_unchecked(a_str, i, j, a, b);
 
-                    if (hash(new_a_str) % num_batches != batch_id) {
+                    if (batch_of(new_a_str, num_batches) != batch_id) {
                         continue;
                     }
 

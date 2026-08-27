@@ -492,7 +492,6 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
     norb_mask.fill_up_to(norb_);
 
     Determinant new_det;
-    auto hash = String::Hash();
     // Loop over all unique alpha strings
     for (size_t i{0}; i < a_string_size; ++i) {
         const String& a_str = ab_list_.sorted_first_string(i);
@@ -532,7 +531,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                 // since we already know they are
                 auto [new_a_str, sign] = create_single_excitation_unchecked(a_str, i, a);
                 // determine if this determinant belongs to the current batch
-                if (hash(new_a_str) % num_batches != batch_id) {
+                if (batch_of(new_a_str, num_batches) != batch_id) {
                     continue;
                 }
                 new_det.set_alpha_string(new_a_str);
@@ -576,7 +575,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
 
                     auto [new_a_str, sign] = create_double_excitation_unchecked(a_str, i, j, a, b);
 
-                    if (hash(new_a_str) % num_batches != batch_id) {
+                    if (batch_of(new_a_str, num_batches) != batch_id) {
                         continue;
                     }
 
@@ -609,7 +608,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                 // find the new alpha string after excitation and the sign and store it
                 auto [new_a_str, a_sign] = create_single_excitation_unchecked(a_str, i, a);
 
-                if (hash(new_a_str) % num_batches != batch_id) {
+                if (batch_of(new_a_str, num_batches) != batch_id) {
                     continue;
                 }
 
@@ -654,7 +653,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
         }
 
         // beta excitations
-        if (hash(a_str) % num_batches != batch_id)
+        if (batch_of(a_str, num_batches) != batch_id)
             continue;
 
         new_det.set_alpha_string(a_str);

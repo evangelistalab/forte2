@@ -8,6 +8,7 @@
 
 #include "helpers/ndarray.h"
 #include "helpers/parallel.h"
+#include "helpers/random.hpp"
 #include "helpers/spin.h"
 
 #include "determinant/determinant.h"
@@ -32,6 +33,19 @@ enum class EnergyCorrection { PT2, Variational };
 
 /// @brief Energy correction regularization method
 enum class PT2Regularizer { None, Shift, DSRG };
+
+/// @brief Assign a string to one of `num_batches` batches
+/// @param s The string to assign
+/// @param num_batches The number of batches (must be > 0)
+/// @return The batch index in [0, num_batches)
+inline size_t batch_of(const String& s, size_t num_batches) {
+    // the hash returns just returns the string for Norb == 64
+    // so hash % num_batches directly would distribute determinants
+    // by the occupation of the lowest few orbitals, leading to load imbalance.
+    // Add a pass through a mixer to send determinants equally to all batches.
+    uint64_t x = splitmix64(static_cast<uint64_t>(String::Hash()(s)));
+    return static_cast<size_t>(x % num_batches);
+}
 
 /// @brief A helper class for selected CI methods such as CIPSI and HBCI
 /// This class manages selection and sigma vector computation for selected CI methods.
