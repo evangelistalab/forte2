@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "sparse/cumulant_reference.h"
 #include "sparse/sparse_normal_order.h"
 
 namespace forte2 {
@@ -11,6 +12,8 @@ class GeneralizedNormalOrderComputer {
   public:
     GeneralizedNormalOrderComputer(const SparseState& vacuum, std::size_t norb, int max_cumulant,
                                    double screen_thresh, int max_rank);
+    GeneralizedNormalOrderComputer(const CumulantReference& reference, double screen_thresh,
+                                   int max_rank);
     ~GeneralizedNormalOrderComputer();
 
     GeneralizedNormalOrderComputer(const GeneralizedNormalOrderComputer&) = delete;
@@ -33,5 +36,11 @@ class GeneralizedNormalOrderComputer {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
+
+/// Expand generalized-normal-ordered terms using moments reconstructed from a truncated cumulant
+/// hierarchy.
+SparseOperator cumulant_truncated_sparse_operator(const GeneralizedNormalOrderedSparseOperator& op,
+                                                  const CumulantReference& reference,
+                                                  double screen_thresh);
 
 } // namespace forte2

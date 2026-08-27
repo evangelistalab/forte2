@@ -416,6 +416,32 @@ class VacuumExpectationCache {
     std::unordered_map<SQOperatorString, sparse_scalar_t, SQOperatorString::Hash> cache_;
 };
 
+class CumulantMomentCache {
+  public:
+    explicit CumulantMomentCache(const CumulantReference& reference) : reference_(reference) {}
+
+    const Determinant& occupied_support() const { return occupied_support_; }
+    const Determinant& core_support() const { return reference_.core_modes(); }
+    const Determinant* core_support_if_present() const {
+        return reference_.core_modes().count_all() > 0 ? &reference_.core_modes() : nullptr;
+    }
+    bool has_core() const { return reference_.core_modes().count_all() > 0; }
+
+    sparse_scalar_t expectation(const SQOperatorString& sqop) {
+        if (const auto it = cache_.find(sqop); it != cache_.end()) {
+            return it->second;
+        }
+        const auto value = reference_.truncated_rdm(sqop.cre(), sqop.ann());
+        cache_.emplace(sqop, value);
+        return value;
+    }
+
+  private:
+    const CumulantReference& reference_;
+    Determinant occupied_support_ = reference_.core_modes() | reference_.active_modes();
+    std::unordered_map<SQOperatorString, sparse_scalar_t, SQOperatorString::Hash> cache_;
+};
+
 bool sparse_state_equal(const SparseState& lhs, const SparseState& rhs) {
     if (lhs.size() != rhs.size()) {
         return false;
@@ -537,11 +563,10 @@ void enumerate_generalized_contractions(const std::vector<NormalOp>& ops, int ma
     }
 }
 
-void sparse_expansion_of_generalized_normal_term(VacuumExpectationCache& expectation_cache,
-                                                 int max_cumulant, const SQOperatorString& term,
-                                                 SparseOperator& result,
-                                                 sparse_scalar_t coefficient,
-                                                 double screen_thresh) {
+template <typename ExpectationCache>
+void sparse_expansion_of_generalized_normal_term(
+    ExpectationCache& expectation_cache, int max_contraction_rank, const SQOperatorString& term,
+    SparseOperator& result, sparse_scalar_t coefficient, double screen_thresh) {
     if (std::abs(coefficient) <= screen_thresh) {
         return;
     }
@@ -550,7 +575,7 @@ void sparse_expansion_of_generalized_normal_term(VacuumExpectationCache& expecta
     result.add(term, coefficient);
 
     enumerate_generalized_contractions(
-        ops, max_cumulant,
+        ops, max_contraction_rank,
         [&](const std::vector<size_t>& selected) {
             const int phase = subset_to_front_phase(selected, ops.size());
             const auto contracted = sparse_string_from_selected_ops(ops, selected);
@@ -562,7 +587,7 @@ void sparse_expansion_of_generalized_normal_term(VacuumExpectationCache& expecta
             const auto remainder =
                 SQOperatorString(term.cre() - contracted.cre(), term.ann() - contracted.ann());
             sparse_expansion_of_generalized_normal_term(
-                expectation_cache, max_cumulant, remainder, result,
+                expectation_cache, max_contraction_rank, remainder, result,
                 -coefficient * static_cast<double>(phase) * contraction, screen_thresh);
         },
         1, &expectation_cache.occupied_support(), expectation_cache.core_support_if_present());
@@ -574,7 +599,13 @@ struct GeneralizedNormalOrderComputer::Impl {
     Impl(const SparseState& vacuum, std::size_t norb, int max_cumulant, double screen_thresh,
          int max_rank)
         : vacuum(vacuum), norb(norb), max_cumulant(max_cumulant), screen_thresh(screen_thresh),
-          max_rank(max_rank), expectation_cache(vacuum, screen_thresh) {}
+          max_rank(max_rank),
+          expectation_cache(std::make_unique<VacuumExpectationCache>(vacuum, screen_thresh)) {}
+
+    Impl(const CumulantReference& reference, double screen_thresh, int max_rank)
+        : vacuum(reference.vacuum()), norb(reference.norb()),
+          max_cumulant(reference.max_cumulant()), screen_thresh(screen_thresh), max_rank(max_rank),
+          cumulant_cache(std::make_unique<CumulantMomentCache>(reference)) {}
 
     const GeneralizedNormalOrderExpansion& expansion(const SQOperatorString& sqop) {
         if (const auto it = expansion_cache.find(sqop); it != expansion_cache.end()) {
@@ -594,21 +625,27 @@ struct GeneralizedNormalOrderComputer::Impl {
 
         const size_t min_selected_count =
             max_rank < 0 ? 1 : std::max(1, sqop.count() - 2 * max_rank);
-        enumerate_generalized_contractions(
-            ops, max_cumulant,
-            [&](const std::vector<size_t>& selected) {
-                const int phase = subset_to_front_phase(selected, ops.size());
-                const auto contracted = sparse_string_from_selected_ops(ops, selected);
-                const auto contraction = expectation_cache.expectation(contracted);
-                if (std::abs(contraction) <= screen_thresh) {
-                    return;
-                }
-                const auto remainder =
-                    SQOperatorString(sqop.cre() - contracted.cre(), sqop.ann() - contracted.ann());
-                ordered.add(remainder, static_cast<double>(phase) * contraction);
-            },
-            min_selected_count, &expectation_cache.occupied_support(),
-            expectation_cache.core_support_if_present());
+        auto accumulate = [&](auto& cache, int max_contraction_rank) {
+            enumerate_generalized_contractions(
+                ops, max_contraction_rank,
+                [&](const std::vector<size_t>& selected) {
+                    const int phase = subset_to_front_phase(selected, ops.size());
+                    const auto contracted = sparse_string_from_selected_ops(ops, selected);
+                    const auto contraction = cache.expectation(contracted);
+                    if (std::abs(contraction) <= screen_thresh) {
+                        return;
+                    }
+                    const auto remainder = SQOperatorString(sqop.cre() - contracted.cre(),
+                                                            sqop.ann() - contracted.ann());
+                    ordered.add(remainder, static_cast<double>(phase) * contraction);
+                },
+                min_selected_count, &cache.occupied_support(), cache.core_support_if_present());
+        };
+        if (cumulant_cache) {
+            accumulate(*cumulant_cache, -1);
+        } else {
+            accumulate(*expectation_cache, max_cumulant);
+        }
 
         auto& result = it->second;
         result.reserve(ordered.size());
@@ -625,7 +662,8 @@ struct GeneralizedNormalOrderComputer::Impl {
     int max_cumulant;
     double screen_thresh;
     int max_rank;
-    VacuumExpectationCache expectation_cache;
+    std::unique_ptr<VacuumExpectationCache> expectation_cache;
+    std::unique_ptr<CumulantMomentCache> cumulant_cache;
     std::unordered_map<SQOperatorString, GeneralizedNormalOrderExpansion, SQOperatorString::Hash>
         expansion_cache;
 };
@@ -641,6 +679,19 @@ GeneralizedNormalOrderComputer::GeneralizedNormalOrderComputer(const SparseState
     if (max_cumulant < -1) {
         throw std::invalid_argument(
             "GeneralizedNormalOrderComputer: max_cumulant must be non-negative or -1");
+    }
+    if (max_rank < -1) {
+        throw std::invalid_argument(
+            "GeneralizedNormalOrderComputer: max_rank must be non-negative or -1");
+    }
+}
+
+GeneralizedNormalOrderComputer::GeneralizedNormalOrderComputer(const CumulantReference& reference,
+                                                               double screen_thresh, int max_rank)
+    : impl_(std::make_unique<Impl>(reference, screen_thresh, max_rank)) {
+    if (screen_thresh < 0.0) {
+        throw std::invalid_argument(
+            "GeneralizedNormalOrderComputer: screen_thresh must be non-negative");
     }
     if (max_rank < -1) {
         throw std::invalid_argument(
@@ -671,21 +722,26 @@ bool GeneralizedNormalOrderComputer::could_contribute(const SQOperatorString& te
     }
 
     const int min_contraction_rank = (term.count() - 2 * impl_->max_rank + 1) / 2;
-    if (impl_->max_cumulant >= 0 and min_contraction_rank > impl_->max_cumulant) {
+    if (not impl_->cumulant_cache and impl_->max_cumulant >= 0 and
+        min_contraction_rank > impl_->max_cumulant) {
         return false;
     }
-    const auto& occupied_support = impl_->expectation_cache.occupied_support();
-    if (not impl_->expectation_cache.has_core()) {
-        const int available_rank = std::min(term.cre().intersection_count(occupied_support),
-                                            term.ann().intersection_count(occupied_support));
+    const auto can_contract = [&](const auto& cache) {
+        const auto& occupied_support = cache.occupied_support();
+        if (not cache.has_core()) {
+            const int available_rank = std::min(term.cre().intersection_count(occupied_support),
+                                                term.ann().intersection_count(occupied_support));
+            return available_rank >= min_contraction_rank;
+        }
+        const auto& core_support = cache.core_support();
+        const auto active_support = occupied_support - core_support;
+        const int available_rank = (term.cre() & core_support).intersection_count(term.ann()) +
+                                   std::min(term.cre().intersection_count(active_support),
+                                            term.ann().intersection_count(active_support));
         return available_rank >= min_contraction_rank;
-    }
-    const auto& core_support = impl_->expectation_cache.core_support();
-    const auto active_support = occupied_support - core_support;
-    const int available_rank = (term.cre() & core_support).intersection_count(term.ann()) +
-                               std::min(term.cre().intersection_count(active_support),
-                                        term.ann().intersection_count(active_support));
-    return available_rank >= min_contraction_rank;
+    };
+    return impl_->cumulant_cache ? can_contract(*impl_->cumulant_cache)
+                                 : can_contract(*impl_->expectation_cache);
 }
 
 GeneralizedNormalOrderedSparseOperator
@@ -695,6 +751,38 @@ GeneralizedNormalOrderComputer::clean(const GeneralizedNormalOrderedSparseOperat
     for (const auto& [term, coefficient] : result.elements()) {
         if ((impl_->max_rank < 0 or term.count() <= 2 * impl_->max_rank) and
             std::abs(coefficient) > impl_->screen_thresh) {
+            cleaned.add(term, coefficient);
+        }
+    }
+    return cleaned;
+}
+
+SparseOperator cumulant_truncated_sparse_operator(const GeneralizedNormalOrderedSparseOperator& op,
+                                                  const CumulantReference& reference,
+                                                  double screen_thresh) {
+    if (screen_thresh < 0.0) {
+        throw std::invalid_argument(
+            "cumulant_truncated_sparse_operator: screen_thresh must be non-negative");
+    }
+    if (op.norb() != reference.norb() or op.max_cumulant() != reference.max_cumulant() or
+        not sparse_state_equal(op.vacuum(), reference.vacuum())) {
+        throw std::invalid_argument(
+            "cumulant_truncated_sparse_operator: operator and reference must match");
+    }
+
+    SparseOperator result;
+    CumulantMomentCache expectation_cache(reference);
+    for (const auto& [term, coefficient] : op.elements()) {
+        if (std::abs(coefficient) <= screen_thresh) {
+            continue;
+        }
+        sparse_expansion_of_generalized_normal_term(expectation_cache, -1, term, result,
+                                                    coefficient, screen_thresh);
+    }
+
+    SparseOperator cleaned;
+    for (const auto& [term, coefficient] : result.elements()) {
+        if (std::abs(coefficient) > screen_thresh) {
             cleaned.add(term, coefficient);
         }
     }

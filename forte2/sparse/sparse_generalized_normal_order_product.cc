@@ -59,13 +59,34 @@ GeneralizedNormalOrderedProductComputer::GeneralizedNormalOrderedProductComputer
     }
 }
 
+GeneralizedNormalOrderedProductComputer::GeneralizedNormalOrderedProductComputer(
+    const CumulantReference& reference, int max_rank, double screen_thresh)
+    : max_rank_(max_rank), screen_thresh_(screen_thresh), reference_(reference) {
+    if (max_rank < 0) {
+        throw std::invalid_argument(
+            "GeneralizedNormalOrderedProductComputer: max_rank must be non-negative");
+    }
+    if (screen_thresh < 0.0) {
+        throw std::invalid_argument(
+            "GeneralizedNormalOrderedProductComputer: screen_thresh must be non-negative");
+    }
+}
+
+bool GeneralizedNormalOrderedProductComputer::uses_cumulant_truncation() const {
+    return reference_.has_value();
+}
+
 GeneralizedNormalOrderedSparseOperator GeneralizedNormalOrderedProductComputer::commutator(
     const GeneralizedNormalOrderedSparseOperator& lhs,
     const GeneralizedNormalOrderedSparseOperator& rhs) const {
     validate_compatible(lhs, rhs);
 
-    const auto lhs_sparse = lhs.to_sparse_operator(screen_thresh_);
-    const auto rhs_sparse = rhs.to_sparse_operator(screen_thresh_);
+    const auto lhs_sparse =
+        reference_ ? cumulant_truncated_sparse_operator(lhs, *reference_, screen_thresh_)
+                   : lhs.to_sparse_operator(screen_thresh_);
+    const auto rhs_sparse =
+        reference_ ? cumulant_truncated_sparse_operator(rhs, *reference_, screen_thresh_)
+                   : rhs.to_sparse_operator(screen_thresh_);
     const auto& lhs_terms = lhs_sparse.elements_as_vec();
     const auto& rhs_terms = rhs_sparse.elements_as_vec();
     std::vector<double> rhs_coefficient_magnitudes;
@@ -97,8 +118,11 @@ GeneralizedNormalOrderedSparseOperator GeneralizedNormalOrderedProductComputer::
     parallel_for_dynamic_thread(0, num_blocks, [&](std::size_t block) {
         const auto block_begin = block * lhs_block_size;
         const auto block_end = std::min(block_begin + lhs_block_size, lhs_terms.size());
-        GeneralizedNormalOrderComputer normal_orderer(lhs.vacuum(), lhs.norb(), lhs.max_cumulant(),
-                                                      screen_thresh_, max_rank_);
+        GeneralizedNormalOrderComputer normal_orderer =
+            reference_
+                ? GeneralizedNormalOrderComputer(*reference_, screen_thresh_, max_rank_)
+                : GeneralizedNormalOrderComputer(lhs.vacuum(), lhs.norb(), lhs.max_cumulant(),
+                                                 screen_thresh_, max_rank_);
         SparseOperator batch;
         batch.reserve(std::min((block_end - block_begin) * rhs_terms.size() * std::size_t{2},
                                std::size_t{500000}));
@@ -159,6 +183,14 @@ generalized_normal_ordered_commutator(const GeneralizedNormalOrderedSparseOperat
                                       const GeneralizedNormalOrderedSparseOperator& rhs,
                                       int max_rank, double screen_thresh) {
     return GeneralizedNormalOrderedProductComputer(max_rank, screen_thresh).commutator(lhs, rhs);
+}
+
+GeneralizedNormalOrderedSparseOperator cumulant_truncated_generalized_normal_ordered_commutator(
+    const GeneralizedNormalOrderedSparseOperator& lhs,
+    const GeneralizedNormalOrderedSparseOperator& rhs, int max_rank, double screen_thresh) {
+    CumulantReference reference(lhs.vacuum(), lhs.norb(), lhs.max_cumulant(), screen_thresh);
+    return GeneralizedNormalOrderedProductComputer(reference, max_rank, screen_thresh)
+        .commutator(lhs, rhs);
 }
 
 } // namespace forte2

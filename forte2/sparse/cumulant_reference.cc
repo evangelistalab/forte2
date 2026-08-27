@@ -169,6 +169,23 @@ sparse_scalar_t CumulantReference::rdm(const Determinant& cre, const Determinant
     return expectation(SQOperatorString(cre, ann));
 }
 
+sparse_scalar_t CumulantReference::truncated_rdm(const Determinant& cre,
+                                                 const Determinant& ann) const {
+    validate_indices(cre, ann);
+    if (cre.count_all() == 0) {
+        return sparse_scalar_t{1.0};
+    }
+
+    std::vector<std::size_t> upper(cre.count_all());
+    std::vector<std::size_t> lower(ann.count_all());
+    std::size_t nupper = 0;
+    std::size_t nlower = 0;
+    cre.find_set_bits(upper, nupper);
+    ann.find_set_bits(lower, nlower);
+    std::unordered_map<SQOperatorString, sparse_scalar_t, SQOperatorString::Hash> cache;
+    return truncated_rdm_modes(upper, lower, cache);
+}
+
 sparse_scalar_t CumulantReference::cumulant(const Determinant& cre, const Determinant& ann) const {
     validate_indices(cre, ann);
     const auto rank = static_cast<int>(cre.count_all());
@@ -254,6 +271,81 @@ sparse_scalar_t CumulantReference::rdm_modes(std::vector<std::size_t> upper,
         ann.set_bit(mode, true);
     }
     return static_cast<double>(upper_phase * lower_phase) * rdm(cre, ann);
+}
+
+sparse_scalar_t CumulantReference::truncated_rdm_modes(
+    const std::vector<std::size_t>& upper, const std::vector<std::size_t>& lower,
+    std::unordered_map<SQOperatorString, sparse_scalar_t, SQOperatorString::Hash>& cache) const {
+    if (upper.size() != lower.size()) {
+        throw std::invalid_argument("CumulantReference: RDM upper and lower ranks must match");
+    }
+    if (upper.empty()) {
+        return sparse_scalar_t{1.0};
+    }
+
+    auto cre = Determinant::zero();
+    auto ann = Determinant::zero();
+    for (const auto mode : upper) {
+        cre.set_bit(mode, true);
+    }
+    for (const auto mode : lower) {
+        ann.set_bit(mode, true);
+    }
+    const auto term = SQOperatorString(cre, ann);
+    if (const auto it = cache.find(term); it != cache.end()) {
+        return it->second;
+    }
+
+    sparse_scalar_t value = 0.0;
+    const auto rank = upper.size();
+    const auto max_block_rank = std::min(rank, static_cast<std::size_t>(max_cumulant_));
+    for (std::size_t block_rank = 1; block_rank <= max_block_rank; ++block_rank) {
+        enumerate_index_combinations(
+            rank - 1, block_rank - 1, [&](const auto& selected_upper_tail) {
+                std::vector<std::size_t> selected_upper{0};
+                selected_upper.reserve(block_rank);
+                for (const auto index : selected_upper_tail) {
+                    selected_upper.push_back(index + 1);
+                }
+
+                enumerate_index_combinations(rank, block_rank, [&](const auto& selected_lower) {
+                    std::vector<std::size_t> block_upper;
+                    std::vector<std::size_t> block_lower;
+                    std::vector<std::size_t> remainder_upper;
+                    std::vector<std::size_t> remainder_lower;
+                    block_upper.reserve(block_rank);
+                    block_lower.reserve(block_rank);
+                    remainder_upper.reserve(rank - block_rank);
+                    remainder_lower.reserve(rank - block_rank);
+
+                    for (std::size_t index = 0; index < rank; ++index) {
+                        if (std::binary_search(selected_upper.begin(), selected_upper.end(),
+                                               index)) {
+                            block_upper.push_back(upper[index]);
+                        } else {
+                            remainder_upper.push_back(upper[index]);
+                        }
+                        if (std::binary_search(selected_lower.begin(), selected_lower.end(),
+                                               index)) {
+                            block_lower.push_back(lower[index]);
+                        } else {
+                            remainder_lower.push_back(lower[index]);
+                        }
+                    }
+
+                    const auto lambda = cumulant_modes(block_upper, block_lower);
+                    if (lambda == sparse_scalar_t{0.0}) {
+                        return;
+                    }
+                    const auto phase = selection_to_front_phase(selected_upper) *
+                                       selection_to_front_phase(selected_lower);
+                    value += static_cast<double>(phase) * lambda *
+                             truncated_rdm_modes(remainder_upper, remainder_lower, cache);
+                });
+            });
+    }
+    cache.emplace(term, value);
+    return value;
 }
 
 sparse_scalar_t CumulantReference::cumulant_modes(std::vector<std::size_t> upper,

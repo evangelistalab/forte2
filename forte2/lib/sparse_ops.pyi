@@ -783,11 +783,35 @@ class CumulantReference:
     def rdm(self, cre: forte2.lib.det.Determinant, ann: forte2.lib.det.Determinant) -> complex:
         """Return an RDM element encoded by determinant bit strings"""
 
+    def truncated_rdm(self, cre: forte2.lib.det.Determinant, ann: forte2.lib.det.Determinant) -> complex:
+        """
+        Return an RDM element reconstructed with unavailable cumulants set to zero
+        """
+
     def cumulant(self, cre: forte2.lib.det.Determinant, ann: forte2.lib.det.Determinant) -> complex:
         """Return a density cumulant encoded by determinant bit strings"""
 
     def cumulant_size(self, rank: int) -> int:
         """Get the number of explicitly stored nonzero cumulants at a rank"""
+
+class GeneralizedNormalOrderedProductComputer:
+    """
+    Sparse generalized-normal-ordered products evaluated through bare operator strings
+    """
+
+    @overload
+    def __init__(self, max_rank: int, screen_thresh: float = 1e-12) -> None:
+        """Use the legacy density-moment rank truncation"""
+
+    @overload
+    def __init__(self, reference: CumulantReference, max_rank: int, screen_thresh: float = 1e-12) -> None:
+        """Reconstruct higher moments from the available density cumulants"""
+
+    def uses_cumulant_truncation(self) -> bool:
+        """Whether unavailable density cumulants are set to zero"""
+
+    def commutator(self, lhs: GeneralizedNormalOrderedSparseOperator, rhs: GeneralizedNormalOrderedSparseOperator) -> GeneralizedNormalOrderedSparseOperator:
+        """Compute a generalized-normal-ordered commutator"""
 
 class CumulantWickEngine:
     """
@@ -806,7 +830,11 @@ class CumulantWickEngine:
         """Get the numerical screening threshold"""
 
     def product(self, lhs: GeneralizedNormalOrderedSparseOperator, rhs: GeneralizedNormalOrderedSparseOperator) -> GeneralizedNormalOrderedSparseOperator:
-        """Compute a direct generalized-normal-ordered product"""
+        """
+        Compute a direct generalized-normal-ordered product with unavailable cumulants set to zero
+        """
 
     def commutator(self, lhs: GeneralizedNormalOrderedSparseOperator, rhs: GeneralizedNormalOrderedSparseOperator) -> GeneralizedNormalOrderedSparseOperator:
-        """Compute a direct generalized-normal-ordered commutator"""
+        """
+        Compute a direct generalized-normal-ordered commutator with unavailable cumulants set to zero
+        """

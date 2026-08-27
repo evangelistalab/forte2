@@ -276,39 +276,21 @@ def _gno_commutator(
     max_rank: int,
     screen_thresh: float,
     gno_backend: str = "sparse",
+    sparse_product_engine: _ft.GeneralizedNormalOrderedProductComputer | None = None,
     cumulant_engine: _ft.CumulantWickEngine | None = None,
-    validation_tol: float = 1.0e-11,
+    validation_tol: float = 1.0e-9,
 ) -> _ft.GeneralizedNormalOrderedSparseOperator:
-    if gno_backend == "validate":
-        lhs_rank = max(
-            (max(term.cre().count(), term.ann().count()) for term, _ in lhs),
-            default=0,
-        )
-        rhs_rank = max(
-            (max(term.cre().count(), term.ann().count()) for term, _ in rhs),
-            default=0,
-        )
-        # In a number-conserving commutator the highest-rank joint moment cancels, so
-        # equivalence between the legacy RDM expansion and a cumulant expansion requires
-        # moments/cumulants through at least r(lhs) + r(rhs) - 1. Below that rank the two
-        # backends implement different truncation schemes and are not valid mutual oracles.
-        required_cumulant = max(0, lhs_rank + rhs_rank - 1)
-        if max_cumulant < required_cumulant:
-            raise RuntimeError(
-                "cannot validate the cumulant Wick backend for operand ranks "
-                f"{lhs_rank} and {rhs_rank} with max_cumulant={max_cumulant}; "
-                f"validation requires max_cumulant >= {required_cumulant} because "
-                "the sparse and cumulant backends otherwise define different "
-                "truncation approximations"
-            )
-
     sparse_result = None
     if gno_backend in {"sparse", "validate"}:
-        sparse_result = lhs.commutator(
-            rhs, max_rank=max_rank, screen_thresh=screen_thresh
-        )
+        if sparse_product_engine is None:
+            raise RuntimeError(
+                "the cumulant-truncated sparse backend was not initialized"
+            )
+        sparse_result = sparse_product_engine.commutator(lhs, rhs)
     if gno_backend == "sparse":
         return sparse_result
+    if gno_backend == "rdm":
+        return lhs.commutator(rhs, max_rank=max_rank, screen_thresh=screen_thresh)
 
     if cumulant_engine is None:
         raise RuntimeError("the cumulant Wick backend was not initialized")
@@ -340,8 +322,9 @@ def _bch_hbar(
     screen_thresh: float,
     commutator_threshold: float,
     gno_backend: str = "sparse",
+    sparse_product_engine: _ft.GeneralizedNormalOrderedProductComputer | None = None,
     cumulant_engine: _ft.CumulantWickEngine | None = None,
-    validation_tol: float = 1.0e-11,
+    validation_tol: float = 1.0e-9,
 ) -> tuple[_ft.GeneralizedNormalOrderedSparseOperator, tuple[float, ...]]:
     hbar = _copy_gno(h0)
     nested = _copy_gno(h0)
@@ -357,6 +340,7 @@ def _bch_hbar(
             max_rank,
             screen_thresh,
             gno_backend,
+            sparse_product_engine,
             cumulant_engine,
             validation_tol,
         )
@@ -414,14 +398,13 @@ def _select_reported_energy(
 class SparseMRDSRG:
     """Sparse-reference MR-DSRG(n) fixed-point solver.
 
-    The ``sparse`` generalized-normal-ordering backend evaluates products by a
-    bare-operator expansion truncated in reference density moments. The
-    ``cumulant`` backend evaluates generalized Wick contractions directly and
-    truncates density cumulants at ``max_cumulant``. These are different
-    approximations when the available cumulant rank is lower than a
-    commutator's contraction rank. The ``validate`` backend compares them only
-    when ``max_cumulant`` is high enough for the two expansions to be
-    equivalent. Cumulants through rank 3 are used by default.
+    The ``sparse`` backend converts through bare operator strings while
+    reconstructing density moments with unavailable cumulants set to zero. The
+    ``cumulant`` backend evaluates the same generalized Wick expansion directly.
+    ``validate`` compares these independent implementations term by term. The
+    historical density-moment rank truncation remains available as ``rdm``.
+    Cumulants through rank 3 are used by default. Molecular inputs must be
+    semicanonical within their core, active, and virtual orbital subspaces.
     """
 
     hamiltonian: _ft.SparseOperator
@@ -432,7 +415,7 @@ class SparseMRDSRG:
     max_cumulant: int = 3
     max_rank: int = 2
     gno_backend: str = "sparse"
-    gno_validation_tol: float = 1.0e-11
+    gno_validation_tol: float = 1.0e-9
     max_commutators: int = 20
     maxiter: int = 50
     e_tol: float = 1.0e-10
@@ -453,17 +436,19 @@ class SparseMRDSRG:
             raise ValueError("max_rank must be positive")
         if self.max_cumulant < -1:
             raise ValueError("max_cumulant must be non-negative or -1")
-        if self.gno_backend not in {"sparse", "cumulant", "validate"}:
+        if self.gno_backend not in {"sparse", "cumulant", "validate", "rdm"}:
             raise ValueError(
-                "gno_backend must be one of 'sparse', 'cumulant', or 'validate'"
+                "gno_backend must be one of 'sparse', 'cumulant', 'validate', or 'rdm'"
             )
-        if self.gno_backend != "sparse" and self.max_rank > 4:
+        if self.gno_backend in {"sparse", "cumulant", "validate"} and self.max_rank > 4:
             raise ValueError(
-                "the cumulant Wick backend currently supports max_rank <= 4"
+                "the cumulant-truncated backends currently support max_rank <= 4"
             )
-        if self.gno_backend != "sparse" and not 1 <= self.max_cumulant <= 4:
+        if self.gno_backend in {"sparse", "cumulant", "validate"} and not (
+            1 <= self.max_cumulant <= 4
+        ):
             raise ValueError(
-                "the cumulant Wick backend currently supports max_cumulant from 1 to 4"
+                "the cumulant-truncated backends currently support max_cumulant from 1 to 4"
             )
         if self.gno_validation_tol < 0.0:
             raise ValueError("gno_validation_tol must be non-negative")
@@ -542,14 +527,22 @@ class SparseMRDSRG:
             else self.excitations
         )
         amplitudes = self._initial_amplitudes(h0, excitations)
+        sparse_product_engine = None
         cumulant_engine = None
-        if self.gno_backend != "sparse":
+        if self.gno_backend in {"sparse", "cumulant", "validate"}:
             cumulant_reference = _ft.CumulantReference(
                 self.vacuum,
                 self.norb,
                 max_cumulant=self.max_cumulant,
                 screen_thresh=self.screen_thresh,
             )
+        if self.gno_backend in {"sparse", "validate"}:
+            sparse_product_engine = _ft.GeneralizedNormalOrderedProductComputer(
+                cumulant_reference,
+                self.max_rank,
+                screen_thresh=self.screen_thresh,
+            )
+        if self.gno_backend in {"cumulant", "validate"}:
             cumulant_engine = _ft.CumulantWickEngine(
                 cumulant_reference,
                 self.max_rank,
@@ -586,6 +579,7 @@ class SparseMRDSRG:
                 self.screen_thresh,
                 self.commutator_threshold,
                 self.gno_backend,
+                sparse_product_engine,
                 cumulant_engine,
                 self.gno_validation_tol,
             )

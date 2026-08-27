@@ -18,7 +18,12 @@ import forte2
 from experiments import dsrg_hchain_benchmark as sr_benchmark
 from forte2.helpers import logger
 from forte2.lib.det import Determinant
-from forte2.lib.sparse_ops import SparseState, overlap
+from forte2.lib.sparse_ops import (
+    CumulantReference,
+    SparseState,
+    overlap,
+    sparse_operator_hamiltonian,
+)
 
 BASIS = "cc-pVDZ"
 BOND_LENGTHS = (0.75, 1.50, 2.25, 3.00)
@@ -73,11 +78,12 @@ def make_manifest() -> dict:
             "basis": BASIS,
             "bond_lengths_angstrom": list(BOND_LENGTHS),
             "ranks": list(RANKS),
+            "mr_max_cumulants": {str(rank): max(3, min(rank, 4)) for rank in RANKS},
             "flow_exponents": list(EXPONENTS),
             "e_tol": E_TOL,
             "r_tol": R_TOL,
             "max_iter": MAX_ITER,
-            "mr_reference": "CAS(2e,2o) in RHF orbitals",
+            "mr_reference": "CAS(2e,2o) in generalized-Fock semicanonical orbitals",
         },
         "cases": cases,
     }
@@ -131,6 +137,46 @@ def cas22_reference(hamiltonian, norb: int):
     return vacuum, model_space, float(eigenvalues[0].real)
 
 
+def semicanonical_h2_problem(system, rhf, hamiltonian):
+    vacuum, _, _ = cas22_reference(hamiltonian, rhf.nmo)
+    reference = CumulantReference(vacuum, rhf.nmo, max_cumulant=3)
+    gamma = np.array(
+        [
+            [
+                sum(reference.gamma(p, alpha, q, alpha).real for alpha in (True, False))
+                for q in range(rhf.nmo)
+            ]
+            for p in range(rhf.nmo)
+        ]
+    )
+    coefficients = rhf.C[0]
+    hcore = np.einsum(
+        "pq,pi,qj->ij", system.ints_hcore(), coefficients, coefficients, optimize=True
+    )
+    eri = system.fock_builder.two_electron_integrals_block(coefficients)
+    fock = hcore + np.einsum("rs,prqs->pq", gamma, eri, optimize=True)
+    fock -= 0.5 * np.einsum("rs,prsq->pq", gamma, eri, optimize=True)
+
+    rotation = np.zeros_like(fock)
+    for orbital_slice in (slice(0, 2), slice(2, rhf.nmo)):
+        _, vectors = np.linalg.eigh(fock[orbital_slice, orbital_slice])
+        rotation[orbital_slice, orbital_slice] = vectors
+    orbital_energies = np.diag(rotation.T @ fock @ rotation)
+    hcore = rotation.T @ hcore @ rotation
+    eri = np.einsum(
+        "pi,qj,pqrs,rk,sl->ijkl",
+        rotation,
+        rotation,
+        eri,
+        rotation,
+        rotation,
+        optimize=True,
+    )
+    hamiltonian = sparse_operator_hamiltonian(system.nuclear_repulsion, hcore, eri)
+    vacuum, model_space, reference_energy = cas22_reference(hamiltonian, rhf.nmo)
+    return hamiltonian, vacuum, model_space, reference_energy, orbital_energies
+
+
 def run_sr(case: dict) -> dict:
     sr_benchmark.BASIS = BASIS
     args = (
@@ -158,7 +204,9 @@ def run_mr(case: dict) -> dict:
         )
         fci = sr_benchmark.forte2_fci_energy(system, rhf, 2)
 
-    vacuum, model_space, reference_energy = cas22_reference(hamiltonian, rhf.nmo)
+    hamiltonian, vacuum, _, reference_energy, eps = semicanonical_h2_problem(
+        system, rhf, hamiltonian
+    )
     excitations = forte2.enumerate_mrdsrg_excitations(
         core_orbitals=[],
         active_orbitals=[0, 1],
@@ -173,8 +221,7 @@ def run_mr(case: dict) -> dict:
         rhf.nmo,
         excitations,
         flow_param=case["flow_param"],
-        max_cumulant=min(case["rank"], 4),
-        model_space=model_space,
+        max_cumulant=max(3, min(case["rank"], 4)),
         e_tol=E_TOL,
         r_tol=R_TOL,
         maxiter=MAX_ITER,

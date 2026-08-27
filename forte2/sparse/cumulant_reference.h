@@ -54,6 +54,9 @@ class CumulantReference {
     /// Return the rank-k RDM element encoded by creator and annihilator bit strings.
     sparse_scalar_t rdm(const Determinant& cre, const Determinant& ann) const;
 
+    /// Return the rank-k RDM reconstructed with cumulants above max_cumulant set to zero.
+    sparse_scalar_t truncated_rdm(const Determinant& cre, const Determinant& ann) const;
+
     /// Return the rank-k density cumulant encoded by creator and annihilator bit strings.
     sparse_scalar_t cumulant(const Determinant& cre, const Determinant& ann) const;
 
@@ -66,6 +69,9 @@ class CumulantReference {
     void validate_indices(const Determinant& cre, const Determinant& ann) const;
     sparse_scalar_t expectation(const SQOperatorString& term) const;
     sparse_scalar_t rdm_modes(std::vector<std::size_t> upper, std::vector<std::size_t> lower) const;
+    sparse_scalar_t truncated_rdm_modes(
+        const std::vector<std::size_t>& upper, const std::vector<std::size_t>& lower,
+        std::unordered_map<SQOperatorString, sparse_scalar_t, SQOperatorString::Hash>& cache) const;
     sparse_scalar_t cumulant_modes(std::vector<std::size_t> upper,
                                    std::vector<std::size_t> lower) const;
     void build_orbital_spaces();

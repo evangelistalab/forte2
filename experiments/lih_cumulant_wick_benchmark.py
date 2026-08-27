@@ -15,15 +15,49 @@ import numpy as np
 import forte2
 from forte2.helpers import logger
 from forte2.lib.det import Determinant
-from forte2.lib.sparse_ops import SparseState, overlap, sparse_operator_hamiltonian
+from forte2.lib.sparse_ops import (
+    CumulantReference,
+    SparseState,
+    overlap,
+    sparse_operator_hamiltonian,
+)
 
 
 def determinant_label(occupations: str, norb: int) -> str:
     return occupations + "0" * (norb - len(occupations))
 
 
+def cas22_reference(hamiltonian, norb: int):
+    model_space = tuple(
+        Determinant(determinant_label(label, norb))
+        for label in ("220", "2ab", "2ba", "202")
+    )
+    matrix = np.array(
+        [
+            [
+                overlap(
+                    SparseState({bra: 1.0}),
+                    hamiltonian.apply_to_state(SparseState({ket: 1.0})),
+                )
+                for ket in model_space
+            ]
+            for bra in model_space
+        ],
+        dtype=complex,
+    )
+    eigenvalues, eigenvectors = np.linalg.eigh(matrix)
+    vacuum = SparseState(
+        {
+            determinant: coefficient
+            for determinant, coefficient in zip(model_space, eigenvectors[:, 0])
+            if abs(coefficient) > 1.0e-14
+        }
+    )
+    return vacuum, model_space, float(eigenvalues[0].real)
+
+
 def build_lih_case(bond_length: float, basis: str):
-    """Build LiH and a frozen-core CAS(2,2) reference in RHF orbitals."""
+    """Build LiH and a semicanonical frozen-core CAS(2,2) reference."""
     xyz = f"Li 0.0 0.0 0.0\nH 0.0 0.0 {bond_length:.12f}"
     logger.set_verbosity_level(0)
     with contextlib.redirect_stdout(io.StringIO()):
@@ -49,35 +83,41 @@ def build_lih_case(bond_length: float, basis: str):
     hamiltonian = sparse_operator_hamiltonian(
         system.nuclear_repulsion, hcore_mo, eri_mo
     )
-    orbital_energies = np.asarray(rhf.eps[0])
-
     if rhf.nmo < 3:
         raise RuntimeError("LiH CAS(2,2) requires at least three molecular orbitals")
-    model_space = tuple(
-        Determinant(determinant_label(label, rhf.nmo))
-        for label in ("220", "2ab", "2ba", "202")
-    )
-    matrix = np.array(
+    vacuum, _, _ = cas22_reference(hamiltonian, rhf.nmo)
+    reference = CumulantReference(vacuum, rhf.nmo, max_cumulant=3)
+    gamma = np.array(
         [
             [
-                overlap(
-                    SparseState({bra: 1.0}),
-                    hamiltonian.apply_to_state(SparseState({ket: 1.0})),
-                )
-                for ket in model_space
+                sum(reference.gamma(p, alpha, q, alpha).real for alpha in (True, False))
+                for q in range(rhf.nmo)
             ]
-            for bra in model_space
-        ],
-        dtype=complex,
+            for p in range(rhf.nmo)
+        ]
     )
-    eigenvalues, eigenvectors = np.linalg.eigh(matrix)
-    vacuum = SparseState(
-        {
-            determinant: coefficient
-            for determinant, coefficient in zip(model_space, eigenvectors[:, 0])
-            if abs(coefficient) > 1.0e-14
-        }
+    fock = hcore_mo + np.einsum("rs,prqs->pq", gamma, eri_mo, optimize=True)
+    fock -= 0.5 * np.einsum("rs,prsq->pq", gamma, eri_mo, optimize=True)
+
+    rotation = np.zeros_like(fock)
+    for orbital_slice in (slice(0, 1), slice(1, 3), slice(3, rhf.nmo)):
+        _, vectors = np.linalg.eigh(fock[orbital_slice, orbital_slice])
+        rotation[orbital_slice, orbital_slice] = vectors
+    orbital_energies = np.diag(rotation.T @ fock @ rotation)
+    hcore_mo = rotation.T @ hcore_mo @ rotation
+    eri_mo = np.einsum(
+        "pi,qj,pqrs,rk,sl->ijkl",
+        rotation,
+        rotation,
+        eri_mo,
+        rotation,
+        rotation,
+        optimize=True,
     )
+    hamiltonian = sparse_operator_hamiltonian(
+        system.nuclear_repulsion, hcore_mo, eri_mo
+    )
+    vacuum, model_space, reference_energy = cas22_reference(hamiltonian, rhf.nmo)
     return {
         "hamiltonian": hamiltonian,
         "vacuum": vacuum,
@@ -85,7 +125,7 @@ def build_lih_case(bond_length: float, basis: str):
         "norb": rhf.nmo,
         "orbital_energies": orbital_energies,
         "rhf_energy": float(rhf.E),
-        "reference_energy": float(eigenvalues[0].real),
+        "reference_energy": reference_energy,
     }
 
 
@@ -108,7 +148,6 @@ def run_solver(case: dict, rank: int, backend: str, args) -> dict:
         max_cumulant=3,
         gno_backend=backend,
         gno_validation_tol=args.validation_tol,
-        model_space=case["model_space"],
         screen_thresh=args.screen_thresh,
         commutator_threshold=args.commutator_threshold,
         e_tol=args.e_tol,
@@ -149,7 +188,7 @@ def parse_args():
     parser.add_argument("--flow-param", type=float, default=5.0)
     parser.add_argument("--screen-thresh", type=float, default=1.0e-12)
     parser.add_argument("--commutator-threshold", type=float, default=1.0e-12)
-    parser.add_argument("--validation-tol", type=float, default=1.0e-11)
+    parser.add_argument("--validation-tol", type=float, default=1.0e-9)
     parser.add_argument("--e-tol", type=float, default=1.0e-10)
     parser.add_argument("--r-tol", type=float, default=1.0e-5)
     parser.add_argument("--maxiter", type=int, default=50)
@@ -170,6 +209,7 @@ def main() -> None:
             "bond_length_angstrom": args.bond_length,
             "basis": args.basis,
             "reference": "frozen-core CAS(2e,2o)",
+            "energy": "reference-projected scalar MR-LDSRG energy",
             "core_orbitals": [0],
             "active_orbitals": [1, 2],
             "virtual_orbitals": list(range(3, case["norb"])),

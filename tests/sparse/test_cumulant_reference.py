@@ -1,3 +1,4 @@
+import itertools
 import math
 
 import pytest
@@ -8,6 +9,13 @@ from forte2.lib.det import Determinant
 
 def det(value):
     return Determinant(value)
+
+
+def alpha_bits(orbitals):
+    result = Determinant.zero()
+    for orbital in orbitals:
+        result.set_na(orbital, True)
+    return result
 
 
 def correlated_reference(weight=0.7):
@@ -106,3 +114,28 @@ def test_cumulant_reference_validates_inputs():
         sparse_ops.CumulantReference(sparse_ops.SparseState(), 2)
     with pytest.raises(IndexError, match="outside"):
         sparse_ops.CumulantReference(vacuum, 2).gamma(2, True, 0, True)
+
+
+def test_cumulant_reference_reconstructs_moments_from_truncated_cumulants():
+    vacuum = sparse_ops.SparseState(
+        {
+            det("aaa000"): math.sqrt(0.5),
+            det("000aaa"): math.sqrt(0.3),
+            det("a0a0a0"): math.sqrt(0.2),
+        }
+    )
+    reference = sparse_ops.CumulantReference(
+        vacuum, 6, max_cumulant=3, screen_thresh=0.0
+    )
+
+    for rank in range(1, 4):
+        for upper in itertools.combinations(range(6), rank):
+            for lower in itertools.combinations(range(6), rank):
+                cre, ann = alpha_bits(upper), alpha_bits(lower)
+                assert reference.truncated_rdm(cre, ann) == pytest.approx(
+                    reference.rdm(cre, ann), abs=1.0e-12
+                )
+
+    cre = alpha_bits((0, 2, 3, 5))
+    assert reference.rdm(cre, cre) == pytest.approx(0.0)
+    assert reference.truncated_rdm(cre, cre) == pytest.approx(0.1146)

@@ -247,7 +247,7 @@ def test_sparse_mrdsrg_rejects_unsupported_cumulant_backend_options():
         )
 
 
-def test_sparse_mrdsrg_validation_rejects_inequivalent_cumulant_truncation():
+def test_sparse_mrdsrg_validation_supports_rank_three_cumulant_truncation():
     vacuum = correlated_singlet_vacuum()
     lhs = sparse_ops.GeneralizedNormalOrderedSparseOperator(
         vacuum,
@@ -263,24 +263,28 @@ def test_sparse_mrdsrg_validation_rejects_inequivalent_cumulant_truncation():
         sparse_ops.sqop("[1a+ 0b+ 0b- 0a-]")[0],
         1.0,
     )
-    engine = sparse_ops.CumulantWickEngine(
-        sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3),
+    reference = sparse_ops.CumulantReference(vacuum, 2, max_cumulant=3)
+    sparse_engine = sparse_ops.GeneralizedNormalOrderedProductComputer(
+        reference, 3, 1.0e-14
+    )
+    cumulant_engine = sparse_ops.CumulantWickEngine(reference, 3, 1.0e-14)
+
+    validated = _gno_commutator(
+        lhs,
+        rhs,
+        vacuum,
+        2,
+        3,
         3,
         1.0e-14,
+        gno_backend="validate",
+        sparse_product_engine=sparse_engine,
+        cumulant_engine=cumulant_engine,
     )
-
-    with pytest.raises(RuntimeError, match="validation requires max_cumulant >= 4"):
-        _gno_commutator(
-            lhs,
-            rhs,
-            vacuum,
-            2,
-            3,
-            3,
-            1.0e-14,
-            gno_backend="validate",
-            cumulant_engine=engine,
-        )
+    direct = cumulant_engine.commutator(lhs, rhs)
+    assert {term.str(): value for term, value in validated} == pytest.approx(
+        {term.str(): value for term, value in direct}, abs=1.0e-12
+    )
 
 
 def test_sparse_mrdsrg_supports_rank_three_and_four_truncations():
@@ -340,3 +344,71 @@ def test_sparse_mrdsrg_supports_rank_three_and_four_truncations():
     assert result4.gno_backend == "cumulant"
     assert result4.hbar.max_cumulant() == 4
     assert result4.energy == pytest.approx(expectation(ham, vacuum))
+
+
+def test_sparse_mrdsrg3_backends_produce_the_same_iterative_energy():
+    vacuum = sparse_ops.SparseState(
+        {
+            det("2000"): math.sqrt(0.7),
+            det("0200"): math.sqrt(0.3),
+        }
+    )
+    ham = sparse_ops.sparse_operator(
+        [
+            ("[]", 0.2),
+            ("[0a+ 0a-]", -0.4),
+            ("[0b+ 0b-]", -0.4),
+            ("[1a+ 1a-]", -0.1),
+            ("[1b+ 1b-]", -0.1),
+            ("[2a+ 2a-]", 0.8),
+            ("[2b+ 2b-]", 0.8),
+            ("[3a+ 3a-]", 1.1),
+            ("[3b+ 3b-]", 1.1),
+            ("[2a+ 0a-]", 0.03),
+            ("[0a+ 2a-]", 0.03),
+            ("[2b+ 0b-]", 0.03),
+            ("[0b+ 2b-]", 0.03),
+            ("[2a+ 2b+ 0b- 0a-]", 0.05),
+            ("[0a+ 0b+ 2b- 2a-]", 0.05),
+            ("[3a+ 2b+ 1b- 0a-]", 0.02),
+            ("[0a+ 1b+ 2b- 3a-]", 0.02),
+        ]
+    )
+    excitations = forte2.enumerate_mrdsrg_excitations(
+        core_orbitals=[],
+        active_orbitals=[0, 1],
+        virtual_orbitals=[2, 3],
+        orbital_energies=[-0.4, -0.1, 0.8, 1.1],
+        max_rank=3,
+    )
+    options = dict(
+        flow_param=0.5,
+        max_cumulant=3,
+        max_commutators=3,
+        maxiter=3,
+        e_tol=0.0,
+        r_tol=0.0,
+        screen_thresh=1.0e-14,
+        commutator_threshold=0.0,
+        do_diis=False,
+    )
+
+    sparse = forte2.solve_sparse_mrdsrg3(
+        ham, vacuum, 4, excitations, gno_backend="sparse", **options
+    )
+    cumulant = forte2.solve_sparse_mrdsrg3(
+        ham, vacuum, 4, excitations, gno_backend="cumulant", **options
+    )
+
+    assert [item.energy for item in sparse.history] == pytest.approx(
+        [item.energy for item in cumulant.history], abs=2.0e-13
+    )
+    assert sparse.energy == pytest.approx(cumulant.energy, abs=2.0e-13)
+    assert (
+        max(
+            abs(amplitude)
+            for amplitude, excitation in zip(sparse.amplitudes, sparse.excitations)
+            if excitation.rank == 3
+        )
+        > 1.0e-7
+    )

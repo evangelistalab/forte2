@@ -3,6 +3,7 @@
 
 #include "sparse/cumulant_reference.h"
 #include "sparse/cumulant_wick.h"
+#include "sparse/sparse_generalized_normal_order_product.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -32,10 +33,26 @@ void export_cumulant_wick_api(nb::module_& m) {
              "Return eta^p_q = delta^p_q - gamma^p_q")
         .def("rdm", &CumulantReference::rdm, "cre"_a, "ann"_a,
              "Return an RDM element encoded by determinant bit strings")
+        .def("truncated_rdm", &CumulantReference::truncated_rdm, "cre"_a, "ann"_a,
+             "Return an RDM element reconstructed with unavailable cumulants set to zero")
         .def("cumulant", &CumulantReference::cumulant, "cre"_a, "ann"_a,
              "Return a density cumulant encoded by determinant bit strings")
         .def("cumulant_size", &CumulantReference::cumulant_size, "rank"_a,
              "Get the number of explicitly stored nonzero cumulants at a rank");
+
+    nb::class_<GeneralizedNormalOrderedProductComputer>(
+        m, "GeneralizedNormalOrderedProductComputer",
+        "Sparse generalized-normal-ordered products evaluated through bare operator strings")
+        .def(nb::init<int, double>(), "max_rank"_a, "screen_thresh"_a = 1.0e-12,
+             "Use the legacy density-moment rank truncation")
+        .def(nb::init<const CumulantReference&, int, double>(), "reference"_a, "max_rank"_a,
+             "screen_thresh"_a = 1.0e-12,
+             "Reconstruct higher moments from the available density cumulants")
+        .def("uses_cumulant_truncation",
+             &GeneralizedNormalOrderedProductComputer::uses_cumulant_truncation,
+             "Whether unavailable density cumulants are set to zero")
+        .def("commutator", &GeneralizedNormalOrderedProductComputer::commutator, "lhs"_a, "rhs"_a,
+             "Compute a generalized-normal-ordered commutator");
 
     nb::class_<CumulantWickEngine>(
         m, "CumulantWickEngine",
