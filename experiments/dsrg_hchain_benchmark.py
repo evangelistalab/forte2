@@ -218,6 +218,7 @@ def solve_sparse_dsrg(
     diis_start,
     diis_nvec,
     diis_min,
+    max_comm=20,
 ):
     ham_no = normal_order(ham, ref, SCREEN, max_rank=truncation_rank)
     h0 = np.array(
@@ -252,7 +253,7 @@ def solve_sparse_dsrg(
             A_no,
             ref,
             truncation_rank=truncation_rank,
-            max_comm=20,
+            max_comm=max_comm,
         )
         energy = physical_coeff(hbar_no, identity_key, identity_phase).real
         hbar_offdiag = np.array(
