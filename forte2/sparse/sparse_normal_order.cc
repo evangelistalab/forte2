@@ -348,18 +348,48 @@ class VacuumExpectationCache {
         if (std::abs(norm_) <= screen_thresh_) {
             throw std::invalid_argument("generalized normal ordering requires a nonzero vacuum");
         }
+        bool first_significant_determinant = true;
         for (const auto& [det, coefficient] : vacuum_.elements()) {
             if (std::abs(coefficient) > screen_thresh_) {
-                det.for_each_set_bit([&](size_t bit) { occupied_support_.set_bit(bit, true); });
+                occupied_support_ |= det;
+                if (first_significant_determinant) {
+                    core_support_ = det;
+                    first_significant_determinant = false;
+                } else {
+                    core_support_ &= det;
+                }
             }
         }
+        has_core_ = core_support_.count_all() > 0;
     }
 
     const Determinant& occupied_support() const { return occupied_support_; }
+    const Determinant& core_support() const { return core_support_; }
+    const Determinant* core_support_if_present() const {
+        return has_core_ ? &core_support_ : nullptr;
+    }
+    bool has_core() const { return has_core_; }
 
     sparse_scalar_t expectation(const SQOperatorString& sqop) {
         if (const auto it = cache_.find(sqop); it != cache_.end()) {
             return it->second;
+        }
+
+        // Fixed-core number operators factor exactly from an active-space density expectation.
+        if (has_core_) {
+            const auto core_cre = sqop.cre() & core_support_;
+            const auto core_ann = sqop.ann() & core_support_;
+            if (core_cre != core_ann) {
+                cache_.emplace(sqop, sparse_scalar_t{0.0});
+                return sparse_scalar_t{0.0};
+            }
+            if (core_cre.count_all() > 0) {
+                const auto active_sqop =
+                    SQOperatorString(sqop.cre() - core_support_, sqop.ann() - core_support_);
+                const auto value = expectation(active_sqop);
+                cache_.emplace(sqop, value);
+                return value;
+            }
         }
 
         const auto ops = to_normal_ops(sqop.op_tuple());
@@ -381,6 +411,8 @@ class VacuumExpectationCache {
     double screen_thresh_;
     sparse_scalar_t norm_;
     Determinant occupied_support_ = Determinant::zero();
+    Determinant core_support_ = Determinant::zero();
+    bool has_core_ = false;
     std::unordered_map<SQOperatorString, sparse_scalar_t, SQOperatorString::Hash> cache_;
 };
 
@@ -400,21 +432,42 @@ bool sparse_state_equal(const SparseState& lhs, const SparseState& rhs) {
 template <typename Func>
 void enumerate_generalized_contractions(const std::vector<NormalOp>& ops, int max_cumulant,
                                         Func&& func, size_t min_selected_count = 1,
-                                        const Determinant* occupied_support = nullptr) {
+                                        const Determinant* occupied_support = nullptr,
+                                        const Determinant* core_support = nullptr) {
     std::vector<size_t> creation_positions;
     std::vector<size_t> annihilation_positions;
+    std::vector<std::pair<size_t, size_t>> core_pair_positions;
     creation_positions.reserve(ops.size());
     annihilation_positions.reserve(ops.size());
     for (size_t i = 0; i < ops.size(); ++i) {
-        if (occupied_support != nullptr and
-            not occupied_support->get_bit(spin_orbital_index(ops[i]))) {
+        const auto mode = spin_orbital_index(ops[i]);
+        if (occupied_support != nullptr and not occupied_support->get_bit(mode)) {
+            continue;
+        }
+        if (core_support != nullptr and core_support->get_bit(mode)) {
             continue;
         }
         (ops[i].creation ? creation_positions : annihilation_positions).push_back(i);
     }
 
+    // A nonzero core contraction must select creation and annihilation together for the same mode.
+    if (core_support != nullptr) {
+        for (size_t i = 0; i < ops.size(); ++i) {
+            if (not ops[i].creation or not core_support->get_bit(spin_orbital_index(ops[i]))) {
+                continue;
+            }
+            for (size_t j = 0; j < ops.size(); ++j) {
+                if (not ops[j].creation and same_spin_orbital(ops[i], ops[j])) {
+                    core_pair_positions.emplace_back(i, j);
+                    break;
+                }
+            }
+        }
+    }
+
     const int available_rank =
-        static_cast<int>(std::min(creation_positions.size(), annihilation_positions.size()));
+        static_cast<int>(core_pair_positions.size() +
+                         std::min(creation_positions.size(), annihilation_positions.size()));
     const int max_rank = max_cumulant < 0 ? available_rank : std::min(max_cumulant, available_rank);
     const int min_rank = std::max(1, static_cast<int>((min_selected_count + 1) / 2));
     if (min_rank > max_rank) {
@@ -443,17 +496,44 @@ void enumerate_generalized_contractions(const std::vector<NormalOp>& ops, int ma
         visit(visit, 0);
     };
 
+    std::vector<size_t> core_pair_indices;
+    core_pair_indices.reserve(core_pair_positions.size());
+    for (size_t i = 0; i < core_pair_positions.size(); ++i) {
+        core_pair_indices.push_back(i);
+    }
+
     std::vector<size_t> selected;
     for (int rank = min_rank; rank <= max_rank; ++rank) {
         selected.reserve(static_cast<size_t>(2 * rank));
-        enumerate_combinations(creation_positions, rank, [&](const auto& selected_cre) {
-            enumerate_combinations(annihilation_positions, rank, [&](const auto& selected_ann) {
-                selected.clear();
-                std::merge(selected_cre.begin(), selected_cre.end(), selected_ann.begin(),
-                           selected_ann.end(), std::back_inserter(selected));
-                func(selected);
+        const int max_core_pairs = std::min(rank, static_cast<int>(core_pair_positions.size()));
+        for (int core_rank = 0; core_rank <= max_core_pairs; ++core_rank) {
+            const int active_rank = rank - core_rank;
+            if (active_rank > static_cast<int>(creation_positions.size()) or
+                active_rank > static_cast<int>(annihilation_positions.size())) {
+                continue;
+            }
+            enumerate_combinations(core_pair_indices, core_rank, [&](const auto& selected_core) {
+                enumerate_combinations(
+                    creation_positions, active_rank, [&](const auto& selected_cre) {
+                        enumerate_combinations(
+                            annihilation_positions, active_rank, [&](const auto& selected_ann) {
+                                selected.clear();
+                                for (const auto core_index : selected_core) {
+                                    const auto& [cre_pos, ann_pos] =
+                                        core_pair_positions[core_index];
+                                    selected.push_back(cre_pos);
+                                    selected.push_back(ann_pos);
+                                }
+                                selected.insert(selected.end(), selected_cre.begin(),
+                                                selected_cre.end());
+                                selected.insert(selected.end(), selected_ann.begin(),
+                                                selected_ann.end());
+                                std::sort(selected.begin(), selected.end());
+                                func(selected);
+                            });
+                    });
             });
-        });
+        }
     }
 }
 
@@ -485,7 +565,7 @@ void sparse_expansion_of_generalized_normal_term(VacuumExpectationCache& expecta
                 expectation_cache, max_cumulant, remainder, result,
                 -coefficient * static_cast<double>(phase) * contraction, screen_thresh);
         },
-        1, &expectation_cache.occupied_support());
+        1, &expectation_cache.occupied_support(), expectation_cache.core_support_if_present());
 }
 
 } // namespace
@@ -527,7 +607,8 @@ struct GeneralizedNormalOrderComputer::Impl {
                     SQOperatorString(sqop.cre() - contracted.cre(), sqop.ann() - contracted.ann());
                 ordered.add(remainder, static_cast<double>(phase) * contraction);
             },
-            min_selected_count, &expectation_cache.occupied_support());
+            min_selected_count, &expectation_cache.occupied_support(),
+            expectation_cache.core_support_if_present());
 
         auto& result = it->second;
         result.reserve(ordered.size());
@@ -593,9 +674,17 @@ bool GeneralizedNormalOrderComputer::could_contribute(const SQOperatorString& te
     if (impl_->max_cumulant >= 0 and min_contraction_rank > impl_->max_cumulant) {
         return false;
     }
-    const auto& support = impl_->expectation_cache.occupied_support();
-    const int available_rank =
-        std::min(term.cre().intersection_count(support), term.ann().intersection_count(support));
+    const auto& occupied_support = impl_->expectation_cache.occupied_support();
+    if (not impl_->expectation_cache.has_core()) {
+        const int available_rank = std::min(term.cre().intersection_count(occupied_support),
+                                            term.ann().intersection_count(occupied_support));
+        return available_rank >= min_contraction_rank;
+    }
+    const auto& core_support = impl_->expectation_cache.core_support();
+    const auto active_support = occupied_support - core_support;
+    const int available_rank = (term.cre() & core_support).intersection_count(term.ann()) +
+                               std::min(term.cre().intersection_count(active_support),
+                                        term.ann().intersection_count(active_support));
     return available_rank >= min_contraction_rank;
 }
 

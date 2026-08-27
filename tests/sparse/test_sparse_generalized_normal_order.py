@@ -20,6 +20,16 @@ def correlated_singlet_vacuum(weight0=0.7):
     )
 
 
+def core_correlated_singlet_vacuum(weight0=0.6):
+    """Add a doubly occupied core to a two-orbital correlated singlet."""
+    return sparse_ops.SparseState(
+        {
+            det("220"): math.sqrt(weight0),
+            det("202"): math.sqrt(1.0 - weight0),
+        }
+    )
+
+
 def one_alpha_delocalized_vacuum():
     return sparse_ops.SparseState(
         {
@@ -130,6 +140,27 @@ def test_generalized_two_body_scalar_and_lower_rank_terms_use_active_rdms():
     assert no_op.to_sparse_operator() == op
 
 
+def test_generalized_contractions_pair_fixed_core_modes():
+    vacuum = core_correlated_singlet_vacuum(weight0=0.6)
+    op = sparse_ops.sparse_operator(
+        "[0a+ 1a+ 0b+ 1b+ 1b- 0b- 1a- 0a-]", 1.0
+    )
+
+    no_op = generalized_normal_order(op, vacuum, norb=3, max_cumulant=4)
+    terms = generalized_normal_order_dict(no_op)
+
+    assert terms["[]"] == pytest.approx(expectation(op, vacuum))
+    for term, _ in no_op:
+        if not term.is_identity():
+            single_term = sparse_ops.GeneralizedNormalOrderedSparseOperator(
+                vacuum, 3, 4, term, 1.0
+            )
+            assert expectation(
+                single_term.to_sparse_operator(), vacuum
+            ) == pytest.approx(0.0)
+    assert no_op.to_sparse_operator() == op
+
+
 def test_generalized_normal_order_round_trip_and_apply_for_multiterm_operator():
     vacuum = correlated_singlet_vacuum(weight0=0.7)
     op = sparse_ops.sparse_operator(
@@ -229,6 +260,36 @@ def test_fused_generalized_commutator_rejects_incompatible_vacua():
 
     with pytest.raises(ValueError, match="vacua must match"):
         lhs.commutator(rhs, max_rank=2)
+
+
+def test_fused_generalized_commutator_screens_coefficient_pairs():
+    vacuum = sparse_ops.SparseState({det("0"): 1.0})
+    lhs = generalized_normal_order(
+        sparse_ops.sparse_operator("[0a-]", 1.0e-6),
+        vacuum,
+        norb=1,
+        max_cumulant=1,
+    )
+    screened_rhs = generalized_normal_order(
+        sparse_ops.sparse_operator("[0a+]", 4.0e-7),
+        vacuum,
+        norb=1,
+        max_cumulant=1,
+    )
+    retained_rhs = generalized_normal_order(
+        sparse_ops.sparse_operator("[0a+]", 6.0e-7),
+        vacuum,
+        norb=1,
+        max_cumulant=1,
+    )
+
+    screened = lhs.commutator(screened_rhs, max_rank=1, screen_thresh=1.0e-12)
+    retained = lhs.commutator(retained_rhs, max_rank=1, screen_thresh=1.0e-12)
+
+    assert len(screened) == 0
+    assert generalized_normal_order_dict(retained) == {
+        "[0a+ 0a-]": pytest.approx(-1.2e-12)
+    }
 
 
 def test_fused_generalized_commutator_merges_parallel_blocks():
