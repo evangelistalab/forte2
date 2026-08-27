@@ -34,7 +34,8 @@ BASIS = "cc-pVDZ"
 EQUILIBRIUM_BOND_LENGTH = 1.60
 BOND_RATIOS = (1, 2, 3)
 RANKS = (2, 3, 4)
-FLOW_PARAM = 5.0
+FLOW_EXPONENTS = tuple(-3.0 + 0.25 * index for index in range(21))
+DEFAULT_FLOW_PARAM = 5.0
 E_TOL = 1.0e-10
 R_TOL = 1.0e-5
 MAX_ITER = 80
@@ -60,7 +61,10 @@ def case_id(case: dict) -> str:
     ratio = case["bond_ratio"]
     if case["method"] == "fci":
         return f"fci_R{ratio}re"
-    return f"{case['method']}_R{ratio}re_n{case['rank']}"
+    exponent = case["flow_exponent"]
+    sign = "m" if exponent < 0.0 else "p"
+    exponent_tag = f"{sign}{abs(exponent):.2f}".replace(".", "p")
+    return f"{case['method']}_R{ratio}re_n{case['rank']}_s10e{exponent_tag}"
 
 
 def make_manifest() -> dict:
@@ -76,24 +80,30 @@ def make_manifest() -> dict:
     for ratio in BOND_RATIOS:
         for rank in RANKS:
             for method in ("sr_normal", "mr_normal"):
-                case = {
-                    "method": method,
-                    "rank": rank,
-                    "bond_ratio": ratio,
-                    "bond_length_angstrom": ratio * EQUILIBRIUM_BOND_LENGTH,
-                }
-                case["id"] = case_id(case)
-                cases.append(case)
+                for exponent in FLOW_EXPONENTS:
+                    case = {
+                        "method": method,
+                        "rank": rank,
+                        "bond_ratio": ratio,
+                        "bond_length_angstrom": ratio * EQUILIBRIUM_BOND_LENGTH,
+                        "flow_exponent": exponent,
+                        "flow_param": 10.0**exponent,
+                    }
+                    case["id"] = case_id(case)
+                    cases.append(case)
         if ratio == 1:
             for rank in RANKS:
-                case = {
-                    "method": "sr_bare",
-                    "rank": rank,
-                    "bond_ratio": ratio,
-                    "bond_length_angstrom": ratio * EQUILIBRIUM_BOND_LENGTH,
-                }
-                case["id"] = case_id(case)
-                cases.append(case)
+                for exponent in FLOW_EXPONENTS:
+                    case = {
+                        "method": "sr_bare",
+                        "rank": rank,
+                        "bond_ratio": ratio,
+                        "bond_length_angstrom": ratio * EQUILIBRIUM_BOND_LENGTH,
+                        "flow_exponent": exponent,
+                        "flow_param": 10.0**exponent,
+                    }
+                    case["id"] = case_id(case)
+                    cases.append(case)
     return {
         "metadata": {
             "created_at": now_s(),
@@ -101,7 +111,8 @@ def make_manifest() -> dict:
             "basis": BASIS,
             "equilibrium_bond_length_angstrom": EQUILIBRIUM_BOND_LENGTH,
             "bond_ratios": list(BOND_RATIOS),
-            "flow_param": FLOW_PARAM,
+            "flow_exponents": list(FLOW_EXPONENTS),
+            "flow_params": [10.0**exponent for exponent in FLOW_EXPONENTS],
             "e_tol": E_TOL,
             "r_tol": R_TOL,
             "max_iter": MAX_ITER,
@@ -284,7 +295,7 @@ def solve_sr_bare(
     reference,
     excitations,
     truncation_rank: int,
-    flow_param: float = FLOW_PARAM,
+    flow_param: float = DEFAULT_FLOW_PARAM,
     e_tol: float = E_TOL,
     r_tol: float = R_TOL,
     max_iter: int = MAX_ITER,
@@ -388,6 +399,7 @@ def sr_excitations(problem: dict, rank: int):
 def solve_sr_normal(
     problem: dict,
     rank: int,
+    flow_param: float = DEFAULT_FLOW_PARAM,
     max_iter: int = MAX_ITER,
     max_commutators: int = MAX_COMMUTATORS,
 ) -> dict:
@@ -397,7 +409,7 @@ def solve_sr_normal(
         ref=problem["reference"],
         excitations=excitations,
         truncation_rank=rank,
-        flow_param=FLOW_PARAM,
+        flow_param=flow_param,
         e_tol=E_TOL,
         r_tol=R_TOL,
         max_iter=max_iter,
@@ -420,6 +432,7 @@ def solve_sr_normal(
 def solve_sr_bare_problem(
     problem: dict,
     rank: int,
+    flow_param: float = DEFAULT_FLOW_PARAM,
     max_iter: int = MAX_ITER,
     max_commutators: int = MAX_COMMUTATORS,
 ) -> dict:
@@ -429,6 +442,7 @@ def solve_sr_bare_problem(
         problem["reference"],
         excitations,
         rank,
+        flow_param=flow_param,
         max_iter=max_iter,
         max_commutators=max_commutators,
     )
@@ -436,7 +450,9 @@ def solve_sr_bare_problem(
     return result
 
 
-def solve_mr_normal(problem: dict, rank: int) -> dict:
+def solve_mr_normal(
+    problem: dict, rank: int, flow_param: float = DEFAULT_FLOW_PARAM
+) -> dict:
     rhf = problem["rhf"]
     excitations = forte2.enumerate_mrdsrg_excitations(
         core_orbitals=[0],
@@ -451,7 +467,7 @@ def solve_mr_normal(problem: dict, rank: int) -> dict:
         problem["mr_vacuum"],
         rhf.nmo,
         excitations,
-        flow_param=FLOW_PARAM,
+        flow_param=flow_param,
         max_cumulant=3,
         include_four_body_cumulant=False,
         gno_backend="sparse",
@@ -500,15 +516,19 @@ def run_case(case: dict) -> dict:
         if method == "fci":
             result = {"status": "ok", "fci": fci_energy(problem)}
         elif method == "sr_normal":
-            result = summarize_solver_result(solve_sr_normal(problem, case["rank"]))
+            result = summarize_solver_result(
+                solve_sr_normal(problem, case["rank"], case["flow_param"])
+            )
             result["status"] = "ok" if result["converged"] else "not_converged"
         elif method == "sr_bare":
             result = summarize_solver_result(
-                solve_sr_bare_problem(problem, case["rank"])
+                solve_sr_bare_problem(problem, case["rank"], case["flow_param"])
             )
             result["status"] = "ok" if result["converged"] else "not_converged"
         elif method == "mr_normal":
-            result = summarize_solver_result(solve_mr_normal(problem, case["rank"]))
+            result = summarize_solver_result(
+                solve_mr_normal(problem, case["rank"], case["flow_param"])
+            )
             result["status"] = "ok" if result["converged"] else "not_converged"
         else:
             raise ValueError(f"unknown method {method}")
@@ -573,6 +593,7 @@ def worker(
     methods: set[str] | None = None,
     ranks: set[int] | None = None,
     ratios: set[int] | None = None,
+    exponents: set[float] | None = None,
 ) -> None:
     manifest = json.loads((root / "manifest.json").read_text())
     for case in manifest["cases"]:
@@ -581,6 +602,12 @@ def worker(
         if ranks and "rank" in case and case["rank"] not in ranks:
             continue
         if ratios and case["bond_ratio"] not in ratios:
+            continue
+        if (
+            exponents
+            and "flow_exponent" in case
+            and case["flow_exponent"] not in exponents
+        ):
             continue
         result_path = root / "cases" / f"{case['id']}.json"
         lock_path = root / "locks" / case["id"]
@@ -656,6 +683,7 @@ def parse_args():
     )
     parser.add_argument("--ranks", nargs="+", type=int, choices=RANKS)
     parser.add_argument("--ratios", nargs="+", type=int, choices=BOND_RATIOS)
+    parser.add_argument("--exponents", nargs="+", type=float, choices=FLOW_EXPONENTS)
     parser.add_argument("--reset-locks", action="store_true")
     return parser.parse_args()
 
@@ -672,6 +700,7 @@ def main() -> None:
             methods=set(args.methods) if args.methods else None,
             ranks=set(args.ranks) if args.ranks else None,
             ratios=set(args.ratios) if args.ratios else None,
+            exponents=set(args.exponents) if args.exponents else None,
         )
     else:
         reap(args.root)

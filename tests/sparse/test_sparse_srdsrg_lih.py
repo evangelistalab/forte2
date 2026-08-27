@@ -1,10 +1,27 @@
 import pytest
 
 from experiments.lih_ccpvdz_dsrg_sweep import (
+    FLOW_EXPONENTS,
     build_lih_problem,
+    make_manifest,
     solve_sr_bare_problem,
     solve_sr_normal,
 )
+
+
+def test_lih_ccpvdz_dsrg_sweep_manifest():
+    manifest = make_manifest()
+    cases = manifest["cases"]
+
+    assert len(cases) == 444
+    assert len({case["id"] for case in cases}) == len(cases)
+    assert sum(case["method"] == "fci" for case in cases) == 3
+    assert sorted(
+        {case["flow_exponent"] for case in cases if case["method"] != "fci"}
+    ) == list(FLOW_EXPONENTS)
+    assert sum(case["method"] == "sr_normal" for case in cases) == 189
+    assert sum(case["method"] == "mr_normal" for case in cases) == 189
+    assert sum(case["method"] == "sr_bare" for case in cases) == 63
 
 
 @pytest.mark.slow
