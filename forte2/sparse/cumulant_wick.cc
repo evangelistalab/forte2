@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -6,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "helpers/parallel.h"
 #include "sparse/cumulant_wick.h"
 
 namespace forte2 {
@@ -16,6 +18,34 @@ struct WickLeg {
     std::size_t mode;
     bool creation;
     bool lhs;
+};
+
+struct PreparedLeg {
+    std::size_t mode;
+    bool creation;
+};
+
+struct PreparedTerm {
+    std::array<PreparedLeg, 4> legs;
+    std::size_t count = 0;
+    Determinant support = Determinant::zero();
+    bool even = true;
+};
+
+struct PreparedOperatorTerm {
+    PreparedTerm term;
+    sparse_scalar_t coefficient;
+    double magnitude;
+};
+
+struct WickLegList {
+    std::array<WickLeg, 8> legs;
+    std::size_t count = 0;
+
+    const WickLeg& operator[](std::size_t index) const { return legs[index]; }
+    auto begin() const { return legs.begin(); }
+    auto end() const { return legs.begin() + static_cast<std::ptrdiff_t>(count); }
+    std::size_t size() const { return count; }
 };
 
 struct ElementaryContraction {
@@ -70,15 +100,26 @@ void enumerate_combinations(const std::vector<std::size_t>& positions, std::size
     visit(visit, 0);
 }
 
-std::vector<WickLeg> product_legs(const SQOperatorString& lhs, const SQOperatorString& rhs) {
-    std::vector<WickLeg> legs;
-    legs.reserve(static_cast<std::size_t>(lhs.count() + rhs.count()));
-    auto append = [&](const SQOperatorString& term, bool is_lhs) {
-        for (const auto& [creation, alpha, orbital] : term.op_tuple()) {
-            const auto mode =
-                alpha ? static_cast<std::size_t>(orbital)
-                      : Determinant::beta_storage_offset + static_cast<std::size_t>(orbital);
-            legs.push_back({legs.size(), mode, creation, is_lhs});
+PreparedTerm prepare_term(const SQOperatorString& term) {
+    PreparedTerm prepared;
+    prepared.support = term.cre() | term.ann();
+    prepared.even = term.count() % 2 == 0;
+    for (const auto& [creation, alpha, orbital] : term.op_tuple()) {
+        const auto mode =
+            alpha ? static_cast<std::size_t>(orbital)
+                  : Determinant::beta_storage_offset + static_cast<std::size_t>(orbital);
+        prepared.legs[prepared.count++] = {mode, creation};
+    }
+    return prepared;
+}
+
+WickLegList product_legs(const PreparedTerm& lhs, const PreparedTerm& rhs) {
+    WickLegList legs;
+    auto append = [&](const PreparedTerm& term, bool is_lhs) {
+        for (std::size_t index = 0; index < term.count; ++index) {
+            const auto& leg = term.legs[index];
+            legs.legs[legs.count] = {legs.count, leg.mode, leg.creation, is_lhs};
+            ++legs.count;
         }
     };
     append(lhs, true);
@@ -86,7 +127,7 @@ std::vector<WickLeg> product_legs(const SQOperatorString& lhs, const SQOperatorS
     return legs;
 }
 
-bool unique_modes(const std::vector<WickLeg>& legs, const std::vector<std::size_t>& positions) {
+bool unique_modes(const WickLegList& legs, const std::vector<std::size_t>& positions) {
     auto modes = Determinant::zero();
     for (const auto position : positions) {
         const auto mode = legs[position].mode;
@@ -99,7 +140,7 @@ bool unique_modes(const std::vector<WickLeg>& legs, const std::vector<std::size_
 }
 
 ElementaryContraction make_elementary_contraction(const CumulantReference& reference,
-                                                  const std::vector<WickLeg>& legs,
+                                                  const WickLegList& legs,
                                                   const std::vector<std::size_t>& creators,
                                                   const std::vector<std::size_t>& annihilators) {
     ElementaryContraction contraction;
@@ -149,7 +190,7 @@ ElementaryContraction make_elementary_contraction(const CumulantReference& refer
 }
 
 std::vector<ElementaryContraction> elementary_contractions(const CumulantReference& reference,
-                                                           const std::vector<WickLeg>& legs,
+                                                           const WickLegList& legs,
                                                            double /* screen_thresh */) {
     std::vector<std::size_t> creators;
     std::vector<std::size_t> annihilators;
@@ -158,11 +199,34 @@ std::vector<ElementaryContraction> elementary_contractions(const CumulantReferen
     }
 
     std::vector<ElementaryContraction> contractions;
-    const auto max_rank = std::min<std::size_t>(static_cast<std::size_t>(reference.max_cumulant()),
-                                                std::min(creators.size(), annihilators.size()));
-    for (std::size_t rank = 1; rank <= max_rank; ++rank) {
-        enumerate_combinations(creators, rank, [&](const auto& selected_cre) {
-            enumerate_combinations(annihilators, rank, [&](const auto& selected_ann) {
+    enumerate_combinations(creators, 1, [&](const auto& selected_cre) {
+        enumerate_combinations(annihilators, 1, [&](const auto& selected_ann) {
+            auto contraction =
+                make_elementary_contraction(reference, legs, selected_cre, selected_ann);
+            if (contraction.selected != 0 and contraction.value != sparse_scalar_t{0.0}) {
+                contractions.push_back(std::move(contraction));
+            }
+        });
+    });
+
+    std::vector<std::size_t> active_creators;
+    std::vector<std::size_t> active_annihilators;
+    for (const auto position : creators) {
+        if (reference.active_modes().get_bit(legs[position].mode)) {
+            active_creators.push_back(position);
+        }
+    }
+    for (const auto position : annihilators) {
+        if (reference.active_modes().get_bit(legs[position].mode)) {
+            active_annihilators.push_back(position);
+        }
+    }
+    const auto max_rank =
+        std::min<std::size_t>(static_cast<std::size_t>(reference.max_cumulant()),
+                              std::min(active_creators.size(), active_annihilators.size()));
+    for (std::size_t rank = 2; rank <= max_rank; ++rank) {
+        enumerate_combinations(active_creators, rank, [&](const auto& selected_cre) {
+            enumerate_combinations(active_annihilators, rank, [&](const auto& selected_ann) {
                 auto contraction =
                     make_elementary_contraction(reference, legs, selected_cre, selected_ann);
                 if (contraction.selected != 0 and contraction.value != sparse_scalar_t{0.0}) {
@@ -174,7 +238,7 @@ std::vector<ElementaryContraction> elementary_contractions(const CumulantReferen
     return contractions;
 }
 
-bool append_remainder(const std::vector<WickLeg>& legs, std::uint16_t selected,
+bool append_remainder(const WickLegList& legs, std::uint16_t selected,
                       std::vector<std::size_t>& order, SQOperatorString& remainder) {
     auto cre = Determinant::zero();
     auto ann = Determinant::zero();
@@ -201,7 +265,7 @@ bool append_remainder(const std::vector<WickLeg>& legs, std::uint16_t selected,
     return true;
 }
 
-void add_contraction_term(const std::vector<WickLeg>& legs,
+void add_contraction_term(const WickLegList& legs,
                           const std::vector<ElementaryContraction>& contractions,
                           const std::vector<std::size_t>& selected_contractions,
                           std::uint16_t selected_legs, sparse_scalar_t contraction_value,
@@ -236,9 +300,10 @@ void add_contraction_term(const std::vector<WickLeg>& legs,
     }
 }
 
-void add_term_product(const CumulantReference& reference, const SQOperatorString& lhs,
-                      const SQOperatorString& rhs, sparse_scalar_t coefficient, int max_rank,
-                      double screen_thresh, GeneralizedNormalOrderedSparseOperator& result) {
+void add_prepared_term_product(const CumulantReference& reference, const PreparedTerm& lhs,
+                               const PreparedTerm& rhs, sparse_scalar_t coefficient, int max_rank,
+                               double screen_thresh, GeneralizedNormalOrderedSparseOperator& result,
+                               bool include_uncontracted = true) {
     const auto legs = product_legs(lhs, rhs);
     if (legs.size() > 16) {
         throw std::invalid_argument(
@@ -249,8 +314,10 @@ void add_term_product(const CumulantReference& reference, const SQOperatorString
     std::vector<std::size_t> selected_contractions;
     auto visit = [&](auto&& self, std::size_t begin, std::uint16_t selected_legs,
                      sparse_scalar_t contraction_value) -> void {
-        add_contraction_term(legs, contractions, selected_contractions, selected_legs,
-                             contraction_value, coefficient, max_rank, screen_thresh, result);
+        if (include_uncontracted or not selected_contractions.empty()) {
+            add_contraction_term(legs, contractions, selected_contractions, selected_legs,
+                                 contraction_value, coefficient, max_rank, screen_thresh, result);
+        }
         for (std::size_t index = begin; index < contractions.size(); ++index) {
             const auto& contraction = contractions[index];
             if ((selected_legs & contraction.selected) != 0) {
@@ -263,6 +330,14 @@ void add_term_product(const CumulantReference& reference, const SQOperatorString
         }
     };
     visit(visit, 0, 0, sparse_scalar_t{1.0});
+}
+
+void add_term_product(const CumulantReference& reference, const SQOperatorString& lhs,
+                      const SQOperatorString& rhs, sparse_scalar_t coefficient, int max_rank,
+                      double screen_thresh, GeneralizedNormalOrderedSparseOperator& result,
+                      bool include_uncontracted = true) {
+    add_prepared_term_product(reference, prepare_term(lhs), prepare_term(rhs), coefficient,
+                              max_rank, screen_thresh, result, include_uncontracted);
 }
 
 GeneralizedNormalOrderedSparseOperator
@@ -353,10 +428,68 @@ CumulantWickEngine::commutator(const GeneralizedNormalOrderedSparseOperator& lhs
                                const GeneralizedNormalOrderedSparseOperator& rhs) const {
     validate_operand(lhs);
     validate_operand(rhs);
+
+    std::vector<PreparedOperatorTerm> lhs_terms;
+    std::vector<PreparedOperatorTerm> rhs_terms;
+    lhs_terms.reserve(lhs.size());
+    rhs_terms.reserve(rhs.size());
+    for (const auto& [term, coefficient] : lhs.elements()) {
+        lhs_terms.push_back({prepare_term(term), coefficient, std::abs(coefficient)});
+    }
+    for (const auto& [term, coefficient] : rhs.elements()) {
+        rhs_terms.push_back({prepare_term(term), coefficient, std::abs(coefficient)});
+    }
+
+    constexpr std::size_t blocks_per_thread = 64;
+    constexpr std::size_t max_block_size = 32;
+    const auto target_blocks = blocks_per_thread * get_num_threads();
+    const auto lhs_block_size =
+        std::max(std::size_t{1}, std::min(max_block_size, lhs_terms.size() / target_blocks));
+    const auto num_blocks = (lhs_terms.size() + lhs_block_size - 1) / lhs_block_size;
+    std::vector<GeneralizedNormalOrderedSparseOperator> block_results;
+    block_results.reserve(num_blocks);
+    for (std::size_t block = 0; block < num_blocks; ++block) {
+        block_results.emplace_back(reference_.vacuum(), reference_.norb(),
+                                   reference_.max_cumulant());
+    }
+
+    parallel_for_dynamic_thread(0, num_blocks, [&](std::size_t block) {
+        const auto begin = block * lhs_block_size;
+        const auto end = std::min(begin + lhs_block_size, lhs_terms.size());
+        auto& block_result = block_results[block];
+        for (std::size_t lhs_index = begin; lhs_index < end; ++lhs_index) {
+            const auto& lhs_term = lhs_terms[lhs_index];
+            for (std::size_t rhs_index = 0; rhs_index < rhs_terms.size(); ++rhs_index) {
+                const auto& rhs_term = rhs_terms[rhs_index];
+                if (2.0 * lhs_term.magnitude * rhs_term.magnitude <= screen_thresh_) {
+                    continue;
+                }
+                if ((lhs_term.term.even or rhs_term.term.even) and
+                    lhs_term.term.support.is_disjoint_from(rhs_term.term.support)) {
+                    continue;
+                }
+                const auto coefficient = lhs_term.coefficient * rhs_term.coefficient;
+                const auto include_uncontracted = not(lhs_term.term.even or rhs_term.term.even);
+                add_prepared_term_product(reference_, lhs_term.term, rhs_term.term, coefficient,
+                                          max_rank_, screen_thresh_, block_result,
+                                          include_uncontracted);
+                add_prepared_term_product(reference_, rhs_term.term, lhs_term.term, -coefficient,
+                                          max_rank_, screen_thresh_, block_result,
+                                          include_uncontracted);
+            }
+        }
+    });
+
     GeneralizedNormalOrderedSparseOperator result(reference_.vacuum(), reference_.norb(),
                                                   reference_.max_cumulant());
-    add_product(lhs, rhs, sparse_scalar_t{1.0}, result);
-    add_product(rhs, lhs, sparse_scalar_t{-1.0}, result);
+    std::size_t result_size = 0;
+    for (const auto& block_result : block_results) {
+        result_size += block_result.size();
+    }
+    result.reserve(std::min(result_size, std::size_t{1000000}));
+    for (const auto& block_result : block_results) {
+        result += block_result;
+    }
     return clean_result(result, screen_thresh_);
 }
 
