@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
@@ -12,6 +13,32 @@
 
 namespace forte2 {
 namespace {
+
+template <typename T, std::size_t Capacity> struct FixedList {
+    std::array<T, Capacity> values;
+    std::size_t count = 0;
+
+    const T& operator[](std::size_t index) const { return values[index]; }
+    T& operator[](std::size_t index) { return values[index]; }
+    auto begin() { return values.begin(); }
+    auto end() { return values.begin() + static_cast<std::ptrdiff_t>(count); }
+    auto begin() const { return values.begin(); }
+    auto end() const { return values.begin() + static_cast<std::ptrdiff_t>(count); }
+    std::size_t size() const { return count; }
+    bool empty() const { return count == 0; }
+    void push_back(T value) {
+        assert(count < Capacity);
+        values[count++] = value;
+    }
+    void pop_back() {
+        assert(count > 0);
+        --count;
+    }
+};
+
+using LegPositions = FixedList<std::size_t, 16>;
+using ContractionPositions = FixedList<std::size_t, 8>;
+using ContractionIndices = FixedList<std::size_t, 8>;
 
 struct WickLeg {
     std::size_t position;
@@ -50,7 +77,7 @@ struct WickLegList {
 
 struct ElementaryContraction {
     std::uint16_t selected = 0;
-    std::vector<std::size_t> canonical_positions;
+    ContractionPositions canonical_positions;
     sparse_scalar_t value = 0.0;
     bool eta = false;
 };
@@ -68,7 +95,7 @@ bool sparse_state_equal(const SparseState& lhs, const SparseState& rhs) {
     return true;
 }
 
-int permutation_phase(const std::vector<std::size_t>& order) {
+int permutation_phase(const LegPositions& order) {
     int phase = 1;
     for (std::size_t i = 0; i < order.size(); ++i) {
         for (std::size_t j = i + 1; j < order.size(); ++j) {
@@ -81,10 +108,8 @@ int permutation_phase(const std::vector<std::size_t>& order) {
 }
 
 template <typename Func>
-void enumerate_combinations(const std::vector<std::size_t>& positions, std::size_t count,
-                            Func&& func) {
-    std::vector<std::size_t> selected;
-    selected.reserve(count);
+void enumerate_combinations(const LegPositions& positions, std::size_t count, Func&& func) {
+    LegPositions selected;
     auto visit = [&](auto&& self, std::size_t begin) -> void {
         if (selected.size() == count) {
             func(selected);
@@ -127,7 +152,7 @@ WickLegList product_legs(const PreparedTerm& lhs, const PreparedTerm& rhs) {
     return legs;
 }
 
-bool unique_modes(const WickLegList& legs, const std::vector<std::size_t>& positions) {
+bool unique_modes(const WickLegList& legs, const LegPositions& positions) {
     auto modes = Determinant::zero();
     for (const auto position : positions) {
         const auto mode = legs[position].mode;
@@ -141,8 +166,8 @@ bool unique_modes(const WickLegList& legs, const std::vector<std::size_t>& posit
 
 ElementaryContraction make_elementary_contraction(const CumulantReference& reference,
                                                   const WickLegList& legs,
-                                                  const std::vector<std::size_t>& creators,
-                                                  const std::vector<std::size_t>& annihilators) {
+                                                  const LegPositions& creators,
+                                                  const LegPositions& annihilators) {
     ElementaryContraction contraction;
     if (not unique_modes(legs, creators) or not unique_modes(legs, annihilators)) {
         return contraction;
@@ -169,14 +194,20 @@ ElementaryContraction make_elementary_contraction(const CumulantReference& refer
         return contraction;
     }
 
-    contraction.canonical_positions = creators;
+    for (const auto position : creators) {
+        contraction.canonical_positions.push_back(position);
+    }
     std::sort(contraction.canonical_positions.begin(), contraction.canonical_positions.end(),
               [&](std::size_t lhs, std::size_t rhs) { return legs[lhs].mode < legs[rhs].mode; });
-    auto canonical_ann = annihilators;
+    ContractionPositions canonical_ann;
+    for (const auto position : annihilators) {
+        canonical_ann.push_back(position);
+    }
     std::sort(canonical_ann.begin(), canonical_ann.end(),
               [&](std::size_t lhs, std::size_t rhs) { return legs[lhs].mode > legs[rhs].mode; });
-    contraction.canonical_positions.insert(contraction.canonical_positions.end(),
-                                           canonical_ann.begin(), canonical_ann.end());
+    for (const auto position : canonical_ann) {
+        contraction.canonical_positions.push_back(position);
+    }
 
     if (cre.count_all() == 1) {
         contraction.eta = creators[0] > annihilators[0];
@@ -192,8 +223,8 @@ ElementaryContraction make_elementary_contraction(const CumulantReference& refer
 std::vector<ElementaryContraction> elementary_contractions(const CumulantReference& reference,
                                                            const WickLegList& legs,
                                                            double /* screen_thresh */) {
-    std::vector<std::size_t> creators;
-    std::vector<std::size_t> annihilators;
+    LegPositions creators;
+    LegPositions annihilators;
     for (const auto& leg : legs) {
         (leg.creation ? creators : annihilators).push_back(leg.position);
     }
@@ -209,8 +240,8 @@ std::vector<ElementaryContraction> elementary_contractions(const CumulantReferen
         });
     });
 
-    std::vector<std::size_t> active_creators;
-    std::vector<std::size_t> active_annihilators;
+    LegPositions active_creators;
+    LegPositions active_annihilators;
     for (const auto position : creators) {
         if (reference.active_modes().get_bit(legs[position].mode)) {
             active_creators.push_back(position);
@@ -238,12 +269,12 @@ std::vector<ElementaryContraction> elementary_contractions(const CumulantReferen
     return contractions;
 }
 
-bool append_remainder(const WickLegList& legs, std::uint16_t selected,
-                      std::vector<std::size_t>& order, SQOperatorString& remainder) {
+bool append_remainder(const WickLegList& legs, std::uint16_t selected, LegPositions& order,
+                      SQOperatorString& remainder) {
     auto cre = Determinant::zero();
     auto ann = Determinant::zero();
-    std::vector<std::size_t> creators;
-    std::vector<std::size_t> annihilators;
+    LegPositions creators;
+    LegPositions annihilators;
     for (const auto& leg : legs) {
         if ((selected & static_cast<std::uint16_t>(1U << leg.position)) != 0) {
             continue;
@@ -259,15 +290,19 @@ bool append_remainder(const WickLegList& legs, std::uint16_t selected,
               [&](std::size_t lhs, std::size_t rhs) { return legs[lhs].mode < legs[rhs].mode; });
     std::sort(annihilators.begin(), annihilators.end(),
               [&](std::size_t lhs, std::size_t rhs) { return legs[lhs].mode > legs[rhs].mode; });
-    order.insert(order.end(), creators.begin(), creators.end());
-    order.insert(order.end(), annihilators.begin(), annihilators.end());
+    for (const auto position : creators) {
+        order.push_back(position);
+    }
+    for (const auto position : annihilators) {
+        order.push_back(position);
+    }
     remainder = SQOperatorString(cre, ann);
     return true;
 }
 
 void add_contraction_term(const WickLegList& legs,
                           const std::vector<ElementaryContraction>& contractions,
-                          const std::vector<std::size_t>& selected_contractions,
+                          const ContractionIndices& selected_contractions,
                           std::uint16_t selected_legs, sparse_scalar_t contraction_value,
                           sparse_scalar_t coefficient, int max_rank, double screen_thresh,
                           GeneralizedNormalOrderedSparseOperator& result) {
@@ -277,13 +312,13 @@ void add_contraction_term(const WickLegList& legs,
         return;
     }
 
-    std::vector<std::size_t> order;
-    order.reserve(legs.size());
+    LegPositions order;
     int eta_phase = 1;
     for (const auto index : selected_contractions) {
         const auto& contraction = contractions[index];
-        order.insert(order.end(), contraction.canonical_positions.begin(),
-                     contraction.canonical_positions.end());
+        for (const auto position : contraction.canonical_positions) {
+            order.push_back(position);
+        }
         if (contraction.eta) {
             eta_phase = -eta_phase;
         }
@@ -311,7 +346,7 @@ void add_prepared_term_product(const CumulantReference& reference, const Prepare
     }
     const auto contractions = elementary_contractions(reference, legs, screen_thresh);
 
-    std::vector<std::size_t> selected_contractions;
+    ContractionIndices selected_contractions;
     auto visit = [&](auto&& self, std::size_t begin, std::uint16_t selected_legs,
                      sparse_scalar_t contraction_value) -> void {
         if (include_uncontracted or not selected_contractions.empty()) {
