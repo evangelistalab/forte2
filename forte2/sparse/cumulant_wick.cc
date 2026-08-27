@@ -463,8 +463,9 @@ void CumulantWickEngine::add_product(const GeneralizedNormalOrderedSparseOperato
             if (std::abs(coefficient) <= screen_thresh_) {
                 continue;
             }
-            add_term_product(reference_, lhs_term, rhs_term, coefficient, max_rank_, screen_thresh_,
-                             result);
+            // A final coefficient can collect several contraction paths. Keep each nonzero path
+            // here and apply the public threshold only after aggregation in clean_result().
+            add_term_product(reference_, lhs_term, rhs_term, coefficient, max_rank_, 0.0, result);
         }
     }
 }
@@ -528,11 +529,9 @@ CumulantWickEngine::commutator(const GeneralizedNormalOrderedSparseOperator& lhs
                 const auto coefficient = lhs_term.coefficient * rhs_term.coefficient;
                 const auto include_uncontracted = not(lhs_term.term.even or rhs_term.term.even);
                 add_prepared_term_product(reference_, lhs_term.term, rhs_term.term, coefficient,
-                                          max_rank_, screen_thresh_, block_result,
-                                          include_uncontracted);
+                                          max_rank_, 0.0, block_result, include_uncontracted);
                 add_prepared_term_product(reference_, rhs_term.term, lhs_term.term, -coefficient,
-                                          max_rank_, screen_thresh_, block_result,
-                                          include_uncontracted);
+                                          max_rank_, 0.0, block_result, include_uncontracted);
             }
         }
     });

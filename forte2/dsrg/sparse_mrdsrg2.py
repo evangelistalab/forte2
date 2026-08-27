@@ -436,23 +436,27 @@ class SparseMRDSRG:
     history: list[SparseMRDSRGIteration] = field(init=False, default_factory=list)
 
     def __post_init__(self):
+        if self.gno_backend not in {"sparse", "cumulant", "validate", "rdm"}:
+            raise ValueError(
+                "gno_backend must be one of 'sparse', 'cumulant', 'validate', or 'rdm'"
+            )
         if self.include_four_body_cumulant:
+            if self.gno_backend == "rdm":
+                raise ValueError(
+                    "include_four_body_cumulant is unavailable with gno_backend='rdm'"
+                )
             if self.max_cumulant not in {3, 4}:
                 raise ValueError(
                     "include_four_body_cumulant requires max_cumulant to be 3 or 4"
                 )
             self.max_cumulant = 4
-        elif self.max_cumulant == 4:
+        elif self.max_cumulant == 4 and self.gno_backend != "rdm":
             # Preserve max_cumulant=4 as the original explicit opt-in spelling.
             self.include_four_body_cumulant = True
         if self.max_rank < 1:
             raise ValueError("max_rank must be positive")
         if self.max_cumulant < -1:
             raise ValueError("max_cumulant must be non-negative or -1")
-        if self.gno_backend not in {"sparse", "cumulant", "validate", "rdm"}:
-            raise ValueError(
-                "gno_backend must be one of 'sparse', 'cumulant', 'validate', or 'rdm'"
-            )
         if self.gno_backend in {"sparse", "cumulant", "validate"} and self.max_rank > 4:
             raise ValueError(
                 "the cumulant-truncated backends currently support max_rank <= 4"
@@ -469,6 +473,16 @@ class SparseMRDSRG:
             raise ValueError("flow_param must be non-negative")
         if self.screen_thresh < 0.0:
             raise ValueError("screen_thresh must be non-negative")
+        if self.commutator_threshold < 0.0:
+            raise ValueError("commutator_threshold must be non-negative")
+        if self.max_commutators < 0:
+            raise ValueError("max_commutators must be non-negative")
+        if self.maxiter < 0:
+            raise ValueError("maxiter must be non-negative")
+        if self.e_tol < 0.0:
+            raise ValueError("e_tol must be non-negative")
+        if self.r_tol < 0.0:
+            raise ValueError("r_tol must be non-negative")
         if not 0.0 < self.damping <= 1.0:
             raise ValueError("damping must be in the interval (0, 1]")
         self.excitations = tuple(
@@ -501,6 +515,7 @@ class SparseMRDSRG:
         return amplitudes
 
     def run(self) -> SparseMRDSRGResult:
+        self.history.clear()
         start_s = time.perf_counter()
         identity = identity_sqop()
         h0 = _ft.generalized_normal_order(
