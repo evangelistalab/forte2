@@ -157,6 +157,7 @@ nanobind_add_module(
   sparse/sparse_normal_order_product.cc
   sparse/sparse_generalized_normal_order_product.cc
   sparse/cumulant_reference.cc
+  sparse/cumulant_wick.cc
   sparse/sparse_normal_order.cc
   sparse/sparse_state_functions.cc
   sparse/sparse_state.cc

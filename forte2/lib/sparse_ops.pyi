@@ -788,3 +788,25 @@ class CumulantReference:
 
     def cumulant_size(self, rank: int) -> int:
         """Get the number of explicitly stored nonzero cumulants at a rank"""
+
+class CumulantWickEngine:
+    """
+    Direct generalized Wick products using explicit spin-orbital density cumulants
+    """
+
+    def __init__(self, reference: CumulantReference, max_rank: int, screen_thresh: float = 1e-12) -> None: ...
+
+    def reference(self) -> CumulantReference:
+        """Get the explicit cumulant reference"""
+
+    def max_rank(self) -> int:
+        """Get the maximum retained many-body rank"""
+
+    def screen_thresh(self) -> float:
+        """Get the numerical screening threshold"""
+
+    def product(self, lhs: GeneralizedNormalOrderedSparseOperator, rhs: GeneralizedNormalOrderedSparseOperator) -> GeneralizedNormalOrderedSparseOperator:
+        """Compute a direct generalized-normal-ordered product"""
+
+    def commutator(self, lhs: GeneralizedNormalOrderedSparseOperator, rhs: GeneralizedNormalOrderedSparseOperator) -> GeneralizedNormalOrderedSparseOperator:
+        """Compute a direct generalized-normal-ordered commutator"""

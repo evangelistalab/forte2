@@ -2,6 +2,7 @@
 #include <nanobind/stl/complex.h>
 
 #include "sparse/cumulant_reference.h"
+#include "sparse/cumulant_wick.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -35,6 +36,22 @@ void export_cumulant_wick_api(nb::module_& m) {
              "Return a density cumulant encoded by determinant bit strings")
         .def("cumulant_size", &CumulantReference::cumulant_size, "rank"_a,
              "Get the number of explicitly stored nonzero cumulants at a rank");
+
+    nb::class_<CumulantWickEngine>(
+        m, "CumulantWickEngine",
+        "Direct generalized Wick products using explicit spin-orbital density cumulants")
+        .def(nb::init<const CumulantReference&, int, double>(), "reference"_a, "max_rank"_a,
+             "screen_thresh"_a = 1.0e-12)
+        .def("reference", &CumulantWickEngine::reference, "Get the explicit cumulant reference")
+        .def("max_rank", &CumulantWickEngine::max_rank, "Get the maximum retained many-body rank")
+        .def("screen_thresh", &CumulantWickEngine::screen_thresh,
+             "Get the numerical screening threshold")
+        .def("product", &CumulantWickEngine::product, "lhs"_a, "rhs"_a,
+             "Compute a direct generalized-normal-ordered product with unavailable cumulants set "
+             "to zero")
+        .def("commutator", &CumulantWickEngine::commutator, "lhs"_a, "rhs"_a,
+             "Compute a direct generalized-normal-ordered commutator with unavailable cumulants "
+             "set to zero");
 }
 
 } // namespace forte2
