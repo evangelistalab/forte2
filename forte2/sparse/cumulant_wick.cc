@@ -181,11 +181,7 @@ ElementaryContraction make_one_body_contraction(const CumulantReference& referen
 
     if (reference.active_modes().get_bit(creator_mode) and
         reference.active_modes().get_bit(annihilator_mode)) {
-        auto cre = Determinant::zero();
-        auto ann = Determinant::zero();
-        cre.set_bit(creator_mode, true);
-        ann.set_bit(annihilator_mode, true);
-        const auto gamma = reference.cumulant(cre, ann);
+        const auto gamma = reference.gamma_mode(creator_mode, annihilator_mode);
         contraction.value =
             contraction.eta ? sparse_scalar_t{creator_mode == annihilator_mode ? 1.0 : 0.0} - gamma
                             : gamma;

@@ -48,6 +48,9 @@ class CumulantReference {
     /// Return eta^p_q = delta^p_q - gamma^p_q.
     sparse_scalar_t eta(std::size_t p, bool p_alpha, std::size_t q, bool q_alpha) const;
 
+    /// Return gamma^p_q using spin-orbital modes in Determinant storage convention.
+    sparse_scalar_t gamma_mode(std::size_t p, std::size_t q) const;
+
     /// Return the rank-k RDM element encoded by creator and annihilator bit strings.
     sparse_scalar_t rdm(const Determinant& cre, const Determinant& ann) const;
 
@@ -62,7 +65,6 @@ class CumulantReference {
     std::size_t compact_mode(std::size_t determinant_mode) const;
     void validate_indices(const Determinant& cre, const Determinant& ann) const;
     sparse_scalar_t expectation(const SQOperatorString& term) const;
-    sparse_scalar_t gamma_mode(std::size_t p, std::size_t q) const;
     sparse_scalar_t rdm_modes(std::vector<std::size_t> upper, std::vector<std::size_t> lower) const;
     sparse_scalar_t cumulant_modes(std::vector<std::size_t> upper,
                                    std::vector<std::size_t> lower) const;
