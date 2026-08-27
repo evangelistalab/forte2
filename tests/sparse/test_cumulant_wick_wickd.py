@@ -69,7 +69,8 @@ def gno_tensor(operator, rank, dimension):
     return dense_antisymmetric_tensor(values, rank, dimension)
 
 
-def test_rank_three_commutator_matches_wickd_cumulant_truncation():
+@pytest.mark.parametrize("max_cumulant", (3, 4))
+def test_rank_three_commutator_matches_wickd_cumulant_truncation(max_cumulant):
     wickd = pytest.importorskip("wickd")
     numerical = pytest.importorskip("wickd.spinadapt.numerical")
 
@@ -82,7 +83,7 @@ def test_rank_three_commutator_matches_wickd_cumulant_truncation():
         }
     )
     reference = sparse_ops.CumulantReference(
-        vacuum, dimension, max_cumulant=3, screen_thresh=0.0
+        vacuum, dimension, max_cumulant=max_cumulant, screen_thresh=0.0
     )
 
     combinations = tuple(itertools.combinations(range(dimension), 3))
@@ -95,7 +96,7 @@ def test_rank_three_commutator_matches_wickd_cumulant_truncation():
             for index in rng.choice(len(index_pairs), 12, replace=False)
         }
         operator = sparse_ops.GeneralizedNormalOrderedSparseOperator(
-            vacuum, dimension, 3
+            vacuum, dimension, max_cumulant
         )
         for (upper, lower), value in values.items():
             operator.add(
@@ -129,7 +130,7 @@ def test_rank_three_commutator_matches_wickd_cumulant_truncation():
     lhs_symbol = wickd.utils.gen_op("O", 3, "a", "a")
     rhs_symbol = wickd.utils.gen_op("T", 3, "a", "a")
     theorem = wickd.WickTheorem()
-    theorem.set_max_cumulant(3)
+    theorem.set_max_cumulant(max_cumulant)
     theorem.set_single_threaded(True)
     equations = (
         theorem.contract(
@@ -146,6 +147,9 @@ def test_rank_three_commutator_matches_wickd_cumulant_truncation():
         "lambda2": cumulant_tensor(2),
         "lambda3": cumulant_tensor(3),
     }
+    if max_cumulant == 4:
+        assert reference.cumulant_size(4) > 0
+        arrays["lambda4"] = cumulant_tensor(4)
 
     direct = sparse_ops.CumulantWickEngine(reference, 3, 0.0).commutator(lhs, rhs)
     alternate = sparse_ops.GeneralizedNormalOrderedProductComputer(

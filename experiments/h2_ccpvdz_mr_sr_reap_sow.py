@@ -78,7 +78,8 @@ def make_manifest() -> dict:
             "basis": BASIS,
             "bond_lengths_angstrom": list(BOND_LENGTHS),
             "ranks": list(RANKS),
-            "mr_max_cumulants": {str(rank): max(3, min(rank, 4)) for rank in RANKS},
+            "mr_max_cumulant": 3,
+            "mr_include_four_body_cumulant": False,
             "flow_exponents": list(EXPONENTS),
             "e_tol": E_TOL,
             "r_tol": R_TOL,
@@ -221,7 +222,8 @@ def run_mr(case: dict) -> dict:
         rhf.nmo,
         excitations,
         flow_param=case["flow_param"],
-        max_cumulant=max(3, min(case["rank"], 4)),
+        max_cumulant=3,
+        include_four_body_cumulant=False,
         e_tol=E_TOL,
         r_tol=R_TOL,
         maxiter=MAX_ITER,
@@ -243,6 +245,7 @@ def run_mr(case: dict) -> dict:
         "iterations": result.iterations,
         "solve_s": result.seconds,
         "max_cumulant": result.max_cumulant,
+        "include_four_body_cumulant": result.include_four_body_cumulant,
         "history_tail": [vars(item) for item in result.history[-5:]],
     }
 

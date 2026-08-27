@@ -50,6 +50,7 @@ class SparseMRDSRGResult:
     iterations: int
     max_rank: int
     max_cumulant: int
+    include_four_body_cumulant: bool
     gno_backend: str
     amplitudes: np.ndarray
     excitations: tuple[SparseMRDSRGExcitation, ...]
@@ -403,8 +404,10 @@ class SparseMRDSRG:
     ``cumulant`` backend evaluates the same generalized Wick expansion directly.
     ``validate`` compares these independent implementations term by term. The
     historical density-moment rank truncation remains available as ``rdm``.
-    Cumulants through rank 3 are used by default. Molecular inputs must be
-    semicanonical within their core, active, and virtual orbital subspaces.
+    Cumulants through rank 3 are used by default. Four-body cumulant
+    contractions can be enabled explicitly with
+    ``include_four_body_cumulant=True``. Molecular inputs must be semicanonical
+    within their core, active, and virtual orbital subspaces.
     """
 
     hamiltonian: _ft.SparseOperator
@@ -413,6 +416,7 @@ class SparseMRDSRG:
     excitations: Sequence[SparseMRDSRGExcitation]
     flow_param: float = 0.5
     max_cumulant: int = 3
+    include_four_body_cumulant: bool = False
     max_rank: int = 2
     gno_backend: str = "sparse"
     gno_validation_tol: float = 1.0e-9
@@ -432,6 +436,15 @@ class SparseMRDSRG:
     history: list[SparseMRDSRGIteration] = field(init=False, default_factory=list)
 
     def __post_init__(self):
+        if self.include_four_body_cumulant:
+            if self.max_cumulant not in {3, 4}:
+                raise ValueError(
+                    "include_four_body_cumulant requires max_cumulant to be 3 or 4"
+                )
+            self.max_cumulant = 4
+        elif self.max_cumulant == 4:
+            # Preserve max_cumulant=4 as the original explicit opt-in spelling.
+            self.include_four_body_cumulant = True
         if self.max_rank < 1:
             raise ValueError("max_rank must be positive")
         if self.max_cumulant < -1:
@@ -513,6 +526,7 @@ class SparseMRDSRG:
                 iterations=0,
                 max_rank=self.max_rank,
                 max_cumulant=self.max_cumulant,
+                include_four_body_cumulant=self.include_four_body_cumulant,
                 gno_backend=self.gno_backend,
                 amplitudes=np.zeros(0, dtype=complex),
                 excitations=tuple(),
@@ -638,6 +652,7 @@ class SparseMRDSRG:
             iterations=len(self.history),
             max_rank=self.max_rank,
             max_cumulant=self.max_cumulant,
+            include_four_body_cumulant=self.include_four_body_cumulant,
             gno_backend=self.gno_backend,
             amplitudes=amplitudes,
             excitations=tuple(excitations),

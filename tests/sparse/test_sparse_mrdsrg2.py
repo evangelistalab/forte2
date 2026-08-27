@@ -245,6 +245,15 @@ def test_sparse_mrdsrg_rejects_unsupported_cumulant_backend_options():
             max_cumulant=5,
             gno_backend="cumulant",
         )
+    with pytest.raises(ValueError, match="include_four_body_cumulant"):
+        forte2.SparseMRDSRG(
+            ham,
+            vacuum,
+            2,
+            [],
+            max_cumulant=2,
+            include_four_body_cumulant=True,
+        )
 
 
 def test_sparse_mrdsrg_validation_supports_rank_three_cumulant_truncation():
@@ -287,7 +296,7 @@ def test_sparse_mrdsrg_validation_supports_rank_three_cumulant_truncation():
     )
 
 
-def test_sparse_mrdsrg_supports_rank_three_and_four_truncations():
+def test_sparse_mrdsrg_four_body_cumulants_are_opt_in():
     vacuum = sparse_ops.SparseState({det("2200"): 1.0})
     ham = sparse_ops.sparse_operator(
         [
@@ -320,12 +329,20 @@ def test_sparse_mrdsrg_supports_rank_three_and_four_truncations():
         maxiter=3,
         max_commutators=3,
     )
+    result4_default = forte2.solve_sparse_mrdsrg4(
+        ham,
+        vacuum,
+        4,
+        excitations,
+        maxiter=3,
+        max_commutators=3,
+    )
     result4 = forte2.solve_sparse_mrdsrg4(
         ham,
         vacuum,
         4,
         excitations,
-        max_cumulant=4,
+        include_four_body_cumulant=True,
         gno_backend="cumulant",
         maxiter=3,
         max_commutators=3,
@@ -334,13 +351,20 @@ def test_sparse_mrdsrg_supports_rank_three_and_four_truncations():
     assert result3.converged
     assert result3.max_rank == 3
     assert result3.max_cumulant == 3
+    assert not result3.include_four_body_cumulant
     assert all(excitation.rank <= 3 for excitation in result3.excitations)
     assert result3.hbar.max_cumulant() == 3
     assert result3.energy == pytest.approx(expectation(ham, vacuum))
 
+    assert result4_default.max_rank == 4
+    assert result4_default.max_cumulant == 3
+    assert not result4_default.include_four_body_cumulant
+    assert result4_default.hbar.max_cumulant() == 3
+
     assert result4.converged
     assert result4.max_rank == 4
     assert result4.max_cumulant == 4
+    assert result4.include_four_body_cumulant
     assert result4.gno_backend == "cumulant"
     assert result4.hbar.max_cumulant() == 4
     assert result4.energy == pytest.approx(expectation(ham, vacuum))

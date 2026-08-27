@@ -19,6 +19,7 @@
     ],
     "norb": 6,
     "max_cumulant": 3,
+    "include_four_body_cumulant": false,
     "flow_param": 5.0,
     "screen_thresh": 1e-12,
     "commutator_threshold": 1e-12,
@@ -37,6 +38,7 @@
     {
       "rank": 2,
       "backend": "sparse",
+      "include_four_body_cumulant": false,
       "converged": true,
       "energy": -7.881245476265514,
       "scalar_energy": -7.881245476265514,
@@ -147,6 +149,7 @@
     {
       "rank": 2,
       "backend": "cumulant",
+      "include_four_body_cumulant": false,
       "converged": true,
       "energy": -7.881245476234174,
       "scalar_energy": -7.881245476234174,
@@ -257,6 +260,7 @@
     {
       "rank": 3,
       "backend": "sparse",
+      "include_four_body_cumulant": false,
       "converged": true,
       "energy": -7.881825076856688,
       "scalar_energy": -7.881825076856688,
@@ -375,6 +379,7 @@
     {
       "rank": 3,
       "backend": "cumulant",
+      "include_four_body_cumulant": false,
       "converged": true,
       "energy": -7.88182507684679,
       "scalar_energy": -7.88182507684679,

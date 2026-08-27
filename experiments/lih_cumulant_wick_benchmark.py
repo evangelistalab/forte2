@@ -146,6 +146,7 @@ def run_solver(case: dict, rank: int, backend: str, args) -> dict:
         excitations,
         flow_param=args.flow_param,
         max_cumulant=3,
+        include_four_body_cumulant=args.include_four_body_cumulant,
         gno_backend=backend,
         gno_validation_tol=args.validation_tol,
         screen_thresh=args.screen_thresh,
@@ -162,6 +163,7 @@ def run_solver(case: dict, rank: int, backend: str, args) -> dict:
     return {
         "rank": rank,
         "backend": backend,
+        "include_four_body_cumulant": result.include_four_body_cumulant,
         "converged": result.converged,
         "energy": result.energy,
         "scalar_energy": result.scalar_energy,
@@ -193,6 +195,7 @@ def parse_args():
     parser.add_argument("--r-tol", type=float, default=1.0e-5)
     parser.add_argument("--maxiter", type=int, default=50)
     parser.add_argument("--max-commutators", type=int, default=20)
+    parser.add_argument("--include-four-body-cumulant", action="store_true")
     parser.add_argument("--no-diis", action="store_true")
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
@@ -214,7 +217,8 @@ def main() -> None:
             "active_orbitals": [1, 2],
             "virtual_orbitals": list(range(3, case["norb"])),
             "norb": case["norb"],
-            "max_cumulant": 3,
+            "max_cumulant": 4 if args.include_four_body_cumulant else 3,
+            "include_four_body_cumulant": args.include_four_body_cumulant,
             "flow_param": args.flow_param,
             "screen_thresh": args.screen_thresh,
             "commutator_threshold": args.commutator_threshold,
