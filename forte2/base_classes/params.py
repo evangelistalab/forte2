@@ -246,6 +246,48 @@ class SelectedCIParams(ParamsBase):
     pt2_regularizer_strength: float, optional, default=0.0
         The strength of the PT2 regularization.
         Note that the interpretation of this parameter depends on the choice of pt2_regularizer (see above).
+    pt2_algorithm: str, optional, default="deterministic"
+        How the final perturbative correction is computed. Options are:
+            - "deterministic": sum every connection above `pt2_threshold` exactly. The cost and the
+              memory both grow as `pt2_threshold` is lowered.
+            - "semistochastic": write the correction as a telescoping sum of three terms, of which
+              only the first is exact. This reaches a `pt2_threshold` far below what is affordable
+              deterministically, at the cost of a statistical error that is reported alongside the
+              energy.
+        The semistochastic algorithm replaces the final selection cycle, so it neither grows the
+        variational space nor reports a `var'` energy.
+    pt2_threshold_determ: float, optional, default=2e-6
+        The threshold reached by the deterministic term of the semistochastic correction.
+        Must be at least `pt2_threshold_pseudostoch`.
+    pt2_threshold_pseudostoch: float, optional, default=1e-7
+        The threshold reached by the pseudo-stochastic term of the semistochastic correction.
+        Must lie between `pt2_threshold` and `pt2_threshold_determ`.
+    pt2_num_batches_per_thread: int, optional, default=20
+        The number of batches per thread for the deterministic and pseudo-stochastic terms. This
+        bounds the memory held at any one time and does not affect the deterministic term's value.
+        The pseudo-stochastic term extrapolates from a subset of these batches, so a larger number
+        also makes its stopping rule finer grained.
+    pt2_min_batches_pseudostoch: int, optional, default=8
+        The number of batches the pseudo-stochastic term evaluates before its stopping rule may
+        fire. The spread over a handful of batches is itself too uncertain to stop on.
+    pt2_num_batches_stoch: int, optional, default=1
+        The number of batches the stochastic term splits its connected space into. The default of 1
+        evaluates each sample exactly; raise it to bound the memory a single sample needs.
+    pt2_batches_per_sample: int, optional, default=1
+        The number of batches evaluated per sample, scaled up by the fraction of batches sampled.
+        This trades the memory and time of a sample against its variance. It must not exceed
+        `pt2_num_batches_stoch`, and setting the two equal makes each sample exact.
+    pt2_num_samples: int, optional, default=10
+        The number of stochastic samples, or 0 to skip the stochastic term. At least two are needed
+        to estimate an error.
+    pt2_sample_size: int, optional, default=200
+        The number of variational determinants drawn with replacement per sample.
+    pt2_target_error: float, optional, default=1e-5
+        The error the semistochastic correction aims for. The pseudo-stochastic term stops once its
+        own error falls well inside this, leaving the rest of the budget to the stochastic term.
+    pt2_seed: int, optional, default=0
+        The seed for the sampling. Runs are reproducible for a fixed seed, thread count and
+        variational space; vary it to obtain independent estimates.
     """
 
     maxcycle: int = 15
@@ -267,11 +309,63 @@ class SelectedCIParams(ParamsBase):
     energy_shift: float = None
     pt2_regularizer: Literal["none", "shift", "dsrg"] = "none"
     pt2_regularizer_strength: float = 0.0
+    pt2_algorithm: Literal["deterministic", "semistochastic"] = "deterministic"
+    pt2_threshold_determ: float = 2e-6
+    pt2_threshold_pseudostoch: float = 1e-7
+    pt2_num_batches_per_thread: int = 20
+    pt2_min_batches_pseudostoch: int = 8
+    pt2_num_batches_stoch: int = 1
+    pt2_batches_per_sample: int = 1
+    pt2_num_samples: int = 10
+    pt2_sample_size: int = 200
+    pt2_target_error: float = 1e-5
+    pt2_seed: int = 0
 
     def __post_init__(self):
         super().__post_init__()
         if self.var_threshold < 0:
-            raise RuntimeError(f"var_threshold cannot be negative, got {self.var_threshold}")
+            raise RuntimeError(
+                f"var_threshold cannot be negative, got {self.var_threshold}"
+            )
         if self.pt2_threshold < 0:
-            raise RuntimeError(f"var_threshold cannot be negative, got {self.pt2_threshold}")
-
+            raise RuntimeError(
+                f"var_threshold cannot be negative, got {self.pt2_threshold}"
+            )
+        if self.pt2_algorithm != "semistochastic":
+            return
+        if not (
+            self.pt2_threshold
+            <= self.pt2_threshold_pseudostoch
+            <= self.pt2_threshold_determ
+        ):
+            raise ValueError(
+                "The semistochastic PT2 algorithm requires "
+                "pt2_threshold <= pt2_threshold_pseudostoch <= pt2_threshold_determ, got "
+                f"{self.pt2_threshold}, {self.pt2_threshold_pseudostoch}, {self.pt2_threshold_determ}. "
+                "Each term of the correction covers the gap between two thresholds, and an "
+                "inverted pair silently contributes with the wrong sign."
+            )
+        if self.pt2_num_samples == 1:
+            raise ValueError(
+                "pt2_num_samples must be 0 to skip the stochastic term, or at least 2 to "
+                "estimate an error from it."
+            )
+        if self.pt2_num_samples > 0 and self.pt2_sample_size < 2:
+            raise ValueError("pt2_sample_size must be at least 2.")
+        if self.pt2_min_batches_pseudostoch < 2:
+            raise ValueError(
+                "pt2_min_batches_pseudostoch must be at least 2: the pseudo-stochastic error is the "
+                "spread over the batches evaluated so far, and a single batch has none to "
+                "measure, so stopping on it would report a one-batch extrapolation as exact."
+            )
+        if not (1 <= self.pt2_batches_per_sample <= self.pt2_num_batches_stoch):
+            raise ValueError(
+                "pt2_batches_per_sample must lie between 1 and pt2_num_batches_stoch, got "
+                f"{self.pt2_batches_per_sample} and {self.pt2_num_batches_stoch}."
+            )
+        if self.pt2_num_samples > 0 and self.energy_correction == "variational":
+            raise ValueError(
+                "The variational energy correction cannot be combined with the stochastic term: "
+                "it is not linear in the square of the coupling, which is what the sampling "
+                "estimates without bias. Set pt2_num_samples=0 or use energy_correction='pt2'."
+            )

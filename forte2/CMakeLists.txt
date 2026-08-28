@@ -141,6 +141,7 @@ nanobind_add_module(
   sci/sci_helper_1trdm.cc
   sci/sci_helper_2rdm.cc
   sci/sci_helper_pt2_determ.cc
+  sci/sci_helper_pt2_semistoch.cc
   sci/sci_helper_select_hbci.cc
   sci/sci_helper_sigma_build.cc
   sci/sci_helper_spin.cc

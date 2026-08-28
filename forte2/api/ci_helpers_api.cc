@@ -287,6 +287,23 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Return the second-order correction of the roots from the last compute_pt2 call")
         .def("ept2_stddev", &SelectedCIHelper::ept2_stddev,
              "Return the standard deviation of the second-order correction of the roots")
+        .def("compute_pt2_semistoch", &SelectedCIHelper::compute_pt2_semistoch, "eps2"_a,
+             "eps2_pseudostoch"_a, "eps2_determ"_a, "num_batches"_a, "min_batches_pseudostoch"_a,
+             "target_error"_a, "num_batches_stoch"_a, "batches_per_sample"_a, "num_samples"_a,
+             "sample_size"_a, "seed"_a,
+             "Compute the second-order correction with the three-step semistochastic algorithm")
+        .def("ept2_determ", &SelectedCIHelper::ept2_determ,
+             "Return the deterministic term of the last semistochastic correction")
+        .def("ept2_pseudostoch", &SelectedCIHelper::ept2_pseudostoch,
+             "Return the pseudo-stochastic term of the last semistochastic correction")
+        .def("ept2_stoch", &SelectedCIHelper::ept2_stoch,
+             "Return the stochastic term of the last semistochastic correction")
+        .def("ept2_pseudostoch_stddev", &SelectedCIHelper::ept2_pseudostoch_stddev,
+             "Return the standard deviation of the pseudo-stochastic term")
+        .def("ept2_stoch_stddev", &SelectedCIHelper::ept2_stoch_stddev,
+             "Return the standard deviation of the stochastic term")
+        .def("num_pseudostoch_batches", &SelectedCIHelper::num_pseudostoch_batches,
+             "Return the number of batches the pseudo-stochastic step evaluated")
         .def("num_pt2_dets", &SelectedCIHelper::num_pt2_dets,
              "Return the number of external determinants included in the last compute_pt2 call")
         .def("pt2_time", &SelectedCIHelper::pt2_time,

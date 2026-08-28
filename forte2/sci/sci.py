@@ -6,6 +6,7 @@ from typing import ClassVar
 import numpy as np
 
 from forte2.lib import det, cpp_helpers
+from forte2.lib.cpp_helpers import get_num_threads
 from forte2.lib.det import Determinant, Configuration, SlaterRules
 from forte2.lib.ci_helpers import SelectedCIHelper, CIStrings
 from forte2.helpers.table import AsciiTable
@@ -282,6 +283,13 @@ class _SelectedCISingleStateSolver:
                 self.log_level,
             )
 
+        if self.sci_params.pt2_algorithm == "semistochastic":
+            self._final_semistoch_pt2()
+            if self.do_test_rdms:
+                self._test_rdms()
+            self.executed = True
+            return self
+
         # final selection to update var' and pt2 contributions with the final CI coefficients
         logger.log(f"\n{'=' * 67}", self.log_level)
         logger.log(f"Final Selected CI Cycle", self.log_level)
@@ -309,6 +317,7 @@ class _SelectedCISingleStateSolver:
         self.e_var = np.array(self.sci_helper.energies())
         self.ept2_var = np.array(self.sci_helper.ept2_var())
         self.ept2_pt = np.array(self.sci_helper.ept2_pt())
+        self.ept2_stddev = np.zeros(self.nroot)
         self.spin2_var = np.array(self._compute_spin2())
         self.e_tot = self.e_var + self.ept2_var + self.ept2_pt
 
@@ -352,6 +361,99 @@ class _SelectedCISingleStateSolver:
         self.executed = True
 
         return self
+
+    def _final_semistoch_pt2(self):
+        """Replace the final selection cycle with the semistochastic correction.
+
+        The final selection cycle exists to refresh the perturbative correction with the converged
+        CI coefficients, and it grows the variational space as a side effect. Running it before the
+        correction would leave the helper holding determinants with zero coefficients and root
+        energies that predate them, so the correction is computed on the converged space instead.
+        """
+        p = self.sci_params
+        num_batches = p.pt2_num_batches_per_thread * get_num_threads()
+
+        logger.log(f"\n{'=' * 67}", self.log_level)
+        logger.log("Final Semistochastic PT2", self.log_level)
+        logger.log(f"{'=' * 67}", self.log_level)
+        logger.log(f"  pt2_threshold             = {p.pt2_threshold}", self.log_level)
+        logger.log(
+            f"  pt2_threshold_pseudostoch = {p.pt2_threshold_pseudostoch}",
+            self.log_level,
+        )
+        logger.log(
+            f"  pt2_threshold_determ      = {p.pt2_threshold_determ}", self.log_level
+        )
+        logger.log(f"  batches                   = {num_batches}", self.log_level)
+        logger.log(
+            f"  samples                   = {p.pt2_num_samples} x {p.pt2_sample_size} dets",
+            self.log_level,
+        )
+
+        self.sci_helper.compute_pt2_semistoch(
+            eps2=p.pt2_threshold,
+            eps2_pseudostoch=p.pt2_threshold_pseudostoch,
+            eps2_determ=p.pt2_threshold_determ,
+            num_batches=num_batches,
+            min_batches_pseudostoch=p.pt2_min_batches_pseudostoch,
+            target_error=p.pt2_target_error,
+            num_batches_stoch=p.pt2_num_batches_stoch,
+            batches_per_sample=p.pt2_batches_per_sample,
+            num_samples=p.pt2_num_samples,
+            sample_size=p.pt2_sample_size,
+            seed=p.pt2_seed,
+        )
+
+        self.e_var = np.array(self.sci_helper.energies())
+        # the variational space is untouched here, so the whole correction is perturbative and the
+        # split that the selection-fused correction reports does not apply
+        self.ept2_var = np.zeros(self.nroot)
+        self.ept2_pt = np.array(self.sci_helper.ept2())
+        self.ept2_stddev = np.array(self.sci_helper.ept2_stddev())
+        self.spin2_var = np.array(self._compute_spin2())
+        self.e_tot = self.e_var + self.ept2_pt
+
+        summary = "\nSummary of the correction:"
+        summary += (
+            f"\n  Deterministic term:    {np.array(self.sci_helper.ept2_determ())}"
+        )
+        summary += (
+            f"\n  Pseudo-stochastic:     {np.array(self.sci_helper.ept2_pseudostoch())}"
+        )
+        summary += (
+            f"\n  Stochastic term:       {np.array(self.sci_helper.ept2_stoch())}"
+        )
+        summary += (
+            f"\n  Batches evaluated:     {self.sci_helper.num_pseudostoch_batches()}"
+            f" of {num_batches}"
+        )
+        summary += f"\n  Total determinants:    {self.sci_helper.ndets()}"
+        summary += f"\n  PT2 time:              {self.sci_helper.pt2_time():.3f} s\n"
+        logger.log(summary, self.log_level)
+
+        table = AsciiTable(
+            columns=[
+                "Root",
+                "E (var) [Eh]",
+                "S^2 (var)",
+                "E (var+PT2) [Eh]",
+                "sigma [Eh]",
+            ],
+            formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}", "{:>12.2e}"],
+        )
+        logger.log(table.header(), self.log_level)
+        for r in range(self.nroot):
+            logger.log(
+                table.row(
+                    r,
+                    self.e_var[r],
+                    self.spin2_var[r],
+                    self.e_tot[r],
+                    self.ept2_stddev[r],
+                ),
+                self.log_level,
+            )
+        logger.log(table.footer(), self.log_level)
 
     def _initial_guess(self):
         # local object used only to build initial guess
@@ -953,6 +1055,11 @@ class SelectedCISolver(CIBase):
         Alias for `evar_flat`, the variational energies of the CI roots.
     E_pt2 : NDArray
         The total PT2 correction (variational + perturbative) for each CI root.
+    E_pt2_stddev : NDArray
+        The statistical error of the PT2 correction for each CI root, which is zero unless
+        `pt2_algorithm="semistochastic"` was used. A multi-root run shares its samples across roots,
+        so these errors are correlated: the error of an energy difference has to be computed from
+        the per-sample differences rather than by adding two of these in quadrature.
     E_tot : NDArray
         Alias for `etot_flat`, the total energies of the CI roots.
     E_avg : float
@@ -1030,6 +1137,7 @@ class SelectedCISolver(CIBase):
         self.evar_per_solver = self.evals_per_solver
         self.ept2_var_per_solver = [s.ept2_var for s in self.sub_solvers]
         self.ept2_pt_per_solver = [s.ept2_pt for s in self.sub_solvers]
+        self.ept2_stddev_per_solver = [s.ept2_stddev for s in self.sub_solvers]
         self.etot_per_solver = [s.e_tot for s in self.sub_solvers]
 
         self.evar_flat = self.evals_flat
@@ -1038,6 +1146,10 @@ class SelectedCISolver(CIBase):
         self.etot_flat = np.concatenate(self.etot_per_solver)
 
         self.E_pt2 = self.ept2_var_flat + self.ept2_pt_flat
+        # zero unless the semistochastic algorithm ran; the per-root errors of a multi-root run
+        # share their samples and are therefore correlated, so they must not be combined in
+        # quadrature to get the error of an energy difference
+        self.E_pt2_stddev = np.concatenate(self.ept2_stddev_per_solver)
         self.E_tot = self.etot_flat
 
     def make_sd_1rdm(self, left_root: int, right_root: int | None = None):

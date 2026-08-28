@@ -416,6 +416,54 @@ class SelectedCIHelper:
     def select_hbci(self, var_threshold: float, pt2_threshold: float) -> None:
         """Perform HBCI selection with the given thresholds"""
 
+    def compute_pt2_determ(self, eps2: float, num_batches: int) -> None:
+        """
+        Compute the second-order correction deterministically without modifying the variational space
+        """
+
+    def ept2(self) -> list[float]:
+        """
+        Return the second-order correction of the roots from the last compute_pt2 call
+        """
+
+    def ept2_stddev(self) -> list[float]:
+        """
+        Return the standard deviation of the second-order correction of the roots
+        """
+
+    def compute_pt2_semistoch(self, eps2: float, eps2_pseudostoch: float, eps2_determ: float, num_batches: int, min_batches_pseudostoch: int, target_error: float, num_batches_stoch: int, batches_per_sample: int, num_samples: int, sample_size: int, seed: int) -> None:
+        """
+        Compute the second-order correction with the three-step semistochastic algorithm
+        """
+
+    def ept2_determ(self) -> list[float]:
+        """Return the deterministic term of the last semistochastic correction"""
+
+    def ept2_pseudostoch(self) -> list[float]:
+        """
+        Return the pseudo-stochastic term of the last semistochastic correction
+        """
+
+    def ept2_stoch(self) -> list[float]:
+        """Return the stochastic term of the last semistochastic correction"""
+
+    def ept2_pseudostoch_stddev(self) -> list[float]:
+        """Return the standard deviation of the pseudo-stochastic term"""
+
+    def ept2_stoch_stddev(self) -> list[float]:
+        """Return the standard deviation of the stochastic term"""
+
+    def num_pseudostoch_batches(self) -> int:
+        """Return the number of batches the pseudo-stochastic step evaluated"""
+
+    def num_pt2_dets(self) -> int:
+        """
+        Return the number of external determinants included in the last compute_pt2 call
+        """
+
+    def pt2_time(self) -> float:
+        """Return the wall time of the last compute_pt2 call"""
+
     def compute_spin2(self) -> list[float]:
         """
         Compute the expectation value of S^2 for each root and return as a list
