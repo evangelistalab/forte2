@@ -25,6 +25,12 @@ using DetMap = ankerl::unordered_dense::map<Determinant, double, Determinant::Ha
 using DetRootMap = ankerl::unordered_dense::map<Determinant, size_t, Determinant::Hash>;
 /// @brief A set of determinants
 using DetSet = ankerl::unordered_dense::set<Determinant, Determinant::Hash>;
+/// @brief The importance weights of the determinants drawn by one stochastic PT2 sample
+///
+/// Maps a determinant's index in the variational space to the two weights its multiplicity implies:
+/// w / p for the linear channel and w (N - 1) / p - (w / p)^2 for the quadratic one. Only sampled
+/// determinants are stored, so the size follows the sample rather than the variational space.
+using PT2WeightMap = ankerl::unordered_dense::map<size_t, std::pair<double, double>>;
 
 /// @brief Screening criteria for selected CI
 enum class ScreeningCriterion { HBCI, eHBCI };
@@ -153,6 +159,73 @@ class SelectedCIHelper {
     /// @param pt2_threshold The threshold for PT2 selection
     void select_hbci(double var_threshold, double pt2_threshold);
 
+    /// @brief Compute the second-order correction deterministically for the current variational
+    /// space and CI coefficients
+    /// @param eps2 Contributions whose |coupling * c| does not exceed this are excluded
+    /// @param num_batches Number of batches to split the external space into, which bounds the
+    /// memory held at any one time; the result does not depend on it
+    ///
+    /// Unlike the correction reported by select_hbci, this does not modify the variational space
+    /// and does not split the result by whether a determinant would have been selected.
+    void compute_pt2_determ(double eps2, size_t num_batches);
+
+    /// @brief Compute the second-order correction with the three-step semistochastic algorithm
+    /// @param eps2 The target threshold, reached by the stochastic step
+    /// @param eps2_pseudostoch The threshold reached by the pseudo-stochastic step, at least eps2
+    /// @param eps2_determ The threshold reached by the deterministic step, at least
+    /// eps2_pseudostoch
+    /// @param num_batches Number of batches for the deterministic and pseudo-stochastic steps
+    /// @param min_batches_pseudostoch Batches the pseudo-stochastic step evaluates before it may
+    /// stop. At least two are needed for it to have a spread to measure.
+    /// @param target_error The error the pseudo-stochastic step aims for, as a fraction of which
+    /// its stopping rule is expressed
+    /// @param num_batches_stoch Number of batches the stochastic step splits its space into
+    /// @param batches_per_sample Batches evaluated per sample, scaled up by their sampled fraction
+    /// @param num_samples Number of stochastic samples, or zero to skip the stochastic step
+    /// @param sample_size Determinants drawn with replacement per sample
+    /// @param seed Seed for the sampling, which is otherwise reproducible
+    ///
+    /// Li et al., J. Chem. Phys. 149, 214110 (2018), Eq. 11. The correction is a telescoping sum
+    /// whose first term is deterministic, whose second extrapolates from a subset of batches, and
+    /// whose third is estimated from samples of the variational space. Each of the last two is a
+    /// difference between two thresholds evaluated in a single pass, so the two channels share
+    /// their randomness and it cancels between them.
+    void compute_pt2_semistoch(double eps2, double eps2_pseudostoch, double eps2_determ,
+                               size_t num_batches, size_t min_batches_pseudostoch,
+                               double target_error, size_t num_batches_stoch,
+                               size_t batches_per_sample, size_t num_samples, size_t sample_size,
+                               uint64_t seed);
+
+    /// @return The second-order correction for each root from the last compute_pt2 call
+    const std::vector<double>& ept2() const { return ept2_; }
+
+    /// @return The standard deviation of the correction for each root, zero when deterministic
+    const std::vector<double>& ept2_stddev() const { return ept2_stddev_; }
+
+    /// @return The deterministic term of the last semistochastic correction
+    const std::vector<double>& ept2_determ() const { return ept2_determ_; }
+
+    /// @return The pseudo-stochastic term of the last semistochastic correction
+    const std::vector<double>& ept2_pseudostoch() const { return ept2_pseudostoch_; }
+
+    /// @return The stochastic term of the last semistochastic correction
+    const std::vector<double>& ept2_stoch() const { return ept2_stoch_; }
+
+    /// @return The standard deviation of the pseudo-stochastic term
+    const std::vector<double>& ept2_pseudostoch_stddev() const { return ept2_pseudostoch_stddev_; }
+
+    /// @return The standard deviation of the stochastic term
+    const std::vector<double>& ept2_stoch_stddev() const { return ept2_stoch_stddev_; }
+
+    /// @return The number of batches the pseudo-stochastic step evaluated
+    size_t num_pseudostoch_batches() const { return num_pseudostoch_batches_; }
+
+    /// @return The number of external determinants included in the last compute_pt2 call
+    size_t num_pt2_dets() const { return num_pt2_dets_; }
+
+    /// @return The wall time of the last compute_pt2 call
+    double pt2_time() const { return pt2_time_; }
+
     /// @brief Compute the diagonal of the Hamiltonian matrix
     /// @return A vector of the diagonal elements of the Hamiltonian matrix
     np_vector Hdiag() const;
@@ -265,26 +338,6 @@ class SelectedCIHelper {
     /// @brief Update the sorted two-electron integrals for fast Hamiltonian application
     void update_hbci_ints();
 
-    /// @brief Compute the energy contribution for a given determinant
-    double compute_delta_ept2(double delta, double v) const;
-
-    /// @brief Apply the Hamiltonian operator H0, H1a, H1b, H2a, H2b, H2ab to the basis and
-    /// accumulate the result in sigma
-    /// @param basis
-    /// @param sigma
-    void H0(std::span<double> basis, std::span<double> sigma) const;
-    void H1a(std::span<double> basis, std::span<double> sigma) const;
-    void H1b(std::span<double> basis, std::span<double> sigma) const;
-    void H2a(std::span<double> basis, std::span<double> sigma) const;
-    void H2b(std::span<double> basis, std::span<double> sigma) const;
-    void H2ab(std::span<double> basis, std::span<double> sigma) const;
-
-    /// @brief Find matching determinants for the given excitation and accumulate their
-    /// contributions to the sigma vector
-    void find_matching_dets(std::span<double> basis, std::span<double> sigma,
-                            const SelectedCIStrings& list, size_t i, size_t j,
-                            double int_sign) const;
-
     /// @brief Reusable working buffers for generate_contributions
     ///
     /// Owned by the calling thread. Held separately from the state a particular caller accumulates
@@ -314,6 +367,76 @@ class SelectedCIHelper {
         /// @brief Buffers for the contribution generator that drives the selection
         ContributionScratch conn;
     };
+
+    /// @brief Reusable working buffers for the perturbative batch routines
+    struct Pt2Scratch {
+        /// @brief Maps each external determinant to the start of its block in slots
+        DetRootMap map;
+        /// @brief Per-root accumulators for each external determinant. The number of slots per
+        /// determinant depends on the routine: one channel for the deterministic correction, two
+        /// for a difference between thresholds, four for the stochastic estimator.
+        std::vector<double> slots;
+        /// @brief Buffers for the contribution generator
+        ContributionScratch conn;
+    };
+
+    /// @brief Compute the energy contribution for a given determinant
+    double compute_delta_ept2(double delta, double v) const;
+
+    /// @brief The factor multiplying v * v in the second-order correction
+    ///
+    /// This deliberately has no variational case. The stochastic step estimates v * v rather than
+    /// v, which is unbiased only for a correction linear in it; the variational correction is
+    /// concave in v * v and would acquire a bias that grows as the sample shrinks.
+    double pt2_denominator(double delta) const;
+
+    /// @brief Sum the second-order correction over the external determinants of one batch
+    /// @param out Accumulates the correction for each root
+    /// @param num_dets Accumulates the number of external determinants
+    void pt2_determ_batch(Pt2Scratch& s, double eps2, size_t num_batches, size_t batch_id,
+                          const DetSet& existing_dets, std::span<double> out,
+                          size_t& num_dets) const;
+
+    /// @brief Sum the correction between two thresholds over the external determinants of one batch
+    /// @param eps_tight The threshold the tight channel applies
+    /// @param eps_loose The threshold the loose channel applies, at least eps_tight
+    /// @param out Accumulates the difference between the two thresholds for each root
+    ///
+    /// Both channels are filled in a single pass and share the map of external determinants, so
+    /// when the thresholds are equal their couplings are bit-identical and the difference is
+    /// exactly zero.
+    void pt2_difference_batch(Pt2Scratch& s, double eps_tight, double eps_loose,
+                              size_t num_batches, size_t batch_id, const DetSet& existing_dets,
+                              std::span<double> out, size_t& num_dets) const;
+
+    /// @brief Estimate the correction between two thresholds over one batch, from one sample
+    /// @param parent_mask The sampled determinants, one bit each
+    /// @param weights The importance weights of each sampled determinant, keyed by its index
+    /// @param out Accumulates the unnormalized estimate for each root
+    ///
+    /// Sharma et al., J. Chem. Theory Comput. 13, 1595 (2017), Eq. 10. The result still has to be
+    /// divided by sample_size * (sample_size - 1).
+    void pt2_stoch_batch(Pt2Scratch& s, double eps_tight, double eps_loose, size_t num_batches,
+                         size_t batch_id, const DetSet& existing_dets,
+                         std::span<const uint64_t> parent_mask, const PT2WeightMap& weights,
+                         std::span<double> out) const;
+
+    /// @brief Apply the Hamiltonian operator H0, H1a, H1b, H2a, H2b, H2ab to the basis and
+    /// accumulate the result in sigma
+    /// @param basis
+    /// @param sigma
+    void H0(std::span<double> basis, std::span<double> sigma) const;
+    void H1a(std::span<double> basis, std::span<double> sigma) const;
+    void H1b(std::span<double> basis, std::span<double> sigma) const;
+    void H2a(std::span<double> basis, std::span<double> sigma) const;
+    void H2b(std::span<double> basis, std::span<double> sigma) const;
+    void H2ab(std::span<double> basis, std::span<double> sigma) const;
+
+    /// @brief Find matching determinants for the given excitation and accumulate their
+    /// contributions to the sigma vector
+    void find_matching_dets(std::span<double> basis, std::span<double> sigma,
+                            const SelectedCIStrings& list, size_t i, size_t j,
+                            double int_sign) const;
 
     /// @brief Enumerate the contributions that the variational space makes to the external
     /// determinants of one batch, and hand each to an accumulator
@@ -515,6 +638,24 @@ class SelectedCIHelper {
     std::vector<double> ept2_var_;
     /// @brief The perturbative energy contributions due to the determinants excluded
     std::vector<double> ept2_pt_;
+
+    /// @brief The second-order correction for each root from the last compute_pt2 call
+    std::vector<double> ept2_;
+    /// @brief The standard deviation of that correction for each root
+    std::vector<double> ept2_stddev_;
+    /// @brief The three terms of the last semistochastic correction, which sum to ept2_
+    std::vector<double> ept2_determ_;
+    std::vector<double> ept2_pseudostoch_;
+    std::vector<double> ept2_stoch_;
+    /// @brief The standard deviations of the two estimated terms
+    std::vector<double> ept2_pseudostoch_stddev_;
+    std::vector<double> ept2_stoch_stddev_;
+    /// @brief The number of batches the pseudo-stochastic step evaluated
+    size_t num_pseudostoch_batches_ = 0;
+    /// @brief The number of external determinants included in the last compute_pt2 call
+    size_t num_pt2_dets_ = 0;
+    /// @brief The wall time of the last compute_pt2 call
+    double pt2_time_ = 0.0;
 
     /// @brief The number of new variational determinants added in the last selection step
     size_t num_new_dets_var_ = 0;

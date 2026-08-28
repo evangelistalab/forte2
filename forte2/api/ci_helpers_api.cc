@@ -279,6 +279,18 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "pt2_threshold"_a, "Perform HBCI selection with the given threshold")
         .def("select_hbci", &SelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
              "Perform HBCI selection with the given thresholds")
+        .def("compute_pt2_determ", &SelectedCIHelper::compute_pt2_determ, "eps2"_a,
+             "num_batches"_a,
+             "Compute the second-order correction deterministically without modifying the "
+             "variational space")
+        .def("ept2", &SelectedCIHelper::ept2,
+             "Return the second-order correction of the roots from the last compute_pt2 call")
+        .def("ept2_stddev", &SelectedCIHelper::ept2_stddev,
+             "Return the standard deviation of the second-order correction of the roots")
+        .def("num_pt2_dets", &SelectedCIHelper::num_pt2_dets,
+             "Return the number of external determinants included in the last compute_pt2 call")
+        .def("pt2_time", &SelectedCIHelper::pt2_time,
+             "Return the wall time of the last compute_pt2 call")
         .def("compute_spin2", &SelectedCIHelper::compute_spin2,
              "Compute the expectation value of S^2 for each root and return as a list")
         .def("a_1rdm", &SelectedCIHelper::compute_a_1rdm, "left_root"_a, "right_root"_a,
