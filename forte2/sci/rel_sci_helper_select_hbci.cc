@@ -33,8 +33,11 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
 
     local_timer selection_timer;
 
-    std::vector<RelDetMap> V_map(nroots_);
-    std::vector<RelDetMap> PT_map(nroots_);
+    // One coupling per external determinant per root, plus the set of determinants that will
+    // join the variational space. The coupling must be complete before it is squared, so it is
+    // never split by which side of var_threshold an individual connection falls on.
+    std::vector<RelDetMap> map(nroots_);
+    DetSet promoted;
 
     std::vector<size_t> aocc(na_, 0);
     std::vector<size_t> avir(norb_ - na_, 0);
@@ -65,20 +68,17 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
                 const std::complex<double> integral = singles_coupling_a(i, a, det);
                 const double criterion = std::abs(integral * max_abs_c);
 
-                if (criterion < pt2_threshold)
+                if (criterion <= pt2_threshold)
                     continue;
 
                 const auto [new_det, sign] = create_single_a_excitation(det, i, a);
                 const std::complex<double> coupling = sign * std::conj(integral);
 
                 if (criterion > var_threshold) {
-                    for (size_t r{0}; r < nroots_; ++r) {
-                        V_map[r][new_det] += coupling * c_det[r];
-                    }
-                } else {
-                    for (size_t r{0}; r < nroots_; ++r) {
-                        PT_map[r][new_det] += coupling * c_det[r];
-                    }
+                    promoted.insert(new_det);
+                }
+                for (size_t r{0}; r < nroots_; ++r) {
+                    map[r][new_det] += coupling * c_det[r];
                 }
             }
         }
@@ -99,20 +99,17 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
 
                         const std::complex<double> integral = Va(i, j, a, b);
                         const double criterion = std::abs(integral * max_abs_c);
-                        if (criterion < pt2_threshold)
+                        if (criterion <= pt2_threshold)
                             continue;
 
                         const auto [new_det, sign] = create_double_aa_excitation(det, i, j, a, b);
                         const std::complex<double> coupling = sign * std::conj(integral);
 
                         if (criterion > var_threshold) {
-                            for (size_t r{0}; r < nroots_; ++r) {
-                                V_map[r][new_det] += coupling * c_det[r];
-                            }
-                        } else {
-                            for (size_t r{0}; r < nroots_; ++r) {
-                                PT_map[r][new_det] += coupling * c_det[r];
-                            }
+                            promoted.insert(new_det);
+                        }
+                        for (size_t r{0}; r < nroots_; ++r) {
+                            map[r][new_det] += coupling * c_det[r];
                         }
                     }
                 }
@@ -120,23 +117,17 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
         }
     }
 
-    // Remove the coupling to determinants that are already in the variational space
-    for (size_t r{0}; r < nroots_; ++r) {
-        for (const auto& det : dets_) {
-            V_map[r].erase(det);
-            PT_map[r].erase(det);
+    // Drop the determinants that are already in the variational space; the correction runs over
+    // the determinants outside it
+    for (const auto& det : dets_) {
+        promoted.erase(det);
+        for (size_t r{0}; r < nroots_; ++r) {
+            map[r].erase(det);
         }
     }
 
-    // Remove the coupling for the PT2 determinants that are already in the new variational space
-    for (size_t r{0}; r < nroots_; ++r) {
-        for (const auto& [det, val] : V_map[r]) {
-            PT_map[r].erase(det);
-        }
-    }
-
-    // add variational determinants first (root 0 defines the variational space)
-    for (const auto& [det, val] : V_map[0]) {
+    // add variational determinants first
+    for (const auto& det : promoted) {
         dets_.push_back(det);
     }
 
@@ -144,21 +135,17 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
     for (size_t r{0}; r < nroots_; ++r) {
         double var = 0.0;
         double pt = 0.0;
-        for (const auto& [det, val] : V_map[r]) {
+        for (const auto& [det, val] : map[r]) {
             const double delta = root_energies_[r] - slater_rules_.energy(det);
-            var += compute_delta_ept2(delta, std::abs(val));
-        }
-        for (const auto& [det, val] : PT_map[r]) {
-            const double delta = root_energies_[r] - slater_rules_.energy(det);
-            pt += compute_delta_ept2(delta, std::abs(val));
+            (promoted.count(det) ? var : pt) += compute_delta_ept2(delta, std::abs(val));
         }
         ept2_var_[r] = var;
         ept2_pt_[r] = pt;
     }
 
     // number of new determinants added this cycle (root 0 defines the variational space)
-    num_new_dets_var_ = V_map[0].size();
-    num_new_dets_pt2_ = PT_map[0].size();
+    num_new_dets_var_ = promoted.size();
+    num_new_dets_pt2_ = map[0].size() - promoted.size();
 
     c_.resize(dets_.size() * nroots_, 0.0);
 
@@ -181,8 +168,7 @@ void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold
     std::atomic<size_t> next_batch(0);
 
     std::vector<std::vector<Determinant>> thread_new_dets(num_threads);
-    std::vector<std::vector<double>> local_ept2_var(num_threads,
-                                                    std::vector<double>(nroots_, 0.0));
+    std::vector<std::vector<double>> local_ept2_var(num_threads, std::vector<double>(nroots_, 0.0));
     std::vector<std::vector<double>> local_ept2_pt(num_threads, std::vector<double>(nroots_, 0.0));
     std::vector<std::vector<std::tuple<size_t, size_t, double>>> thread_log_data(num_threads);
 
@@ -190,10 +176,9 @@ void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold
 
     // worker function for each thread that processes batches of determinants
     auto worker = [&](size_t thread_id) {
-        // persistent storage for this thread to avoid repeated allocations. The maps are cleared
-        // at the beginning of select_hbci_batch, but the underlying memory is reused.
-        RelDetRootMap V_map, PT_map;
-        std::vector<std::complex<double>> V_coeffs, PT_coeffs;
+        // Persistent storage for this thread, so that re-walking the variational space once per
+        // batch does not reallocate. select_hbci_batch clears it on entry but the memory stays.
+        RelSelectHbciScratch s;
         std::vector<Determinant> new_dets_local;
 
         while (true) {
@@ -204,44 +189,36 @@ void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold
 
             local_timer batch_timer;
 
-            select_hbci_batch(V_map, PT_map, V_coeffs, PT_coeffs, var_threshold, pt2_threshold,
-                              num_batches, batch_id, existing_dets);
+            select_hbci_batch(s, var_threshold, pt2_threshold, num_batches, batch_id,
+                              existing_dets);
 
-            // Filter out determinants in PT_map that are already in the new variational space
-            // (V_map). Both have already been filtered against the existing variational space in
-            // select_hbci_batch.
-            for (const auto& [det, _] : V_map) {
-                PT_map.erase(det);
-            }
-
-            // Compute energy contributions for new variational and PT2 determinants.
-            for (const auto& [det, idx] : V_map) {
+            // Each determinant carries its complete coupling to the variational wave function and
+            // is attributed to exactly one of the two contributions, so no filtering between them
+            // is needed. Determinants already in the variational space were skipped during
+            // generation.
+            new_dets_local.clear();
+            size_t num_pt_dets = 0;
+            for (const auto& [det, idx] : s.map) {
                 const double energy = slater_rules_.energy(det);
+                auto& target = s.promoted[idx / nroots_] ? local_ept2_var[thread_id]
+                                                         : local_ept2_pt[thread_id];
                 for (size_t r{0}; r < nroots_; ++r) {
-                    local_ept2_var[thread_id][r] +=
-                        compute_delta_ept2(root_energies_[r] - energy, std::abs(V_coeffs[idx + r]));
+                    target[r] +=
+                        compute_delta_ept2(root_energies_[r] - energy, std::abs(s.coeffs[idx + r]));
                 }
-            }
-
-            for (const auto& [det, idx] : PT_map) {
-                const double energy = slater_rules_.energy(det);
-                for (size_t r{0}; r < nroots_; ++r) {
-                    local_ept2_pt[thread_id][r] += compute_delta_ept2(root_energies_[r] - energy,
-                                                                      std::abs(PT_coeffs[idx + r]));
+                if (s.promoted[idx / nroots_]) {
+                    new_dets_local.push_back(det);
+                } else {
+                    num_pt_dets++;
                 }
             }
 
             // Append to thread-local container (no locks)
-            new_dets_local.clear();
-            new_dets_local.reserve(V_map.size());
-            for (const auto& [det, _] : V_map)
-                new_dets_local.push_back(det);
-
             thread_new_dets[thread_id].insert(thread_new_dets[thread_id].end(),
                                               new_dets_local.begin(), new_dets_local.end());
 
             thread_log_data[thread_id].push_back(
-                {batch_id, PT_map.size(), batch_timer.elapsed_seconds()});
+                {batch_id, num_pt_dets, batch_timer.elapsed_seconds()});
         }
     };
 
@@ -308,44 +285,58 @@ void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold
     selection_time_ = selection_timer.elapsed_seconds();
 }
 
-void RelSelectedCIHelper::select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap& PT_map,
-                                            std::vector<std::complex<double>>& V_coeffs,
-                                            std::vector<std::complex<double>>& PT_coeffs,
-                                            double var_threshold, double pt2_threshold,
-                                            size_t num_batches, size_t batch_id,
-                                            const DetSet& existing_dets) {
-    V_map.clear();
-    PT_map.clear();
-    V_coeffs.clear();
-    PT_coeffs.clear();
+void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_threshold,
+                                            double pt2_threshold, size_t num_batches,
+                                            size_t batch_id, const DetSet& existing_dets) {
+    auto& map = s.map;
+    auto& coeffs = s.coeffs;
+    auto& promoted = s.promoted;
+    map.clear();
+    coeffs.clear();
+    promoted.clear();
 
-    // Accumulate `prefactor * c_I` for the determinant `det`, appending a new coefficient block for
-    // each root if the determinant is seen for the first time. `prefactor` already carries the
-    // conjugated, signed coupling <J|H|I> (see the note at the top of this file).
-    auto accumulate = [&](RelDetRootMap& map, std::vector<std::complex<double>>& coeffs,
-                          const Determinant& det, std::complex<double> prefactor,
-                          const std::span<std::complex<double>>& c) {
-        size_t loc = coeffs.size();
-        auto [it, emplaced] = map.try_emplace(det, loc);
-        if (emplaced) {
-            // new determinant, need to append to coeffs vector
-            for (auto& c_r : c) {
-                coeffs.push_back(prefactor * c_r);
-            }
-        } else {
-            // idx is the starting index in the coeffs vector for this determinant
-            size_t idx = it->second;
-            for (size_t r{0}; auto& c_r : c) {
-                coeffs[idx + r] += prefactor * c_r;
-                r++;
-            }
-        }
-    };
-
-    std::vector<size_t> aocc(na_);
-    std::vector<size_t> avir(norb_ - na_);
+    // size the caller's buffers on first use; later batches reuse them untouched
+    s.aocc.resize(na_);
+    s.avir.resize(norb_ - na_);
+    auto& aocc = s.aocc;
+    auto& avir = s.avir;
 
     const auto a_string_size = ab_list_.first_string_size();
+
+    // The single place that decides whether a connection survives and what happens to it. Both
+    // channels go through it, so neither can drift from the other, and it applies the same test
+    // as select_hbci_ref. Channels also test the criterion themselves before building the
+    // external determinant, but only to skip work and only against an upper bound on it; this
+    // test is the one that decides.
+    //
+    // `coupling` already carries the conjugated, signed matrix element <J|H|I> (see the note at
+    // the top of this file).
+    auto accumulate = [&](const Determinant& det, std::span<const std::complex<double>> c_parent,
+                          std::complex<double> coupling, double criterion) {
+        if (criterion <= pt2_threshold)
+            return;
+        // if the determinant is already in the variational space, skip it
+        if (existing_dets.count(det))
+            return;
+        // A determinant can be reached by several parents. Every contribution to <det|H|Psi> has
+        // to be summed before that sum is squared, so all of them accumulate into one entry of
+        // coeffs regardless of which side of var_threshold the individual connection falls on.
+        // Whether the determinant is promoted is a property of the determinant, recorded
+        // separately: one connection above var_threshold is enough.
+        const size_t loc = coeffs.size();
+        auto [it, emplaced] = map.try_emplace(det, loc);
+        if (emplaced) {
+            for (size_t r{0}; r < nroots_; ++r)
+                coeffs.push_back(coupling * c_parent[r]);
+            promoted.push_back(criterion > var_threshold ? 1 : 0);
+        } else {
+            const size_t idx = it->second;
+            for (size_t r{0}; r < nroots_; ++r)
+                coeffs[idx + r] += coupling * c_parent[r];
+            if (criterion > var_threshold)
+                promoted[idx / nroots_] = 1;
+        }
+    };
 
     // norb_mask is used to compute the allowed virtual creation indices
     String norb_mask = String::zero();
@@ -366,10 +357,15 @@ void RelSelectedCIHelper::select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap&
         new_det.set_beta_string(ab_list_.sorted_second_string(b_str_idx));
 
         // CI coefficients of this determinant for all roots, viewed directly in c_ (no gather)
-        std::span<std::complex<double>> c_det(c_.data() + det_index * nroots_, nroots_);
+        std::span<const std::complex<double>> c_det(c_.data() + det_index * nroots_, nroots_);
         double abs_c_max_det = 0.0;
         for (size_t r{0}; r < nroots_; ++r)
             abs_c_max_det = std::max(abs_c_max_det, std::abs(c_det[r]));
+
+        // Every criterion below is proportional to this coefficient, so a determinant whose
+        // coefficients are all zero cannot produce a connection that survives accumulate.
+        if (abs_c_max_det == 0.0)
+            continue;
 
         // find the occupied and virtual orbitals for the current alpha string
         auto a_str_annihilation_masked = a_str & ~frozen_annihilation_mask_;
@@ -395,18 +391,8 @@ void RelSelectedCIHelper::select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap&
                 }
                 new_det.set_alpha_string(new_a_str);
                 const std::complex<double> integral = singles_coupling_a(i, a, new_det);
-                const double criterion = std::abs(integral * abs_c_max_det);
-                if (criterion > pt2_threshold) {
-                    // if the determinant is already in the variational space, skip it
-                    if (!existing_dets.count(new_det)) {
-                        const std::complex<double> coupling = sign * std::conj(integral);
-                        if (criterion > var_threshold) {
-                            accumulate(V_map, V_coeffs, new_det, coupling, c_det);
-                        } else {
-                            accumulate(PT_map, PT_coeffs, new_det, coupling, c_det);
-                        }
-                    }
-                }
+                accumulate(new_det, c_det, sign * std::conj(integral),
+                           std::abs(integral * abs_c_max_det));
             }
         }
 
@@ -419,7 +405,7 @@ void RelSelectedCIHelper::select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap&
                 for (const auto& [key, integral, a, b] : v_list) {
                     // break early if the integrals are too small (the sorted real key monotonically
                     // decreases, so no later term can pass the threshold)
-                    if (std::fabs(key * abs_c_max_det) < pt2_threshold)
+                    if (std::fabs(key * abs_c_max_det) <= pt2_threshold)
                         break;
 
                     if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b))
@@ -432,18 +418,10 @@ void RelSelectedCIHelper::select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap&
                     }
 
                     const double criterion = std::abs(integral * abs_c_max_det);
-                    if (criterion > pt2_threshold) {
-                        new_det.set_alpha_string(new_a_str);
-                        // if the determinant is already in the variational space, skip it
-                        if (!existing_dets.count(new_det)) {
-                            const std::complex<double> coupling = sign * std::conj(integral);
-                            if (criterion > var_threshold) {
-                                accumulate(V_map, V_coeffs, new_det, coupling, c_det);
-                            } else {
-                                accumulate(PT_map, PT_coeffs, new_det, coupling, c_det);
-                            }
-                        }
-                    }
+                    if (criterion <= pt2_threshold)
+                        continue;
+                    new_det.set_alpha_string(new_a_str);
+                    accumulate(new_det, c_det, sign * std::conj(integral), criterion);
                 }
             }
         }

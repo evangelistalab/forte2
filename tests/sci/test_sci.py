@@ -998,3 +998,54 @@ def test_sci_final_orbitals(final_orbitals):
     sci.run()
 
     assert sci.E[0] == approx(-2.180967812920)
+
+
+def test_sci_pt2_split_is_independent_of_var_threshold():
+    """
+    ept2_var + ept2_pt is the Epstein-Nesbet PT2 over the determinants outside the
+    variational space, so it cannot depend on var_threshold. That threshold only decides how the total is split between the two reported energies.
+    """
+    pt2_threshold = 1e-10
+    xyz = """
+        O 0.0000000 0.0000000 -0.0655905
+        H 0.0000000 -0.7578344 0.5203775
+        H 0.0000000  0.7578344 0.5203775
+        """
+    system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+
+    sci = SelectedCI(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(13)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-3,
+            pt2_threshold=pt2_threshold,
+            maxcycle=2,
+        ),
+    )(rhf)
+    sci.run()
+
+    # Freeze the variational space and its coefficients
+    # then run selection at different eps_var but fixed eps_pt2
+    worker = sci.sub_solvers[0]
+    dets = worker.dets
+    c = worker.evecs
+    energies = np.ascontiguousarray(np.asarray(worker.evals).real)
+
+    def probe(var_threshold):
+        helper = SelectedCIHelper(
+            worker.norb, dets, c, worker.ints.E, worker.ints.H, worker.ints.V, 0
+        )
+        helper.set_energies(energies)
+        helper.select_hbci(var_threshold=var_threshold, pt2_threshold=pt2_threshold)
+        return np.array(helper.ept2_var()), np.array(helper.ept2_pt())
+
+    # very large eps_var leaves all to PT2 space
+    # all subsequent e_var + e_pt2 must add to ref_pt
+    ref_var, ref_pt = probe(1e6)
+    assert np.all(ref_var == 0.0)
+
+    for var_threshold in (1e-3, 1e-4, 1e-5, 1e-7, 0.0):
+        var, pt = probe(var_threshold)
+        assert var + pt == approx(ref_pt)

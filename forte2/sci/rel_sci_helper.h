@@ -186,12 +186,35 @@ class RelSelectedCIHelper {
     void H1a(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
     void H2a(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
 
-    /// @brief Select new variational and PT2 determinants using a batch approach
-    void select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap& PT_map,
-                           std::vector<std::complex<double>>& V_coeffs,
-                           std::vector<std::complex<double>>& PT_coeffs, double var_threshold,
-                           double pt2_threshold, size_t num_batches, size_t batch_id,
-                           const DetSet& existing_dets);
+    /// @brief Reusable working buffers for select_hbci_batch
+    struct RelSelectHbciScratch {
+        /// @brief Maps each external determinant to the starting index of its coefficient block
+        RelDetRootMap map;
+        /// @brief The coupling <det|H|Psi_r> of each external determinant to each root, summed
+        /// over every parent that reaches it, as coeffs[idx + r]
+        std::vector<std::complex<double>> coeffs;
+        /// @brief One flag per external determinant, indexed as promoted[idx / nroots], set when
+        /// at least one of its connections exceeds var_threshold and it therefore will join the
+        /// variational space in the next iteration
+        std::vector<uint8_t> promoted;
+        /// @brief Scratch occupation vectors for occupied/virtual spinors
+        std::vector<size_t> aocc, avir;
+    };
+
+    /// @brief Enumerate the determinants of one batch that are connected to the variational space
+    /// and accumulate their couplings
+    /// @param s Working buffers owned by the calling thread, cleared on entry
+    /// @param var_threshold Connections above this promote their determinant into the variational
+    /// space. Must not be negative.
+    /// @param pt2_threshold Connections whose criterion does not exceed this are discarded. Must
+    /// not be negative.
+    /// @param num_batches The total number of batches
+    /// @param batch_id The batch index to process
+    /// @param existing_dets The set of determinants already in the variational space to skip
+    /// @note Batch membership is decided by the external determinant alone, so every parent
+    /// that reaches a given determinant is guaranteed to be visited in the same batch
+    void select_hbci_batch(RelSelectHbciScratch& s, double var_threshold, double pt2_threshold,
+                           size_t num_batches, size_t batch_id, const DetSet& existing_dets);
 
     // == Class Private Variables ==
 
