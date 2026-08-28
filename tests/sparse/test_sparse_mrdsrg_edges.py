@@ -218,6 +218,26 @@ def test_zero_commutators_and_zero_maxiter_produce_one_finite_iteration():
     assert np.all(np.isfinite(result.amplitudes))
 
 
+def test_iteration_callback_receives_each_history_record():
+    hamiltonian, reference, excitations = tiny_problem()
+    callback_history = []
+    solver = SparseMRDSRG(
+        hamiltonian,
+        reference,
+        2,
+        excitations,
+        max_commutators=0,
+        maxiter=1,
+        initial_amplitudes=np.zeros(1),
+        iteration_callback=callback_history.append,
+    )
+
+    result = solver.run()
+
+    assert tuple(callback_history) == result.history
+    assert len(callback_history) == result.iterations == 2
+
+
 def test_repeated_run_resets_history_and_is_reproducible():
     hamiltonian, reference, excitations = tiny_problem()
     solver = SparseMRDSRG(

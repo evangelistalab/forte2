@@ -219,19 +219,31 @@ def solve_sparse_dsrg(
     diis_nvec,
     diis_min,
     max_comm=20,
+    initial_amplitudes=None,
+    iteration_callback=None,
+    damping=1.0,
 ):
+    if not 0.0 < damping <= 1.0:
+        raise ValueError("damping must be in the interval (0, 1]")
     ham_no = normal_order(ham, ref, SCREEN, max_rank=truncation_rank)
     h0 = np.array(
         [physical_coeff(ham_no, ex["key"], ex["phase"]) for ex in excitations],
         dtype=complex,
     )
-    amplitudes = np.array(
-        [
-            h0[k] * regularized_denominator(ex["denom"], flow_param)
-            for k, ex in enumerate(excitations)
-        ],
-        dtype=complex,
-    )
+    if initial_amplitudes is None:
+        amplitudes = np.array(
+            [
+                h0[k] * regularized_denominator(ex["denom"], flow_param)
+                for k, ex in enumerate(excitations)
+            ],
+            dtype=complex,
+        )
+    else:
+        amplitudes = np.asarray(initial_amplitudes, dtype=complex).copy()
+        if amplitudes.shape != h0.shape:
+            raise ValueError(
+                f"Initial amplitude shape {amplitudes.shape} does not match {h0.shape}"
+            )
 
     diis = DIIS(
         diis_start=diis_start,
@@ -270,10 +282,11 @@ def solve_sparse_dsrg(
             dtype=complex,
         )
 
-        update = fixed_point - amplitudes
+        damped_fixed_point = amplitudes + damping * (fixed_point - amplitudes)
+        update = damped_fixed_point - amplitudes
         rms_update = float(np.linalg.norm(update))
         delta_energy = 0.0 if previous_energy is None else energy - previous_energy
-        next_amplitudes = diis.update(fixed_point, update)
+        next_amplitudes = diis.update(damped_fixed_point, update)
         iter_s = time.perf_counter() - iter_t0
         history.append(
             {
@@ -287,6 +300,8 @@ def solve_sparse_dsrg(
                 "diis_status": getattr(diis, "status", ""),
             }
         )
+        if iteration_callback is not None:
+            iteration_callback(history[-1])
 
         if (
             previous_energy is not None

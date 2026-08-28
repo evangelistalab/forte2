@@ -6,7 +6,7 @@ import itertools
 import math
 import time
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Callable, Sequence
 
 import numpy as np
 
@@ -432,6 +432,7 @@ class SparseMRDSRG:
     damping: float = 1.0
     use_hamiltonian_denominators: bool = True
     initial_amplitudes: np.ndarray | None = None
+    iteration_callback: Callable[[SparseMRDSRGIteration], None] | None = None
     model_space: Sequence[Determinant] | None = None
     history: list[SparseMRDSRGIteration] = field(init=False, default_factory=list)
 
@@ -633,16 +634,17 @@ class SparseMRDSRG:
             update = damped_fixed_point - amplitudes
             rms_update = float(np.linalg.norm(update) / math.sqrt(len(update)))
             delta_energy = 0.0 if previous_energy is None else energy - previous_energy
-            self.history.append(
-                SparseMRDSRGIteration(
-                    iteration=iteration,
-                    energy=energy,
-                    delta_energy=delta_energy,
-                    rms_update=rms_update,
-                    ncomm=len(commutator_norms),
-                    iter_s=time.perf_counter() - iter_s,
-                )
+            iteration_result = SparseMRDSRGIteration(
+                iteration=iteration,
+                energy=energy,
+                delta_energy=delta_energy,
+                rms_update=rms_update,
+                ncomm=len(commutator_norms),
+                iter_s=time.perf_counter() - iter_s,
             )
+            self.history.append(iteration_result)
+            if self.iteration_callback is not None:
+                self.iteration_callback(iteration_result)
 
             if (
                 previous_energy is not None

@@ -300,7 +300,12 @@ def solve_sr_bare(
     r_tol: float = R_TOL,
     max_iter: int = MAX_ITER,
     max_commutators: int = MAX_COMMUTATORS,
+    initial_amplitudes=None,
+    iteration_callback=None,
+    damping: float = 1.0,
 ):
+    if not 0.0 < damping <= 1.0:
+        raise ValueError("damping must be in the interval (0, 1]")
     reference_state = SparseState({reference: 1.0})
     excitation_states = [
         excitation["op"] @ reference_state for excitation in excitations
@@ -309,13 +314,21 @@ def solve_sr_bare(
     h0 = np.array(
         [overlap(state, h0_state) for state in excitation_states], dtype=complex
     )
-    amplitudes = np.array(
-        [
-            h0[index] * sr.regularized_denominator(excitation["denom"], flow_param)
-            for index, excitation in enumerate(excitations)
-        ],
-        dtype=complex,
-    )
+    if initial_amplitudes is None:
+        amplitudes = np.array(
+            [
+                h0[index]
+                * sr.regularized_denominator(excitation["denom"], flow_param)
+                for index, excitation in enumerate(excitations)
+            ],
+            dtype=complex,
+        )
+    else:
+        amplitudes = np.asarray(initial_amplitudes, dtype=complex).copy()
+        if amplitudes.shape != h0.shape:
+            raise ValueError(
+                f"Initial amplitude shape {amplitudes.shape} does not match {h0.shape}"
+            )
     diis = DIIS(
         diis_start=DIIS_START,
         diis_nvec=DIIS_NVEC,
@@ -348,7 +361,8 @@ def solve_sr_bare(
             ],
             dtype=complex,
         )
-        update = fixed_point - amplitudes
+        damped_fixed_point = amplitudes + damping * (fixed_point - amplitudes)
+        update = damped_fixed_point - amplitudes
         rms_update = float(np.linalg.norm(update))
         delta_energy = 0.0 if previous_energy is None else energy - previous_energy
         history.append(
@@ -362,6 +376,8 @@ def solve_sr_bare(
                 "iter_s": time.perf_counter() - iter_started,
             }
         )
+        if iteration_callback is not None:
+            iteration_callback(history[-1])
         if (
             previous_energy is not None
             and abs(delta_energy) < e_tol
@@ -374,7 +390,7 @@ def solve_sr_bare(
                 "seconds": time.perf_counter() - started,
                 "converged": True,
             }
-        amplitudes = diis.update(fixed_point, update)
+        amplitudes = diis.update(damped_fixed_point, update)
         previous_energy = energy
     return {
         "energy": energy,
