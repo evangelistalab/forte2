@@ -285,17 +285,12 @@ class SelectedCIHelper {
                             const SelectedCIStrings& list, size_t i, size_t j,
                             double int_sign) const;
 
-    /// @brief Reusable working buffers for select_hbci_batch
-    struct SelectHbciScratch {
-        /// @brief Maps each external determinant to the starting index of its coefficient block
-        DetRootMap map;
-        /// @brief The coupling <det|H|Psi_r> of each external determinant to each root, summed
-        /// over every parent that reaches it, as coeffs[idx + r]
-        std::vector<double> coeffs;
-        /// @brief One flag per external determinant, indexed as promoted[idx / nroots], set when
-        /// at least one of its connections exceeds var_threshold and it therefore will join the
-        /// variational space in the next iteration
-        std::vector<uint8_t> promoted;
+    /// @brief Reusable working buffers for generate_contributions
+    ///
+    /// Owned by the calling thread. Held separately from the state a particular caller accumulates
+    /// into, so that callers keeping entirely different per-determinant state can still share the
+    /// gather buffers.
+    struct ContributionScratch {
         /// @brief Largest |c| over all roots for each determinant of the current alpha string
         std::vector<double> abs_c_max;
         /// @brief Coefficients of the current alpha string's determinants, as
@@ -304,6 +299,50 @@ class SelectedCIHelper {
         /// @brief Scratch occupation vectors for alpha/beta occupied/virtual
         std::vector<size_t> aocc, bocc, avir, bvir;
     };
+
+    /// @brief Reusable working buffers for select_hbci_batch
+    struct SelectHbciScratch {
+        /// @brief Maps each external determinant to the starting index of its coefficient block
+        DetRootMap map;
+        /// @brief The coupling <det|H|Psi_r> of each external determinant to each root, summed
+        /// over every parent that reaches it, as coeffs[idx + r]
+        std::vector<double> coeffs;
+        /// @brief One flag per external determinant, indexed as promoted[idx / nroots], set when
+        /// at least one of its contributions exceeds var_threshold and it therefore will join the
+        /// variational space in the next iteration
+        std::vector<uint8_t> promoted;
+        /// @brief Buffers for the contribution generator that drives the selection
+        ContributionScratch conn;
+    };
+
+    /// @brief Enumerate the contributions that the variational space makes to the external
+    /// determinants of one batch, and hand each to an accumulator
+    /// @param s Working buffers owned by the calling thread
+    /// @param prefilter An upper bound below which a contribution cannot survive, used only to
+    /// skip work: sorted integral lists break on it and all-zero blocks are dropped. It never
+    /// decides whether a contribution counts, which is left to acc.
+    /// @param num_batches The total number of batches
+    /// @param batch_id The batch index to process
+    /// @param parent_mask One bit per variational determinant, packed 64 to a word. A determinant
+    /// whose bit is clear makes no contributions. Pass an empty span to use the whole space.
+    /// @param acc Called as acc(det, c_parent, det_index, coupling, criterion) once per
+    /// contribution, where `coupling` carries the excitation sign and `criterion` is the screening
+    /// value, which is not |coupling| under the eHBCI criterion
+    ///
+    /// An external determinant reached by several parents produces several calls, one per parent.
+    /// Batch membership is decided by the external determinant alone, so all of them fall in the
+    /// same batch and an accumulator can sum them before squaring.
+    ///
+    /// The mask is a bitset rather than a modified copy of the coefficients because the stochastic
+    /// PT2 step draws a new parent set per sample per thread: at ten million determinants and ten
+    /// roots a coefficient copy costs hundreds of megabytes per thread against about one megabyte
+    /// for the bitset.
+    ///
+    /// The definition lives in sci_helper_contributions.hpp.
+    template <class Acc>
+    void generate_contributions(ContributionScratch& s, double prefilter, size_t num_batches,
+                                size_t batch_id, std::span<const uint64_t> parent_mask,
+                                Acc&& acc) const;
 
     /// @brief Enumerate the determinants of one batch that are connected to the variational space
     /// and accumulate their couplings
