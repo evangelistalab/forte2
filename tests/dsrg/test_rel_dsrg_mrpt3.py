@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, GHF, MCOptimizer, RelCISolver, X2CParams
-from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT3
+from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT3, RelFNO_DSRG_MRPT3
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
 
@@ -117,67 +117,54 @@ def test_mrpt3_fno():
     pt3_ref = RelDSRG_MRPT3(flow_param=0.5, frozen_core_orbitals=4)(mc)
     pt3_ref.run()
 
-    # p_o=1.0 retains every virtual orbital, so the FNO correction should
-    # vanish and the chained PT3 energy must reproduce the untruncated result
-    # to near machine precision -- a real correctness check on the
-    # correction/detection logic, not an accuracy statement about truncation.
-    pt2_full_100 = RelDSRG_MRPT2(flow_param=0.5, frozen_core_orbitals=4, fno_p_o=1.0)(
-        mc
-    )
-    pt2_full_100.run()
-    pt2_fno_100 = RelDSRG_MRPT2(flow_param=0.5)(pt2_full_100)
-    pt2_fno_100.run()
-    assert pt2_fno_100.fno_e == approx(0.0)
-    assert pt2_fno_100.fno_e_relax == approx(0.0)
-    assert pt2_fno_100.fno_hbar1 == approx(np.zeros_like(pt2_fno_100.fno_hbar1))
-    assert pt2_fno_100.fno_hbar2 == approx(np.zeros_like(pt2_fno_100.fno_hbar2))
-    pt3_fno_100 = RelDSRG_MRPT3(flow_param=0.5)(pt2_fno_100)
-    pt3_fno_100.run()
-    assert pt3_fno_100.E_dsrg == approx(pt3_ref.E_dsrg)
+    # p_o=1.0 retains every virtual orbital, so the truncation correction
+    # should vanish identically and the FNO-corrected PT3 energy must
+    # reproduce the untruncated result to near machine precision -- a real
+    # correctness check on the composition, not an accuracy statement about
+    # truncation.
+    fno_100 = RelFNO_DSRG_MRPT3(
+        flow_param=0.5, fno_flow_param=0.5, fno_p_o=1.0, frozen_core_orbitals=4
+    )(mc)
+    fno_100.run()
+    shift = fno_100.pt2_fno.hbar_shift
+    assert shift["e_dsrg"] == approx(0.0)
+    assert shift["hbar0"] == approx(0.0)
+    assert shift["hbar1"] == approx(np.zeros_like(shift["hbar1"]))
+    assert shift["hbar2"] == approx(np.zeros_like(shift["hbar2"]))
+    assert fno_100.E_dsrg == approx(pt3_ref.E_dsrg)
 
-    # a genuinely truncated case: the FNO correction is non-zero and brings
-    # the FNO-space PT3 energy within a bounded, physically sane distance of
-    # the untruncated reference for this small basis.
-    pt2_full = RelDSRG_MRPT2(flow_param=0.5, frozen_core_orbitals=4, fno_p_o=0.9)(mc)
-    pt2_full.run()
-    assert pt2_full.mo_space.nvirt < pt2_full_100.mo_space.nvirt
-
-    pt2_fno = RelDSRG_MRPT2(flow_param=0.5)(pt2_full)
-    pt2_fno.run()
-    assert abs(pt2_fno.fno_e) > 1e-6
-    pt3_fno = RelDSRG_MRPT3(flow_param=0.5)(pt2_fno)
-    pt3_fno.run()
-    assert abs(pt3_fno.E_dsrg - pt3_ref.E_dsrg) < 0.05
+    # a genuinely truncated case: the correction is non-zero and brings the
+    # FNO-space PT3 energy within a bounded, physically sane distance of the
+    # untruncated reference for this small basis.
+    fno = RelFNO_DSRG_MRPT3(
+        flow_param=0.5, fno_flow_param=0.5, fno_p_o=0.9, frozen_core_orbitals=4
+    )(mc)
+    fno.run()
+    assert fno.pt2_full.mo_space.nvirt < fno_100.pt2_full.mo_space.nvirt
+    assert abs(fno.pt2_fno.hbar_shift["e_dsrg"]) > 1e-6
+    assert abs(fno.E_dsrg - pt3_ref.E_dsrg) < 0.05
 
     # with reference relaxation, the correction is folded into the effective
     # Hamiltonian handed to the CI solver (not applied as a post-hoc shift),
     # so the relaxed (single, here) eigenvalue must stay consistent with the
     # state-averaged relaxed energy it comes from, and relaxation must lower
     # the energy relative to the fixed-reference result.
-    pt3_fno_relaxed = RelDSRG_MRPT3(flow_param=0.5, relax_reference="once")(pt2_fno)
-    pt3_fno_relaxed.run()
-    assert pt3_fno_relaxed.relax_eigvals[0] == approx(pt3_fno_relaxed.E_relaxed_ref)
-    assert pt3_fno_relaxed.E_relaxed_ref.real < pt3_fno_relaxed.E_dsrg.real
+    fno_relaxed = RelFNO_DSRG_MRPT3(
+        flow_param=0.5,
+        fno_flow_param=0.5,
+        fno_p_o=0.9,
+        frozen_core_orbitals=4,
+        relax_reference="once",
+    )(mc)
+    fno_relaxed.run()
+    assert fno_relaxed.relax_eigvals[0] == approx(fno_relaxed.E_relaxed_ref)
+    assert fno_relaxed.E_relaxed_ref.real < fno_relaxed.E_dsrg.real
 
 
 def test_mrpt3_fno_vs_forte():
     """
-    Cross-validation of the FNO truncation correction against forte's
-    independent spin-free SA-DSRG-MRPT2/MRPT3 + FNO implementation.
-
-    A plain (non-relativistic) GHF reference makes the 2-component spinor
-    formalism equivalent to the spin-free one, so the two codes must agree
-    numerically. The reference values below were computed with forte
-    (DF-MCSCF, int_type=df, frozen_docc=[2], restricted_docc=[2],
-    active=[6], dsrg_fno_scheme=po, dsrg_fno_po=90.0, dsrg_fno_pt2_s=1.5,
-    dsrg_fno_pt2_cu3=true), using calc_type=ss for the unrelaxed numbers
-    and calc_type=sa (which forces exactly one relaxation) for the relaxed
-    one.
-
-    This pins down both halves of eq. 11 of Li, Mao, Huang, Evangelista,
-    J. Chem. Theory Comput. 2024, 20, 4170-4181: the scalar correction on
-    the unrelaxed energies, and its folding into the effective Hamiltonian
-    that the CI solver diagonalizes during reference relaxation.
+    Cross-validation against forte1 input:
+    https://gist.github.com/brianz98/57770edfe3b883f1dd7991f07ff9ee7e
     """
     e_pt2_forte = -109.2357480291
     e_pt3_forte = -109.2594557723
@@ -201,22 +188,27 @@ def test_mrpt3_fno_vs_forte():
     mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
-    # s1 builds the FNOs and must be shared by both PT2 passes; the
-    # high-level method's own s2 is independent (and deliberately different
-    # here, to check the two never get conflated).
+    # s1 builds the FNOs and the correction; the high-level method's own s2 is
+    # independent (and deliberately different here, to check the two never get
+    # conflated).
     s1, s2 = 1.5, 2.0
 
-    pt2_full = RelDSRG_MRPT2(flow_param=s1, frozen_core_orbitals=4, fno_p_o=0.9)(mc)
-    pt2_full.run()
-    pt2_fno = RelDSRG_MRPT2(flow_param=s1)(pt2_full)
-    pt2_fno.run()
+    fno = RelFNO_DSRG_MRPT3(
+        flow_param=s2, fno_flow_param=s1, fno_p_o=0.9, frozen_core_orbitals=4
+    )(mc)
+    fno.run()
+
     # pt2_fno does not apply its own correction; a consumer does.
-    assert (pt2_fno.E_dsrg + pt2_fno.fno_e).real == approx(e_pt2_forte)
+    pt2_fno = fno.pt2_fno
+    assert (pt2_fno.E_dsrg + pt2_fno.hbar_shift["e_dsrg"]).real == approx(e_pt2_forte)
+    assert fno.E_dsrg.real == approx(e_pt3_forte)
 
-    pt3_fno = RelDSRG_MRPT3(flow_param=s2)(pt2_fno)
-    pt3_fno.run()
-    assert pt3_fno.E_dsrg.real == approx(e_pt3_forte)
-
-    pt3_fno_relaxed = RelDSRG_MRPT3(flow_param=s2, relax_reference="once")(pt2_fno)
-    pt3_fno_relaxed.run()
-    assert pt3_fno_relaxed.E_relaxed_ref.real == approx(e_pt3_relaxed_forte)
+    fno_relaxed = RelFNO_DSRG_MRPT3(
+        flow_param=s2,
+        fno_flow_param=s1,
+        fno_p_o=0.9,
+        frozen_core_orbitals=4,
+        relax_reference="once",
+    )(mc)
+    fno_relaxed.run()
+    assert fno_relaxed.E_relaxed_ref.real == approx(e_pt3_relaxed_forte)

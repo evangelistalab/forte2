@@ -39,25 +39,25 @@ class RelDSRG_MRPT2(DSRGBase):
     relax_tol : float, optional, default=1e-6
         The convergence tolerance for reference relaxation (in Hartree).
     fno_p_o : float, optional, default=None
-        Enable frozen natural orbitals (FNO), retaining the smallest set of
-        leading virtual natural orbitals whose cumulative occupation is at
-        least this fraction (0, 1] of the total. Mutually exclusive with
-        fno_n_kappa; setting either activates FNO. When active, this object
-        performs a single pass in the full virtual space to build the natural
-        orbitals, then truncates: relax_reference is not implemented on this
-        pass (see the class docstring below).
+        Truncate the virtual space to frozen natural orbitals (FNO) once the
+        energy is computed, retaining the smallest set of leading virtual
+        natural orbitals whose cumulative occupation is at least this fraction
+        (0, 1] of the total. Mutually exclusive with fno_n_kappa.
     fno_n_kappa : float, optional, default=None
-        Enable FNO, retaining all virtual natural orbitals with occupation
+        As fno_p_o, but retaining all virtual natural orbitals with occupation
         number >= fno_n_kappa. Mutually exclusive with fno_p_o.
     fno_degeneracy_tol : float, optional, default=1e-2
-        When FNO is active, the truncation boundary is pushed outward (more
-        orbitals retained) while the occupation numbers straddling it differ
-        by less than this fraction of the larger one, so that near-degenerate
-        natural orbitals (e.g. Kramers partners) are never split between the
-        retained and discarded sets.
-    fno_use_3cumulant : bool, optional, default=True
-        Whether to include the reference's 3-body density cumulant when
-        building the FNO virtual-virtual 1-RDM; see compute_unrelaxed_gamma_vv.
+        When truncating, the boundary is pushed outward (more orbitals
+        retained) while the occupation numbers straddling it differ by less
+        than this fraction of the larger one, so that near-degenerate natural
+        orbitals (e.g. Kramers partners) are never split between the retained
+        and discarded sets.
+    compute_hbar_shift : bool, optional, default=False
+        Publish this object's effective Hamiltonian subtracted from its
+        parent's as an hbar_shift, for a method chained onto this one to apply.
+        Requires the parent to expose its own effective Hamiltonian (i.e. to
+        have been run with save_hbar, or with reference relaxation) and to use
+        the same flow_param. Implies save_hbar.
 
     Attributes
     ----------
@@ -72,46 +72,23 @@ class RelDSRG_MRPT2(DSRGBase):
         The eigenvalues of the relaxed CI Hamiltonian.
     relax_eigvals_history : NDArray
         The history of eigenvalues of the relaxed CI Hamiltonian during relaxation.
-    fno_active : bool
-        Whether this object performed FNO truncation (i.e. fno_p_o or
-        fno_n_kappa was given). Set to True at the end of a successful FNO
-        pass; a plain RelDSRG_MRPT2 chained onto such an object (e.g.
-        RelDSRG_MRPT2()(pt2_fno_pass)) does not inherit or inspect this flag
-        itself -- downstream methods that need to detect FNO do so by
-        checking their own parent chain.
-    fno_e, fno_hbar1, fno_hbar2 : complex, np.ndarray, np.ndarray, or None
-        Only set on a plain instance chained directly onto an fno_active
-        parent: the truncation correction [H_PT2^MO(s1) - H_PT2^FNO(s1)] of
-        eq. 11 of ref. [5] below -- this object's own scalar/one-/two-body
-        effective Hamiltonian minus its parent's, both evaluated at the
-        shared flow_param s1. A downstream high-level method (e.g.
-        RelDSRG_MRPT3) applies this by adding it into its own effective
-        Hamiltonian wherever it builds one (see that class's docstring).
-        None if this object is not chained onto an fno_active parent.
+    hbar_shift : dict or None
+        Set when compute_hbar_shift is given: this object's effective
+        Hamiltonian subtracted from its parent's, for a method chained onto
+        this one to apply. None otherwise.
 
     Notes
     -----
-    To build and use FNOs, run this class twice in a chain, e.g.::
+    Setting fno_p_o or fno_n_kappa truncates the virtual space *after* the
+    energy is computed, so it composes with everything else this class does
+    rather than replacing it; the truncated, natural-orbital-rotated space is
+    exposed as this object's own mos/mo_space for a chained method to pick up.
+    Setting compute_hbar_shift additionally publishes the difference between
+    the parent's effective Hamiltonian and this object's.
 
-        pt2_full = RelDSRG_MRPT2(fno_p_o=0.98)(mc)
-        pt2_full.run()
-        pt2_fno = RelDSRG_MRPT2()(pt2_full)
-        pt2_fno.run()
-
-    The first pass (fno_p_o or fno_n_kappa given) always performs a single
-    solve in the full virtual space without reference relaxation, builds the
-    natural orbitals from the unrelaxed (i.e. response-free, in the sense of
-    compute_unrelaxed_gamma_vv) virtual-virtual 1-RDM, and exposes the truncated,
-    natural-orbital-rotated virtual space as its own mos/mo_space -- so the
-    second, chained instance runs as an entirely ordinary RelDSRG_MRPT2 in
-    that truncated space, additionally computing fno_e/fno_hbar1/fno_hbar2
-    (see above) for a downstream high-level method to pick up. The second
-    instance must share flow_param with the first (both are "s1"); a
-    downstream high-level method's own flow_param ("s2") is independent and
-    typically higher. The second instance is expected to run with
-    relax_reference=False (the common pattern -- relaxation happens at the
-    high-level method, not here); relax_reference on this pass itself is not
-    currently supported together with FNO correction detection.
+    Chaining the two gives the FNO truncation correction of ref. [5]; see
+    RelFNO_DSRG_MRPT3, which composes exactly that and is the supported way
+    to run it.
 
     References
     ----------
@@ -130,25 +107,7 @@ class RelDSRG_MRPT2(DSRGBase):
     fno_p_o: float | None = None
     fno_n_kappa: float | None = None
     fno_degeneracy_tol: float = 1e-2
-    fno_use_3cumulant: bool = True
-
-    fno_active: bool = field(init=False, default=False)
-    # Set only on a plain instance chained onto an fno_active parent: the
-    # truncation correction [H_PT2^MO(s1) - H_PT2^FNO(s1)] of eq. 11 of Li,
-    # Mao, Huang, Evangelista, J. Chem. Theory Comput. 2024, 20, 4170-4181,
-    # i.e. this object's own effective Hamiltonian minus its parent's. A
-    # downstream high-level method (e.g. RelDSRG_MRPT3) detects and applies
-    # it by inspecting these attributes on its own parent_method.
-    #
-    # fno_e (a plain E_dsrg difference) is for the reported unrelaxed
-    # energy. fno_e_relax/fno_hbar1/fno_hbar2 are the corresponding
-    # difference of the two full CI-ready effective Hamiltonians, for
-    # injection into reference relaxation. Note fno_e_relax already
-    # contains fno_e (see _compute_fno_correction).
-    fno_e: complex | None = field(init=False, default=None)
-    fno_e_relax: complex | None = field(init=False, default=None)
-    fno_hbar1: np.ndarray | None = field(init=False, default=None)
-    fno_hbar2: np.ndarray | None = field(init=False, default=None)
+    compute_hbar_shift: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -158,38 +117,30 @@ class RelDSRG_MRPT2(DSRGBase):
             assert (self.fno_p_o is None) != (
                 self.fno_n_kappa is None
             ), "Specify exactly one of fno_p_o or fno_n_kappa."
-            # Not a restriction of the theory -- the natural orbitals could in
-            # principle be built from a relaxed reference just as well (the
-            # "unrelaxed" in "unrelaxed 1-RDM" refers to the absence of orbital
-            # and amplitude response contributions, not to the reference). It is
-            # simply not implemented: the FNO branch of run() performs a single
-            # solve with no relaxation loop, so relax_reference would be silently
-            # ignored. Implementing it would also need care, since relaxation
-            # mutates the shared ci_solver and the truncation correction assumes
-            # this pass and the chained one see the same reference.
-            assert not self.relax_reference, (
-                "relax_reference is not implemented together with "
-                "fno_p_o/fno_n_kappa. Run this class once with FNO options and "
-                "no relaxation to build the truncated space, then chain a second "
-                "RelDSRG_MRPT2 (with relax_reference if desired) onto it."
-            )
+        if self.compute_hbar_shift:
+            # Both Hamiltonians in the difference must be available and built
+            # at the same flow parameter; see _post_process.
+            self.save_hbar = True
 
-    def run(self):
-        if self.fno_p_o is None and self.fno_n_kappa is None:
-            super().run()
-            self._compute_fno_correction()
-            return self
+    def _post_process(self):
+        """
+        Truncate the virtual space to frozen natural orbitals and/or publish
+        an hbar_shift, as requested. Both are optional and independent of how
+        the energy itself was obtained, so neither needs to branch run().
+        """
+        if self.fno_p_o is not None or self.fno_n_kappa is not None:
+            self._truncate_to_fno()
+        if self.compute_hbar_shift:
+            self._publish_hbar_shift()
 
-        # FNO pass: a single unrelaxed solve in the full virtual space, used
-        # only to build Gamma_vv and truncate. See the class docstring.
-        self._startup()
-        self.ints, self.cumulants = self.get_integrals()
-        self.E_dsrg = self.solve_dsrg(form_hbar=True)
-        self._build_ci_hamiltonian()
-        self.E = self.E_dsrg
-
+    def _truncate_to_fno(self):
+        """
+        Diagonalize the unrelaxed virtual-virtual 1-RDM, truncate the virtual
+        space, and expose the truncated, natural-orbital-rotated space as this
+        object's own mos/mo_space, for a chained method to pick up.
+        """
         nvirt_full = self.nvirt
-        gamma_vv = self.compute_unrelaxed_gamma_vv(use_3cumulant=self.fno_use_3cumulant)
+        gamma_vv = self.compute_unrelaxed_gamma_vv()
         self.mos, self.mo_space = build_fno_virtual_space(
             self,
             gamma_vv,
@@ -197,60 +148,38 @@ class RelDSRG_MRPT2(DSRGBase):
             n_kappa=self.fno_n_kappa,
             degeneracy_tol=self.fno_degeneracy_tol,
         )
-        self.fno_active = True
         logger.log_info1(
             f"\nFrozen natural orbitals: retained {self.mo_space.nvirt} of "
             f"{nvirt_full} virtual orbitals "
             f"({100 * self.mo_space.nvirt / nvirt_full:.1f}%)."
         )
-
         self._release_integrals()
-        self.executed = True
-        return self
 
-    def _compute_fno_correction(self):
+    def _publish_hbar_shift(self):
         """
-        If this is a plain (non-FNO) instance chained onto an fno_active
-        parent, build this object's own CI-ready effective Hamiltonian and
-        store its difference against the parent's as fno_e/fno_e_relax/
-        fno_hbar1/fno_hbar2 -- the eq. 11 truncation correction, for a
-        downstream high-level method (e.g. RelDSRG_MRPT3) to detect and
-        apply.
+        Expose this object's effective Hamiltonian subtracted from its
+        parent's, for a method chained onto this one to apply (see the
+        hbar_shift attribute on DSRGBase for the dict's keys).
 
-        Two separate corrections are computed, mirroring forte's own FNO
-        implementation (dsrg_fno_procrouting/dsrg.py), which keeps its
-        analogous "dept2" (a plain compute_energy() difference) and "dhpt2"
-        (a compute_Heff_actv() difference: a scalar + one-/two-body object)
-        separate:
-
-        - fno_e = E_dsrg(parent) - E_dsrg(self): a plain difference of the
-          total DSRG energies, for the reported (unrelaxed) energy.
-        - fno_e_relax/fno_hbar1/fno_hbar2 = difference of
-          _build_ci_hamiltonian's e_pt2/hbar1_pt2/hbar2_pt2, i.e. of the two
-          full CI-ready effective Hamiltonians, for injecting into reference
-          relaxation.
-
-        The two scalars are not independent: e_pt2 = [de-normal-ordering
-        terms] + E_dsrg, so fno_e_relax = [de-normal-ordering difference] +
-        fno_e. A consumer that has already applied fno_e to its own E_dsrg
-        must therefore add only fno_e_relax - fno_e when building its CI
-        Hamiltonian, or fno_e is counted twice (see
-        RelDSRG_MRPT3._build_ci_hamiltonian).
+        With an FNO-truncated parent this is the eq. 11 truncation correction
+        [H_PT2^MO(s1) - H_PT2^FNO(s1)] of Li, Mao, Huang, Evangelista, J.
+        Chem. Theory Comput. 2024, 20, 4170-4181: the parent spans the full
+        virtual space and this object the truncated one. Both must therefore
+        use the same flow parameter s1, and the two Hamiltonians are compared
+        in the shared basis of the initial CASSCF active orbitals (the
+        *_canon convention), which FNO truncation leaves untouched.
         """
         parent = self.parent_method
-        if not getattr(parent, "fno_active", False):
-            return
         assert self.flow_param == parent.flow_param, (
-            "The FNO-space companion (this object) must share flow_param "
-            "with the FNO-building pass (its parent): both are 's1' in "
-            "eq. 11 of Li, Mao, Huang, Evangelista, J. Chem. Theory "
-            "Comput. 2024, 20, 4170-4181."
+            "compute_hbar_shift compares this object's effective Hamiltonian "
+            "against its parent's, so the two must share flow_param."
         )
-        self._build_ci_hamiltonian()
-        self.fno_e = parent.E_dsrg - self.E_dsrg
-        self.fno_e_relax = parent.e_pt2 - self.e_pt2
-        self.fno_hbar1 = parent.hbar1_pt2 - self.hbar1_pt2
-        self.fno_hbar2 = parent.hbar2_pt2 - self.hbar2_pt2
+        self.hbar_shift = {
+            "e_dsrg": parent.E_dsrg - self.E_dsrg,
+            "hbar0": parent.hbar0 - self.hbar0,
+            "hbar1": parent.hbar1_canon - self.hbar1_canon,
+            "hbar2": parent.hbar2_canon - self.hbar2_canon,
+        }
 
     def _release_integrals(self):
         super()._release_integrals()
@@ -381,7 +310,6 @@ class RelDSRG_MRPT2(DSRGBase):
         return ints, cumulants
 
     def solve_dsrg(self, form_hbar=False):
-        form_hbar = form_hbar or getattr(self.parent_method, "fno_active", False)
         self.T1, self.T2 = self._build_tamps()
         self.F_tilde = self._renormalize_F()
         # self.ints["V"] gets renormalizes to V_tilde in place for the following blocks:
@@ -394,64 +322,53 @@ class RelDSRG_MRPT2(DSRGBase):
         E += self.ints["E"]
         return E
 
-    def _build_ci_hamiltonian(self):
-        """
-        Fold self.hbar1/hbar2 (as built by solve_dsrg(form_hbar=True)) into
-        the fully processed, CI-ready effective Hamiltonian -- the scalar and
-        rotated-to-CASSCF-basis one-/two-body pieces that either get handed
-        to the CI solver directly (do_reference_relaxation) or compared
-        against another such triple to build an FNO truncation correction
-        (see RelDSRG_MRPT3._build_ci_hamiltonian). Caches the result as
-        self.e_pt2/hbar1_pt2/hbar2_pt2 in addition to returning it.
-        """
-        self.hbar1 += self.fock[self.actv, self.actv]
-        self.hbar2 += self.ints["V"]["aaaa"]
+    def _build_hbar(self):
+        # hbar1/hbar2 are left untouched so that this can be called more than
+        # once per solve (see DSRGBase._build_hbar).
+        _hbar1 = self.hbar1 + self.fock[self.actv, self.actv]
+        _hbar2 = self.hbar2 + self.ints["V"]["aaaa"]
 
-        # see eq 29 of Ann. Rev. Phys. Chem.
-        _e_scalar = (
-            -np.einsum("uv,uv->", self.hbar1, self.cumulants["gamma1"])
-            - 0.25 * np.einsum("uvxy,uvxy->", self.hbar2, self.cumulants["lambda2"])
+        # see eq 29 of Ann. Rev. Phys. Chem. Built from the bare energy: an
+        # incoming shift is added below, and E_dsrg already carries its energy
+        # contribution.
+        self._hbar0 = (
+            -np.einsum("uv,uv->", _hbar1, self.cumulants["gamma1"])
+            - 0.25 * np.einsum("uvxy,uvxy->", _hbar2, self.cumulants["lambda2"])
             + 0.5
             * np.einsum(
                 "uvxy,ux,vy->",
-                self.hbar2,
+                _hbar2,
                 self.cumulants["gamma1"],
                 self.cumulants["gamma1"],
             )
-        ) + self.E_dsrg
+        ) + self._E_dsrg_bare
 
-        self.hbar1 -= np.einsum("uxvy,xy->uv", self.hbar2, self.cumulants["gamma1"])
+        _hbar1 = _hbar1 - np.einsum("uxvy,xy->uv", _hbar2, self.cumulants["gamma1"])
 
-        _hbar1_canon = np.einsum(
-            "ip,pq,jq->ij", self.Uactv, self.hbar1, self.Uactv.conj(), optimize=True
+        self._hbar1_canon = np.einsum(
+            "ip,pq,jq->ij", self.Uactv, _hbar1, self.Uactv.conj(), optimize=True
         )
-        _hbar2_canon = np.einsum(
+        self._hbar2_canon = np.einsum(
             "ip,jq,pqrs,kr,ls->ijkl",
             self.Uactv,
             self.Uactv,
-            self.hbar2,
+            _hbar2,
             self.Uactv.conj(),
             self.Uactv.conj(),
             optimize=True,
         )
+        # _hbar2_canon is already antisymmetric (<pq||rs>) and the CI solver
+        # antisymmetrizes it again, doubling it, hence the 0.5.
+        self._hbar2_canon *= 0.5
 
-        self.e_pt2 = _e_scalar
-        self.hbar1_pt2 = _hbar1_canon
-        self.hbar2_pt2 = _hbar2_canon
-
-        # Also expose the CI-ready Hamiltonian through the attributes added in
-        # #242. _hbar2_canon is already antisymmetric (<pq||rs>) and the CI
-        # solver antisymmetrizes it again, doubling it, so the stored copy
-        # carries the compensating 0.5 (the e_pt2/hbar*_pt2 aliases above keep
-        # the unscaled convention that RelDSRG_MRPT3 currently expects).
-        self._hbar0 = _e_scalar
-        self._hbar1_canon = _hbar1_canon
-        self._hbar2_canon = 0.5 * _hbar2_canon
-
-        return _e_scalar, _hbar1_canon, _hbar2_canon
+        shift = getattr(self.parent_method, "hbar_shift", None)
+        if shift is not None:
+            self._hbar0 += shift["hbar0"]
+            self._hbar1_canon += shift["hbar1"]
+            self._hbar2_canon += shift["hbar2"]
 
     def do_reference_relaxation(self):
-        self._build_ci_hamiltonian()
+        self._build_hbar()
         self.ci_solver.set_ints(self._hbar0, self._hbar1_canon, self._hbar2_canon)
         self.ci_solver.run()
         e_relaxed = self.ci_solver.compute_average_energy()
@@ -725,7 +642,7 @@ class RelDSRG_MRPT2(DSRGBase):
 
         return E
 
-    def compute_unrelaxed_gamma_vv(self, use_3cumulant=True):
+    def compute_unrelaxed_gamma_vv(self):
         """
         Virtual-virtual block of the unrelaxed second-order 1-RDM,
         Gamma_ef = (1/2) <Phi0| [[E^e_f, A], A] |Phi0>
@@ -741,12 +658,6 @@ class RelDSRG_MRPT2(DSRGBase):
         _compute_pt2_energy_ccvv/_cavv/_ccav) since those T2 blocks aren't
         persisted by this class; the other terms use the persistently stored
         T1/T2 blocks directly.
-
-        Parameters
-        ----------
-        use_3cumulant : bool, optional, default=True
-            Whether to include the term involving the reference's 3-body
-            density cumulant (lambda3).
         """
         gamma1 = self.cumulants["gamma1"]
         eta1 = self.cumulants["eta1"]
@@ -815,14 +726,13 @@ class RelDSRG_MRPT2(DSRGBase):
         Gamma += +0.250 * np.einsum(
             "uvwx,wxac,uvbc->ab", lambda2, T2["aavv"], T2["aavv"].conj(), optimize=True
         )
-        if use_3cumulant:
-            Gamma += -0.250000 * np.einsum(
-                "uvwxyz,xywa,uvzb->ab",
-                lambda3,
-                T2["aaav"],
-                T2["aaav"].conj(),
-                optimize=True,
-            )
+        Gamma += -0.250000 * np.einsum(
+            "uvwxyz,xywa,uvzb->ab",
+            lambda3,
+            T2["aaav"],
+            T2["aaav"].conj(),
+            optimize=True,
+        )
 
         Gamma += self._compute_gamma_vv_ccvv()
         Gamma += self._compute_gamma_vv_cavv()

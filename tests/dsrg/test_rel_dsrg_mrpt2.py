@@ -412,7 +412,6 @@ def test_mrpt2_fno():
         mc
     )
     pt2_full_100.run()
-    assert pt2_full_100.fno_active
     assert pt2_full_100.mo_space.nvirt == pt2_ref.mo_space.nvirt
     assert pt2_full_100.mo_space.nfrozen_core == pt2_ref.mo_space.nfrozen_core
     # large (full-space) integrals/amplitudes are released once no longer needed
@@ -421,8 +420,8 @@ def test_mrpt2_fno():
 
     pt2_fno_100 = RelDSRG_MRPT2(flow_param=0.5)(pt2_full_100)
     pt2_fno_100.run()
-    # a plain instance chained onto an FNO pass does not itself set fno_active
-    assert not pt2_fno_100.fno_active
+    # a plain instance publishes no correction of its own
+    assert pt2_fno_100.hbar_shift is None
     assert pt2_fno_100.E_dsrg == approx(pt2_ref.E_dsrg)
 
     # a genuinely truncated case: fewer virtuals retained, energy deviates by

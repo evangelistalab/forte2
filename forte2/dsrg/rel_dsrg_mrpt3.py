@@ -39,28 +39,16 @@ class RelDSRG_MRPT3(DSRGBase):
 
     Notes
     -----
-    If this object is chained onto a frozen natural orbital (FNO) DSRG-MRPT2
-    pipeline (see RelDSRG_MRPT2's docstring), it detects this via its
-    immediate parent's fno_e/fno_e_relax/fno_hbar1/fno_hbar2 attributes and
-    adds them into its own effective Hamiltonian everywhere it builds one::
-
-        pt2_full = RelDSRG_MRPT2(fno_p_o=0.98)(mc)
-        pt2_full.run()
-        pt2_fno = RelDSRG_MRPT2()(pt2_full)
-        pt2_fno.run()
-        pt3_fno = RelDSRG_MRPT3()(pt2_fno)
-        pt3_fno.run()
-
-    The correction (eq. 11 of ref. [5] below) is [H_PT2^MO(s1) -
-    H_PT2^FNO(s1)] -- computed once, by pt2_fno itself when it detects its
-    own parent is fno_active, entirely independent of this class. The scalar
-    piece (fno_e) is added to E_dsrg at every iteration, and, when relaxing
-    the reference, fno_hbar1/fno_hbar2 (plus the still-missing part of the
-    scalar, fno_e_relax - fno_e) are folded into the effective Hamiltonian
-    handed to the CI solver, so relaxed and state-averaged reference states
-    are properly perturbed by the correction rather than uniformly shifted.
-    Both the unrelaxed and relaxed energies match forte's own spin-free
-    FNO-DSRG-MRPT2/MRPT3 implementation to ~1e-9 Eh.
+    If the parent method publishes an hbar_shift, its energy contribution is
+    added to E_dsrg and, when relaxing the reference, the rest of it is folded
+    into the effective Hamiltonian handed to the CI solver, so relaxed and
+    state-averaged reference states are properly perturbed by the correction
+    rather than uniformly shifted after the fact. Nothing here is specific to
+    where that shift came from; see RelFNO_DSRG_MRPT3, which composes this
+    class with two DSRG-MRPT2 runs to produce the frozen natural orbital
+    truncation correction. Both the unrelaxed and relaxed energies of that
+    composition match forte's own spin-free FNO-DSRG-MRPT2/MRPT3
+    implementation to ~1e-9 Eh.
 
     Attributes
     ----------
@@ -195,81 +183,62 @@ class RelDSRG_MRPT3(DSRGBase):
             + self.e_dsrg_mrpt3_2
             + self.e_dsrg_mrpt3_3
         )
-        fno_e = getattr(self.parent_method, "fno_e", None)
-        if fno_e is not None:
-            E = E + fno_e
         return E
 
-    def _build_ci_hamiltonian(self):
-        """
-        Fold self.hbar1/hbar2 (as built by solve_dsrg(form_hbar=True)) into
-        the fully processed, CI-ready effective Hamiltonian -- the scalar and
-        rotated-to-CASSCF-basis one-/two-body pieces handed to the CI solver.
-        If this object is chained onto an FNO DSRG-MRPT2 pipeline (its
-        parent_method has fno_e/fno_hbar1/fno_hbar2 set -- see that class's
-        docstring), the eq. 11 truncation correction is added in before
-        returning. See eq. 11 of Li, Mao, Huang, Evangelista, J. Chem.
-        Theory Comput. 2024, 20, 4170-4181.
-        """
-        self.hbar1 += self.hbar1.T.conj()
-        self.hbar1 += self.fock[self.actv, self.actv]
+    def _build_hbar(self):
+        # hbar1/hbar2 are left untouched so that this can be called more than
+        # once per solve (see DSRGBase._build_hbar).
+        _hbar1 = self.hbar1 + self.hbar1.T.conj() + self.fock[self.actv, self.actv]
 
-        hermitize_and_antisymmetrize_two_body_dense(self.hbar2)
-        self.hbar2 += self.ints["V"]["aaaa"]
+        _hbar2 = self.hbar2.copy()
+        hermitize_and_antisymmetrize_two_body_dense(_hbar2)
+        _hbar2 += self.ints["V"]["aaaa"]
 
-        # see eq 29 of Ann. Rev. Phys. Chem.
-        _e_scalar = (
-            -np.einsum("uv,uv->", self.hbar1.conj(), self.cumulants["gamma1"])
-            - 0.25
-            * np.einsum("uvxy,uvxy->", self.hbar2.conj(), self.cumulants["lambda2"])
+        # see eq 29 of Ann. Rev. Phys. Chem. Built from the bare energy: an
+        # incoming shift is added below, and E_dsrg already carries its energy
+        # contribution.
+        self._hbar0 = (
+            -np.einsum("uv,uv->", _hbar1.conj(), self.cumulants["gamma1"])
+            - 0.25 * np.einsum("uvxy,uvxy->", _hbar2.conj(), self.cumulants["lambda2"])
             + 0.5
             * np.einsum(
                 "uvxy,ux,vy->",
-                self.hbar2.conj(),
+                _hbar2.conj(),
                 self.cumulants["gamma1"],
                 self.cumulants["gamma1"],
             )
-        ) + self.E_dsrg
+        ) + self._E_dsrg_bare
 
-        self.hbar1 -= np.einsum("uxvy,xy->uv", self.hbar2, self.cumulants["gamma1"])
-        self.hbar1 = np.conj(self.hbar1, out=self.hbar1)
-        self.hbar2 = np.conj(self.hbar2, out=self.hbar2)
-
-        _hbar1_canon = np.einsum(
-            "ip,pq,jq->ij", self.Uactv, self.hbar1, self.Uactv.conj(), optimize=True
+        _hbar1 = np.conj(
+            _hbar1 - np.einsum("uxvy,xy->uv", _hbar2, self.cumulants["gamma1"])
         )
-        _hbar2_canon = np.einsum(
+        _hbar2 = np.conj(_hbar2)
+
+        self._hbar1_canon = np.einsum(
+            "ip,pq,jq->ij", self.Uactv, _hbar1, self.Uactv.conj(), optimize=True
+        )
+        self._hbar2_canon = np.einsum(
             "ip,jq,pqrs,kr,ls->ijkl",
             self.Uactv,
             self.Uactv,
-            self.hbar2,
+            _hbar2,
             self.Uactv.conj(),
             self.Uactv.conj(),
             optimize=True,
         )
+        # _hbar2_canon is already antisymmetric (<pq||rs>) and the CI solver
+        # antisymmetrizes it again, doubling it, hence the 0.5.
+        self._hbar2_canon *= 0.5
 
-        # Add the eq. 11 correction to the CI-ready Hamiltonian. The scalar
-        # needs care to avoid double counting: _e_scalar above already
-        # contains self.E_dsrg, and solve_dsrg has already folded fno_e into
-        # E_dsrg. Since fno_e_relax (the full scalar difference of the two
-        # PT2 effective Hamiltonians) decomposes as
-        #     fno_e_relax = [de-normal-ordering difference] + fno_e,
-        # only the de-normal-ordering part, fno_e_relax - fno_e, is still
-        # missing here.
-        fno_e_relax = getattr(self.parent_method, "fno_e_relax", None)
-        if fno_e_relax is not None:
-            _e_scalar = _e_scalar + (fno_e_relax - self.parent_method.fno_e)
-            _hbar1_canon = _hbar1_canon + self.parent_method.fno_hbar1
-            _hbar2_canon = _hbar2_canon + self.parent_method.fno_hbar2
-
-        return _e_scalar, _hbar1_canon, _hbar2_canon
+        shift = getattr(self.parent_method, "hbar_shift", None)
+        if shift is not None:
+            self._hbar0 += shift["hbar0"]
+            self._hbar1_canon += shift["hbar1"]
+            self._hbar2_canon += shift["hbar2"]
 
     def do_reference_relaxation(self):
-        _e_scalar, _hbar1_canon, _hbar2_canon = self._build_ci_hamiltonian()
-
-        # _hbar2_canon is already antisymmetric (<pq||rs>), the CI solver
-        # antisymmetrizes it again, doubling it, hence the 0.5
-        self.ci_solver.set_ints(_e_scalar, _hbar1_canon, 0.5 * _hbar2_canon)
+        self._build_hbar()
+        self.ci_solver.set_ints(self._hbar0, self._hbar1_canon, self._hbar2_canon)
         self.ci_solver.run()
         e_relaxed = self.ci_solver.compute_average_energy()
         self.relax_eigvals = self.ci_solver.evals_flat.copy()

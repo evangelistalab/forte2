@@ -28,11 +28,18 @@ class DSRGBase(Method):
     frozen_core_orbitals: int | list[int] = None
     frozen_virtual_orbitals: int | list[int] = None
 
+    # Build the active-space effective Hamiltonian even when the reference is not relaxed
+    save_hbar: bool = False
+
     # Non-init attributes
     converged: bool = field(init=False, default=False)
     _hbar0: float | None = field(init=False, default=None)
     _hbar1_canon: NDArray | None = field(init=False, default=None)
     _hbar2_canon: NDArray | None = field(init=False, default=None)
+    # The DSRG energy before any incoming hbar_shift is applied
+    _E_dsrg_bare: float | None = field(init=False, default=None)
+    # Used for FNO corrections
+    hbar_shift: dict | None = field(init=False, default=None)
 
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
@@ -124,7 +131,9 @@ class DSRGBase(Method):
         self.hc = self.core
         self.pv = slice(self.nact, self.nact + self.nvirt)
 
-        self.dsrg_helper = _RelDSRGHelper(self) if self.two_component else _DSRGHelper(self)
+        self.dsrg_helper = (
+            _RelDSRGHelper(self) if self.two_component else _DSRGHelper(self)
+        )
         perm = self.mo_space.orig_to_contig
         self._C = self.mos.C[0][:, perm].copy()
 
@@ -149,17 +158,52 @@ class DSRGBase(Method):
     def _release_integrals(self):
         """
         Release large per-run integral/cumulant state once it is no longer
-        needed, freeing the underlying memory. Subclasses holding additional
-        large arrays (e.g. T1/T2 amplitudes) should override and call super().
+        needed, freeing the underlying memory.
         """
         self.ints = None
         self.cumulants = None
 
+    def _build_hbar(self):
+        """
+        Fold the raw hbar1/hbar2 left by solve_dsrg(form_hbar=True) into the
+        CI-ready effective Hamiltonian, storing it as _hbar0/_hbar1_canon/
+        _hbar2_canon (and applying any incoming hbar_shift).
+
+        Implementations must not consume hbar1/hbar2 in place, so that calling
+        this more than once per solve is harmless.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement _build_hbar, so it "
+            "cannot expose its effective Hamiltonian outside of reference "
+            "relaxation (save_hbar is not supported)."
+        )
+
+    def _solve_dsrg_shifted(self, form_hbar):
+        """
+        Solve, keeping the unshifted energy in _E_dsrg_bare and returning it
+        with any incoming hbar_shift's energy contribution applied.
+        """
+        self._E_dsrg_bare = float(self.solve_dsrg(form_hbar))
+        if self.save_hbar:
+            self._build_hbar()
+        shift = getattr(self.parent_method, "hbar_shift", None)
+        if shift is None:
+            return self._E_dsrg_bare
+        return self._E_dsrg_bare + shift["e_dsrg"]
+
+    def _post_process(self):
+        """
+        Hook run at the end of run(), after the energy (and, if requested, the
+        effective Hamiltonian) is available. Subclasses override it to expose
+        derived quantities -- e.g. RelDSRG_MRPT2 uses it to truncate its
+        virtual space to frozen natural orbitals, and to publish an hbar_shift.
+        """
+
     def run(self):
         self._startup()
-        form_hbar = self.nrelax > 0
+        form_hbar = self.nrelax > 0 or self.save_hbar
 
-        self.E_dsrg = self.solve_dsrg(form_hbar)
+        self.E_dsrg = self._solve_dsrg_shifted(form_hbar)
         if abs(self.E_dsrg.imag) > 1e-12:
             logger.log_warning(
                 f"DSRG energy has a significant imaginary component: {self.E_dsrg.imag}"
@@ -204,7 +248,7 @@ class DSRGBase(Method):
                 break
 
             self.ints, self.cumulants = self.get_integrals()
-            self.E_dsrg = self.solve_dsrg(form_hbar=form_hbar)
+            self.E_dsrg = self._solve_dsrg_shifted(form_hbar)
             if abs(self.E_dsrg.imag) > 1e-12:
                 logger.log_warning(
                     f"DSRG energy has a significant imaginary component: {self.E_dsrg.imag}"
@@ -228,6 +272,7 @@ class DSRGBase(Method):
                     self.ci_solver.sa_info, self.ci_solver.evals_per_solver
                 )
         self.relax_eigvals_history = np.array(self.relax_eigvals_history)
+        self._post_process()
         self.executed = True
         return self
 
@@ -263,14 +308,18 @@ class DSRGBase(Method):
     @property
     def hbar0(self):
         if self._hbar0 is None:
-            raise RuntimeError("hbar0 is only available after reference relaxation!")
+            raise RuntimeError(
+                "hbar0 is only available after reference relaxation or a run "
+                "with save_hbar=True!"
+            )
         return self._hbar0
 
     @property
     def hbar1_canon(self):
         if self._hbar1_canon is None:
             raise RuntimeError(
-                "hbar1_canon is only available after reference relaxation!"
+                "hbar1_canon is only available after reference relaxation or "
+                "a run with save_hbar=True!"
             )
         return self._hbar1_canon
 
@@ -278,6 +327,7 @@ class DSRGBase(Method):
     def hbar2_canon(self):
         if self._hbar2_canon is None:
             raise RuntimeError(
-                "hbar2_canon is only available after reference relaxation!"
+                "hbar2_canon is only available after reference relaxation or "
+                "a run with save_hbar=True!"
             )
         return self._hbar2_canon
