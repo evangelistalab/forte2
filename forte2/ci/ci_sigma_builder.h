@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <cmath>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <tuple>
@@ -19,15 +20,22 @@
 namespace forte2 {
 
 enum class CIAlgorithm {
-    Knowles_Handy,     // Knowles-Handy algorithm
-    Harrison_Zarrabian // Harrison-Zarrabian algorithm
+    // Knowles-Handy algorithm. Its compound-index (p>=q) compression assumes V has the full
+    // 8-fold real-integral permutational symmetry (V[p,q,r,s] invariant under p<->r and q<->s
+    // individually, not just the combined (p,q,r,s)->(q,p,s,r) swap). Genuine MO integrals always
+    // have this; V that only satisfies the weaker combined swap will silently produce a wrong
+    // sigma vector with this algorithm.
+    Knowles_Handy,
+    Harrison_Zarrabian // Harrison-Zarrabian algorithm; does not require the stronger V symmetry.
 };
 
 class CISigmaBuilder {
   public:
     // == Class Constructor ==
-    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
-                   int log_level = 3);
+    /// @param algorithm The CI algorithm to use, fixed for the object's lifetime.
+    ///        Supported: "kh", "hz", "knowles-handy", "harrison-zarrabian" (default is "hz")
+    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V, int log_level = 3,
+                   const std::string& algorithm = "hz");
 
     // == Class Public Functions ==
 
@@ -35,17 +43,21 @@ class CISigmaBuilder {
     /// @param mb Memory size in megabytes (default is 1 GB)
     void set_memory(int mb);
 
-    /// @brief Set the CI algorithm to use for building the Hamiltonian
-    /// @param algorithm The CI algorithm to use (default is "knowles-handy")
-    /// Supported algorithms: "kh", "hz", "knowles-handy", "harrison-zarrabian"
-    void set_algorithm(const std::string& algorithm);
-
     /// @brief Get the name of the current sigma build algorithm
     /// @return The name of the current sigma build algorithm
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
+    /// @param E New scalar energy, or nullopt to keep the current value
+    /// @param H New one-electron integrals, or nullopt to keep the current value
+    /// @param V New two-electron integrals, or nullopt to keep the current value
+    /// @note With the Knowles-Handy algorithm, H and V must be given together (or not at all):
+    /// its modified one-electron integrals mix both, and neither is cached between calls, so
+    /// there is nothing to fall back on for the one not supplied. Harrison-Zarrabian has no such
+    /// restriction since H and V feed independent derived arrays.
+    void set_Hamiltonian(std::optional<double> E = std::nullopt,
+                         std::optional<np_matrix> H = std::nullopt,
+                         std::optional<np_tensor4> V = std::nullopt);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -88,6 +100,17 @@ class CISigmaBuilder {
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
     void Hamiltonian(np_vector basis, np_vector sigma) const;
+
+    /// @brief Apply the scalar and one-electron part of the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector |sigma> = (E + sum_pq H_pq E_pq) |basis>
+    /// @note The one-electron integrals are not required to be symmetric.
+    void sigma_one_electron(np_vector basis, np_vector sigma) const;
+
+    /// @brief Apply the two-electron part of the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector, the two-electron part of H |basis>
+    void sigma_two_electron(np_vector basis, np_vector sigma) const;
 
     /// @brief Return the average build time for the Hamiltonian components
     std::vector<double> avg_build_time() const {
@@ -290,10 +313,6 @@ class CISigmaBuilder {
     const CIStrings& lists_;
     /// @brief The scalar energy
     double E_;
-    /// @brief One-electron integrals in the form of a matrix H[p][q] = <p|H|q> = h_pq
-    np_matrix H_;
-    /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
-    np_tensor4 V_;
     /// @brief Object for computing the energy and Slater determinants
     SlaterRules slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
@@ -338,6 +357,11 @@ class CISigmaBuilder {
     /// @brief Two-electron integrals: V[p][q][r][s] = <pq||rs> = (pr|qs) - (ps|qr)
     mutable std::vector<double> v_pr_qs_a;
 
+    /// @brief Rebuild h_hz from H. Depends only on H.
+    void update_h_hz(np_matrix& H);
+    /// @brief Rebuild v_pr_qs and v_pr_qs_a from V. Depends only on V.
+    void update_v_hz(np_tensor4& V);
+
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
     /// @param alpha If true, compute the alpha contribution, otherwise the beta
     /// @param h The one-electron integrals
@@ -359,6 +383,12 @@ class CISigmaBuilder {
     mutable std::vector<double> h_kh;
     // Modified two-electron integrals used in the Knowles-Handy algorithm
     mutable std::vector<double> v_ijkl_hk;
+
+    /// @brief Rebuild h_kh from H and V. Mixes both, so set_Hamiltonian requires both to be
+    /// given together whenever this algorithm is active.
+    void update_h_kh(np_matrix& H, np_tensor4& V);
+    /// @brief Rebuild v_ijkl_hk from V. Depends only on V.
+    void update_v_kh(np_tensor4& V);
 
     /// @brief Builds the one-electron contribution to the sigma vector using the Knowles-Handy
     /// algorithm.

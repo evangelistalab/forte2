@@ -3,6 +3,7 @@
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/complex.h>
+#include <nanobind/stl/optional.h>
 
 #include "determinant/determinant.h"
 #include "determinant/determinant_helpers.h"
@@ -284,6 +285,10 @@ void export_slater_rules_api(nb::module_& sub_m) {
              "one_electron_integrals"_a, "two_electron_integrals"_a,
              "Initialize a SlaterRules object with the number of orbitals, scalar energy, "
              "one-electron integrals, and two-electron integrals in physicist's notation.")
+        .def("update_integrals", &SlaterRules::update_integrals, "norb"_a,
+             "scalar_energy"_a = nb::none(), "one_electron_integrals"_a = nb::none(),
+             "two_electron_integrals"_a = nb::none(),
+             "Update the integrals used in evaluating Slater rules.")
         .def("energy", &SlaterRules::energy)
         .def("energies", &SlaterRules::energies, "dets"_a,
              "Compute the energies of a vector of determinants")
@@ -296,6 +301,10 @@ void export_rel_slater_rules_api(nb::module_& sub_m) {
              "scalar_energy"_a, "one_electron_integrals"_a, "two_electron_integrals"_a,
              "Initialize a RelSlaterRules object with the number of spinor(orbitals), scalar "
              "energy, one-electron integrals, and two-electron integrals in physicist's notation.")
+        .def("update_integrals", &RelSlaterRules::update_integrals, "nspinor"_a,
+             "scalar_energy"_a = nb::none(), "one_electron_integrals"_a = nb::none(),
+             "two_electron_integrals"_a = nb::none(),
+             "Update the integrals used in evaluating Slater rules.")
         .def("energy", &RelSlaterRules::energy)
         .def("energies", &RelSlaterRules::energies, "dets"_a,
              "Compute the energies of a vector of determinants")

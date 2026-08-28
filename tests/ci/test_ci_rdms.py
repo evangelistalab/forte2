@@ -415,8 +415,7 @@ def test_ci_builder_memory_reconfiguration_is_retry_safe():
     lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
     H = np.diag(np.linspace(-1.0, 1.0, norb))
     V = np.zeros((norb, norb, norb, norb))
-    builder = CISigmaBuilder(lists, 0.25, H, V, 0)
-    builder.set_algorithm("hz")
+    builder = CISigmaBuilder(lists, 0.25, H, V, 0, "hz")
 
     rng = np.random.default_rng(205)
     basis = rng.normal(size=lists.ndet)

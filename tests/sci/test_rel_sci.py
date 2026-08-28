@@ -6,6 +6,7 @@ from forte2.ci import RelCI
 from forte2.sci import RelSelectedCI, RelSelectedCISolver
 from forte2.helpers.comparisons import approx
 from forte2.base_classes.params import SelectedCIParams
+from forte2.lib.det import Determinant
 
 
 def _h2_ghf_upcast():
@@ -42,6 +43,28 @@ def test_rel_sci_h2():
     assert sci.E[0] == approx(-1.096071975854)
     # the full variational space is recovered, so there is no PT2 remainder
     assert abs(sci.E_pt2[0]) < 1e-10
+
+
+def test_rel_sci_pinned_only_guess():
+    """RelSelectedCI must support an initial guess built purely from pinned_guess_dets
+    (test_sci_pinned_only_guess's counterpart): _initial_guess previously left
+    guess_hdiag/nguess_dets unbound when guess_dets was empty."""
+    conv = _h2_ghf_upcast()
+
+    sci = RelSelectedCI(
+        nel=2,
+        active_orbitals=4,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+            guess_dets=[],
+            pinned_guess_dets=[Determinant("aa00")],
+        ),
+    )(conv)
+    sci.run()
+
+    assert sci.E[0] == approx(-1.096071975854)
 
 
 def test_rel_sci_h2_exact():

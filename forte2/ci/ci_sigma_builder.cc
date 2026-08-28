@@ -27,9 +27,17 @@ double transpose_1_time = 0.0;
 double transpose_2_time = 0.0;
 
 CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
-                               int log_level)
-    : lists_(lists), E_(E), H_(H), V_(V), slater_rules_(lists.norb(), E, H, V),
-      log_level_(log_level) {
+                               int log_level, const std::string& algorithm)
+    : lists_(lists), E_(E), slater_rules_(lists.norb(), E, H, V), log_level_(log_level) {
+
+    if (algorithm == "kh" or algorithm == "knowles-handy") {
+        algorithm_ = CIAlgorithm::Knowles_Handy;
+    } else if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
+        algorithm_ = CIAlgorithm::Harrison_Zarrabian;
+    } else {
+        throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
+    }
+
     // Find the size of the largest symmetry block
     size_t max_size = 0;
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
@@ -44,16 +52,6 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
     TL.resize(max_size);
 
     set_Hamiltonian(E, H, V);
-}
-
-void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
-    if (algorithm == "kh" or algorithm == "knowles-handy") {
-        algorithm_ = CIAlgorithm::Knowles_Handy;
-    } else if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
-        algorithm_ = CIAlgorithm::Harrison_Zarrabian;
-    } else {
-        throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
-    }
 }
 
 std::string CISigmaBuilder::get_algorithm() const {
@@ -99,50 +97,80 @@ size_t CISigmaBuilder::max_composite_hole_dimension(const StringAddress& alpha_a
     return max_alpha * max_beta;
 }
 
-void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
-    E_ = E;
-
-    if (H.ndim() != 2) {
-        throw std::runtime_error("H must be a 2D matrix.");
+void CISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<np_matrix> H,
+                                     std::optional<np_tensor4> V) {
+    if (E) {
+        E_ = *E;
     }
-    if (H.shape(0) != lists_.norb() || H.shape(1) != lists_.norb()) {
-        throw std::runtime_error("H shape does not match the number of orbitals.");
-    }
-    H_ = H;
 
-    // Initialize the one-electron integrals h_hz and h_kh
-
-    const size_t norb = lists_.norb();
-    h_kh.resize(norb * norb);
-    h_hz.resize(norb * norb);
-    auto h = H.view();
-    auto v = V.view();
-    for (size_t p = 0; p < norb; ++p) {
-        for (size_t q = 0; q < norb; ++q) {
-            h_hz[p * norb + q] = h(p, q);
-            h_kh[p * norb + q] = h(p, q);
-            for (size_t r = 0; r < norb; ++r) {
-                h_kh[p * norb + q] -= 0.5 * v(p, q, r, r);
-            }
+    if (H) {
+        if (H->ndim() != 2) {
+            throw std::runtime_error("H must be a 2D matrix.");
+        }
+        if (H->shape(0) != lists_.norb() || H->shape(1) != lists_.norb()) {
+            throw std::runtime_error("H shape does not match the number of orbitals.");
         }
     }
 
-    // Initialize the two-electron integrals v_pr_qs and v_pr_qs_a
-    if (V.ndim() != 4) {
-        throw std::runtime_error("V must be a 4D tensor.");
+    if (V) {
+        if (V->ndim() != 4) {
+            throw std::runtime_error("V must be a 4D tensor.");
+        }
+        if (V->shape(0) != lists_.norb() || V->shape(1) != lists_.norb() ||
+            V->shape(2) != lists_.norb() || V->shape(3) != lists_.norb()) {
+            throw std::runtime_error("V shape does not match the number of orbitals.");
+        }
     }
-    if (V.shape(0) != lists_.norb() || V.shape(1) != lists_.norb() || V.shape(2) != lists_.norb() ||
-        V.shape(3) != lists_.norb()) {
-        throw std::runtime_error("V shape does not match the number of orbitals.");
-    }
-    V_ = V;
 
+    // optional containers forwarded to slater rules update,
+    // where partial updates are also supported
+    if (E || H || V) {
+        slater_rules_.update_integrals(static_cast<int>(lists_.norb()), E, H, V);
+    }
+
+    if (!H && !V) {
+        return;
+    }
+
+    // Only rebuild the derived arrays used by the algorithm fixed at construction; the other
+    // algorithm's arrays are never built since the algorithm cannot change afterward.
+    if (algorithm_ == CIAlgorithm::Knowles_Handy) {
+        if (static_cast<bool>(H) != static_cast<bool>(V)) {
+            throw std::runtime_error(
+                "The Knowles-Handy algorithm's modified one-electron integrals mix H and V, "
+                "and neither is cached between calls, so set_Hamiltonian requires both to be "
+                "given together.");
+        }
+        update_h_kh(*H, *V);
+        update_v_kh(*V);
+    } else {
+        if (H) {
+            update_h_hz(*H);
+        }
+        if (V) {
+            update_v_hz(*V);
+        }
+    }
+}
+
+void CISigmaBuilder::update_h_hz(np_matrix& H) {
+    const size_t norb = lists_.norb();
+    h_hz.resize(norb * norb);
+    auto h = H.view();
+    for (size_t p = 0; p < norb; ++p) {
+        for (size_t q = 0; q < norb; ++q) {
+            h_hz[p * norb + q] = h(p, q);
+        }
+    }
+}
+
+void CISigmaBuilder::update_v_hz(np_tensor4& V) {
+    const size_t norb = lists_.norb();
     const size_t norb2 = norb * norb;
-    const size_t npairs = (norb * (norb - 1)) / 2;    // Number of pairs (p, r) with p > r
-    const size_t ngeqpairs = (norb * (norb + 1)) / 2; // Number of pairs (p, r) with p >= r
+    const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
     v_pr_qs.resize(norb2 * norb2);
     v_pr_qs_a.resize(npairs * npairs);
-    v_ijkl_hk.resize(ngeqpairs * ngeqpairs);
+    auto v = V.view();
 
     // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs
     for (size_t p = 0; p < norb; ++p) {
@@ -168,6 +196,29 @@ void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
             }
         }
     }
+}
+
+void CISigmaBuilder::update_h_kh(np_matrix& H, np_tensor4& V) {
+    const size_t norb = lists_.norb();
+    h_kh.resize(norb * norb);
+    auto h = H.view();
+    auto v = V.view();
+    for (size_t p = 0; p < norb; ++p) {
+        for (size_t q = 0; q < norb; ++q) {
+            h_kh[p * norb + q] = h(p, q);
+            for (size_t r = 0; r < norb; ++r) {
+                h_kh[p * norb + q] -= 0.5 * v(p, q, r, r);
+            }
+        }
+    }
+}
+
+void CISigmaBuilder::update_v_kh(np_tensor4& V) {
+    const size_t norb = lists_.norb();
+    const size_t ngeqpairs = (norb * (norb + 1)) / 2; // Number of pairs (p, r) with p >= r
+    v_ijkl_hk.resize(ngeqpairs * ngeqpairs);
+    auto v = V.view();
+
     // Loop over all pairs (i, j) and (k, l) to fill v_ijkl_hk with i >= j and k >= l
     for (size_t i = 0; i < norb; ++i) {
         for (size_t j = 0; j <= i; ++j) {
@@ -215,6 +266,35 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     }
     hdiag_timer_ += t.elapsed_seconds();
     build_count_++;
+}
+
+void CISigmaBuilder::sigma_one_electron(np_vector basis, np_vector sigma) const {
+    vector::zero<double>(sigma);
+    auto b_span = vector::as_span<double>(basis);
+    auto s_span = vector::as_span<double>(sigma);
+
+    H0(b_span, s_span);
+    if (algorithm_ == CIAlgorithm::Knowles_Handy) {
+        H1_kh(b_span, s_span, Spin::Alpha);
+        H1_kh(b_span, s_span, Spin::Beta);
+    } else {
+        H1_hz(b_span, s_span, Spin::Alpha, h_hz);
+        H1_hz(b_span, s_span, Spin::Beta, h_hz);
+    }
+}
+
+void CISigmaBuilder::sigma_two_electron(np_vector basis, np_vector sigma) const {
+    vector::zero<double>(sigma);
+    auto b_span = vector::as_span<double>(basis);
+    auto s_span = vector::as_span<double>(sigma);
+
+    if (algorithm_ == CIAlgorithm::Knowles_Handy) {
+        H2_kh(b_span, s_span);
+    } else {
+        H2_hz_opposite_spin(b_span, s_span);
+        H2_hz_same_spin(b_span, s_span, Spin::Alpha);
+        H2_hz_same_spin(b_span, s_span, Spin::Beta);
+    }
 }
 
 void CISigmaBuilder::H0(std::span<double> basis, std::span<double> sigma) const {

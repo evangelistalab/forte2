@@ -208,22 +208,22 @@ class DSRG_MRPT2(DSRGBase):
 
         hbar2_temp = 2 * _hbar2 - _hbar2.swapaxes(2, 3)
 
-        _e_scalar = self.E_dsrg
-        _e_scalar -= np.einsum("vu,vu->", _hbar1, self.cumulants["gamma1"])
-        _e_scalar += 0.25 * np.einsum(
+        self._hbar0 = self.E_dsrg
+        self._hbar0 -= np.einsum("vu,vu->", _hbar1, self.cumulants["gamma1"])
+        self._hbar0 += 0.25 * np.einsum(
             "uv,vyux,xy->",
             self.cumulants["gamma1"],
             hbar2_temp,
             self.cumulants["gamma1"],
         )
-        _e_scalar -= 0.5 * np.einsum("xyuv,uvxy->", _hbar2, self.cumulants["lambda2"])
+        self._hbar0 -= 0.5 * np.einsum("xyuv,uvxy->", _hbar2, self.cumulants["lambda2"])
 
         _hbar1 -= 0.5 * np.einsum("uxvy,yx->uv", hbar2_temp, self.cumulants["gamma1"])
 
-        _hbar1_canon = np.einsum(
+        self._hbar1_canon = np.einsum(
             "ip,pq,jq->ij", self.Uactv, _hbar1, self.Uactv.conj(), optimize=True
         )
-        _hbar2_canon = np.einsum(
+        self._hbar2_canon = np.einsum(
             "ip,jq,pqrs,kr,ls->ijkl",
             self.Uactv,
             self.Uactv,
@@ -233,7 +233,7 @@ class DSRG_MRPT2(DSRGBase):
             optimize=True,
         )
 
-        self.ci_solver.set_ints(_e_scalar, _hbar1_canon, _hbar2_canon)
+        self.ci_solver.set_ints(self._hbar0, self._hbar1_canon, self._hbar2_canon)
         self.ci_solver.run()
         e_relaxed = self.ci_solver.compute_average_energy()
         self.relax_eigvals = self.ci_solver.evals_flat.copy()

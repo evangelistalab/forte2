@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from abc import abstractmethod
 
 import numpy as np
+from numpy.typing import NDArray
 
 from forte2.base_classes import Method, CIBase, RelCIBase
 from forte2.mcopt.mc_optimizer import MCOptimizerBase
@@ -29,6 +30,9 @@ class DSRGBase(Method):
 
     # Non-init attributes
     converged: bool = field(init=False, default=False)
+    _hbar0: float | None = field(init=False, default=None)
+    _hbar1_canon: NDArray | None = field(init=False, default=None)
+    _hbar2_canon: NDArray | None = field(init=False, default=None)
 
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
@@ -141,7 +145,6 @@ class DSRGBase(Method):
 
         self.fock_builder = self.system.fock_builder
         self.ints, self.cumulants = self.get_integrals()
-        self.hbar = dict()
 
     def _release_integrals(self):
         """
@@ -256,3 +259,25 @@ class DSRGBase(Method):
 
     @abstractmethod
     def get_integrals(self): ...
+
+    @property
+    def hbar0(self):
+        if self._hbar0 is None:
+            raise RuntimeError("hbar0 is only available after reference relaxation!")
+        return self._hbar0
+
+    @property
+    def hbar1_canon(self):
+        if self._hbar1_canon is None:
+            raise RuntimeError(
+                "hbar1_canon is only available after reference relaxation!"
+            )
+        return self._hbar1_canon
+
+    @property
+    def hbar2_canon(self):
+        if self._hbar2_canon is None:
+            raise RuntimeError(
+                "hbar2_canon is only available after reference relaxation!"
+            )
+        return self._hbar2_canon

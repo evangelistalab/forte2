@@ -5,6 +5,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/complex.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 
 #include "ci/ci_strings.h"
@@ -87,11 +88,9 @@ void export_ci_strings_api(nb::module_& sub_m) {
 
 void export_ci_sigma_builder_api(nb::module_& sub_m) {
     nb::class_<CISigmaBuilder>(sub_m, "CISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int>(), "lists"_a, "E"_a,
-             "H"_a, "V"_a, "log_level"_a = 3,
+        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int, const std::string&>(),
+             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "algorithm"_a = "kh",
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
-        .def("set_algorithm", &CISigmaBuilder::set_algorithm, "algorithm"_a,
-             "Set the sigma build algorithm (options = kh, hz)")
         .def("get_algorithm", &CISigmaBuilder::get_algorithm,
              "Get the current sigma build algorithm")
         .def("set_memory", &CISigmaBuilder::set_memory, "memory"_a,
@@ -105,6 +104,14 @@ void export_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,
              "I"_a, "J"_a)
         .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("sigma_one_electron", &CISigmaBuilder::sigma_one_electron, "basis"_a, "sigma"_a,
+             "Apply the scalar and one-electron part of the Hamiltonian to the wave function")
+        .def("sigma_two_electron", &CISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
+             "Apply the two-electron part of the Hamiltonian to the wave function")
+        .def("set_Hamiltonian", &CISigmaBuilder::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
+             "scratch buffers. Any argument left as None keeps its current value.")
         .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a, "threshold"_a = 1e-12,
              "Convert a CI vector to a sparse state")
         // Spin-free RDMs and cumulants
@@ -202,11 +209,10 @@ void export_ci_spin_adapter_api(nb::module_& sub_m) {
 
 void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
     nb::class_<RelCISigmaBuilder>(sub_m, "RelCISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int>(),
-             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
+        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int,
+                      const std::string&>(),
+             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "algorithm"_a = "hz",
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
-        .def("set_algorithm", &RelCISigmaBuilder::set_algorithm, "algorithm"_a,
-             "Set the sigma build algorithm (options = kh, hz)")
         .def("get_algorithm", &RelCISigmaBuilder::get_algorithm,
              "Get the current sigma build algorithm")
         .def("set_memory", &RelCISigmaBuilder::set_memory, "memory"_a,
@@ -214,6 +220,14 @@ void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("form_Hdiag", &RelCISigmaBuilder::form_Hdiag, "dets"_a)
         .def("slater_rules", &RelCISigmaBuilder::slater_rules, "dets"_a, "I"_a, "J"_a)
         .def("Hamiltonian", &RelCISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("sigma_one_electron", &RelCISigmaBuilder::sigma_one_electron, "basis"_a, "sigma"_a,
+             "Apply the scalar and one-electron part of the Hamiltonian to the wave function")
+        .def("sigma_two_electron", &RelCISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
+             "Apply the two-electron part of the Hamiltonian to the wave function")
+        .def("set_Hamiltonian", &RelCISigmaBuilder::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
+             "scratch buffers. Any argument left as None keeps its current value.")
         .def("so_1rdm", &RelCISigmaBuilder::compute_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital one-electron reduced density matrix")
         .def("so_2rdm", &RelCISigmaBuilder::compute_2rdm, "C_left"_a, "C_right"_a,
@@ -239,8 +253,9 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "frozen_annihilation"_a = std::vector<size_t>{},
              "Initialize the SelectedCIHelper with the number of orbitals, initial determinants, "
              "energy, Hamiltonian, and integrals")
-        .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
-             "Set the Hamiltonian integrals")
+        .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Set the Hamiltonian integrals. Any argument left as None keeps its current value.")
         .def("Hamiltonian", &SelectedCIHelper::Hamiltonian, "basis"_a, "sigma"_a,
              "Apply the Hamiltonian to the basis and store the result in sigma")
         .def("Hdiag", &SelectedCIHelper::Hdiag, "Return the diagonal of the Hamiltonian matrix")
@@ -293,6 +308,8 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Return the determinants in the variational space")
         .def("ndets", &SelectedCIHelper::num_dets_var,
              "Return the number of determinants in the variational space")
+        .def("slater_rules", &SelectedCIHelper::slater_rules, "dets"_a, "I"_a, "J"_a,
+             "Compute the Hamiltonian matrix element <I|H|J>")
         .def("energies", &SelectedCIHelper::energies, "Return the energies of the roots")
         .def("ept2_var", &SelectedCIHelper::ept2_var,
              "Return the variational part of the Epstein-Nesbet second-order energy correction")
@@ -319,8 +336,10 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "frozen_annihilation"_a = std::vector<size_t>{},
              "Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, "
              "energy, complex Hamiltonian, and complex integrals")
-        .def("set_Hamiltonian", &RelSelectedCIHelper::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
-             "Set the (complex) Hamiltonian integrals")
+        .def("set_Hamiltonian", &RelSelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Set the (complex) Hamiltonian integrals. Any argument left as None keeps its "
+             "current value.")
         .def("Hamiltonian", &RelSelectedCIHelper::Hamiltonian, "basis"_a, "sigma"_a,
              "Apply the Hamiltonian to the (complex) basis and store the result in sigma")
         .def("Hdiag", &RelSelectedCIHelper::Hdiag,
@@ -353,6 +372,8 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "Return the determinants in the variational space")
         .def("ndets", &RelSelectedCIHelper::num_dets_var,
              "Return the number of determinants in the variational space")
+        .def("slater_rules", &RelSelectedCIHelper::slater_rules, "dets"_a, "I"_a, "J"_a,
+             "Compute the Hamiltonian matrix element <I|H|J>")
         .def("energies", &RelSelectedCIHelper::energies, "Return the energies of the roots")
         .def("ept2_var", &RelSelectedCIHelper::ept2_var,
              "Return the variational part of the Epstein-Nesbet second-order energy correction")

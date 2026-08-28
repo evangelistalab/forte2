@@ -80,6 +80,14 @@ def test_sf_mrpt2_o2_triplet():
     assert dsrg.relax_energies[1, 1] == approx(-149.965334494277)
     assert dsrg.relax_energies[1, 2] == approx(-149.70550603407)
 
+    # diagonalizing hbar should reproduce most recent relaxed energy
+    hbar0 = dsrg.hbar0
+    hbar1 = dsrg.hbar1_canon
+    hbar2 = dsrg.hbar2_canon
+    ci_solver.set_ints(hbar0, hbar1, hbar2)
+    ci_solver.run()
+    assert ci_solver.E[0] == approx(-149.965334494277)  # dsrg.relax_energies[1, 1]
+
 
 def test_mrpt2_all_active():
     xyz = f"""

@@ -438,14 +438,21 @@ class RelDSRG_MRPT2(DSRGBase):
         self.e_pt2 = _e_scalar
         self.hbar1_pt2 = _hbar1_canon
         self.hbar2_pt2 = _hbar2_canon
+
+        # Also expose the CI-ready Hamiltonian through the attributes added in
+        # #242. _hbar2_canon is already antisymmetric (<pq||rs>) and the CI
+        # solver antisymmetrizes it again, doubling it, so the stored copy
+        # carries the compensating 0.5 (the e_pt2/hbar*_pt2 aliases above keep
+        # the unscaled convention that RelDSRG_MRPT3 currently expects).
+        self._hbar0 = _e_scalar
+        self._hbar1_canon = _hbar1_canon
+        self._hbar2_canon = 0.5 * _hbar2_canon
+
         return _e_scalar, _hbar1_canon, _hbar2_canon
 
     def do_reference_relaxation(self):
-        _e_scalar, _hbar1_canon, _hbar2_canon = self._build_ci_hamiltonian()
-
-        # _hbar2_canon is already antisymmetric (<pq||rs>),
-        # the CI solver antisymmetrizes it again, doubling it, hence the 0.5
-        self.ci_solver.set_ints(_e_scalar, _hbar1_canon, 0.5 * _hbar2_canon)
+        self._build_ci_hamiltonian()
+        self.ci_solver.set_ints(self._hbar0, self._hbar1_canon, self._hbar2_canon)
         self.ci_solver.run()
         e_relaxed = self.ci_solver.compute_average_energy()
         self.relax_eigvals = self.ci_solver.evals_flat.copy()
