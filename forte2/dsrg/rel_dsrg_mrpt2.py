@@ -43,9 +43,9 @@ class RelDSRG_MRPT2(DSRGBase):
         leading virtual natural orbitals whose cumulative occupation is at
         least this fraction (0, 1] of the total. Mutually exclusive with
         fno_n_kappa; setting either activates FNO. When active, this object
-        performs a single unrelaxed pass in the full virtual space to build
-        the natural orbitals, then truncates: relax_reference is not
-        supported on this pass (see the class docstring below).
+        performs a single pass in the full virtual space to build the natural
+        orbitals, then truncates: relax_reference is not implemented on this
+        pass (see the class docstring below).
     fno_n_kappa : float, optional, default=None
         Enable FNO, retaining all virtual natural orbitals with occupation
         number >= fno_n_kappa. Mutually exclusive with fno_p_o.
@@ -99,8 +99,9 @@ class RelDSRG_MRPT2(DSRGBase):
         pt2_fno.run()
 
     The first pass (fno_p_o or fno_n_kappa given) always performs a single
-    unrelaxed solve in the full virtual space, builds the natural orbitals
-    from the unrelaxed virtual-virtual 1-RDM, and exposes the truncated,
+    solve in the full virtual space without reference relaxation, builds the
+    natural orbitals from the unrelaxed (i.e. response-free, in the sense of
+    compute_unrelaxed_gamma_vv) virtual-virtual 1-RDM, and exposes the truncated,
     natural-orbital-rotated virtual space as its own mos/mo_space -- so the
     second, chained instance runs as an entirely ordinary RelDSRG_MRPT2 in
     that truncated space, additionally computing fno_e/fno_hbar1/fno_hbar2
@@ -157,12 +158,20 @@ class RelDSRG_MRPT2(DSRGBase):
             assert (self.fno_p_o is None) != (
                 self.fno_n_kappa is None
             ), "Specify exactly one of fno_p_o or fno_n_kappa."
+            # Not a restriction of the theory -- the natural orbitals could in
+            # principle be built from a relaxed reference just as well (the
+            # "unrelaxed" in "unrelaxed 1-RDM" refers to the absence of orbital
+            # and amplitude response contributions, not to the reference). It is
+            # simply not implemented: the FNO branch of run() performs a single
+            # solve with no relaxation loop, so relax_reference would be silently
+            # ignored. Implementing it would also need care, since relaxation
+            # mutates the shared ci_solver and the truncation correction assumes
+            # this pass and the chained one see the same reference.
             assert not self.relax_reference, (
-                "relax_reference is not supported together with fno_p_o/fno_n_kappa: "
-                "the natural orbitals must come from an unrelaxed reference. Run this "
-                "class once with FNO options and no relaxation to build the truncated "
-                "space, then chain a second RelDSRG_MRPT2 (with relax_reference if "
-                "desired) onto it."
+                "relax_reference is not implemented together with "
+                "fno_p_o/fno_n_kappa. Run this class once with FNO options and "
+                "no relaxation to build the truncated space, then chain a second "
+                "RelDSRG_MRPT2 (with relax_reference if desired) onto it."
             )
 
     def run(self):
@@ -713,16 +722,24 @@ class RelDSRG_MRPT2(DSRGBase):
         """
         Virtual-virtual block of the unrelaxed second-order 1-RDM,
         Gamma_ef = (1/2) <Phi0| [[E^e_f, A], A] |Phi0>
-        with the reference's 3-body density cumulant (lambda3) dropped.
         Used to build FNOs; see eq 8-9 and Appendix A of
         Li, Mao, Huang, Evangelista, J. Chem. Theory Comput. 2024, 20, 4170-4181.
+        "Unrelaxed" here is the response-theory sense of eq 7-8 of that paper (a
+        plain expectation value, with no orbital or amplitude response
+        contributions); it does not refer to DSRG reference relaxation.
         The reference (CASSCF) contribution to Gamma_ef is exactly zero, since
         virtual orbitals are unoccupied in every determinant of the CAS reference.
         Requires self.T1/self.T2 (i.e. solve_dsrg must have already run).
-        Derived with wickd; see forte2/dsrg/derive_fno_gamma_vv.py. The ccvv/cavv/ccav
-        contributions are accumulated on the fly (mirroring _compute_pt2_energy_ccvv/
-        _cavv/_ccav) since those T2 blocks aren't persisted by this class; the other
-        11 terms use the persistently stored T1/T2 blocks directly.
+        The ccvv/cavv/ccav contributions are accumulated on the fly (mirroring
+        _compute_pt2_energy_ccvv/_cavv/_ccav) since those T2 blocks aren't
+        persisted by this class; the other terms use the persistently stored
+        T1/T2 blocks directly.
+
+        Parameters
+        ----------
+        use_3cumulant : bool, optional, default=True
+            Whether to include the term involving the reference's 3-body
+            density cumulant (lambda3).
         """
         gamma1 = self.cumulants["gamma1"]
         eta1 = self.cumulants["eta1"]
