@@ -267,3 +267,11 @@ class SelectedCIParams(ParamsBase):
     energy_shift: float = None
     pt2_regularizer: Literal["none", "shift", "dsrg"] = "none"
     pt2_regularizer_strength: float = 0.0
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.var_threshold < 0:
+            raise RuntimeError(f"var_threshold cannot be negative, got {self.var_threshold}")
+        if self.pt2_threshold < 0:
+            raise RuntimeError(f"var_threshold cannot be negative, got {self.pt2_threshold}")
+
