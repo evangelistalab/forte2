@@ -1,0 +1,153 @@
+{
+  "bond_length_angstrom": 4.800000000000001,
+  "bond_ratio": 3,
+  "completed_at": "2026-08-27 19:18:02",
+  "converged": true,
+  "energy": -7.871148379700626,
+  "flow_exponent": 0.25,
+  "flow_param": 1.7782794100389228,
+  "history": [
+    {
+      "delta_energy": 0.0,
+      "diis_status": "",
+      "elapsed_s": 1.3162855000118725,
+      "energy": -7.867108253507937,
+      "iter_s": 1.316283292020671,
+      "iteration": 0,
+      "ncomm": 9,
+      "rms_update": 0.02932093788654631
+    },
+    {
+      "delta_energy": -0.0026661703367203415,
+      "diis_status": "",
+      "elapsed_s": 3.37795241700951,
+      "energy": -7.869774423844658,
+      "iter_s": 2.0616629170253873,
+      "iteration": 1,
+      "ncomm": 10,
+      "rms_update": 0.011790728264162543
+    },
+    {
+      "delta_energy": -0.0008601047613465695,
+      "diis_status": "S",
+      "elapsed_s": 5.488745458016638,
+      "energy": -7.870634528606004,
+      "iter_s": 2.1107887090183794,
+      "iteration": 2,
+      "ncomm": 10,
+      "rms_update": 0.004983319420530474
+    },
+    {
+      "delta_energy": -0.00029498565516483666,
+      "diis_status": "S",
+      "elapsed_s": 7.616562457988039,
+      "energy": -7.870929514261169,
+      "iter_s": 2.127812749997247,
+      "iteration": 3,
+      "ncomm": 10,
+      "rms_update": 0.002141254116181251
+    },
+    {
+      "delta_energy": -0.00012600061412371133,
+      "diis_status": "S/E",
+      "elapsed_s": 9.759459999972023,
+      "energy": -7.871055514875293,
+      "iter_s": 2.1428942919592373,
+      "iteration": 4,
+      "ncomm": 10,
+      "rms_update": 0.000928086092106933
+    },
+    {
+      "delta_energy": -9.129698866949809e-05,
+      "diis_status": "S/E",
+      "elapsed_s": 11.926013207994401,
+      "energy": -7.871146811863962,
+      "iter_s": 2.1665501249954104,
+      "iteration": 5,
+      "ncomm": 10,
+      "rms_update": 3.505729595460237e-05
+    },
+    {
+      "delta_energy": -1.6338835866491763e-06,
+      "diis_status": "S/E",
+      "elapsed_s": 14.084983707987703,
+      "energy": -7.871148445747549,
+      "iter_s": 2.1589681670302525,
+      "iteration": 6,
+      "ncomm": 10,
+      "rms_update": 4.009633042828103e-06
+    },
+    {
+      "delta_energy": 5.241520906196229e-08,
+      "diis_status": "S/E",
+      "elapsed_s": 16.31859187502414,
+      "energy": -7.87114839333234,
+      "iter_s": 2.2336055409978144,
+      "iteration": 7,
+      "ncomm": 10,
+      "rms_update": 1.0217377815496412e-06
+    },
+    {
+      "delta_energy": 1.4447261165173586e-08,
+      "diis_status": "S/E",
+      "elapsed_s": 18.455152707989328,
+      "energy": -7.871148378885079,
+      "iter_s": 2.136558416998014,
+      "iteration": 8,
+      "ncomm": 10,
+      "rms_update": 1.3130980446613534e-07
+    },
+    {
+      "delta_energy": -1.97592608941477e-09,
+      "diis_status": "S/E",
+      "elapsed_s": 20.609761916974094,
+      "energy": -7.871148380861005,
+      "iter_s": 2.1546068330062553,
+      "iteration": 9,
+      "ncomm": 10,
+      "rms_update": 1.4279790382138565e-08
+    },
+    {
+      "delta_energy": 9.971365955152578e-10,
+      "diis_status": "S/E",
+      "elapsed_s": 22.75188562500989,
+      "energy": -7.871148379863868,
+      "iter_s": 2.1421215829905123,
+      "iteration": 10,
+      "ncomm": 10,
+      "rms_update": 2.339160622838533e-09
+    },
+    {
+      "delta_energy": 1.6368417732337548e-10,
+      "diis_status": "S/E",
+      "elapsed_s": 24.888420999981463,
+      "energy": -7.871148379700184,
+      "iter_s": 2.1365331250126474,
+      "iteration": 11,
+      "ncomm": 10,
+      "rms_update": 5.95070186568176e-10
+    },
+    {
+      "delta_energy": -4.4231285301066237e-13,
+      "diis_status": "S/E",
+      "elapsed_s": 27.10903320799116,
+      "energy": -7.871148379700626,
+      "iter_s": 2.2206100409966893,
+      "iteration": 12,
+      "ncomm": 10,
+      "rms_update": 1.4095713781786684e-10
+    }
+  ],
+  "id": "sr_normal_R3re_n2_s10ep0p25",
+  "iterations": 13,
+  "max_abs_amplitude": 0.05729756393373876,
+  "method": "sr_normal",
+  "n_amplitudes": 1496,
+  "nmo": 19,
+  "rank": 2,
+  "rhf_energy": -7.840928560038565,
+  "seconds": 27.109035332978237,
+  "setup_s": 0.2818730410072021,
+  "status": "ok",
+  "wall_s": 27.541721124958713
+}

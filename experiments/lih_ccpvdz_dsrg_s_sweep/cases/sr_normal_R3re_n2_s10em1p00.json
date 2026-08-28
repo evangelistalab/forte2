@@ -1,0 +1,113 @@
+{
+  "bond_length_angstrom": 4.800000000000001,
+  "bond_ratio": 3,
+  "completed_at": "2026-08-27 19:17:05",
+  "converged": true,
+  "energy": -7.850789490433294,
+  "flow_exponent": -1.0,
+  "flow_param": 0.1,
+  "history": [
+    {
+      "delta_energy": 0.0,
+      "diis_status": "",
+      "elapsed_s": 0.9173748749890365,
+      "energy": -7.850410703408964,
+      "iter_s": 0.9173725420259871,
+      "iteration": 0,
+      "ncomm": 7,
+      "rms_update": 0.0027103549828842565
+    },
+    {
+      "delta_energy": -0.000350171606068983,
+      "diis_status": "",
+      "elapsed_s": 2.1312628340092488,
+      "energy": -7.850760875015033,
+      "iter_s": 1.2138797500520013,
+      "iteration": 1,
+      "ncomm": 7,
+      "rms_update": 0.00026948480236343287
+    },
+    {
+      "delta_energy": -2.6290726173883172e-05,
+      "diis_status": "S",
+      "elapsed_s": 3.352463833987713,
+      "energy": -7.850787165741207,
+      "iter_s": 1.2211969170020893,
+      "iteration": 2,
+      "ncomm": 7,
+      "rms_update": 2.8276810377535853e-05
+    },
+    {
+      "delta_energy": -2.1239967864516984e-06,
+      "diis_status": "S",
+      "elapsed_s": 4.577097917033825,
+      "energy": -7.850789289737993,
+      "iter_s": 1.224630375043489,
+      "iteration": 3,
+      "ncomm": 7,
+      "rms_update": 3.153204688914093e-06
+    },
+    {
+      "delta_energy": -1.8358852749145171e-07,
+      "diis_status": "S/E",
+      "elapsed_s": 5.942240209027659,
+      "energy": -7.850789473326521,
+      "iter_s": 1.3651391249732114,
+      "iteration": 4,
+      "ncomm": 7,
+      "rms_update": 3.976786989779887e-07
+    },
+    {
+      "delta_energy": -1.8039560067961702e-08,
+      "diis_status": "S/E",
+      "elapsed_s": 7.192713875032496,
+      "energy": -7.850789491366081,
+      "iter_s": 1.2504712080117315,
+      "iteration": 5,
+      "ncomm": 7,
+      "rms_update": 2.755261894405594e-08
+    },
+    {
+      "delta_energy": 7.571463456201855e-10,
+      "diis_status": "S/E",
+      "elapsed_s": 8.447028374997899,
+      "energy": -7.850789490608935,
+      "iter_s": 1.2543120830086991,
+      "iteration": 6,
+      "ncomm": 7,
+      "rms_update": 2.9455201549839245e-09
+    },
+    {
+      "delta_energy": 1.74519954043717e-10,
+      "diis_status": "S/E",
+      "elapsed_s": 9.71856662502978,
+      "energy": -7.850789490434415,
+      "iter_s": 1.2715354580432177,
+      "iteration": 7,
+      "ncomm": 7,
+      "rms_update": 2.366706631590881e-10
+    },
+    {
+      "delta_energy": 1.120881165661558e-12,
+      "diis_status": "S/E",
+      "elapsed_s": 10.989073208998889,
+      "energy": -7.850789490433294,
+      "iter_s": 1.2705040000146255,
+      "iteration": 8,
+      "ncomm": 7,
+      "rms_update": 2.0745287453947443e-11
+    }
+  ],
+  "id": "sr_normal_R3re_n2_s10em1p00",
+  "iterations": 9,
+  "max_abs_amplitude": 0.017630564700881687,
+  "method": "sr_normal",
+  "n_amplitudes": 1496,
+  "nmo": 19,
+  "rank": 2,
+  "rhf_energy": -7.840928560038565,
+  "seconds": 10.989075499994215,
+  "setup_s": 0.30356400000164285,
+  "status": "ok",
+  "wall_s": 11.459786959050689
+}

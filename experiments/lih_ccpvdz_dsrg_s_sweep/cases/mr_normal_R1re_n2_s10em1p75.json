@@ -1,0 +1,81 @@
+{
+  "bond_length_angstrom": 1.6,
+  "bond_ratio": 1,
+  "completed_at": "2026-08-27 19:48:00",
+  "converged": true,
+  "energy": -7.988604483591896,
+  "flow_exponent": -1.75,
+  "flow_param": 0.01778279410038923,
+  "history": [
+    {
+      "delta_energy": 0.0,
+      "energy": -7.988471163473996,
+      "iter_s": 10.04062841704581,
+      "iteration": 0,
+      "ncomm": 6,
+      "rms_update": 7.301939269331411e-06
+    },
+    {
+      "delta_energy": -0.0001281056264641478,
+      "energy": -7.98859926910046,
+      "iter_s": 10.028090375009924,
+      "iteration": 1,
+      "ncomm": 6,
+      "rms_update": 3.3649466871663965e-07
+    },
+    {
+      "delta_energy": -5.00901757227723e-06,
+      "energy": -7.988604278118032,
+      "iter_s": 9.994487458956428,
+      "iteration": 2,
+      "ncomm": 6,
+      "rms_update": 1.773796543080025e-08
+    },
+    {
+      "delta_energy": -1.9590387712042912e-07,
+      "energy": -7.988604474021909,
+      "iter_s": 10.102771374979056,
+      "iteration": 3,
+      "ncomm": 6,
+      "rms_update": 1.1155808257146117e-09
+    },
+    {
+      "delta_energy": -9.168128478620474e-09,
+      "energy": -7.988604483190038,
+      "iter_s": 10.055994707974605,
+      "iteration": 4,
+      "ncomm": 6,
+      "rms_update": 8.722109952211535e-11
+    },
+    {
+      "delta_energy": -4.0376058052515873e-10,
+      "energy": -7.988604483593798,
+      "iter_s": 10.120304042007774,
+      "iteration": 5,
+      "ncomm": 6,
+      "rms_update": 2.2395073324395926e-12
+    },
+    {
+      "delta_energy": 1.9024781749976682e-12,
+      "energy": -7.988604483591896,
+      "iter_s": 9.871563332970254,
+      "iteration": 6,
+      "ncomm": 6,
+      "rms_update": 6.243702999579918e-14
+    }
+  ],
+  "id": "mr_normal_R1re_n2_s10em1p75",
+  "iterations": 7,
+  "max_abs_amplitude": 0.005647044735931058,
+  "method": "mr_normal",
+  "n_amplitudes": 3916,
+  "nmo": 19,
+  "rank": 2,
+  "reference_energy": -7.983839012420489,
+  "rhf_energy": -7.983754622912174,
+  "scalar_energy": -7.988604483591896,
+  "seconds": 70.3700460420223,
+  "setup_s": 0.26076233299681917,
+  "status": "ok",
+  "wall_s": 70.70327025000006
+}

@@ -1,0 +1,13 @@
+{
+  "bond_length_angstrom": 1.6,
+  "bond_ratio": 1,
+  "completed_at": "2026-08-27 20:05:01",
+  "flow_exponent": -3.0,
+  "flow_param": 0.001,
+  "id": "sr_normal_R1re_n4_s10em3p00",
+  "method": "sr_normal",
+  "rank": 4,
+  "status": "timeout",
+  "timeout_s": 1200.0,
+  "wall_s": 1200.4847224589903
+}

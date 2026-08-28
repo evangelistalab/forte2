@@ -1,0 +1,83 @@
+{
+  "bond_length_angstrom": 4.800000000000001,
+  "bond_ratio": 3,
+  "completed_at": "2026-08-27 19:16:39",
+  "converged": true,
+  "energy": -7.843981999872031,
+  "flow_exponent": -1.75,
+  "flow_param": 0.01778279410038923,
+  "history": [
+    {
+      "delta_energy": 0.0,
+      "diis_status": "",
+      "elapsed_s": 0.756843667011708,
+      "energy": -7.843929072145076,
+      "iter_s": 0.756841333990451,
+      "iteration": 0,
+      "ncomm": 6,
+      "rms_update": 0.0002328790186164483
+    },
+    {
+      "delta_energy": -5.1391706472614374e-05,
+      "diis_status": "",
+      "elapsed_s": 1.607642917020712,
+      "energy": -7.8439804638515485,
+      "iter_s": 0.8507952920044772,
+      "iteration": 1,
+      "ncomm": 6,
+      "rms_update": 7.683359862111919e-06
+    },
+    {
+      "delta_energy": -1.4995275865459234e-06,
+      "diis_status": "S",
+      "elapsed_s": 2.5026521669933572,
+      "energy": -7.843981963379135,
+      "iter_s": 0.895005707978271,
+      "iteration": 2,
+      "ncomm": 6,
+      "rms_update": 3.413440299066753e-07
+    },
+    {
+      "delta_energy": -3.50403004389932e-08,
+      "diis_status": "S",
+      "elapsed_s": 3.363842749968171,
+      "energy": -7.843981998419435,
+      "iter_s": 0.8611866249702871,
+      "iteration": 3,
+      "ncomm": 6,
+      "rms_update": 3.308022025028958e-08
+    },
+    {
+      "delta_energy": -1.4333982889525032e-09,
+      "diis_status": "S/E",
+      "elapsed_s": 4.2206935419817455,
+      "energy": -7.843981999852834,
+      "iter_s": 0.8568471249891445,
+      "iteration": 4,
+      "ncomm": 6,
+      "rms_update": 5.37359265643363e-09
+    },
+    {
+      "delta_energy": -1.9197088363398507e-11,
+      "diis_status": "S/E",
+      "elapsed_s": 5.081918417010456,
+      "energy": -7.843981999872031,
+      "iter_s": 0.8612227500416338,
+      "iteration": 5,
+      "ncomm": 6,
+      "rms_update": 1.4673520104889771e-10
+    }
+  ],
+  "id": "sr_normal_R3re_n2_s10em1p75",
+  "iterations": 6,
+  "max_abs_amplitude": 0.004794235965054418,
+  "method": "sr_normal",
+  "n_amplitudes": 1496,
+  "nmo": 19,
+  "rank": 2,
+  "rhf_energy": -7.840928560038565,
+  "seconds": 5.081920708005782,
+  "setup_s": 0.26590366603340954,
+  "status": "ok",
+  "wall_s": 5.511189708020538
+}

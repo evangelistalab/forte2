@@ -1,0 +1,57 @@
+{
+  "bond_length_angstrom": 1.6,
+  "bond_ratio": 1,
+  "completed_at": "2026-08-27 19:44:44",
+  "converged": true,
+  "energy": -7.984396287875262,
+  "flow_exponent": -2.75,
+  "flow_param": 0.0017782794100389228,
+  "history": [
+    {
+      "delta_energy": 0.0,
+      "energy": -7.98439437311596,
+      "iter_s": 6.0599557920359075,
+      "iteration": 0,
+      "ncomm": 5,
+      "rms_update": 9.842167923617677e-08
+    },
+    {
+      "delta_energy": -1.9051483954868331e-06,
+      "energy": -7.984396278264356,
+      "iter_s": 6.199560959008522,
+      "iteration": 1,
+      "ncomm": 5,
+      "rms_update": 5.941226034311056e-10
+    },
+    {
+      "delta_energy": -9.571293091426014e-09,
+      "energy": -7.984396287835649,
+      "iter_s": 6.1648660830105655,
+      "iteration": 2,
+      "ncomm": 5,
+      "rms_update": 5.470007959907004e-12
+    },
+    {
+      "delta_energy": -3.9612757518625585e-11,
+      "energy": -7.984396287875262,
+      "iter_s": 6.1420148750185035,
+      "iteration": 3,
+      "ncomm": 5,
+      "rms_update": 7.728466095355571e-14
+    }
+  ],
+  "id": "mr_normal_R1re_n2_s10em2p75",
+  "iterations": 4,
+  "max_abs_amplitude": 0.000621488011349047,
+  "method": "mr_normal",
+  "n_amplitudes": 3916,
+  "nmo": 19,
+  "rank": 2,
+  "reference_energy": -7.983839012420489,
+  "rhf_energy": -7.983754622912174,
+  "scalar_energy": -7.984396287875262,
+  "seconds": 24.706726083997637,
+  "setup_s": 0.2637876250082627,
+  "status": "ok",
+  "wall_s": 25.056364707998
+}

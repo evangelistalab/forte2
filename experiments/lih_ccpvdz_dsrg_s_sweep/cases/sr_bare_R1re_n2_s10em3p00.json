@@ -1,0 +1,59 @@
+{
+  "bond_length_angstrom": 1.6,
+  "bond_ratio": 1,
+  "completed_at": "2026-08-27 20:06:36",
+  "converged": true,
+  "energy": -7.984071292101538,
+  "flow_exponent": -3.0,
+  "flow_param": 0.001,
+  "history": [
+    {
+      "delta_energy": 0.0,
+      "energy": -7.984070748004139,
+      "iter_s": 11.587385041988455,
+      "iteration": 0,
+      "n_terms": 77954,
+      "ncomm": 4,
+      "rms_update": 1.970971931024916e-06
+    },
+    {
+      "delta_energy": -5.422827999979063e-07,
+      "energy": -7.984071290286939,
+      "iter_s": 16.25132154201856,
+      "iteration": 1,
+      "n_terms": 77954,
+      "ncomm": 4,
+      "rms_update": 6.835386046065364e-09
+    },
+    {
+      "delta_energy": -1.8113945898790007e-09,
+      "energy": -7.984071292098333,
+      "iter_s": 16.210625917010475,
+      "iteration": 2,
+      "n_terms": 77954,
+      "ncomm": 4,
+      "rms_update": 3.084535502594135e-11
+    },
+    {
+      "delta_energy": -3.204547738278052e-12,
+      "energy": -7.984071292101538,
+      "iter_s": 16.26066470897058,
+      "iteration": 3,
+      "n_terms": 77954,
+      "ncomm": 4,
+      "rms_update": 1.7988023140740415e-13
+    }
+  ],
+  "id": "sr_bare_R1re_n2_s10em3p00",
+  "iterations": 4,
+  "max_abs_amplitude": 0.0003512439385453233,
+  "method": "sr_bare",
+  "n_amplitudes": 1496,
+  "nmo": 19,
+  "rank": 2,
+  "rhf_energy": -7.983754622912174,
+  "seconds": 60.310023583006114,
+  "setup_s": 0.3315092090051621,
+  "status": "ok",
+  "wall_s": 60.752845750015695
+}

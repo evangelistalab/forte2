@@ -1,0 +1,93 @@
+{
+  "bond_length_angstrom": 1.6,
+  "bond_ratio": 1,
+  "completed_at": "2026-08-27 18:57:16",
+  "converged": true,
+  "energy": -7.988532733598025,
+  "flow_exponent": -1.75,
+  "flow_param": 0.01778279410038923,
+  "history": [
+    {
+      "delta_energy": 0.0,
+      "diis_status": "",
+      "elapsed_s": 0.8571098339743912,
+      "energy": -7.9883984473053795,
+      "iter_s": 0.857107707997784,
+      "iteration": 0,
+      "ncomm": 6,
+      "rms_update": 0.00044545783262106353
+    },
+    {
+      "delta_energy": -0.0001289810020823623,
+      "diis_status": "",
+      "elapsed_s": 1.9675404999870807,
+      "energy": -7.988527428307462,
+      "iter_s": 1.1104244159650989,
+      "iteration": 1,
+      "ncomm": 6,
+      "rms_update": 2.0501291994176595e-05
+    },
+    {
+      "delta_energy": -5.096834637008385e-06,
+      "diis_status": "S",
+      "elapsed_s": 3.0728496669908054,
+      "energy": -7.988532525142099,
+      "iter_s": 1.1053048340254463,
+      "iteration": 2,
+      "ncomm": 6,
+      "rms_update": 1.1091546109670787e-06
+    },
+    {
+      "delta_energy": -1.985820468064503e-07,
+      "diis_status": "S",
+      "elapsed_s": 4.28279491700232,
+      "energy": -7.988532723724146,
+      "iter_s": 1.2099409999791533,
+      "iteration": 3,
+      "ncomm": 6,
+      "rms_update": 7.814421295792191e-08
+    },
+    {
+      "delta_energy": -9.475736639785737e-09,
+      "diis_status": "S/E",
+      "elapsed_s": 5.394665833970066,
+      "energy": -7.988532733199882,
+      "iter_s": 1.1118669580318965,
+      "iteration": 4,
+      "ncomm": 6,
+      "rms_update": 7.194857125117927e-09
+    },
+    {
+      "delta_energy": -4.0189096495168997e-10,
+      "diis_status": "S/E",
+      "elapsed_s": 6.501423000008799,
+      "energy": -7.988532733601773,
+      "iter_s": 1.106754833017476,
+      "iteration": 5,
+      "ncomm": 6,
+      "rms_update": 9.456701456144583e-11
+    },
+    {
+      "delta_energy": 3.7481129311345285e-12,
+      "diis_status": "S/E",
+      "elapsed_s": 7.605786583968438,
+      "energy": -7.988532733598025,
+      "iter_s": 1.104360583005473,
+      "iteration": 6,
+      "ncomm": 6,
+      "rms_update": 4.111251999767831e-12
+    }
+  ],
+  "id": "sr_normal_R1re_n2_s10em1p75",
+  "iterations": 7,
+  "max_abs_amplitude": 0.005652159287349444,
+  "method": "sr_normal",
+  "n_amplitudes": 1496,
+  "nmo": 19,
+  "rank": 2,
+  "rhf_energy": -7.983754622912174,
+  "seconds": 7.605788749991916,
+  "setup_s": 0.23711470898706466,
+  "status": "ok",
+  "wall_s": 7.973250666982494
+}

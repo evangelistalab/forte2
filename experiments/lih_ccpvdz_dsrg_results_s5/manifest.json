@@ -1,0 +1,198 @@
+{
+  "cases": [
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "fci_R1re",
+      "method": "fci"
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "id": "fci_R2re",
+      "method": "fci"
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "id": "fci_R3re",
+      "method": "fci"
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "sr_normal_R1re_n2",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "mr_normal_R1re_n2",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "sr_normal_R1re_n3",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "mr_normal_R1re_n3",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "sr_normal_R1re_n4",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "mr_normal_R1re_n4",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "sr_bare_R1re_n2",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "sr_bare_R1re_n3",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "sr_bare_R1re_n4",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "id": "sr_normal_R2re_n2",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "id": "mr_normal_R2re_n2",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "id": "sr_normal_R2re_n3",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "id": "mr_normal_R2re_n3",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "id": "sr_normal_R2re_n4",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "id": "mr_normal_R2re_n4",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "id": "sr_normal_R3re_n2",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "id": "mr_normal_R3re_n2",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "id": "sr_normal_R3re_n3",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "id": "mr_normal_R3re_n3",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "id": "sr_normal_R3re_n4",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "id": "mr_normal_R3re_n4",
+      "method": "mr_normal",
+      "rank": 4
+    }
+  ],
+  "metadata": {
+    "basis": "cc-pVDZ",
+    "bond_ratios": [
+      1,
+      2,
+      3
+    ],
+    "created_at": "2026-08-27 18:49:08",
+    "diis": {
+      "enabled": true,
+      "min": 3,
+      "nvec": 8,
+      "start": 3
+    },
+    "e_tol": 1e-10,
+    "equilibrium_bond_length_angstrom": 1.6,
+    "flow_param": 5.0,
+    "max_commutators": 20,
+    "max_iter": 80,
+    "mr_backend": "sparse cumulant-truncated GNO",
+    "mr_include_four_body_cumulant": false,
+    "mr_max_cumulant": 3,
+    "mr_reference": "frozen-core CAS(2e,2o), generalized-Fock semicanonical",
+    "r_tol": 1e-05,
+    "screen_thresh": 1e-12,
+    "sr_bare_truncation": "bare physical operator-string many-body rank",
+    "sr_normal_truncation": "determinant-normal-ordered many-body rank",
+    "system": "LiH"
+  }
+}

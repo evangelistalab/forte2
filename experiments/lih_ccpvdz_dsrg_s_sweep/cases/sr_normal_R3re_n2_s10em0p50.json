@@ -1,0 +1,103 @@
+{
+  "bond_length_angstrom": 4.800000000000001,
+  "bond_ratio": 3,
+  "completed_at": "2026-08-27 19:17:29",
+  "converged": true,
+  "energy": -7.85679143158328,
+  "flow_exponent": -0.5,
+  "flow_param": 0.31622776601683794,
+  "history": [
+    {
+      "delta_energy": 0.0,
+      "diis_status": "",
+      "elapsed_s": 1.1647542919963598,
+      "energy": -7.855931310607534,
+      "iter_s": 1.1647525409935042,
+      "iteration": 0,
+      "ncomm": 8,
+      "rms_update": 0.007291018992467207
+    },
+    {
+      "delta_energy": -0.0007297830109020964,
+      "diis_status": "",
+      "elapsed_s": 2.7088559169787914,
+      "energy": -7.8566610936184365,
+      "iter_s": 1.544095290999394,
+      "iteration": 1,
+      "ncomm": 8,
+      "rms_update": 0.0012588134847509008
+    },
+    {
+      "delta_energy": -0.00010762432042366044,
+      "diis_status": "S",
+      "elapsed_s": 4.262655499973334,
+      "energy": -7.85676871793886,
+      "iter_s": 1.5537929160054773,
+      "iteration": 2,
+      "ncomm": 8,
+      "rms_update": 0.00023725542389363896
+    },
+    {
+      "delta_energy": -1.844762306291159e-05,
+      "diis_status": "S",
+      "elapsed_s": 5.793070957995951,
+      "energy": -7.856787165561923,
+      "iter_s": 1.5304112499579787,
+      "iteration": 3,
+      "ncomm": 8,
+      "rms_update": 4.775240872267123e-05
+    },
+    {
+      "delta_energy": -3.43205086306142e-06,
+      "diis_status": "S/E",
+      "elapsed_s": 7.348747124953661,
+      "energy": -7.856790597612786,
+      "iter_s": 1.5556729579693638,
+      "iteration": 4,
+      "ncomm": 8,
+      "rms_update": 1.0004904737611514e-05
+    },
+    {
+      "delta_energy": -8.357590921548308e-07,
+      "diis_status": "S/E",
+      "elapsed_s": 8.896834707993548,
+      "energy": -7.856791433371878,
+      "iter_s": 1.5480851249885745,
+      "iteration": 5,
+      "ncomm": 8,
+      "rms_update": 3.159591725989345e-07
+    },
+    {
+      "delta_energy": 1.8470043272600378e-09,
+      "diis_status": "S/E",
+      "elapsed_s": 10.439328124979511,
+      "energy": -7.856791431524874,
+      "iter_s": 1.5424906670232303,
+      "iteration": 6,
+      "ncomm": 8,
+      "rms_update": 2.5693986750767518e-08
+    },
+    {
+      "delta_energy": -5.840572470106054e-11,
+      "diis_status": "S/E",
+      "elapsed_s": 12.001760207989719,
+      "energy": -7.85679143158328,
+      "iter_s": 1.5624300829949789,
+      "iteration": 7,
+      "ncomm": 8,
+      "rms_update": 4.532395712750654e-09
+    }
+  ],
+  "id": "sr_normal_R3re_n2_s10em0p50",
+  "iterations": 8,
+  "max_abs_amplitude": 0.03804119773472809,
+  "method": "sr_normal",
+  "n_amplitudes": 1496,
+  "nmo": 19,
+  "rank": 2,
+  "rhf_energy": -7.840928560038565,
+  "seconds": 12.001762166968547,
+  "setup_s": 0.31905691704014316,
+  "status": "ok",
+  "wall_s": 12.603539250034373
+}

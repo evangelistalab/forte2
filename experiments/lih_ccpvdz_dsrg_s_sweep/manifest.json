@@ -1,0 +1,4065 @@
+{
+  "cases": [
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "id": "fci_R1re",
+      "method": "fci"
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "id": "fci_R2re",
+      "method": "fci"
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "id": "fci_R3re",
+      "method": "fci"
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_normal_R1re_n2_s10em3p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_normal_R1re_n2_s10em2p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_normal_R1re_n2_s10em2p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_normal_R1re_n2_s10em2p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_normal_R1re_n2_s10em2p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_normal_R1re_n2_s10em1p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_normal_R1re_n2_s10em1p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_normal_R1re_n2_s10em1p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_normal_R1re_n2_s10em1p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_normal_R1re_n2_s10em0p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_normal_R1re_n2_s10em0p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_normal_R1re_n2_s10em0p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_normal_R1re_n2_s10ep0p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_normal_R1re_n2_s10ep0p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_normal_R1re_n2_s10ep0p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_normal_R1re_n2_s10ep0p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_normal_R1re_n2_s10ep1p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_normal_R1re_n2_s10ep1p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_normal_R1re_n2_s10ep1p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_normal_R1re_n2_s10ep1p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_normal_R1re_n2_s10ep2p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "mr_normal_R1re_n2_s10em3p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "mr_normal_R1re_n2_s10em2p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "mr_normal_R1re_n2_s10em2p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "mr_normal_R1re_n2_s10em2p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "mr_normal_R1re_n2_s10em2p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "mr_normal_R1re_n2_s10em1p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "mr_normal_R1re_n2_s10em1p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "mr_normal_R1re_n2_s10em1p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "mr_normal_R1re_n2_s10em1p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "mr_normal_R1re_n2_s10em0p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "mr_normal_R1re_n2_s10em0p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "mr_normal_R1re_n2_s10em0p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "mr_normal_R1re_n2_s10ep0p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "mr_normal_R1re_n2_s10ep0p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "mr_normal_R1re_n2_s10ep0p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "mr_normal_R1re_n2_s10ep0p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "mr_normal_R1re_n2_s10ep1p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "mr_normal_R1re_n2_s10ep1p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "mr_normal_R1re_n2_s10ep1p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "mr_normal_R1re_n2_s10ep1p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "mr_normal_R1re_n2_s10ep2p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_normal_R1re_n3_s10em3p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_normal_R1re_n3_s10em2p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_normal_R1re_n3_s10em2p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_normal_R1re_n3_s10em2p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_normal_R1re_n3_s10em2p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_normal_R1re_n3_s10em1p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_normal_R1re_n3_s10em1p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_normal_R1re_n3_s10em1p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_normal_R1re_n3_s10em1p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_normal_R1re_n3_s10em0p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_normal_R1re_n3_s10em0p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_normal_R1re_n3_s10em0p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_normal_R1re_n3_s10ep0p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_normal_R1re_n3_s10ep0p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_normal_R1re_n3_s10ep0p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_normal_R1re_n3_s10ep0p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_normal_R1re_n3_s10ep1p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_normal_R1re_n3_s10ep1p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_normal_R1re_n3_s10ep1p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_normal_R1re_n3_s10ep1p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_normal_R1re_n3_s10ep2p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "mr_normal_R1re_n3_s10em3p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "mr_normal_R1re_n3_s10em2p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "mr_normal_R1re_n3_s10em2p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "mr_normal_R1re_n3_s10em2p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "mr_normal_R1re_n3_s10em2p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "mr_normal_R1re_n3_s10em1p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "mr_normal_R1re_n3_s10em1p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "mr_normal_R1re_n3_s10em1p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "mr_normal_R1re_n3_s10em1p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "mr_normal_R1re_n3_s10em0p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "mr_normal_R1re_n3_s10em0p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "mr_normal_R1re_n3_s10em0p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "mr_normal_R1re_n3_s10ep0p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "mr_normal_R1re_n3_s10ep0p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "mr_normal_R1re_n3_s10ep0p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "mr_normal_R1re_n3_s10ep0p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "mr_normal_R1re_n3_s10ep1p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "mr_normal_R1re_n3_s10ep1p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "mr_normal_R1re_n3_s10ep1p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "mr_normal_R1re_n3_s10ep1p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "mr_normal_R1re_n3_s10ep2p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_normal_R1re_n4_s10em3p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_normal_R1re_n4_s10em2p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_normal_R1re_n4_s10em2p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_normal_R1re_n4_s10em2p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_normal_R1re_n4_s10em2p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_normal_R1re_n4_s10em1p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_normal_R1re_n4_s10em1p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_normal_R1re_n4_s10em1p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_normal_R1re_n4_s10em1p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_normal_R1re_n4_s10em0p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_normal_R1re_n4_s10em0p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_normal_R1re_n4_s10em0p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_normal_R1re_n4_s10ep0p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_normal_R1re_n4_s10ep0p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_normal_R1re_n4_s10ep0p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_normal_R1re_n4_s10ep0p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_normal_R1re_n4_s10ep1p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_normal_R1re_n4_s10ep1p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_normal_R1re_n4_s10ep1p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_normal_R1re_n4_s10ep1p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_normal_R1re_n4_s10ep2p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "mr_normal_R1re_n4_s10em3p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "mr_normal_R1re_n4_s10em2p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "mr_normal_R1re_n4_s10em2p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "mr_normal_R1re_n4_s10em2p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "mr_normal_R1re_n4_s10em2p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "mr_normal_R1re_n4_s10em1p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "mr_normal_R1re_n4_s10em1p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "mr_normal_R1re_n4_s10em1p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "mr_normal_R1re_n4_s10em1p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "mr_normal_R1re_n4_s10em0p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "mr_normal_R1re_n4_s10em0p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "mr_normal_R1re_n4_s10em0p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "mr_normal_R1re_n4_s10ep0p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "mr_normal_R1re_n4_s10ep0p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "mr_normal_R1re_n4_s10ep0p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "mr_normal_R1re_n4_s10ep0p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "mr_normal_R1re_n4_s10ep1p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "mr_normal_R1re_n4_s10ep1p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "mr_normal_R1re_n4_s10ep1p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "mr_normal_R1re_n4_s10ep1p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "mr_normal_R1re_n4_s10ep2p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_bare_R1re_n2_s10em3p00",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_bare_R1re_n2_s10em2p75",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_bare_R1re_n2_s10em2p50",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_bare_R1re_n2_s10em2p25",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_bare_R1re_n2_s10em2p00",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_bare_R1re_n2_s10em1p75",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_bare_R1re_n2_s10em1p50",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_bare_R1re_n2_s10em1p25",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_bare_R1re_n2_s10em1p00",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_bare_R1re_n2_s10em0p75",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_bare_R1re_n2_s10em0p50",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_bare_R1re_n2_s10em0p25",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_bare_R1re_n2_s10ep0p00",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_bare_R1re_n2_s10ep0p25",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_bare_R1re_n2_s10ep0p50",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_bare_R1re_n2_s10ep0p75",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_bare_R1re_n2_s10ep1p00",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_bare_R1re_n2_s10ep1p25",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_bare_R1re_n2_s10ep1p50",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_bare_R1re_n2_s10ep1p75",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_bare_R1re_n2_s10ep2p00",
+      "method": "sr_bare",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_bare_R1re_n3_s10em3p00",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_bare_R1re_n3_s10em2p75",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_bare_R1re_n3_s10em2p50",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_bare_R1re_n3_s10em2p25",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_bare_R1re_n3_s10em2p00",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_bare_R1re_n3_s10em1p75",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_bare_R1re_n3_s10em1p50",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_bare_R1re_n3_s10em1p25",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_bare_R1re_n3_s10em1p00",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_bare_R1re_n3_s10em0p75",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_bare_R1re_n3_s10em0p50",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_bare_R1re_n3_s10em0p25",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_bare_R1re_n3_s10ep0p00",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_bare_R1re_n3_s10ep0p25",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_bare_R1re_n3_s10ep0p50",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_bare_R1re_n3_s10ep0p75",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_bare_R1re_n3_s10ep1p00",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_bare_R1re_n3_s10ep1p25",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_bare_R1re_n3_s10ep1p50",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_bare_R1re_n3_s10ep1p75",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_bare_R1re_n3_s10ep2p00",
+      "method": "sr_bare",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_bare_R1re_n4_s10em3p00",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_bare_R1re_n4_s10em2p75",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_bare_R1re_n4_s10em2p50",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_bare_R1re_n4_s10em2p25",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_bare_R1re_n4_s10em2p00",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_bare_R1re_n4_s10em1p75",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_bare_R1re_n4_s10em1p50",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_bare_R1re_n4_s10em1p25",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_bare_R1re_n4_s10em1p00",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_bare_R1re_n4_s10em0p75",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_bare_R1re_n4_s10em0p50",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_bare_R1re_n4_s10em0p25",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_bare_R1re_n4_s10ep0p00",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_bare_R1re_n4_s10ep0p25",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_bare_R1re_n4_s10ep0p50",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_bare_R1re_n4_s10ep0p75",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_bare_R1re_n4_s10ep1p00",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_bare_R1re_n4_s10ep1p25",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_bare_R1re_n4_s10ep1p50",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_bare_R1re_n4_s10ep1p75",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 1.6,
+      "bond_ratio": 1,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_bare_R1re_n4_s10ep2p00",
+      "method": "sr_bare",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_normal_R2re_n2_s10em3p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_normal_R2re_n2_s10em2p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_normal_R2re_n2_s10em2p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_normal_R2re_n2_s10em2p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_normal_R2re_n2_s10em2p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_normal_R2re_n2_s10em1p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_normal_R2re_n2_s10em1p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_normal_R2re_n2_s10em1p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_normal_R2re_n2_s10em1p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_normal_R2re_n2_s10em0p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_normal_R2re_n2_s10em0p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_normal_R2re_n2_s10em0p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_normal_R2re_n2_s10ep0p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_normal_R2re_n2_s10ep0p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_normal_R2re_n2_s10ep0p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_normal_R2re_n2_s10ep0p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_normal_R2re_n2_s10ep1p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_normal_R2re_n2_s10ep1p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_normal_R2re_n2_s10ep1p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_normal_R2re_n2_s10ep1p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_normal_R2re_n2_s10ep2p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "mr_normal_R2re_n2_s10em3p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "mr_normal_R2re_n2_s10em2p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "mr_normal_R2re_n2_s10em2p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "mr_normal_R2re_n2_s10em2p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "mr_normal_R2re_n2_s10em2p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "mr_normal_R2re_n2_s10em1p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "mr_normal_R2re_n2_s10em1p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "mr_normal_R2re_n2_s10em1p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "mr_normal_R2re_n2_s10em1p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "mr_normal_R2re_n2_s10em0p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "mr_normal_R2re_n2_s10em0p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "mr_normal_R2re_n2_s10em0p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "mr_normal_R2re_n2_s10ep0p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "mr_normal_R2re_n2_s10ep0p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "mr_normal_R2re_n2_s10ep0p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "mr_normal_R2re_n2_s10ep0p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "mr_normal_R2re_n2_s10ep1p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "mr_normal_R2re_n2_s10ep1p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "mr_normal_R2re_n2_s10ep1p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "mr_normal_R2re_n2_s10ep1p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "mr_normal_R2re_n2_s10ep2p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_normal_R2re_n3_s10em3p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_normal_R2re_n3_s10em2p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_normal_R2re_n3_s10em2p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_normal_R2re_n3_s10em2p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_normal_R2re_n3_s10em2p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_normal_R2re_n3_s10em1p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_normal_R2re_n3_s10em1p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_normal_R2re_n3_s10em1p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_normal_R2re_n3_s10em1p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_normal_R2re_n3_s10em0p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_normal_R2re_n3_s10em0p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_normal_R2re_n3_s10em0p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_normal_R2re_n3_s10ep0p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_normal_R2re_n3_s10ep0p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_normal_R2re_n3_s10ep0p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_normal_R2re_n3_s10ep0p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_normal_R2re_n3_s10ep1p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_normal_R2re_n3_s10ep1p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_normal_R2re_n3_s10ep1p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_normal_R2re_n3_s10ep1p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_normal_R2re_n3_s10ep2p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "mr_normal_R2re_n3_s10em3p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "mr_normal_R2re_n3_s10em2p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "mr_normal_R2re_n3_s10em2p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "mr_normal_R2re_n3_s10em2p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "mr_normal_R2re_n3_s10em2p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "mr_normal_R2re_n3_s10em1p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "mr_normal_R2re_n3_s10em1p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "mr_normal_R2re_n3_s10em1p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "mr_normal_R2re_n3_s10em1p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "mr_normal_R2re_n3_s10em0p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "mr_normal_R2re_n3_s10em0p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "mr_normal_R2re_n3_s10em0p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "mr_normal_R2re_n3_s10ep0p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "mr_normal_R2re_n3_s10ep0p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "mr_normal_R2re_n3_s10ep0p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "mr_normal_R2re_n3_s10ep0p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "mr_normal_R2re_n3_s10ep1p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "mr_normal_R2re_n3_s10ep1p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "mr_normal_R2re_n3_s10ep1p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "mr_normal_R2re_n3_s10ep1p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "mr_normal_R2re_n3_s10ep2p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_normal_R2re_n4_s10em3p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_normal_R2re_n4_s10em2p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_normal_R2re_n4_s10em2p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_normal_R2re_n4_s10em2p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_normal_R2re_n4_s10em2p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_normal_R2re_n4_s10em1p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_normal_R2re_n4_s10em1p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_normal_R2re_n4_s10em1p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_normal_R2re_n4_s10em1p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_normal_R2re_n4_s10em0p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_normal_R2re_n4_s10em0p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_normal_R2re_n4_s10em0p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_normal_R2re_n4_s10ep0p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_normal_R2re_n4_s10ep0p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_normal_R2re_n4_s10ep0p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_normal_R2re_n4_s10ep0p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_normal_R2re_n4_s10ep1p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_normal_R2re_n4_s10ep1p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_normal_R2re_n4_s10ep1p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_normal_R2re_n4_s10ep1p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_normal_R2re_n4_s10ep2p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "mr_normal_R2re_n4_s10em3p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "mr_normal_R2re_n4_s10em2p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "mr_normal_R2re_n4_s10em2p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "mr_normal_R2re_n4_s10em2p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "mr_normal_R2re_n4_s10em2p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "mr_normal_R2re_n4_s10em1p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "mr_normal_R2re_n4_s10em1p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "mr_normal_R2re_n4_s10em1p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "mr_normal_R2re_n4_s10em1p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "mr_normal_R2re_n4_s10em0p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "mr_normal_R2re_n4_s10em0p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "mr_normal_R2re_n4_s10em0p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "mr_normal_R2re_n4_s10ep0p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "mr_normal_R2re_n4_s10ep0p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "mr_normal_R2re_n4_s10ep0p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "mr_normal_R2re_n4_s10ep0p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "mr_normal_R2re_n4_s10ep1p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "mr_normal_R2re_n4_s10ep1p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "mr_normal_R2re_n4_s10ep1p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "mr_normal_R2re_n4_s10ep1p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 3.2,
+      "bond_ratio": 2,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "mr_normal_R2re_n4_s10ep2p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_normal_R3re_n2_s10em3p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_normal_R3re_n2_s10em2p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_normal_R3re_n2_s10em2p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_normal_R3re_n2_s10em2p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_normal_R3re_n2_s10em2p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_normal_R3re_n2_s10em1p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_normal_R3re_n2_s10em1p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_normal_R3re_n2_s10em1p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_normal_R3re_n2_s10em1p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_normal_R3re_n2_s10em0p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_normal_R3re_n2_s10em0p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_normal_R3re_n2_s10em0p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_normal_R3re_n2_s10ep0p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_normal_R3re_n2_s10ep0p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_normal_R3re_n2_s10ep0p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_normal_R3re_n2_s10ep0p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_normal_R3re_n2_s10ep1p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_normal_R3re_n2_s10ep1p25",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_normal_R3re_n2_s10ep1p50",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_normal_R3re_n2_s10ep1p75",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_normal_R3re_n2_s10ep2p00",
+      "method": "sr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "mr_normal_R3re_n2_s10em3p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "mr_normal_R3re_n2_s10em2p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "mr_normal_R3re_n2_s10em2p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "mr_normal_R3re_n2_s10em2p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "mr_normal_R3re_n2_s10em2p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "mr_normal_R3re_n2_s10em1p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "mr_normal_R3re_n2_s10em1p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "mr_normal_R3re_n2_s10em1p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "mr_normal_R3re_n2_s10em1p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "mr_normal_R3re_n2_s10em0p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "mr_normal_R3re_n2_s10em0p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "mr_normal_R3re_n2_s10em0p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "mr_normal_R3re_n2_s10ep0p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "mr_normal_R3re_n2_s10ep0p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "mr_normal_R3re_n2_s10ep0p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "mr_normal_R3re_n2_s10ep0p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "mr_normal_R3re_n2_s10ep1p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "mr_normal_R3re_n2_s10ep1p25",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "mr_normal_R3re_n2_s10ep1p50",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "mr_normal_R3re_n2_s10ep1p75",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "mr_normal_R3re_n2_s10ep2p00",
+      "method": "mr_normal",
+      "rank": 2
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_normal_R3re_n3_s10em3p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_normal_R3re_n3_s10em2p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_normal_R3re_n3_s10em2p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_normal_R3re_n3_s10em2p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_normal_R3re_n3_s10em2p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_normal_R3re_n3_s10em1p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_normal_R3re_n3_s10em1p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_normal_R3re_n3_s10em1p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_normal_R3re_n3_s10em1p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_normal_R3re_n3_s10em0p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_normal_R3re_n3_s10em0p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_normal_R3re_n3_s10em0p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_normal_R3re_n3_s10ep0p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_normal_R3re_n3_s10ep0p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_normal_R3re_n3_s10ep0p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_normal_R3re_n3_s10ep0p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_normal_R3re_n3_s10ep1p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_normal_R3re_n3_s10ep1p25",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_normal_R3re_n3_s10ep1p50",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_normal_R3re_n3_s10ep1p75",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_normal_R3re_n3_s10ep2p00",
+      "method": "sr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "mr_normal_R3re_n3_s10em3p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "mr_normal_R3re_n3_s10em2p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "mr_normal_R3re_n3_s10em2p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "mr_normal_R3re_n3_s10em2p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "mr_normal_R3re_n3_s10em2p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "mr_normal_R3re_n3_s10em1p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "mr_normal_R3re_n3_s10em1p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "mr_normal_R3re_n3_s10em1p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "mr_normal_R3re_n3_s10em1p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "mr_normal_R3re_n3_s10em0p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "mr_normal_R3re_n3_s10em0p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "mr_normal_R3re_n3_s10em0p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "mr_normal_R3re_n3_s10ep0p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "mr_normal_R3re_n3_s10ep0p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "mr_normal_R3re_n3_s10ep0p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "mr_normal_R3re_n3_s10ep0p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "mr_normal_R3re_n3_s10ep1p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "mr_normal_R3re_n3_s10ep1p25",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "mr_normal_R3re_n3_s10ep1p50",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "mr_normal_R3re_n3_s10ep1p75",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "mr_normal_R3re_n3_s10ep2p00",
+      "method": "mr_normal",
+      "rank": 3
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "sr_normal_R3re_n4_s10em3p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "sr_normal_R3re_n4_s10em2p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "sr_normal_R3re_n4_s10em2p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "sr_normal_R3re_n4_s10em2p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "sr_normal_R3re_n4_s10em2p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "sr_normal_R3re_n4_s10em1p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "sr_normal_R3re_n4_s10em1p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "sr_normal_R3re_n4_s10em1p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "sr_normal_R3re_n4_s10em1p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "sr_normal_R3re_n4_s10em0p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "sr_normal_R3re_n4_s10em0p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "sr_normal_R3re_n4_s10em0p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "sr_normal_R3re_n4_s10ep0p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "sr_normal_R3re_n4_s10ep0p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "sr_normal_R3re_n4_s10ep0p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "sr_normal_R3re_n4_s10ep0p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "sr_normal_R3re_n4_s10ep1p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "sr_normal_R3re_n4_s10ep1p25",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "sr_normal_R3re_n4_s10ep1p50",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "sr_normal_R3re_n4_s10ep1p75",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "sr_normal_R3re_n4_s10ep2p00",
+      "method": "sr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -3.0,
+      "flow_param": 0.001,
+      "id": "mr_normal_R3re_n4_s10em3p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.75,
+      "flow_param": 0.0017782794100389228,
+      "id": "mr_normal_R3re_n4_s10em2p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.5,
+      "flow_param": 0.0031622776601683794,
+      "id": "mr_normal_R3re_n4_s10em2p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.25,
+      "flow_param": 0.005623413251903491,
+      "id": "mr_normal_R3re_n4_s10em2p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -2.0,
+      "flow_param": 0.01,
+      "id": "mr_normal_R3re_n4_s10em2p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.75,
+      "flow_param": 0.01778279410038923,
+      "id": "mr_normal_R3re_n4_s10em1p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.5,
+      "flow_param": 0.03162277660168379,
+      "id": "mr_normal_R3re_n4_s10em1p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.25,
+      "flow_param": 0.05623413251903491,
+      "id": "mr_normal_R3re_n4_s10em1p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -1.0,
+      "flow_param": 0.1,
+      "id": "mr_normal_R3re_n4_s10em1p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.75,
+      "flow_param": 0.1778279410038923,
+      "id": "mr_normal_R3re_n4_s10em0p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.5,
+      "flow_param": 0.31622776601683794,
+      "id": "mr_normal_R3re_n4_s10em0p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": -0.25,
+      "flow_param": 0.5623413251903491,
+      "id": "mr_normal_R3re_n4_s10em0p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.0,
+      "flow_param": 1.0,
+      "id": "mr_normal_R3re_n4_s10ep0p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.25,
+      "flow_param": 1.7782794100389228,
+      "id": "mr_normal_R3re_n4_s10ep0p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.5,
+      "flow_param": 3.1622776601683795,
+      "id": "mr_normal_R3re_n4_s10ep0p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 0.75,
+      "flow_param": 5.623413251903491,
+      "id": "mr_normal_R3re_n4_s10ep0p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.0,
+      "flow_param": 10.0,
+      "id": "mr_normal_R3re_n4_s10ep1p00",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.25,
+      "flow_param": 17.78279410038923,
+      "id": "mr_normal_R3re_n4_s10ep1p25",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.5,
+      "flow_param": 31.622776601683793,
+      "id": "mr_normal_R3re_n4_s10ep1p50",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 1.75,
+      "flow_param": 56.23413251903491,
+      "id": "mr_normal_R3re_n4_s10ep1p75",
+      "method": "mr_normal",
+      "rank": 4
+    },
+    {
+      "bond_length_angstrom": 4.800000000000001,
+      "bond_ratio": 3,
+      "flow_exponent": 2.0,
+      "flow_param": 100.0,
+      "id": "mr_normal_R3re_n4_s10ep2p00",
+      "method": "mr_normal",
+      "rank": 4
+    }
+  ],
+  "metadata": {
+    "basis": "cc-pVDZ",
+    "bond_ratios": [
+      1,
+      2,
+      3
+    ],
+    "created_at": "2026-08-27 18:56:47",
+    "diis": {
+      "enabled": true,
+      "min": 3,
+      "nvec": 8,
+      "start": 3
+    },
+    "e_tol": 1e-10,
+    "equilibrium_bond_length_angstrom": 1.6,
+    "flow_exponents": [
+      -3.0,
+      -2.75,
+      -2.5,
+      -2.25,
+      -2.0,
+      -1.75,
+      -1.5,
+      -1.25,
+      -1.0,
+      -0.75,
+      -0.5,
+      -0.25,
+      0.0,
+      0.25,
+      0.5,
+      0.75,
+      1.0,
+      1.25,
+      1.5,
+      1.75,
+      2.0
+    ],
+    "flow_params": [
+      0.001,
+      0.0017782794100389228,
+      0.0031622776601683794,
+      0.005623413251903491,
+      0.01,
+      0.01778279410038923,
+      0.03162277660168379,
+      0.05623413251903491,
+      0.1,
+      0.1778279410038923,
+      0.31622776601683794,
+      0.5623413251903491,
+      1.0,
+      1.7782794100389228,
+      3.1622776601683795,
+      5.623413251903491,
+      10.0,
+      17.78279410038923,
+      31.622776601683793,
+      56.23413251903491,
+      100.0
+    ],
+    "max_commutators": 20,
+    "max_iter": 80,
+    "mr_backend": "sparse cumulant-truncated GNO",
+    "mr_include_four_body_cumulant": false,
+    "mr_max_cumulant": 3,
+    "mr_reference": "frozen-core CAS(2e,2o), generalized-Fock semicanonical",
+    "r_tol": 1e-05,
+    "screen_thresh": 1e-12,
+    "sr_bare_truncation": "bare physical operator-string many-body rank",
+    "sr_normal_truncation": "determinant-normal-ordered many-body rank",
+    "system": "LiH"
+  }
+}

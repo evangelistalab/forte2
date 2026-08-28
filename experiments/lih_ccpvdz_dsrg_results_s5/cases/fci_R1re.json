@@ -1,0 +1,19 @@
+{
+  "bond_length_angstrom": 1.6,
+  "bond_ratio": 1,
+  "completed_at": "2026-08-27 18:49:09",
+  "fci": {
+    "algorithm": "hz",
+    "converged": true,
+    "energy": -8.014778935201054,
+    "ndet": 29241,
+    "seconds": 0.082077415951062
+  },
+  "id": "fci_R1re",
+  "method": "fci",
+  "nmo": 19,
+  "rhf_energy": -7.983754622912174,
+  "setup_s": 0.2204002080252394,
+  "status": "ok",
+  "wall_s": 0.30249645799631253
+}
