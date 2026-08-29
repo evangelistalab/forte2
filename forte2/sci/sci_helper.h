@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <functional>
 #include <vector>
 #include <cmath>
@@ -284,21 +285,40 @@ class SelectedCIHelper {
                             const SelectedCIStrings& list, size_t i, size_t j,
                             double int_sign) const;
 
-    /// @brief Select new variational and PT2 determinants using a batch approach
-    /// @param V_map The map to accumulate variational determinants and their contributions
-    /// @param PT_map The map to accumulate PT2 determinants and their contributions
-    /// @param V_coeffs The vector to accumulate the coefficients of the variational
-    /// determinants
-    /// @param PT_coeffs The vector to accumulate the coefficients of the PT2 determinants
-    /// @param var_threshold The threshold for variational selection
-    /// @param pt2_threshold The threshold for PT2 selection
+    /// @brief Reusable working buffers for select_hbci_batch
+    struct SelectHbciScratch {
+        /// @brief Maps each external determinant to the starting index of its coefficient block
+        DetRootMap map;
+        /// @brief The coupling <det|H|Psi_r> of each external determinant to each root, summed
+        /// over every parent that reaches it, as coeffs[idx + r]
+        std::vector<double> coeffs;
+        /// @brief One flag per external determinant, indexed as promoted[idx / nroots], set when
+        /// at least one of its connections exceeds var_threshold and it therefore will join the
+        /// variational space in the next iteration
+        std::vector<uint8_t> promoted;
+        /// @brief Largest |c| over all roots for each determinant of the current alpha string
+        std::vector<double> abs_c_max;
+        /// @brief Coefficients of the current alpha string's determinants, as
+        /// c_block[k * nroots + r]
+        std::vector<double> c_block;
+        /// @brief Scratch occupation vectors for alpha/beta occupied/virtual
+        std::vector<size_t> aocc, bocc, avir, bvir;
+    };
+
+    /// @brief Enumerate the determinants of one batch that are connected to the variational space
+    /// and accumulate their couplings
+    /// @param s Working buffers owned by the calling thread, cleared on entry
+    /// @param var_threshold Connections above this promote their determinant into the variational
+    /// space. Must not be negative.
+    /// @param pt2_threshold Connections whose criterion does not exceed this are discarded. Must
+    /// not be negative.
     /// @param num_batches The total number of batches
     /// @param batch_id The batch index to process
     /// @param existing_dets The set of determinants already in the variational space to skip
-    void select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map, std::vector<double>& V_coeffs,
-                           std::vector<double>& PT_coeffs, double var_threshold,
-                           double pt2_threshold, size_t num_batches, size_t batch_id,
-                           const DetSet& existing_dets);
+    /// @note Batch membership is decided by the external determinant alone, so every parent
+    /// that reaches a given determinant is guaranteed to be visited in the same batch
+    void select_hbci_batch(SelectHbciScratch& s, double var_threshold, double pt2_threshold,
+                           size_t num_batches, size_t batch_id, const DetSet& existing_dets);
 
     /// @brief Compute the expectation value of S^2 for a given batch of determinants
     /// @param num_batches The total number of batches
@@ -445,6 +465,8 @@ class SelectedCIHelper {
 
     /// @brief The alpha and beta strings for the determinants in the variational space
     SelectedCIStrings ab_list_;
+    /// @brief The largest number of determinants sharing one alpha string in ab_list_
+    size_t max_block_size_ = 0;
     /// @brief The beta and alpha strings for the determinants in the variational space
     SelectedCIStrings ba_list_;
 

@@ -30,6 +30,12 @@ void SelectedCIHelper::prepare_strings() {
         sorted_dets[i] = dets_[i].spin_flip();
     }
     ba_list_ = SelectedCIStrings(norb_, sorted_dets);
+
+    // the largest alpha-string block, used to size the select_hbci_batch scratch buffers
+    max_block_size_ = 0;
+    for (const auto& block : ab_list_.second_string_to_det_index()) {
+        max_block_size_ = std::max(max_block_size_, block.size());
+    }
 }
 
 void SelectedCIHelper::Hamiltonian(np_vector basis, np_vector sigma) const {
