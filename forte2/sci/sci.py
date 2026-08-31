@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass, field
 from itertools import combinations
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 import numpy as np
 
@@ -22,6 +22,8 @@ from forte2.ci.ci_utils import (
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
     pretty_print_ci_nat_occ_numbers,
+    validate_single_state_rdm,
+    make_cumulant_from_rdms,
 )
 
 
@@ -686,8 +688,8 @@ class _SelectedCISingleStateSolver:
 
         for root in range(self.nroot):
             root_rdms = {}
-            root_rdms["rdm1"] = self.make_sf_1rdm(root)
-            rdm2_aa, rdm2_ab, rdm2_bb = self.make_sd_2rdm(root)
+            root_rdms["rdm1"] = self.make_rdm(root, order=1, kind="sf")
+            rdm2_aa, rdm2_ab, rdm2_bb = self.make_rdm(root, order=2, kind="sd")
             root_rdms["rdm2_aa"] = rdm2_aa
             root_rdms["rdm2_ab"] = rdm2_ab
             root_rdms["rdm2_bb"] = rdm2_bb
@@ -696,7 +698,7 @@ class _SelectedCISingleStateSolver:
             root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_aa)
             root_rdms["rdm2_bb_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_bb)
 
-            root_rdms["rdm2_sf"] = self.make_sf_2rdm(root)
+            root_rdms["rdm2_sf"] = self.make_rdm(root, order=2, kind="sf")
 
             # Compute the energy from the RDMs
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
@@ -757,9 +759,22 @@ class _SelectedCISingleStateSolver:
                 f"RDMs for root {root} validated successfully.\n", self.log_level
             )
 
-    def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
-        r"""
-        Make the spin-dependent one-particle RDM for two CI roots.
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
+    _rdm_kinds: ClassVar[tuple[str, ...]] = ("sd", "sf")
+    # only the 2-cumulant: it needs the 1- and 2-RDMs, and selected CI has no 3-RDM
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
+    _cumulant_kinds: ClassVar[tuple[str, ...]] = ("sf",)
+
+    def make_rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: Literal[1, 2],
+        kind: Literal["sd", "sf"],
+    ):
+        """
+        Make the RDM of the given order and representation for two CI roots.
 
         Parameters
         ----------
@@ -767,21 +782,54 @@ class _SelectedCISingleStateSolver:
             the CI root for the bra state.
         right_root : int | None, optional (default=left_root)
             the CI root for the ket state.
+        order : int
+            The RDM order (1 or 2; selected CI has no 3-RDM).
+        kind : str
+            "sd" (spin-dependent) or "sf" (spin-free).
 
         Returns
         -------
-        tuple[NDArray, NDArray]:
-            Spin-dependent one-particle RDMs (a, b).
+        NDArray or tuple[NDArray, ...]
+            order=1 kind=sd -> (a, b); order=2 kind=sd -> (aa, ab, bb);
+            kind=sf -> a single full tensor.
         """
+        validate_single_state_rdm(
+            self,
+            left_root,
+            right_root,
+            order,
+            self._rdm_orders,
+            kind,
+            self._rdm_kinds,
+        )
         if right_root is None:
             right_root = left_root
-        a = self.sci_helper.a_1rdm(left_root, right_root)
-        b = self.sci_helper.b_1rdm(left_root, right_root)
-        return a, b
+        helper = self.sci_helper
+        if kind == "sd":
+            if order == 1:
+                return helper.a_1rdm(left_root, right_root), helper.b_1rdm(
+                    left_root, right_root
+                )
+            return (
+                helper.aa_2rdm(left_root, right_root),
+                helper.ab_2rdm(left_root, right_root),
+                helper.bb_2rdm(left_root, right_root),
+            )
+        # kind == "sf"
+        if order == 1:
+            return helper.sf_1rdm(left_root, right_root)
+        return helper.sf_2rdm(left_root, right_root)
 
-    def make_sd_2rdm(self, left_root: int, right_root: int | None = None):
-        r"""
-        Make the spin-dependent two-particle RDM for two CI roots.
+    def make_cumulant(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: Literal[2, 3],
+        kind: Literal["sf", "so"],
+    ):
+        """
+        Make the cumulant of the given order for two CI roots.
 
         Parameters
         ----------
@@ -789,70 +837,32 @@ class _SelectedCISingleStateSolver:
             the CI root for the bra state.
         right_root : int | None, optional (default=left_root)
             the CI root for the ket state.
-
-        Returns
-        -------
-        tuple[NDArray, NDArray, NDArray]:
-            Spin-dependent two-particle RDMs (aa, ab, bb).
-        """
-        if right_root is None:
-            right_root = left_root
-        aa = self.sci_helper.aa_2rdm(left_root, right_root)
-        ab = self.sci_helper.ab_2rdm(left_root, right_root)
-        bb = self.sci_helper.bb_2rdm(left_root, right_root)
-        return aa, ab, bb
-
-    def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free one-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
+        order : int
+            The cumulant order (2; selected CI has no 3-RDM).
+        kind : str
+            "sf" (spin-free) or "so" (spin-orbital), depending on the backend.
 
         Returns
         -------
         NDArray
-            Spin-free one-particle RDM.
+            The cumulant.
         """
-        if right_root is None:
-            right_root = left_root
-        return self.sci_helper.sf_1rdm(left_root, right_root)
-
-    def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free two-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Spin-free two-particle RDM in chemist's notation.
-        """
-        if right_root is None:
-            right_root = left_root
-        return self.sci_helper.sf_2rdm(left_root, right_root)
-
-    # The state-averaged RDM machinery in CIBase calls make_{1,2}rdm on the sub-solvers.
-    # Non-relativistic sCI returns spin-free RDMs.
-    def make_1rdm(self, left_root: int, right_root: int | None = None):
-        return self.make_sf_1rdm(left_root, right_root)
-
-    def make_2rdm(self, left_root: int, right_root: int | None = None):
-        return self.make_sf_2rdm(left_root, right_root)
+        validate_single_state_rdm(
+            self,
+            left_root,
+            right_root,
+            order,
+            self._cumulant_orders,
+            kind,
+            self._cumulant_kinds,
+        )
+        return make_cumulant_from_rdms(
+            self, left_root, right_root, order=order, kind=kind
+        )
 
     def compute_natural_occupation_numbers(self):
         """
-        Compute the natural occupation numbers from the spin-free 1-RDM.
+        Compute the natural occupation numbers from the 1-RDM.
 
         Returns
         -------
@@ -861,9 +871,10 @@ class _SelectedCISingleStateSolver:
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
+        kind = "so" if self.two_component else "sf"
         no = np.zeros((self.norb, self.nroot))
         for i in range(self.nroot):
-            g1 = self.make_1rdm(i)
+            g1 = self.make_rdm(i, order=1, kind=kind)
             no[:, i] = np.linalg.eigvalsh(g1)[::-1]
 
         return no
@@ -1040,72 +1051,72 @@ class SelectedCISolver(CIBase):
         self.E_pt2 = self.ept2_var_flat + self.ept2_pt_flat
         self.E_tot = self.etot_flat
 
-    def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
+    _rdm_kinds: ClassVar[tuple[str, ...]] = ("sd", "sf")
+    _rdm_cross_state_orders: ClassVar[tuple[int, ...]] = (1,)
+    # only the 2-cumulant: it needs the 1- and 2-RDMs, and selected CI has no 3-RDM
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
+    _cumulant_kinds: ClassVar[tuple[str, ...]] = ("sf",)
+
+    def make_rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: Literal[1, 2],
+        kind: Literal["sd", "sf"],
+    ):
         """
-        Make the spin-dependent one-particle RDM for two absolute CI roots.
+        Make the RDM of the given order and representation for two absolute CI roots.
+        Cross-state (transition) requests are only supported at order=1.
+
+        Parameters
+        ----------
+        left_root : int
+            the absolute CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the absolute CI root for the ket state.
+        order : int
+            The RDM order (1 or 2; selected CI has no 3-RDM).
+        kind : str
+            "sd" (spin-dependent) or "sf" (spin-free).
+
+        Returns
+        -------
+        NDArray or tuple[NDArray, ...]
+            order=1 kind=sd -> (a, b); order=2 kind=sd -> (aa, ab, bb);
+            kind=sf -> a single full tensor.
         """
         left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
+            self._validate_rdm_inputs(
+                left_root,
+                right_root,
+                order,
+                self._rdm_orders,
+                kind,
+                self._rdm_kinds,
+                self._rdm_cross_state_orders,
+            )
         )
         if left_state == right_state:
-            return self.sub_solvers[left_state].make_sd_1rdm(
-                left_root_in_state, right_root_in_state
+            return self.sub_solvers[left_state].make_rdm(
+                left_root_in_state, right_root_in_state, order=order, kind=kind
             )
-
-        left_solver = self.sub_solvers[left_state]
-        right_solver = self.sub_solvers[right_state]
-        a_1trdm = left_solver.sci_helper.a_1trdm(
-            right_solver.sci_helper, left_root_in_state, right_root_in_state
-        )
-        b_1trdm = left_solver.sci_helper.b_1trdm(
-            right_solver.sci_helper, left_root_in_state, right_root_in_state
-        )
-        return a_1trdm, b_1trdm
-
-    def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free one-particle RDM for two absolute CI roots.
-        """
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_sf_1rdm(
-                left_root_in_state, right_root_in_state
+        # Cross-state: the validator above only lets this fall through when order == 1.
+        left_helper = self.sub_solvers[left_state].sci_helper
+        right_helper = self.sub_solvers[right_state].sci_helper
+        if kind == "sd":
+            return (
+                left_helper.a_1trdm(
+                    right_helper, left_root_in_state, right_root_in_state
+                ),
+                left_helper.b_1trdm(
+                    right_helper, left_root_in_state, right_root_in_state
+                ),
             )
-
-        left_solver = self.sub_solvers[left_state]
-        right_solver = self.sub_solvers[right_state]
-        return left_solver.sci_helper.sf_1trdm(
-            right_solver.sci_helper, left_root_in_state, right_root_in_state
+        return left_helper.sf_1trdm(
+            right_helper, left_root_in_state, right_root_in_state
         )
-
-    def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free two-particle RDM for two absolute CI roots.
-        """
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_sf_2rdm(
-                left_root_in_state, right_root_in_state
-            )
-        raise ValueError(
-            f"Cross-state 2-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-        )
-
-    def make_1rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free one-particle RDM for two absolute CI roots.
-        """
-        return self.make_sf_1rdm(left_root, right_root)
-
-    def make_2rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free two-particle RDM for two absolute CI roots.
-        """
-        return self.make_sf_2rdm(left_root, right_root)
 
     def reset_eigensolver(self):
         # sCI eigensolver gets reset every iteration anyway

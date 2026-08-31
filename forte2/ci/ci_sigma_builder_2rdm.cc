@@ -256,27 +256,4 @@ np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) 
     return rdm_sf;
 }
 
-np_tensor4 CISigmaBuilder::compute_sf_2cumulant(np_vector C_left, np_vector C_right) const {
-    // Compute the spin-free 1-RDM
-    auto G1 = compute_sf_1rdm(C_left, C_right);
-    // Compute the spin-free 2-RDM (this will hold the cumulant)
-    auto L2 = compute_sf_2rdm(C_left, C_right);
-
-    // Evaluate L2[p,q,r,s] = G2[p,q,r,s] - G1[p,r] * G1[q,s] + 0.5 * G1[p,s] * G1[q,r]
-    auto G1_v = G1.view();
-    auto L2_v = L2.view();
-
-    const auto norb = lists_.norb();
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s) {
-                    L2_v(p, q, r, s) += -G1_v(p, r) * G1_v(q, s) + 0.5 * G1_v(p, s) * G1_v(q, r);
-                }
-            }
-        }
-    }
-    return L2;
-}
-
 } // namespace forte2

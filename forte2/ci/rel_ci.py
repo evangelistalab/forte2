@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, Literal
 import numpy as np
 
 from forte2.lib import sparse_ops
@@ -19,6 +19,7 @@ from .ci_utils import (
     pretty_print_ci_nat_occ_numbers,
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
+    validate_single_state_rdm,
 )
 from .ci import _CISingleStateSolver
 
@@ -137,8 +138,8 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
     def _test_rdms(self):
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
         for root in range(self.nroot):
-            rdm1 = self.make_1rdm(root)
-            rdm2 = self.make_2rdm(root)
+            rdm1 = self.make_rdm(root, order=1, kind="so")
+            rdm2 = self.make_rdm(root, order=2, kind="so")
 
             rdms_energy = self.ints.E
             rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
@@ -151,259 +152,65 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
                 f"RDMs for root {root} validated successfully.\n", self.log_level
             )
 
-    def make_1rdm(self, left_root: int, right_root: int | None = None):
-        return self.make_so_1rdm(left_root, right_root)
-
-    def make_2rdm(self, left_root: int, right_root: int | None = None):
-        return self.make_so_2rdm(left_root, right_root)
-
-    def make_3rdm(self, left_root: int, right_root: int | None = None):
-        return self.make_so_3rdm(left_root, right_root)
-
-    def make_2cumulant(self, left_root: int, right_root: int | None = None):
-        return self.make_so_2cumulant(left_root, right_root)
-
-    def make_3cumulant(self, left_root: int, right_root: int | None = None):
-        return self.make_so_3cumulant(left_root, right_root)
-
     def csf_C_to_det_C(self, csf_vec):
         raise NotImplementedError(
             "There is no CSF basis in the two-component (spinor) case; the CI "
             "vectors are already in the determinant basis."
         )
 
-    def make_so_1rdm(self, left_root: int, right_root: int = None):
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2, 3)
+    _rdm_kinds: ClassVar[tuple[str, ...]] = ("so",)
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2, 3)
+    _cumulant_kinds: ClassVar[tuple[str, ...]] = ("so",)
+
+    def make_rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: Literal[1, 2, 3],
+        kind: Literal["so"],
+    ):
         """
-        Make the one-particle RDM for two CI roots. For two-component CI only.
+        Make the spin-orbital RDM of the given order for two CI roots. For two-component
+        CI only.
 
         Parameters
         ----------
         left_root : int
             the CI root for the bra state.
-        right_root : int, optional (default=left_root)
+        right_root : int | None, optional (default=left_root)
             the CI root for the ket state.
+        order : int
+            The RDM order (1, 2, or 3).
+        kind : str
+            Must be "so".
 
         Returns
         -------
         NDArray
-            One-particle RDM.
+            The spin-orbital RDM.
         """
+        validate_single_state_rdm(
+            self,
+            left_root,
+            right_root,
+            order,
+            self._rdm_orders,
+            kind,
+            self._rdm_kinds,
+        )
         if right_root is None:
             right_root = left_root
         # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_1rdm(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_so_1rdm_debug(self, left_root: int, right_root: int = None):
-        """
-        Make the one-particle RDM for two CI roots. For two-component CI only.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            One-particle RDM.
-        """
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_1rdm_debug(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_so_2rdm_debug(self, left_root: int, right_root: int = None):
-        """
-        Make the two-particle RDM for two CI roots. For two-component CI only.
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Two-particle RDM.
-        """
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_2rdm_debug(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_so_2cumulant(self, left_root: int, right_root: int = None):
-        """
-        Make the cumulant of the two-particle RDM for two CI roots. For two-component CI only.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Cumulant of the two-particle RDM.
-        """
-        if right_root is None:
-            right_root = left_root
-        lambda2 = self.ci_sigma_builder.so_2cumulant(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-        return lambda2
-
-    def make_so_2rdm(self, left_root: int, right_root: int = None):
-        """
-        Make the two-particle RDM for two CI roots. For two-component CI only.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Two-particle RDM.
-        """
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_2rdm(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_so_2cumulant_debug(self, left_root: int, right_root: int = None):
-        """
-        Make the cumulant of the two-particle RDM for two CI roots. For two-component CI only.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Cumulant of the two-particle RDM.
-        """
-        if right_root is None:
-            right_root = left_root
-        rdm1 = self.make_so_1rdm_debug(left_root, right_root)
-        rdm2 = self.make_so_2rdm_debug(left_root, right_root)
-        lambda2 = (
-            rdm2
-            - np.einsum("pr,qs->pqrs", rdm1, rdm1, optimize=True)
-            + np.einsum("ps,qr->pqrs", rdm1, rdm1, optimize=True)
-        )
-        return lambda2
-
-    def make_so_3rdm_debug(self, left_root: int, right_root: int = None):
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_3rdm_debug(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_so_3rdm(self, left_root: int, right_root: int = None):
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_3rdm(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_so_3cumulant(self, left_root: int, right_root: int = None):
-        if right_root is None:
-            right_root = left_root
-        lambda3 = self.ci_sigma_builder.so_3cumulant(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-        return lambda3
-
-    def make_sd_1rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "make_sd_1rdm is not defined in the two-component (spinor) basis; "
-            "use the make_so_* methods instead."
-        )
-
-    def make_sd_2rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "make_sd_2rdm is not defined in the two-component (spinor) basis; "
-            "use the make_so_* methods instead."
-        )
-
-    def make_sd_3rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "make_sd_3rdm is not defined in the two-component (spinor) basis; "
-            "use the make_so_* methods instead."
-        )
-
-    def make_sf_1rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "make_sf_1rdm is not defined in the two-component (spinor) basis; "
-            "use the make_so_* methods instead."
-        )
-
-    def make_sf_2rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "make_sf_2rdm is not defined in the two-component (spinor) basis; "
-            "use the make_so_* methods instead."
-        )
-
-    def make_sf_3rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "make_sf_3rdm is not defined in the two-component (spinor) basis; "
-            "use the make_so_* methods instead."
-        )
-
-    def make_sf_2cumulant(self, *args, **kwargs):
-        raise NotImplementedError(
-            "make_sf_2cumulant is not defined in the two-component (spinor) basis; "
-            "use the make_so_* methods instead."
-        )
-
-    def make_sf_3cumulant(self, *args, **kwargs):
-        raise NotImplementedError(
-            "make_sf_3cumulant is not defined in the two-component (spinor) basis; "
-            "use the make_so_* methods instead."
-        )
+        Cl = self.evecs[:, left_root].copy()
+        Cr = self.evecs[:, right_root].copy()
+        sb = self.ci_sigma_builder
+        if order == 1:
+            return sb.so_1rdm(Cl, Cr)
+        if order == 2:
+            return sb.so_2rdm(Cl, Cr)
+        return sb.so_3rdm(Cl, Cr)
 
 
 @dataclass
@@ -436,31 +243,36 @@ class RelCISolver(RelCIBase):
     # Per-state worker class used by CIBase._startup
     _ss_solver_cls: ClassVar[type] = _RelCISingleStateSolver
 
-    def make_1rdm(self, left_root: int, right_root: int | None = None):
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_1rdm(
-                left_root_in_state, right_root_in_state
-            )
-        else:
-            raise NotImplementedError(
-                f"Cross-state 1-RDMs are not supported for RelCI. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2, 3)
+    _rdm_kinds: ClassVar[tuple[str, ...]] = ("so",)
+    # spinor RDMs between roots of *different* states are not implemented
+    _rdm_cross_state_orders: ClassVar[tuple[int, ...]] = ()
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2, 3)
+    _cumulant_kinds: ClassVar[tuple[str, ...]] = ("so",)
 
-    def make_2rdm(self, left_root: int, right_root: int | None = None):
+    def make_rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: Literal[1, 2, 3],
+        kind: Literal["so"],
+    ):
+        """Spin-orbital RDM of the given order for two absolute CI roots (same-state only)."""
         left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
+            self._validate_rdm_inputs(
+                left_root,
+                right_root,
+                order,
+                self._rdm_orders,
+                kind,
+                self._rdm_kinds,
+                self._rdm_cross_state_orders,
+            )
         )
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_2rdm(
-                left_root_in_state, right_root_in_state
-            )
-        else:
-            raise NotImplementedError(
-                f"Cross-state 2-RDMs are not supported for RelCI. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
+        return self.sub_solvers[left_state].make_rdm(
+            left_root_in_state, right_root_in_state, order=order, kind=kind
+        )
 
 
 @dataclass

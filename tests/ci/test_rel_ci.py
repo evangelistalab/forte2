@@ -176,8 +176,8 @@ def test_rel_ci_natural_noncontiguous_mo_space():
         atol=1e-10,
     )
 
-    original_occs = np.sort(np.linalg.eigvalsh(ci_original.make_average_1rdm()))[::-1]
-    natural_occs = np.sort(np.linalg.eigvalsh(ci_natural.make_average_1rdm()))[::-1]
+    original_occs = np.sort(np.linalg.eigvalsh(ci_original.make_average_rdm(1)))[::-1]
+    natural_occs = np.sort(np.linalg.eigvalsh(ci_natural.make_average_rdm(1)))[::-1]
     assert natural_occs == approx(original_occs)
 
 

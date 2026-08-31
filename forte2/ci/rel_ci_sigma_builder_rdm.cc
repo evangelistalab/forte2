@@ -11,8 +11,8 @@
 
 namespace forte2 {
 
-np_matrix_complex RelCISigmaBuilder::compute_1rdm(np_vector_complex C_left,
-                                                  np_vector_complex C_right) const {
+np_matrix_complex RelCISigmaBuilder::compute_so_1rdm(np_vector_complex C_left,
+                                                     np_vector_complex C_right) const {
     const auto na = lists_.na();
     const auto norb = lists_.norb();
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({norb, norb});
@@ -70,8 +70,8 @@ np_matrix_complex RelCISigmaBuilder::compute_1rdm(np_vector_complex C_left,
     return rdm;
 }
 
-np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
-                                                   np_vector_complex C_right) const {
+np_tensor4_complex RelCISigmaBuilder::compute_so_2rdm(np_vector_complex C_left,
+                                                      np_vector_complex C_right) const {
     Spin spin = Spin::Alpha; // placeholder spin
 
     const auto na = lists_.na();
@@ -182,32 +182,8 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
     return matrix::packed_tensor4_to_tensor4<std::complex<double>>(rdm);
 }
 
-np_tensor4_complex RelCISigmaBuilder::compute_2cumulant(np_vector_complex C_left,
-                                                        np_vector_complex C_right) const {
-    // Compute the 1-RDM
-    auto G1 = compute_1rdm(C_left, C_right);
-    // Compute the 2-RDM (this will hold the cumulant)
-    auto L2 = compute_2rdm(C_left, C_right);
-
-    // Evaluate L2[p,q,r,s] = G2[p,q,r,s] - G1[p,r] * G1[q,s] + 0.5 * G1[p,s] * G1[q,r]
-    auto G1_v = G1.view();
-    auto L2_v = L2.view();
-
-    const auto norb = lists_.norb();
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s) {
-                    L2_v(p, q, r, s) += -G1_v(p, r) * G1_v(q, s) + G1_v(p, s) * G1_v(q, r);
-                }
-            }
-        }
-    }
-    return L2;
-}
-
-np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
-                                                   np_vector_complex C_right) const {
+np_tensor6_complex RelCISigmaBuilder::compute_so_3rdm(np_vector_complex C_left,
+                                                      np_vector_complex C_right) const {
     Spin spin = Spin::Alpha; // placeholder spin
     const auto na = lists_.na();
     const auto nb = lists_.nb();
@@ -362,50 +338,6 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
     }
 
     return rdm_full;
-}
-
-np_tensor6_complex RelCISigmaBuilder::compute_3cumulant(np_vector_complex C_left,
-                                                        np_vector_complex C_right) const {
-    // Compute the 1-RDM
-    auto G1 = compute_1rdm(C_left, C_right);
-    // Compute the 2-RDM
-    auto G2 = compute_2rdm(C_left, C_right);
-    // Compute the 3-RDM (this will hold the cumulant)
-    auto L3 = compute_3rdm(C_left, C_right);
-
-    auto G1_v = G1.view();
-    auto G2_v = G2.view();
-    auto L3_v = L3.view();
-
-    const auto norb = lists_.norb();
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s) {
-                    for (size_t t{0}; t < norb; ++t) {
-                        for (size_t u{0}; u < norb; ++u) {
-                            L3_v(p, q, r, s, t, u) += -G1_v(p, s) * G2_v(q, r, t, u);
-                            L3_v(p, q, r, s, t, u) += -G1_v(q, t) * G2_v(p, r, s, u);
-                            L3_v(p, q, r, s, t, u) += -G1_v(r, u) * G2_v(p, q, s, t);
-                            L3_v(p, q, r, s, t, u) += +G1_v(p, t) * G2_v(q, r, s, u);
-                            L3_v(p, q, r, s, t, u) += +G1_v(p, u) * G2_v(q, r, t, s);
-                            L3_v(p, q, r, s, t, u) += +G1_v(q, s) * G2_v(p, r, t, u);
-                            L3_v(p, q, r, s, t, u) += +G1_v(q, u) * G2_v(p, r, s, t);
-                            L3_v(p, q, r, s, t, u) += +G1_v(r, s) * G2_v(p, q, u, t);
-                            L3_v(p, q, r, s, t, u) += +G1_v(r, t) * G2_v(p, q, s, u);
-                            L3_v(p, q, r, s, t, u) += +2.0 * G1_v(p, s) * G1_v(q, t) * G1_v(r, u);
-                            L3_v(p, q, r, s, t, u) += -2.0 * G1_v(p, s) * G1_v(q, u) * G1_v(r, t);
-                            L3_v(p, q, r, s, t, u) += -2.0 * G1_v(p, u) * G1_v(q, t) * G1_v(r, s);
-                            L3_v(p, q, r, s, t, u) += -2.0 * G1_v(p, t) * G1_v(q, s) * G1_v(r, u);
-                            L3_v(p, q, r, s, t, u) += +2.0 * G1_v(p, t) * G1_v(q, u) * G1_v(r, s);
-                            L3_v(p, q, r, s, t, u) += +2.0 * G1_v(p, u) * G1_v(q, s) * G1_v(r, t);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return L3;
 }
 
 } // namespace forte2

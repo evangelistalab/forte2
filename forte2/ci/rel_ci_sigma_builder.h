@@ -78,54 +78,29 @@ class RelCISigmaBuilder {
     /// @param sigma The resulting sigma vector, the two-electron part of H |basis>
     void sigma_two_electron(np_vector_complex basis, np_vector_complex sigma) const;
 
-    /// @brief Compute the spin-dependent one-electron reduced density matrix
+    /// @brief Compute the spin-orbital one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
-    /// @param spin The spin component to compute
     /// @return The one-electron reduced density matrix stored as
-    ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
+    ///        gamma[p][q] = <L| a^+_p a_q |R> with p,q spinor indices
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
-    np_matrix_complex compute_1rdm(np_vector_complex C_left, np_vector_complex C_right) const;
+    np_matrix_complex compute_so_1rdm(np_vector_complex C_left, np_vector_complex C_right) const;
 
-    /// @brief Compute the same-spin two-electron reduced density matrix
+    /// @brief Compute the spin-orbital two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
-    /// @param spin The spin component to compute
-    /// @return The two-electron same-spin reduced density matrix stored as a matrix
-    ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
-    ///        with p > q, and r > s orbitals of spin sigma
-    np_tensor4_complex compute_2rdm(np_vector_complex C_left, np_vector_complex C_right) const;
+    /// @return The two-electron reduced density matrix stored as a matrix
+    ///        gamma[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
+    ///        with p > q, and r > s spinor indices
+    np_tensor4_complex compute_so_2rdm(np_vector_complex C_left, np_vector_complex C_right) const;
 
-    /// @brief Compute the cumulant of the spin-free two-electron reduced density matrix
+    /// @brief Compute the three-electron spin-orbital reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
-    /// @return The cumulant of the two-electron spin-free reduced density matrix stored as a tensor
-    ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
-    ///                              0.5 * gamma[p][s] * gamma[q][r]
-    np_tensor4_complex compute_2cumulant(np_vector_complex C_left, np_vector_complex C_right) const;
-
-    /// @brief Compute the three-electron same-spin reduced density matrix
-    /// @param C_left The left-hand side coefficients
-    /// @param C_right The right-hand side coefficients
-    /// @param spin The spin component to compute
-    /// @return The three-electron same-spin reduced density matrix stored as a matrix
-    ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
-    ///        with p > q > r, and s > t > u orbitals of spin sigma
-    np_tensor6_complex compute_3rdm(np_vector_complex C_left, np_vector_complex C_right) const;
-
-    /// @brief Compute the cumulant of the spin-free three-electron reduced density matrix
-    /// @param C_left The left-hand side coefficients
-    /// @param C_right The right-hand side coefficients
-    /// @return The cumulant of the three-electron spin-free reduced density matrix stored as a
-    /// tensor
-    ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
-    np_tensor6_complex compute_3cumulant(np_vector_complex C_left, np_vector_complex C_right) const;
-
-    np_matrix_complex compute_1rdm_debug(np_vector_complex C_left, np_vector_complex C_right) const;
-    np_tensor4_complex compute_2rdm_debug(np_vector_complex C_left,
-                                          np_vector_complex C_right) const;
-    np_tensor6_complex compute_3rdm_debug(np_vector_complex C_left,
-                                          np_vector_complex C_right) const;
+    /// @return The three-electron reduced density matrix stored as a matrix
+    ///        gamma[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
+    ///        with p > q > r, and s > t > u spinor indices
+    np_tensor6_complex compute_so_3rdm(np_vector_complex C_left, np_vector_complex C_right) const;
 
   private:
     // == Class Private Variables ==

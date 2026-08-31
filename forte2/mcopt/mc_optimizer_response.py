@@ -634,14 +634,14 @@ def _solve_response(mc, root, *, r_tol, maxiter):
     reference_dets = _build_ci_reference_det_vectors(mc, layout)
     nrot = mc.orb_opt.nrot
     dimension = nrot + nci
-    mc.orb_opt.set_rdms(mc.make_average_1rdm(), mc.make_average_2rdm())
+    mc.orb_opt.set_rdms(mc.make_average_rdm(1), mc.make_average_rdm(2))
     intermediates = _build_coupled_response_intermediates(mc.orb_opt)
     _, density_intermediates, _ = intermediates
     orbital_b = _compute_ci_orbital_response_from_rdms(
         mc.orb_opt,
         1.0,
-        mc.make_sf_1rdm(root),
-        mc.make_sf_2rdm(root),
+        mc.ci_solver.make_rdm(root, order=1, kind="sf"),
+        mc.ci_solver.make_rdm(root, order=2, kind="sf"),
         density_intermediates,
     )
     raw_ci_b = _compute_raw_ci_response_b_vector(mc, root, layout)
@@ -809,8 +809,8 @@ def _solve_state_specific_gradient_response(mc, root):
     )
     del ci_response
 
-    base_g1 = mc.make_sf_1rdm(root)
-    base_g2 = mc.make_sf_2rdm(root)
+    base_g1 = mc.ci_solver.make_rdm(root, order=1, kind="sf")
+    base_g2 = mc.ci_solver.make_rdm(root, order=2, kind="sf")
     base_g1 += ci_g1
     base_g2 += ci_g2
     del ci_g1, ci_g2
@@ -871,12 +871,12 @@ def compute_omega(mc, root, orbital_response, ci_response):
     ci_response, layout = _validate_ci_response_vector(mc, ci_response)
     ci_response = _project_ci_response_vector(mc, ci_response, layout)
     ci_overlap, ci_g1, ci_g2 = _compute_ci_response_rdms(mc, ci_response, layout)
-    base_g1 = mc.make_sf_1rdm(root)
-    base_g2 = mc.make_sf_2rdm(root)
+    base_g1 = mc.ci_solver.make_rdm(root, order=1, kind="sf")
+    base_g2 = mc.ci_solver.make_rdm(root, order=2, kind="sf")
     base_g1 += ci_g1
     base_g2 += ci_g2
 
-    mc.orb_opt.set_rdms(mc.make_average_1rdm(), mc.make_average_2rdm())
+    mc.orb_opt.set_rdms(mc.make_average_rdm(1), mc.make_average_rdm(2))
     intermediates = _build_coupled_response_intermediates(mc.orb_opt)
     return _compute_omega_from_intermediates(
         mc,

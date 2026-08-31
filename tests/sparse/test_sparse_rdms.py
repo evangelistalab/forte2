@@ -40,7 +40,9 @@ def test_ci_tdm_same_solver():
             tdm1_a_ref = rdms.compute_a_1rdm(state_left, state_right, 6)
             tdm1_b_ref = rdms.compute_b_1rdm(state_left, state_right, 6)
 
-            tdm1_a, tdm1_b = ci.sub_solvers[0].make_sd_1rdm(root_left, root_right)
+            tdm1_a, tdm1_b = ci.sub_solvers[0].make_rdm(
+                root_left, root_right, order=1, kind="sd"
+            )
             assert np.allclose(tdm1_a, tdm1_a_ref)
             assert np.allclose(tdm1_b, tdm1_b_ref)
 
@@ -48,8 +50,8 @@ def test_ci_tdm_same_solver():
             tdm2_ab_ref = rdms.compute_ab_2rdm(state_left, state_right, 6)
             tdm2_bb_ref = rdms.compute_bb_2rdm(state_left, state_right, 6)
 
-            tdm2_aa, tdm2_ab, tdm2_bb = ci.sub_solvers[0].make_sd_2rdm(
-                root_left, root_right
+            tdm2_aa, tdm2_ab, tdm2_bb = ci.sub_solvers[0].make_rdm(
+                root_left, root_right, order=2, kind="sd"
             )
             tdm2_aa = cpp_helpers.packed_tensor4_to_tensor4(tdm2_aa)
             tdm2_bb = cpp_helpers.packed_tensor4_to_tensor4(tdm2_bb)
@@ -93,17 +95,16 @@ def test_gasci_tdm_different_solvers():
     state_left = left_sb.make_sparse_state(C_left)
     state_right = right_sb.make_sparse_state(C_right)
 
-    a_1trdm, b_1trdm = ci.make_sd_1rdm(0, 1)
-    sf_1trdm = ci.make_1rdm(0, 1)
+    a_1trdm, b_1trdm = ci.make_rdm(0, 1, order=1, kind="sd")
+    sf_1trdm = ci.make_rdm(0, 1, order=1, kind="sf")
     a_1trdm_ref = rdms.compute_a_1rdm(state_left, state_right, 6)
     b_1trdm_ref = rdms.compute_b_1rdm(state_left, state_right, 6)
     assert np.allclose(a_1trdm, a_1trdm_ref)
     assert np.allclose(b_1trdm, b_1trdm_ref)
     assert np.allclose(sf_1trdm, a_1trdm_ref + b_1trdm_ref)
 
-    a_1trdm, b_1trdm = ci.make_sd_1rdm(1, 0)
-    # make_sf_1rdm and make_1rdm are synonymous
-    sf_1trdm = ci.make_sf_1rdm(1, 0)
+    a_1trdm, b_1trdm = ci.make_rdm(1, 0, order=1, kind="sd")
+    sf_1trdm = ci.make_rdm(1, 0, order=1, kind="sf")
     a_1trdm_ref = rdms.compute_a_1rdm(state_right, state_left, 6)
     b_1trdm_ref = rdms.compute_b_1rdm(state_right, state_left, 6)
     assert np.allclose(a_1trdm, a_1trdm_ref)

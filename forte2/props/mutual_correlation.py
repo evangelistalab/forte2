@@ -39,9 +39,9 @@ class MutualCorrelationAnalysis:
     This analysis expects an active space solver with the following API
     on the selected sub-solver `solver.sub_solvers[sub_solver_index]`:
 
-    - make_sd_1rdm(root) -> tuple[NDArray, NDArray]
+    - make_rdm(root, order=1, kind="sd") -> tuple[NDArray, NDArray]
             Returns (γa, γb) spin-dependent 1-RDMs with shape (norb, norb) each.
-    - make_sd_2rdm(root) -> tuple[NDArray, NDArray, NDArray]
+    - make_rdm(root, order=2, kind="sd") -> tuple[NDArray, NDArray, NDArray]
             Returns (γaa, γab, γbb) spin-dependent 2-RDMs.
             γaa and γbb are packed (lower-triangular pair indices) and are
             converted to full (norb, norb, norb, norb) tensors via
@@ -71,13 +71,15 @@ class MutualCorrelationAnalysis:
         self.active_mo_indices = solver.mo_space.active_indices[:]
 
         # extract the spin-dependent 1-RDM  from the solver
-        γa, γb = solver.sub_solvers[sub_solver_index].make_sd_1rdm(root)
+        γa, γb = solver.sub_solvers[sub_solver_index].make_rdm(root, order=1, kind="sd")
 
         # compute the spin-dependent 1-RDM
         self.Γ1 = γa + γb
 
         # extract the spin-dependent 2-RDM from the solver
-        γaa, γab, γbb = solver.sub_solvers[sub_solver_index].make_sd_2rdm(root)
+        γaa, γab, γbb = solver.sub_solvers[sub_solver_index].make_rdm(
+            root, order=2, kind="sd"
+        )
 
         # convert packed 2-RDMs to full tensors (only the aa and bb components are packed)
         γaa = cpp_helpers.packed_tensor4_to_tensor4(γaa)

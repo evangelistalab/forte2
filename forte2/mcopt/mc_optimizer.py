@@ -243,8 +243,8 @@ class MCOptimizerBase(Method):
         self.E_orb = self.E_avg
         self.E_orb_old = self.E_orb
 
-        self.g1_act = self.make_average_1rdm()
-        g2_act = self.make_average_2rdm()
+        self.g1_act = self.make_average_rdm(1)
+        g2_act = self.make_average_rdm(2)
 
         # Prepare the orbital optimizer
         self.orb_opt.set_rdms(self.g1_act, g2_act)
@@ -304,8 +304,8 @@ class MCOptimizerBase(Method):
                 self.E_ci = np.array(self.ci_solver.E)
                 self.E_avg = self.ci_solver.compute_average_energy()
                 self.E = self.E_avg
-                self.g1_act = self.make_average_1rdm()
-                g2_act = self.make_average_2rdm()
+                self.g1_act = self.make_average_rdm(1)
+                g2_act = self.make_average_rdm(2)
                 self.orb_opt.set_rdms(self.g1_act, g2_act)
                 self.iter += 1
             if self.iter >= self.maxiter and not conv:
@@ -485,61 +485,26 @@ class MCOptimizerBase(Method):
         self.E_orb_old = self.E_orb
         return conv, conv_str
 
-    def make_average_1rdm(self):
-        return self.ci_solver.make_average_1rdm()
+    def make_rdm(
+        self, left_root: int, right_root: int | None = None, *, order: int, kind: str
+    ):
+        return self.ci_solver.make_rdm(left_root, right_root, order=order, kind=kind)
 
-    def make_average_2rdm(self):
-        return self.ci_solver.make_average_2rdm()
+    def make_cumulant(
+        self, left_root: int, right_root: int | None = None, *, order: int, kind: str
+    ):
+        return self.ci_solver.make_cumulant(
+            left_root, right_root, order=order, kind=kind
+        )
 
-    def make_average_2cumulant(self):
-        return self.ci_solver.make_average_2cumulant()
+    def make_average_rdm(self, order: int):
+        return self.ci_solver.make_average_rdm(order)
 
-    def make_average_3rdm(self):
-        return self.ci_solver.make_average_3rdm()
-
-    def make_average_3cumulant(self):
-        return self.ci_solver.make_average_3cumulant()
-
-    def make_average_cumulants(self):
-        return self.ci_solver.make_average_cumulants()
+    def make_average_cumulant(self, order: int):
+        return self.ci_solver.make_average_cumulant(order)
 
 
 class MCOptimizer(MCOptimizerBase):
-    def make_sd_1rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> tuple[NDArray, NDArray]:
-        return self.ci_solver.make_sd_1rdm(left_root, right_root)
-
-    def make_sd_2rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> tuple[NDArray, NDArray, NDArray]:
-        return self.ci_solver.make_sd_2rdm(left_root, right_root)
-
-    def make_sd_3rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-        return self.ci_solver.make_sd_3rdm(left_root, right_root)
-
-    def make_sf_1rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> NDArray:
-        return self.ci_solver.make_sf_1rdm(left_root, right_root)
-
-    def make_sf_2rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> NDArray:
-        return self.ci_solver.make_sf_2rdm(left_root, right_root)
-
     def gradient(self, root=None) -> NDArray:
         r"""
         Compute a target-root CASSCF/GASSCF analytic nuclear gradient.

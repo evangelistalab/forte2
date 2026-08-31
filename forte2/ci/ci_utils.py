@@ -8,6 +8,76 @@ from forte2.helpers import logger
 from forte2.data import EH_TO_EV
 
 
+def check_capability_declared(solver, **capabilities):
+    """
+    Check that a solver declared the capabilities a request needs.
+
+    The capability class variables default to None on the base classes, so a subclass that
+    forgets to declare one is reported here by name instead of surfacing as a confusing
+    AttributeError or a TypeError from the membership test that follows.
+
+    Parameters
+    ----------
+    solver
+        The solver whose declaration is being checked.
+    **capabilities
+        The declared tuples, keyed by capability name. A value of None means the subclass
+        never declared it; an empty tuple is a valid declaration meaning "not supported".
+
+    Raises
+    ------
+    NotImplementedError
+        If any declaration is missing.
+    """
+    missing = [name for name, value in capabilities.items() if value is None]
+    if missing:
+        raise NotImplementedError(
+            f"{type(solver).__name__} does not declare {', '.join(sorted(missing))}. "
+            "Every concrete solver must set its capability class variables "
+            "(an empty tuple means 'not supported')."
+        )
+
+
+def validate_single_state_rdm(
+    solver, left_root, right_root, order, allowed_orders, kind, allowed_kinds
+):
+    """
+    Validate a `make_rdm`/`make_cumulant` request against a single-state solver's root count
+    and its allowed (order, kind) combinations.
+
+    Parameters
+    ----------
+    solver
+        The single-state solver handling the request.
+    left_root : int
+        The root index for the bra state.
+    right_root : int | None
+        The root index for the ket state, or None (meaning the same as `left_root`).
+    order : int
+        The requested RDM/cumulant order.
+    allowed_orders : tuple[int, ...]
+        The orders this solver supports.
+    kind : str
+        The requested representation ("sd", "sf", or "so").
+    allowed_kinds : tuple[str, ...]
+        The representations this solver supports.
+
+    Raises
+    ------
+    ValueError
+        If `order`/`kind` aren't in the allowed sets, or if either root is out of `[0, nroot)`.
+    """
+    check_capability_declared(solver, orders=allowed_orders, kinds=allowed_kinds)
+    if order not in allowed_orders:
+        raise ValueError(f"order must be one of {allowed_orders}, got {order}.")
+    if kind not in allowed_kinds:
+        raise ValueError(f"kind must be one of {allowed_kinds}, got '{kind}'.")
+    nroot = solver.nroot
+    for name, root in (("left_root", left_root), ("right_root", right_root)):
+        if root is not None and not (0 <= root < nroot):
+            raise ValueError(f"{name} must be between 0 and {nroot - 1}, got {root}.")
+
+
 def pretty_print_gas_info(ci_strings: CIStrings):
     num_spaces = ci_strings.ngas_spaces
     gas_sizes = ci_strings.gas_size
@@ -353,6 +423,39 @@ def make_3cumulant_so(gamma1, gamma2, gamma3):
     )
 
     return l3
+
+
+def make_cumulant_from_rdms(solver, left_root, right_root, *, order, kind):
+    """
+    Assemble a cumulant of the given order from a solver's own RDMs.
+
+    Works with any object exposing ``make_rdm(left_root, right_root, order=, kind=)``,
+    which covers both the per-state worker solvers and the state-averaged ones.
+
+    Parameters
+    ----------
+    solver
+        The solver supplying the RDMs.
+    left_root : int
+        The root index for the bra state.
+    right_root : int | None
+        The root index for the ket state, or None (meaning the same as `left_root`).
+    order : int
+        The cumulant order (2 or 3).
+    kind : str
+        "sf" (spin-free) or "so" (spin-orbital).
+
+    Returns
+    -------
+    NDArray
+        The cumulant.
+    """
+    rdm1 = solver.make_rdm(left_root, right_root, order=1, kind=kind)
+    rdm2 = solver.make_rdm(left_root, right_root, order=2, kind=kind)
+    if order == 2:
+        return (make_2cumulant_so if kind == "so" else make_2cumulant_sf)(rdm1, rdm2)
+    rdm3 = solver.make_rdm(left_root, right_root, order=3, kind=kind)
+    return (make_3cumulant_so if kind == "so" else make_3cumulant_sf)(rdm1, rdm2, rdm3)
 
 
 def make_2cumulant_sf(gamma1, gamma2):
