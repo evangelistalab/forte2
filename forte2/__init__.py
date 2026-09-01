@@ -1,4 +1,4 @@
-__version__ = "2026.6.4"
+__version__ = "2026.9.1"
 __author__ = "Forte2 Developers"
 
 from .helpers.echo_script import echo_invoking_script
