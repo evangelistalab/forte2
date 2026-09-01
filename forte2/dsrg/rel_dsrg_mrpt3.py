@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from itertools import product
 
 import numpy as np
 
@@ -78,6 +79,19 @@ class RelDSRG_MRPT3(DSRGBase):
            J. Chem. Theory Comput. 2024, 20, 4170-4181.
     """
 
+    def _release_integrals(self):
+        super()._release_integrals()
+        self.T1_1 = None
+        self.T2_1 = None
+        self.T1_2 = None
+        self.T2_2 = None
+        self.F_1_tilde = None
+        self.V_1_tilde = None
+        self.H0A1_1b = None
+        self.H0A1_2b = None
+        self.Htilde1A1_1b = None
+        self.Htilde1A1_2b = None
+
     def get_integrals(self):
         g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
@@ -130,13 +144,46 @@ class RelDSRG_MRPT3(DSRGBase):
         ints["E"] = cas_energy_given_RDMs(
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
         )
-        V_so = self.fock_builder.two_electron_integrals_block_spinor(
-            self._C_semican.conj()
-        )
-        V_so -= V_so.swapaxes(2, 3)  # antisymmetrize
+        # Build each V block directly from the 3-index B tensors, as in RelDSRG_MRPT2,
+        # instead of forming the dense spinor V and slicing it: the dense tensor is
+        # nspinor**4 and is unaffordable beyond the smallest systems.
+        # <pq||rs> = (pr|qs) - (ps|qr), and (pr|qs) = sum_P B[P,p,r] B[P,q,s], so a block
+        # only ever needs the B blocks for the space pairs (p,r), (q,s), (p,s) and (q,r).
+        # The coefficients are conjugated to match the convention of the F tensor above.
+        C_conj = {
+            "c": self._C_semican[:, self.core].conj(),
+            "a": self._C_semican[:, self.actv].conj(),
+            "v": self._C_semican[:, self.virt].conj(),
+        }
+        B_so = dict()
+        for x, y in product("cav", repeat=2):
+            if x + y in B_so:
+                continue
+            B_so[x + y] = self.fock_builder.B_tensor_gen_block_spinor(
+                C_conj[x], C_conj[y]
+            )
+            # B[xy] and B[yx] are related by a transpose-conjugate, so only half are built
+            if y + x not in B_so:
+                B_so[y + x] = B_so[x + y].transpose(0, 2, 1).conj()
+
         ints["V"] = self.dsrg_helper.make_tensor(self.dsrg_helper.all_2_labels)
         for blk in ints["V"].keys():
-            ints["V"][blk] = V_so[_sl[blk[0]], _sl[blk[1]], _sl[blk[2]], _sl[blk[3]]]
+            p, q, r, s = blk
+            V_blk = np.einsum("Ppr,Pqs->pqrs", B_so[p + r], B_so[q + s], optimize=True)
+            # The exchange term (ps|qr) is a transpose of the direct term whenever the
+            # swapped pair shares a space, which holds for 40 of the 76 blocks: with
+            # D[abcd] = sum_P B[P,a,c] B[P,b,d], the exchange is D[pqsr] if r and s share
+            # a space, and D[qprs] if p and q do (the two B factors commute). Only the
+            # remaining blocks need a second contraction.
+            if r == s:
+                V_blk -= V_blk.swapaxes(2, 3)
+            elif p == q:
+                V_blk -= V_blk.swapaxes(0, 1)
+            else:
+                V_blk -= np.einsum(
+                    "Pps,Pqr->pqrs", B_so[p + s], B_so[q + r], optimize=True
+                )
+            ints["V"][blk] = V_blk
 
         # store the diagonal of the Fock matrix for later use in T1 denominators
         ints["eps"] = dict()

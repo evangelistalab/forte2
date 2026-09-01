@@ -3,6 +3,7 @@ from itertools import product
 
 einsum = lambda *args, **kwargs: np.einsum(*args, **kwargs, optimize=True)
 
+
 class _RelDSRGHelper:
     def __init__(self, dsrg_obj):
         self.hc = dsrg_obj.hc
@@ -33,11 +34,36 @@ class _RelDSRGHelper:
             ["".join(_) for _ in product(["c", "a", "v"], repeat=2)]
         )
         self.non_od_1_labels = self.all_1_labels - self.od_1_labels
-        self.all_2_labels = set(
-            ["".join(_) for _ in product(["c", "a", "v"], repeat=4)]
+        # Only 31 of the 81 two-body blocks are ever contracted, so only those are
+        # built. Taking every label and subtracting a handful of "large" ones used to
+        # leave 76, of which 45 were never read -- including vavv, vcvv, vvva and vvvc,
+        # which are O(nvirt**3) and were allocated twice (once in ints["V"], again in
+        # the non-od copy). The blocks with three or four virtual indices are all
+        # handled by the *_non_od_large kernels, which stream them from the B tensors
+        # instead of materialising them.
+        # Every od block is required: they are added into H0A1_2b wholesale. The non-od
+        # blocks below are those the contraction kernels index by name; to regenerate,
+        # collect the V["...."] literals in the uncommented body of this file.
+        self.contracted_non_od_2_labels = set(
+            [
+                "aaaa",
+                "aacv",
+                "avav",
+                "avcv",
+                "caca",
+                "cacc",
+                "cacv",
+                "ccca",
+                "cccc",
+                "cccv",
+                "cvaa",
+                "cvav",
+                "cvca",
+                "cvcc",
+                "cvcv",
+            ]
         )
-        large_labels = set(["vvvv", "avvv", "cvvv", "vvav", "vvcv"])
-        self.all_2_labels -= large_labels
+        self.all_2_labels = self.od_2_labels | self.contracted_non_od_2_labels
         self.non_od_2_labels = self.all_2_labels - self.od_2_labels
         self.dims = {
             "c": self.ncore,

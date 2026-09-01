@@ -247,6 +247,11 @@ class DSRGBase(Method):
             if self.converged:
                 break
 
+            # Drop the previous set first: get_integrals() does not read self.ints,
+            # so holding both across the call would double the integral footprint on
+            # every relaxation iteration.
+            self.ints = None
+            self.cumulants = None
             self.ints, self.cumulants = self.get_integrals()
             self.E_dsrg = self._solve_dsrg_shifted(form_hbar)
             if abs(self.E_dsrg.imag) > 1e-12:
