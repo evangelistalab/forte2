@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, CI, State, AVAS, ROHF, MOSpace
+from forte2 import AVAS, CI, CISolver, MOSpace, RHF, ROHF, State, System
 from forte2.base_classes import DavidsonLiuParams
 from forte2.helpers.comparisons import approx
 
@@ -14,8 +14,10 @@ def test_ci_orbital_invariance_is_true():
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = RHF(charge=-1, e_tol=1e-12)(system)
-    ci = CI(State(system=system, multiplicity=2, ms=0.5), active_orbitals=[0, 1])(rhf)
-    assert ci.orbital_rotation_invariant
+    ci = CI(
+        CISolver(State(system=system, multiplicity=2, ms=0.5), active_orbitals=[0, 1])
+    )(rhf)
+    assert ci.ci_solver.orbital_rotation_invariant
 
 
 def test_ci_1():
@@ -27,11 +29,13 @@ def test_ci_1():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(State(system=system, multiplicity=1, ms=0.0), active_orbitals=[0, 1])(rhf)
+    ci = CI(
+        CISolver(State(system=system, multiplicity=1, ms=0.0), active_orbitals=[0, 1])
+    )(rhf)
     ci.run()
 
     assert rhf.E == approx(-1.05643120731551)
-    assert ci.E[0] == approx(-1.096071975854)
+    assert ci.E_ci[0] == approx(-1.096071975854)
 
 
 def test_ci_2():
@@ -45,13 +49,15 @@ def test_ci_2():
     )
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        states=State(nel=10, multiplicity=1, ms=0.0),
-        core_orbitals=[0],
-        active_orbitals=[1, 2, 3, 4, 5, 6],
+        CISolver(
+            states=State(nel=10, multiplicity=1, ms=0.0),
+            core_orbitals=[0],
+            active_orbitals=[1, 2, 3, 4, 5, 6],
+        )
     )(rhf)
     ci.run()
 
-    assert ci.E[0] == approx(-100.019788438077)
+    assert ci.E_ci[0] == approx(-100.019788438077)
 
 
 def test_ci_n2_with_symmetry():
@@ -69,13 +75,15 @@ def test_ci_n2_with_symmetry():
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        states=State(nel=14, multiplicity=1, ms=0.0),
-        core_orbitals=4,
-        active_orbitals=6,
+        CISolver(
+            states=State(nel=14, multiplicity=1, ms=0.0),
+            core_orbitals=4,
+            active_orbitals=6,
+        )
     )(rhf)
     ci.run()
     eref_singlet = -109.004622061660
-    assert ci.E[0] == approx(eref_singlet)
+    assert ci.E_ci[0] == approx(eref_singlet)
 
 
 def test_ci_ch4_with_symmetry():
@@ -94,14 +102,16 @@ def test_ci_ch4_with_symmetry():
     )
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        states=State(nel=10, multiplicity=1, ms=0.0),
-        core_orbitals=1,
-        active_orbitals=8,
+        CISolver(
+            states=State(nel=10, multiplicity=1, ms=0.0),
+            core_orbitals=1,
+            active_orbitals=8,
+        )
     )(rhf)
     ci.run()
 
     # reference energy obtained without symmetry
-    assert ci.E[0] == approx(-40.2116319300)
+    assert ci.E_ci[0] == approx(-40.2116319300)
 
 
 def test_sa_ci_n2():
@@ -115,21 +125,22 @@ def test_sa_ci_n2():
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     singlet = State(nel=14, multiplicity=1, ms=0.0)
     triplet = State(nel=14, multiplicity=3, ms=0.0)
-    ci = CI(
+    ci_solver = CISolver(
         states=[singlet, triplet],
         core_orbitals=4,
         active_orbitals=6,
         nroots=[1, 2],
         weights=[[1.0], [0.85, 0.15]],
-    )(rhf)
+    )
+    ci = CI(ci_solver)(rhf)
     ci.run()
     eref_singlet = -109.004622061660
     eref_triplet1 = -108.779926502402
     eref_triplet2 = -108.733907910380
-    assert ci.E[0] == approx(eref_singlet)
-    assert ci.E[1] == approx(eref_triplet1)
-    assert ci.E[2] == approx(eref_triplet2)
-    assert ci.compute_average_energy() == approx(
+    assert ci.E_ci[0] == approx(eref_singlet)
+    assert ci.E_ci[1] == approx(eref_triplet1)
+    assert ci.E_ci[2] == approx(eref_triplet2)
+    assert ci.E_avg == approx(
         0.5 * eref_singlet + 0.5 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
     )
 
@@ -159,13 +170,16 @@ def test_sa_ci_with_avas():
     singlet = State(nel=14, multiplicity=1, ms=0.0)
     triplet = State(nel=14, multiplicity=3, ms=0.0)
 
-    saci = CI([singlet, triplet], nroots=[1, 2], weights=[[1.0], [0.85, 0.15]])(avas)
+    ci_solver = CISolver(
+        [singlet, triplet], nroots=[1, 2], weights=[[1.0], [0.85, 0.15]]
+    )
+    saci = CI(ci_solver)(avas)
     saci.run()
 
-    assert saci.E[0] == approx(eref_singlet)
-    assert saci.E[1] == approx(eref_triplet1)
-    assert saci.E[2] == approx(eref_triplet2)
-    assert saci.compute_average_energy() == approx(
+    assert saci.E_ci[0] == approx(eref_singlet)
+    assert saci.E_ci[1] == approx(eref_triplet1)
+    assert saci.E_ci[2] == approx(eref_triplet2)
+    assert saci.E_avg == approx(
         0.5 * eref_singlet + 0.5 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
     )
 
@@ -180,18 +194,18 @@ def test_ci_tdm():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(
+    ci_solver = CISolver(
         State(nel=14, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4, 5, 6, 7, 8, 9],
         nroots=10,
-        do_transition_dipole=True,
-    )(rhf)
+    )
+    ci = CI(ci_solver, do_transition_dipole=True)(rhf)
     ci.run()
-    assert abs(ci.transition_dipoles[(0, 6)][2]) == pytest.approx(
+    assert abs(ci_solver.transition_dipoles[(0, 6)][2]) == pytest.approx(
         1.5435316739347478, abs=1e-4
     )
-    assert ci.oscillator_strengths[(0, 6)] == pytest.approx(
+    assert ci_solver.oscillator_strengths[(0, 6)] == pytest.approx(
         1.1589808047738437, abs=1e-4
     )
 
@@ -214,11 +228,13 @@ def test_ci_no_active():
     )
     state = State(nel=10, multiplicity=1, ms=0.0)
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(states=state, core_orbitals=[0, 1, 2, 3, 4], active_orbitals=[])(rhf)
+    ci = CI(CISolver(states=state, core_orbitals=[0, 1, 2, 3, 4], active_orbitals=[]))(
+        rhf
+    )
     ci.run()
 
     assert rhf.E == approx(-99.997725200294)
-    assert ci.E[0] == approx(-99.997725200294)
+    assert ci.E_ci[0] == approx(-99.997725200294)
 
 
 def test_ci_single_determinant1():
@@ -238,11 +254,13 @@ def test_ci_single_determinant1():
     )
     state = State(nel=10, multiplicity=1, ms=0.0)
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(states=state, core_orbitals=[0, 1, 2, 3], active_orbitals=[4])(rhf)
+    ci = CI(CISolver(states=state, core_orbitals=[0, 1, 2, 3], active_orbitals=[4]))(
+        rhf
+    )
     ci.run()
 
     assert rhf.E == approx(-99.997725200294)
-    assert ci.E[0] == approx(-99.997725200294)
+    assert ci.E_ci[0] == approx(-99.997725200294)
 
 
 def test_ci_single_determinant2():
@@ -262,11 +280,13 @@ def test_ci_single_determinant2():
     )
     state = State(nel=10, multiplicity=1, ms=0.0)
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(states=state, core_orbitals=[], active_orbitals=[0, 1, 2, 3, 4])(rhf)
+    ci = CI(CISolver(states=state, core_orbitals=[], active_orbitals=[0, 1, 2, 3, 4]))(
+        rhf
+    )
     ci.run()
 
     assert rhf.E == approx(-99.997725200294)
-    assert ci.E[0] == approx(-99.997725200294)
+    assert ci.E_ci[0] == approx(-99.997725200294)
 
 
 def test_ci_single_determinant3():
@@ -284,11 +304,11 @@ def test_ci_single_determinant3():
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = ROHF(charge=0, ms=1.0, e_tol=1e-12)(system)
-    ci = CI(State(nel=2, multiplicity=3, ms=1.0), active_orbitals=[0, 1])(rhf)
+    ci = CI(CISolver(State(nel=2, multiplicity=3, ms=1.0), active_orbitals=[0, 1]))(rhf)
     ci.run()
 
     assert rhf.E == approx(-0.889646913931)
-    assert ci.E[0] == approx(-0.889646913931)
+    assert ci.E_ci[0] == approx(-0.889646913931)
 
 
 def test_ci_single_csf1():
@@ -306,11 +326,11 @@ def test_ci_single_csf1():
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = ROHF(charge=0, ms=1.0, e_tol=1e-12)(system)
-    ci = CI(State(nel=2, multiplicity=3, ms=0.0), active_orbitals=[0, 1])(rhf)
+    ci = CI(CISolver(State(nel=2, multiplicity=3, ms=0.0), active_orbitals=[0, 1]))(rhf)
     ci.run()
 
     assert rhf.E == approx(-0.889646913931)
-    assert ci.E[0] == approx(-0.889646913931)
+    assert ci.E_ci[0] == approx(-0.889646913931)
 
 
 def _lih_noncontiguous_mo_space(system):
@@ -333,13 +353,12 @@ def test_ci_semicanonical_noncontiguous_mo_space():
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     mo_space = _lih_noncontiguous_mo_space(system)
 
-    ci_original = CI(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space)(
-        rhf
-    )
+    ci_original = CI(
+        CISolver(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space)
+    )(rhf)
     ci_original.run()
     ci_semicanonical = CI(
-        State(nel=4, multiplicity=1, ms=0.0),
-        mo_space_override=mo_space,
+        CISolver(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space),
         final_orbitals="semicanonical",
     )(rhf)
     ci_semicanonical.run()
@@ -349,7 +368,7 @@ def test_ci_semicanonical_noncontiguous_mo_space():
     # frozen_virt] ordering, so this permutation is genuinely non-trivial.
     np.testing.assert_array_equal(mo_space.orig_to_contig, [0, 1, 2, 4, 5, 3])
     np.testing.assert_array_equal(mo_space.contig_to_orig, [0, 1, 2, 5, 3, 4])
-    assert ci_semicanonical.E[0] == approx(ci_original.E[0])
+    assert ci_semicanonical.E_ci[0] == approx(ci_original.E_ci[0])
     np.testing.assert_allclose(
         ci_semicanonical.mos.C[0].T @ system.ints_overlap() @ ci_semicanonical.mos.C[0],
         np.eye(mo_space.nmo),
@@ -368,18 +387,17 @@ def test_ci_natural_noncontiguous_mo_space():
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     mo_space = _lih_noncontiguous_mo_space(system)
 
-    ci_original = CI(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space)(
-        rhf
-    )
+    ci_original = CI(
+        CISolver(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space)
+    )(rhf)
     ci_original.run()
     ci_natural = CI(
-        State(nel=4, multiplicity=1, ms=0.0),
-        mo_space_override=mo_space,
+        CISolver(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space),
         final_orbitals="natural",
     )(rhf)
     ci_natural.run()
 
-    assert ci_natural.E[0] == approx(ci_original.E[0])
+    assert ci_natural.E_ci[0] == approx(ci_original.E_ci[0])
     np.testing.assert_allclose(
         ci_natural.mos.C[0].T @ system.ints_overlap() @ ci_natural.mos.C[0],
         np.eye(mo_space.nmo),
@@ -408,7 +426,7 @@ def test_ci_final_orbitals(final_orbitals):
 
     singlet = State(nel=10, multiplicity=1, ms=0.0)
     triplet = State(nel=10, multiplicity=3, ms=1.0)
-    ci_solver = CI(
+    ci_solver = CISolver(
         states=[singlet, triplet],
         nroots=[2, 1],
         core_orbitals=[0],
@@ -418,7 +436,7 @@ def test_ci_final_orbitals(final_orbitals):
             r_tol=1e-4,
             ndets_per_guess=10,
         ),
-        final_orbitals=final_orbitals,
-    )(rhf)
-    ci_solver.run()
-    assert ci_solver.E_avg == approx(eref)
+    )
+    ci = CI(ci_solver, final_orbitals=final_orbitals)(rhf)
+    ci.run()
+    assert ci.E_avg == approx(eref)

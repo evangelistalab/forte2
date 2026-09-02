@@ -1,4 +1,4 @@
-from forte2 import System, CI, State, ROHF
+from forte2 import CI, CISolver, ROHF, State, System
 from forte2.helpers.comparisons import approx
 
 
@@ -13,18 +13,21 @@ def test_rohf_ci_1():
     )
     rhf = ROHF(charge=1, ms=0.5, e_tol=1e-12)(system)
     ci = CI(
-        states=State(system=system, charge=1, multiplicity=2, ms=0.5),
-        core_orbitals=[0],
-        active_orbitals=[1, 2, 3, 4, 5, 6],
-        nroots=2,
+        CISolver(
+            states=State(system=system, charge=1, multiplicity=2, ms=0.5),
+            core_orbitals=[0],
+            active_orbitals=[1, 2, 3, 4, 5, 6],
+            nroots=2,
+        )
     )(rhf)
     ci.run()
 
-    assert ci.E[0] == approx(-99.510706628367)
+    assert ci.E_ci[0] == approx(-99.510706628367)
 
 
 def test_rohf_ci_2():
     from forte2.base_classes import CIParams
+
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
@@ -35,12 +38,14 @@ def test_rohf_ci_2():
     )
     rhf = ROHF(charge=1, ms=-0.5, e_tol=1e-12)(system)
     ci = CI(
-        active_orbitals=[1, 2, 3, 4, 5, 6],
-        core_orbitals=[0],
-        states=State(system=system, charge=1, multiplicity=2, ms=-0.5),
-        nroots=2,
-        ci_params=CIParams(ci_algorithm="exact"),
+        CISolver(
+            active_orbitals=[1, 2, 3, 4, 5, 6],
+            core_orbitals=[0],
+            states=State(system=system, charge=1, multiplicity=2, ms=-0.5),
+            nroots=2,
+            ci_params=CIParams(ci_algorithm="exact"),
+        )
     )(rhf)
     ci.run()
 
-    assert ci.E[0] == approx(-99.510706628367)
+    assert ci.E_ci[0] == approx(-99.510706628367)

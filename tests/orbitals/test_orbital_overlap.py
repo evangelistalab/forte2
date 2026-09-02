@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System, RHF, GHF
+from forte2 import GHF, RHF, System
 from forte2.orbitals import mo_overlap, project_occupied_orbitals
 from forte2.helpers.comparisons import approx
 from forte2.base_classes import X2CParams

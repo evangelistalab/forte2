@@ -12,14 +12,7 @@ from forte2.base_classes import RelCIBase
 from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 from forte2.helpers import logger
 from forte2.jkbuilder import SpinorbitalIntegrals
-from forte2.orbitals import FinalOrbitals, validate_final_orbitals
-from forte2.ci.ci_utils import (
-    pretty_print_ci_summary,
-    pretty_print_ci_dets,
-    pretty_print_ci_transition_props,
-    pretty_print_ci_nat_occ_numbers,
-    validate_single_state_rdm,
-)
+from forte2.ci.ci_utils import validate_single_state_rdm
 from .sci import _SelectedCISingleStateSolver, SelectedCISolver
 
 
@@ -298,7 +291,7 @@ class RelSelectedCISolver(RelCIBase, SelectedCISolver):
     do_test_rdms : bool, optional, default=False
         If True, compute and validate the RDMs against the CI energy after the calculation.
     log_level : int, optional
-        The logging level for the CI solver.
+        The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
     """
 
     # Selected CI is a variational truncation, not the full CI space, so unlike
@@ -312,9 +305,11 @@ class RelSelectedCISolver(RelCIBase, SelectedCISolver):
         default_factory=DavidsonLiuParams
     )
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level() + 1)
 
-    # Active-space integral class used by CIBase._make_active_space_ints
+    # Label for the two energy tables; differs from SelectedCISolver only here.
+    _energy_summary_label: ClassVar[str] = "Relativistic selected CI energy"
+
+    # Active-space integral class used by CIBase.make_active_space_ints
     _integrals_cls: ClassVar[type] = SpinorbitalIntegrals
     # Per-state worker class used by CIBase._startup
     _ss_solver_cls: ClassVar[type] = _RelSelectedCISingleStateSolver
@@ -350,56 +345,3 @@ class RelSelectedCISolver(RelCIBase, SelectedCISolver):
         return self.sub_solvers[left_state].make_rdm(
             left_root_in_state, right_root_in_state, order=order, spin_type=spin_type
         )
-
-
-@dataclass
-class RelSelectedCI(RelSelectedCISolver):
-    """
-    Two-component selected CI specialized for a single calculation (i.e., not used in a loop).
-    See `RelSelectedCISolver` for all parameters and attributes.
-    """
-
-    die_if_not_converged: bool = True
-    final_orbitals: FinalOrbitals = "original"
-    do_transition_dipole: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
-
-    def __post_init__(self):
-        super().__post_init__()
-        validate_final_orbitals(self.final_orbitals)
-
-    def run(self):
-        self._solve()
-        self._rotate_final_orbitals(self.final_orbitals)
-        self._post_process()
-        return self
-
-    def _post_process(self):
-        pretty_print_ci_summary(
-            self.sa_info,
-            self.evar_per_solver,
-            header="\nRelativistic selected CI energy (variational)",
-        )
-        pretty_print_ci_summary(
-            self.sa_info,
-            self.etot_per_solver,
-            header="\nRelativistic selected CI energy (variational + PT2)",
-        )
-        self.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(
-            self.sa_info,
-            self.mo_space,
-            self.nat_occs,
-            self.nat_occs_avg,
-        )
-        top_dets = self.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-
-        if self.do_transition_dipole:
-            self.compute_transition_properties()
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.transition_dipoles,
-                self.oscillator_strengths,
-                self.evar_per_solver,
-            )

@@ -1,13 +1,13 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, GHF, SpinorUpcaster, MOSpace, X2CParams
+from forte2 import CI, GHF, MOSpace, RHF, RelCISolver, SpinorUpcaster, System, X2CParams
 from forte2.helpers.comparisons import approx
-from forte2.ci import RelCI
+from forte2 import CI
 
 
 def test_rel_ci_orbital_invariance_is_true():
-    # test that the orbital rotation invariance flag is set to True for RelCI
+    # test that the orbital rotation invariance flag is set to True for CI
     xyz = """H 0.0 0.0 0.0"""
 
     system = System(
@@ -15,8 +15,8 @@ def test_rel_ci_orbital_invariance_is_true():
     )
     scf = GHF(charge=0, e_tol=1e-12)(system)
     conv = SpinorUpcaster(apply_random_phase=True)(scf)
-    ci = RelCI(nel=1, active_orbitals=2, do_test_rdms=True)(conv)
-    assert ci.orbital_rotation_invariant
+    ci = CI(RelCISolver(nel=1, active_orbitals=2, do_test_rdms=True))(conv)
+    assert ci.ci_solver.orbital_rotation_invariant
 
 
 def test_rel_ci_h2():
@@ -32,10 +32,10 @@ def test_rel_ci_h2():
     scf = GHF(charge=0, e_tol=1e-12)(system)
     conv = SpinorUpcaster(apply_random_phase=True)(scf)
 
-    ci = RelCI(nel=2, active_orbitals=4, do_test_rdms=True)(conv)
+    ci = CI(RelCISolver(nel=2, active_orbitals=4, do_test_rdms=True))(conv)
 
     ci.run()
-    assert ci.E[0] == approx(-1.096071975854)
+    assert ci.E_ci[0] == approx(-1.096071975854)
 
 
 def test_rel_ci_hf():
@@ -51,14 +51,11 @@ def test_rel_ci_hf():
     scf = RHF(charge=0, e_tol=1e-10)(system)
     conv = SpinorUpcaster(apply_random_phase=True)(scf)
 
-    ci = RelCI(
-        nel=10,
-        core_orbitals=2,
-        active_orbitals=12,
-        do_test_rdms=True,
+    ci = CI(
+        RelCISolver(nel=10, core_orbitals=2, active_orbitals=12, do_test_rdms=True)
     )(conv)
     ci.run()
-    assert ci.E[0] == approx(-100.019788438077)
+    assert ci.E_ci[0] == approx(-100.019788438077)
 
 
 def test_rel_ci_hf_ghf():
@@ -77,15 +74,12 @@ def test_rel_ci_hf_ghf():
         x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
-    ci = RelCI(
-        nel=10,
-        core_orbitals=2,
-        active_orbitals=12,
-        do_test_rdms=True,
+    ci = CI(
+        RelCISolver(nel=10, core_orbitals=2, active_orbitals=12, do_test_rdms=True),
         final_orbitals="semicanonical",
     )(scf)
     ci.run()
-    assert ci.E[0] == approx(eref)
+    assert ci.E_ci[0] == approx(eref)
 
 
 def test_rel_ci_semicanonical_noncontiguous_mo_space():
@@ -108,12 +102,10 @@ def test_rel_ci_semicanonical_noncontiguous_mo_space():
         frozen_virtual_orbitals=[6, 7],
     )
 
-    ci_original = RelCI(nel=4, mo_space_override=mo_space)(scf)
+    ci_original = CI(RelCISolver(nel=4, mo_space_override=mo_space))(scf)
     ci_original.run()
-    ci_semicanonical = RelCI(
-        nel=4,
-        mo_space_override=mo_space,
-        final_orbitals="semicanonical",
+    ci_semicanonical = CI(
+        RelCISolver(nel=4, mo_space_override=mo_space), final_orbitals="semicanonical"
     )(scf)
     ci_semicanonical.run()
 
@@ -125,7 +117,7 @@ def test_rel_ci_semicanonical_noncontiguous_mo_space():
         mo_space.contig_to_orig,
         [0, 1, 2, 3, 4, 5, 10, 11, 6, 7, 8, 9],
     )
-    assert ci_semicanonical.E[0] == approx(ci_original.E[0])
+    assert ci_semicanonical.E_ci[0] == approx(ci_original.E_ci[0])
     np.testing.assert_allclose(
         ci_semicanonical.mos.C[0].conj().T
         @ system.ints_overlap()
@@ -137,7 +129,7 @@ def test_rel_ci_semicanonical_noncontiguous_mo_space():
 
 def test_rel_ci_natural_noncontiguous_mo_space():
     """
-    RelCI final_orbitals='natural' reproduces the energy and natural
+    Two-component CI final_orbitals='natural' reproduces the energy and natural
     occupation number spectrum after a non-trivial contig/orig
     permutation
     """
@@ -160,16 +152,14 @@ def test_rel_ci_natural_noncontiguous_mo_space():
         frozen_virtual_orbitals=[6, 7],
     )
 
-    ci_original = RelCI(nel=4, mo_space_override=mo_space)(scf)
+    ci_original = CI(RelCISolver(nel=4, mo_space_override=mo_space))(scf)
     ci_original.run()
-    ci_natural = RelCI(
-        nel=4,
-        mo_space_override=mo_space,
-        final_orbitals="natural",
+    ci_natural = CI(
+        RelCISolver(nel=4, mo_space_override=mo_space), final_orbitals="natural"
     )(scf)
     ci_natural.run()
 
-    assert ci_natural.E[0] == approx(ci_original.E[0])
+    assert ci_natural.E_ci[0] == approx(ci_original.E_ci[0])
     np.testing.assert_allclose(
         ci_natural.mos.C[0].conj().T @ system.ints_overlap() @ ci_natural.mos.C[0],
         np.eye(mo_space.nmo),
@@ -194,18 +184,15 @@ def test_rel_ci_hf_transition_dipole_equivalence_to_rhf():
         unit="bohr",
     )
     scf = GHF(charge=0)(system)
-    ci = RelCI(
-        nel=10,
-        nroots=4,
-        core_orbitals=2,
-        active_orbitals=12,
+    ci = CI(
+        RelCISolver(nel=10, nroots=4, core_orbitals=2, active_orbitals=12),
         do_transition_dipole=True,
     )(scf)
     ci.run()
-    assert np.abs(ci.transition_dipoles[(0, 0)]) == pytest.approx(
+    assert np.abs(ci.ci_solver.transition_dipoles[(0, 0)]) == pytest.approx(
         [0.0, 0.0, 0.756780349], abs=1e-6
     )
-    assert np.abs(ci.transition_dipoles[(1, 1)]) == pytest.approx(
+    assert np.abs(ci.ci_solver.transition_dipoles[(1, 1)]) == pytest.approx(
         [0.0, 0.0, 0.721450697], abs=1e-6
     )
 
@@ -224,29 +211,27 @@ def test_rel_ci_hf_transition_dipole_ghf():
         x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
-    ci = RelCI(
-        nel=10,
-        nroots=5,
-        core_orbitals=2,
-        active_orbitals=12,
+    ci = CI(
+        RelCISolver(
+            nel=10, nroots=5, core_orbitals=2, active_orbitals=12, do_test_rdms=True
+        ),
         do_transition_dipole=True,
-        do_test_rdms=True,
     )(scf)
     ci.run()
-    assert ci.E[0] == approx(-100.10065023157668)
-    assert ci.E[1] == approx(-99.7875319545)
-    assert ci.E[3] == approx(-99.7866432345)
+    assert ci.E_ci[0] == approx(-100.10065023157668)
+    assert ci.E_ci[1] == approx(-99.7875319545)
+    assert ci.E_ci[3] == approx(-99.7866432345)
 
-    assert np.abs(ci.transition_dipoles[(0, 0)]) == pytest.approx(
+    assert np.abs(ci.ci_solver.transition_dipoles[(0, 0)]) == pytest.approx(
         [0.0, 0.0, 7.54972929e-01], abs=1e-4
     )
-    assert np.abs(ci.transition_dipoles[(1, 1)]) == pytest.approx(
+    assert np.abs(ci.ci_solver.transition_dipoles[(1, 1)]) == pytest.approx(
         [0.0, 0.0, 7.21280467e-01], abs=1e-4
     )
-    assert np.abs(ci.transition_dipoles[(3, 3)]) == pytest.approx(
+    assert np.abs(ci.ci_solver.transition_dipoles[(3, 3)]) == pytest.approx(
         [0.0, 0.0, 7.21064890e-01], abs=1e-4
     )
-    assert np.abs(ci.oscillator_strengths[(0, 3)]) == pytest.approx(
+    assert np.abs(ci.ci_solver.oscillator_strengths[(0, 3)]) == pytest.approx(
         1.711178808962322e-05, abs=1e-4
     )
 
@@ -265,14 +250,14 @@ def test_rel_ci_algorithms_agree(algorithm):
     scf = GHF(charge=0, e_tol=1e-12)(system)
     conv = SpinorUpcaster(apply_random_phase=True)(scf)
 
-    ci = RelCI(
-        nel=2,
-        active_orbitals=4,
-        ci_params=CIParams(ci_algorithm=algorithm),
+    ci = CI(
+        RelCISolver(
+            nel=2, active_orbitals=4, ci_params=CIParams(ci_algorithm=algorithm)
+        )
     )(conv)
     ci.run()
 
-    assert ci.E[0] == approx(-1.096071975854)
+    assert ci.E_ci[0] == approx(-1.096071975854)
 
 
 @pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
@@ -291,12 +276,9 @@ def test_rel_ci_final_orbitals(final_orbitals):
         x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
-    ci = RelCI(
-        nel=10,
-        core_orbitals=2,
-        active_orbitals=12,
-        do_test_rdms=True,
+    ci = CI(
+        RelCISolver(nel=10, core_orbitals=2, active_orbitals=12, do_test_rdms=True),
         final_orbitals=final_orbitals,
     )(scf)
     ci.run()
-    assert ci.E[0] == approx(eref)
+    assert ci.E_ci[0] == approx(eref)
