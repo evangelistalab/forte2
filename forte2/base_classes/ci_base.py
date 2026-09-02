@@ -49,6 +49,8 @@ class CIBase(ActiveSpaceSolver):
 
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
+        if not hasattr(self, "final_orbitals"):
+            self.final_orbitals = getattr(parent_method, "final_orbitals", "original")
         return self
 
     def reset(self):
