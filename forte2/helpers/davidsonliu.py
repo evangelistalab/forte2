@@ -25,8 +25,9 @@ class DavidsonLiuSolver:
     energy_shift : float, optional
         Target eigenvalue shift for sorting eigenpairs.
         If None, no shift is applied.
-    log_level : int, optional, default=logger.get_verbosity_level()
-        Logging level for output messages.
+    log_level : int, optional, default=logger.VERBOSITY_DEBUG
+        Severity the solver tags its own output with. The default keeps it
+        silent unless it is asked for; the caller that owns it raises this.
     dtype : type, optional, default=np.float64
         Data type of the matrix to diagonalize. Must be float or complex.
 
@@ -42,7 +43,7 @@ class DavidsonLiuSolver:
     nroot: int
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     energy_shift: float = field(default=None)
-    log_level: int = field(default=logger.get_verbosity_level())
+    log_level: int = logger.VERBOSITY_DEBUG
     dtype: type = field(default=np.float64)
 
     def __post_init__(self):
@@ -364,11 +365,13 @@ class DavidsonLiuSolver:
                 self.basis_size += added2
                 sep = ", " if msg else ""
                 msg += f"{sep}+{added2} rand"
-            
+
             t1 = time.perf_counter()
 
             logger.log(
-                table.row(self.iter, avg_e, max_de, max_r, self.basis_size, t1 - t0, msg),
+                table.row(
+                    self.iter, avg_e, max_de, max_r, self.basis_size, t1 - t0, msg
+                ),
                 self.log_level,
             )
 

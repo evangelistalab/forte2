@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from forte2 import System, RHF, MCOptimizer, State, CISolver, MOSpace
+from forte2 import CISolver, MCOptimizer, MOSpace, RHF, State, System
 from forte2.helpers.comparisons import approx
 from forte2.mcopt import mc_optimizer as mc_optimizer_module
 from forte2.mcopt.mc_optimizer import MCOptimizerBase

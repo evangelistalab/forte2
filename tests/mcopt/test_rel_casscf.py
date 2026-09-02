@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System, GHF, RHF, RelCISolver, MCOptimizer, SpinorUpcaster, X2CParams
+from forte2 import GHF, MCOptimizer, RHF, RelCISolver, SpinorUpcaster, System, X2CParams
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import AVAS
 
