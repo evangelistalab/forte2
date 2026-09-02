@@ -149,9 +149,13 @@ def get_MC(cumu2):
     return M1, M2, M3, M4
 
 
-def make_NO_cumulant(rdm1,rdm2):
+def _cumulant_basis_trans(rdm1,rdm2,extras_transform=None):
+    """
+    if the extra_transformation is None, 
+    transform the cumulant to the natural orbital basis.
+    """
     from forte2.ci.ci_utils import make_2cumulant_sf, make_2cumulant_so
-
+    
     occs, evecs = np.linalg.eigh(rdm1)
     occs = occs[::-1]
     evecs = evecs[:, ::-1]
@@ -173,6 +177,17 @@ def make_NO_cumulant(rdm1,rdm2):
         )
     
     cumulant2_no = rdm2_no - np.einsum("ik,jl->ijkl", rdm1_no, rdm1_no, optimize=True) + np.einsum("il,jk->ijkl", rdm1_no, rdm1_no, optimize=True)
+    if extras_transform is not None:
+        cumulant2_no = np.einsum(
+            'ip,jq,ijab,ar,bs->pqrs',
+            extras_transform.conj(),
+            extras_transform.conj(),
+            cumulant2_no,
+            extras_transform,
+            extras_transform,
+            optimize=True,
+        )
+        
     return cumulant2_no
 
 def C_to_NO(C,rdm1):
