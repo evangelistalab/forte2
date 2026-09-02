@@ -87,22 +87,22 @@ belong to different states are more restricted.
      - Spin types
      - Transition RDMs within a state
      - Transition RDMs between states
-   * - ``CI``
+   * - ``CISolver``
      - 1, 2, 3
      - ``sd``, ``sf``
      - All orders
      - Order 1
-   * - ``RelCI``
+   * - ``RelCISolver``
      - 1, 2, 3
      - ``so``
      - All orders
      - Not supported
-   * - ``SelectedCI``
+   * - ``SelectedCISolver``
      - 1, 2
      - ``sd``, ``sf``
      - All orders
      - Order 1
-   * - ``RelSelectedCI``
+   * - ``RelSelectedCISolver``
      - 1, 2
      - ``so``
      - All orders
@@ -126,16 +126,16 @@ transition counterpart.
    * - Solver
      - Orders
      - Spin types
-   * - ``CI``
+   * - ``CISolver``
      - 2, 3
      - ``sf``
-   * - ``RelCI``
+   * - ``RelCISolver``
      - 2, 3
      - ``so``
-   * - ``SelectedCI``
+   * - ``SelectedCISolver``
      - 2
      - ``sf``
-   * - ``RelSelectedCI``
+   * - ``RelSelectedCISolver``
      - 2
      - ``so``
 

@@ -27,6 +27,8 @@ class CIBase(ActiveSpaceSolver):
     ``reset_eigensolver``, ``get_convergence_status``, ``make_rdm``).
     """
 
+    log_level: int = logger.VERBOSITY_DEBUG
+
     ### Non-init attributes
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
@@ -55,13 +57,19 @@ class CIBase(ActiveSpaceSolver):
         self.first_run = True
         return super().reset()
 
-    @property
-    def ci_solver(self):
+    def _print_energy_summary(self) -> None:
         """
-        A bare CI solver is itself the ci_solver, matching MCOptimizerBase.ci_solver
-        so that downstream methods (e.g. DSRG) can treat both parent kinds uniformly.
+        Print this solver's energy table. Overridden by solvers that report more
+        than one energy, e.g. selected CI's variational and PT2-corrected values.
+        Called by the driver that owns this solver.
         """
-        return self
+        from forte2.ci.ci_utils import pretty_print_ci_summary
+
+        pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
+
+    def _transition_property_energies(self):
+        """The energies the transition-property table is printed against."""
+        return self.evals_per_solver
 
     def _collect_child_kwargs(self, target_cls):
         """Collect keyword arguments for child solvers."""
@@ -218,7 +226,7 @@ class CIBase(ActiveSpaceSolver):
             dm1, dm2, dm3
         )
 
-    def _make_active_space_ints(self):
+    def make_active_space_ints(self):
         """Build the active-space integrals for the current ``self.mos``."""
         return self._integrals_cls(
             self.system,
@@ -241,7 +249,7 @@ class CIBase(ActiveSpaceSolver):
         )
         self.active_indices = self.mo_space.active_indices
 
-        ints = self._make_active_space_ints()
+        ints = self.make_active_space_ints()
 
         active_orbsym = [
             [self.mos.irrep_indices[0][i] for i in active_space]
@@ -293,60 +301,6 @@ class CIBase(ActiveSpaceSolver):
     def run(self):
         """Solve in the current basis. Single-shot solvers extend this."""
         return self._solve()
-
-    def _rotate_final_orbitals(self, final_orbitals):
-        """
-        Apply the requested ``final_orbitals`` transformation and re-solve.
-        No-op unless "semicanonical" or "natural" is requested.
-
-        Parameters
-        ----------
-        final_orbitals : str
-            Type of final_orbitals. Validated by caller.
-        """
-        from forte2.orbitals import (
-            check_final_orbital_energy_invariance,
-            make_final_orbitals,
-        )
-
-        if final_orbitals not in ("semicanonical", "natural"):
-            return
-
-        irrep_indices = np.asarray(self.mos.irrep_indices[0], dtype=int)[
-            self.mo_space.orig_to_contig
-        ]
-        C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
-        C_final = make_final_orbitals(
-            final_orbitals,
-            system=self.system,
-            mo_space=self.mo_space,
-            irrep_indices=irrep_indices,
-            C_contig=C_contig,
-            g1_act=self.make_average_rdm(1),
-        )
-        # undo the contiguous ordering
-        self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
-
-        old_E = self.E.copy()
-        old_E_avg = self.E_avg
-
-        # re-solve in the final orbital basis
-        ints = self._make_active_space_ints()
-        self.set_ints(ints.E, ints.H, ints.V)
-        # reset_eigensolver() drops the DavidsonLiuSolver, so the rerun rebuilds it
-        # from davidson_liu_params (including its maxiter).
-        self.reset_eigensolver()
-        self._solve()
-
-        check_final_orbital_energy_invariance(
-            hard_fail=self.orbital_rotation_invariant,
-            tol=self._final_orbital_energy_tol,
-            old_E=old_E,
-            new_E=self.E,
-            old_E_avg=old_E_avg,
-            new_E_avg=self.E_avg,
-            hard_fail_hint="Consider increasing davidson_liu_params.maxiter.",
-        )
 
     def set_ints(self, scalar, oei, tei):
         """

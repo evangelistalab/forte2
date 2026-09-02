@@ -161,6 +161,7 @@ def test_gaussian_nuclear_deriv_finite_difference():
     weights = rng.standard_normal((system.nbf, system.nbf))
     weights /= np.linalg.norm(weights)
     analytical = integrals.nuclear_deriv(system, weights)[5]
+
     def contracted(z):
         return np.einsum("mn,mn->", integrals.nuclear(make_system(z)), weights)
 

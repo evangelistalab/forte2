@@ -63,7 +63,6 @@ class LBFGS:
     max_step: float = 1.0e15
     c1: float = 1.0e-4
     c2: float = 0.9
-    log_level: int = field(default=logger.get_verbosity_level())
     warn_if_not_converged: bool = False
     dtype: type = np.float64
 
@@ -112,6 +111,10 @@ class LBFGS:
             raise ValueError("Parameter c1 must lie in (0, 0.5)")
         if not (self.c1 < self.c2 < 1):
             raise ValueError("Parameter c2 must lie in (c1, 1.0)")
+        if self.h0_rel_tol > 1.0 or self.h0_rel_tol < 0.0:
+            raise ValueError(
+                f"h0_rel_tol needs to be in [0.0, 1.0], got {self.h0_rel_tol}"
+            )
 
     def minimize(self, obj, x):
         """
@@ -344,7 +347,8 @@ class LBFGS:
         scale = np.max(np.abs(vh))
         if scale <= 0.0:
             return q
-        mask = np.abs(vh) > self.h0_rel_tol * scale
+        cutoff = max(1.0e-12, self.h0_rel_tol * scale)
+        mask = np.abs(vh) > cutoff
         q[mask] /= vh[mask]
         return q
 
