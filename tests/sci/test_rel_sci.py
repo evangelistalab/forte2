@@ -1,9 +1,18 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, SpinorUpcaster, MCOptimizer, MOSpace, X2CParams
-from forte2.ci import RelCI
-from forte2.sci import RelSelectedCI, RelSelectedCISolver
+from forte2 import (
+    CI,
+    GHF,
+    MCOptimizer,
+    MOSpace,
+    RelCISolver,
+    SpinorUpcaster,
+    System,
+    X2CParams,
+)
+from forte2 import CI
+from forte2.sci import RelSelectedCISolver
 from forte2.helpers.comparisons import approx
 from forte2.base_classes.params import SelectedCIParams
 from forte2.lib.det import Determinant
@@ -28,90 +37,98 @@ def _h2_ghf_upcast():
 
 
 def test_rel_sci_h2():
-    """RelSelectedCI at tight thresholds == 2c-FCI energy of H2 (test_rel_ci_h2)."""
+    """Relativistic selected CI at tight thresholds == 2c-FCI energy of H2 (test_rel_ci_h2)."""
     conv = _h2_ghf_upcast()
 
-    sci = RelSelectedCI(
-        nel=2,
-        active_orbitals=4,
-        do_test_rdms=True,
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-        ),
+    sci = CI(
+        RelSelectedCISolver(
+            nel=2,
+            active_orbitals=4,
+            do_test_rdms=True,
+            sci_params=SelectedCIParams(
+                selection_algorithm="hbci",
+                var_threshold=1e-12,
+                pt2_threshold=0.0,
+            ),
+        )
     )(conv)
     sci.run()
 
-    assert sci.E[0] == approx(-1.096071975854)
+    assert sci.E_ci[0] == approx(-1.096071975854)
     # the full variational space is recovered, so there is no PT2 remainder
-    assert abs(sci.E_pt2[0]) < 1e-10
+    assert abs(sci.ci_solver.E_pt2[0]) < 1e-10
 
 
 def test_rel_sci_pinned_only_guess():
-    """RelSelectedCI must support an initial guess built purely from pinned_guess_dets
+    """Relativistic selected CI must support an initial guess built purely from pinned_guess_dets
     (test_sci_pinned_only_guess's counterpart): _initial_guess previously left
     guess_hdiag/nguess_dets unbound when guess_dets was empty."""
     conv = _h2_ghf_upcast()
 
-    sci = RelSelectedCI(
-        nel=2,
-        active_orbitals=4,
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-            guess_dets=[],
-            pinned_guess_dets=[Determinant("aa00")],
-        ),
+    sci = CI(
+        RelSelectedCISolver(
+            nel=2,
+            active_orbitals=4,
+            sci_params=SelectedCIParams(
+                selection_algorithm="hbci",
+                var_threshold=1e-12,
+                pt2_threshold=0.0,
+                guess_dets=[],
+                pinned_guess_dets=[Determinant("aa00")],
+            ),
+        )
     )(conv)
     sci.run()
 
-    assert sci.E[0] == approx(-1.096071975854)
+    assert sci.E_ci[0] == approx(-1.096071975854)
 
 
 def test_rel_sci_h2_exact():
     """Exact selected-CI diagonalization path for the 2c (complex) case."""
     conv = _h2_ghf_upcast()
 
-    sci = RelSelectedCI(
-        nel=2,
-        active_orbitals=4,
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-            ci_algorithm="exact",
-        ),
+    sci = CI(
+        RelSelectedCISolver(
+            nel=2,
+            active_orbitals=4,
+            sci_params=SelectedCIParams(
+                selection_algorithm="hbci",
+                var_threshold=1e-12,
+                pt2_threshold=0.0,
+                ci_algorithm="exact",
+            ),
+        )
     )(conv)
     sci.run()
 
-    assert sci.E[0] == approx(-1.096071975854)
+    assert sci.E_ci[0] == approx(-1.096071975854)
 
 
 def test_rel_sci_h2_rdms_match_rel_ci():
-    """Complex spin-orbital 1-/2-RDMs match RelCI in the full space.
+    """Complex spin-orbital 1-/2-RDMs match CI in the full space.
 
-    RDMs are basis dependent, so RelCI and RelSelectedCI are built on the *same*
+    RDMs are basis dependent, so full CI and selected CI are built on the *same*
     spinor orbitals (one shared upcaster) before comparing.
     """
     conv = _h2_ghf_upcast()
 
-    ci = RelCI(nel=2, active_orbitals=4)(conv)
+    ci = CI(RelCISolver(nel=2, active_orbitals=4))(conv)
     ci.run()
 
-    sci = RelSelectedCI(
-        nel=2,
-        active_orbitals=4,
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-        ),
+    sci = CI(
+        RelSelectedCISolver(
+            nel=2,
+            active_orbitals=4,
+            sci_params=SelectedCIParams(
+                selection_algorithm="hbci",
+                var_threshold=1e-12,
+                pt2_threshold=0.0,
+            ),
+        )
     )(conv)
     sci.run()
 
-    assert sci.E[0] == approx(ci.E[0])
+    assert sci.E_ci[0] == approx(ci.E_ci[0])
     assert np.allclose(sci.make_average_rdm(1), ci.make_average_rdm(1), atol=1e-8)
     assert np.allclose(sci.make_average_rdm(2), ci.make_average_rdm(2), atol=1e-8)
 
@@ -150,20 +167,22 @@ def test_rel_sci_hf_ghf():
     )
     scf = GHF(charge=0)(system)
 
-    sci = RelSelectedCI(
-        nel=10,
-        core_orbitals=2,
-        active_orbitals=12,
-        do_test_rdms=True,
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-        ),
+    sci = CI(
+        RelSelectedCISolver(
+            nel=10,
+            core_orbitals=2,
+            active_orbitals=12,
+            do_test_rdms=True,
+            sci_params=SelectedCIParams(
+                selection_algorithm="hbci",
+                var_threshold=1e-12,
+                pt2_threshold=0.0,
+            ),
+        )
     )(scf)
     sci.run()
 
-    assert sci.E[0] == approx(-100.10065023157668)
+    assert sci.E_ci[0] == approx(-100.10065023157668)
 
 
 def test_rel_sci_hf_ghf_transition_rdms():
@@ -181,21 +200,23 @@ def test_rel_sci_hf_ghf_transition_rdms():
     scf = GHF(charge=0)(system)
 
     nroots = 3
-    sci = RelSelectedCI(
-        nel=10,
-        nroots=nroots,
-        core_orbitals=2,
-        active_orbitals=12,
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-        ),
+    sci = CI(
+        RelSelectedCISolver(
+            nel=10,
+            nroots=nroots,
+            core_orbitals=2,
+            active_orbitals=12,
+            sci_params=SelectedCIParams(
+                selection_algorithm="hbci",
+                var_threshold=1e-12,
+                pt2_threshold=0.0,
+            ),
+        )
     )(scf)
     sci.run()
 
     # sub_solver holds the per-root vectors and the SparseState reference RDMs
-    ref_solver = sci.sub_solvers[0]
+    ref_solver = sci.ci_solver.sub_solvers[0]
     nel_active = 8  # 10 electrons - 2 core spinors
 
     for left in range(nroots):
@@ -229,7 +250,7 @@ def test_rel_sci_hf_ghf_transition_rdms():
 
 def test_rel_sci_natural_noncontiguous_mo_space():
     """
-    RelSelectedCI final_orbitals='natural' reproduces the energy and
+    Relativistic selected CI final_orbitals='natural' reproduces the energy and
     natural occupation number spectrum after a non-trivial
     contig/orig permutation
     """
@@ -256,19 +277,17 @@ def test_rel_sci_natural_noncontiguous_mo_space():
         pt2_threshold=0.0,
     )
 
-    sci_original = RelSelectedCI(
-        nel=4, mo_space_override=mo_space, sci_params=sci_params
+    sci_original = CI(
+        RelSelectedCISolver(nel=4, mo_space_override=mo_space, sci_params=sci_params)
     )(scf)
     sci_original.run()
-    sci_natural = RelSelectedCI(
-        nel=4,
-        mo_space_override=mo_space,
-        sci_params=sci_params,
+    sci_natural = CI(
+        RelSelectedCISolver(nel=4, mo_space_override=mo_space, sci_params=sci_params),
         final_orbitals="natural",
     )(scf)
     sci_natural.run()
 
-    assert sci_natural.E[0] == approx(sci_original.E[0])
+    assert sci_natural.E_ci[0] == approx(sci_original.E_ci[0])
     np.testing.assert_allclose(
         sci_natural.mos.C[0].conj().T @ system.ints_overlap() @ sci_natural.mos.C[0],
         np.eye(mo_space.nmo),
@@ -316,24 +335,28 @@ def test_rel_sci_casscf_hf_ghf():
 def test_rel_sci_transition_dipole():
     conv = _h2_ghf_upcast()
 
-    sci = RelSelectedCI(
-        nel=2,
-        active_orbitals=4,
-        nroots=2,
-        do_transition_dipole=True,
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
+    sci = CI(
+        RelSelectedCISolver(
+            nel=2,
+            active_orbitals=4,
+            nroots=2,
+            sci_params=SelectedCIParams(
+                selection_algorithm="hbci",
+                var_threshold=1e-12,
+                pt2_threshold=0.0,
+            ),
         ),
+        do_transition_dipole=True,
     )(conv)
     sci.run()
 
     # no bright transitions, just an existence check
-    assert sci.transition_dipoles[(0, 0)].shape == (3,)
-    assert sci.oscillator_strengths[(0, 0)] == 0.0
-    assert sci.vertical_transition_energies[(0, 0)] == 0.0
-    assert sci.vertical_transition_energies[(0, 1)] == approx(sci.E[1] - sci.E[0])
+    assert sci.ci_solver.transition_dipoles[(0, 0)].shape == (3,)
+    assert sci.ci_solver.oscillator_strengths[(0, 0)] == 0.0
+    assert sci.ci_solver.vertical_transition_energies[(0, 0)] == 0.0
+    assert sci.ci_solver.vertical_transition_energies[(0, 1)] == approx(
+        sci.E_ci[1] - sci.E_ci[0]
+    )
 
 
 @pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
@@ -351,21 +374,23 @@ def test_rel_sci_final_orbitals(final_orbitals):
     )
     scf = GHF(charge=0)(system)
 
-    sci = RelSelectedCI(
-        nel=10,
-        core_orbitals=2,
-        active_orbitals=12,
-        do_test_rdms=True,
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
+    sci = CI(
+        RelSelectedCISolver(
+            nel=10,
+            core_orbitals=2,
+            active_orbitals=12,
+            do_test_rdms=True,
+            sci_params=SelectedCIParams(
+                selection_algorithm="hbci",
+                var_threshold=1e-12,
+                pt2_threshold=0.0,
+            ),
         ),
         final_orbitals=final_orbitals,
     )(scf)
     sci.run()
 
-    assert sci.E[0] == approx(-100.10065023157668)
+    assert sci.E_ci[0] == approx(-100.10065023157668)
 
 
 def test_rel_sci_pt2_split_is_independent_of_var_threshold():
@@ -382,21 +407,23 @@ def test_rel_sci_pt2_split_is_independent_of_var_threshold():
     system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = GHF(charge=0, e_tol=1e-12)(system)
 
-    sci = RelSelectedCI(
-        nel=10,
-        active_orbitals=list(range(26)),
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-3,
-            pt2_threshold=pt2_threshold,
-            maxcycle=2,
-        ),
+    sci = CI(
+        RelSelectedCISolver(
+            nel=10,
+            active_orbitals=list(range(26)),
+            sci_params=SelectedCIParams(
+                selection_algorithm="hbci",
+                var_threshold=1e-3,
+                pt2_threshold=pt2_threshold,
+                maxcycle=2,
+            ),
+        )
     )(rhf)
     sci.run()
 
     # Freeze the variational space and its coefficients
     # then run selection at different eps_var but fixed eps_pt2
-    worker = sci.sub_solvers[0]
+    worker = sci.ci_solver.sub_solvers[0]
     dets = worker.dets
     c = worker.evecs
     energies = np.ascontiguousarray(np.asarray(worker.evals).real)

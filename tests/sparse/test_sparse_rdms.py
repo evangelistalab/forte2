@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System, RHF, CI, State
+from forte2 import CI, CISolver, RHF, State, System
 from forte2.lib import rdms, cpp_helpers
 from forte2.base_classes import DavidsonLiuParams
 from forte2.helpers.comparisons import approx
@@ -17,30 +17,36 @@ def test_ci_tdm_same_solver():
     )
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        State(nel=14, multiplicity=1, ms=0.0),
-        core_orbitals=[0, 1, 2, 3],
-        active_orbitals=[4, 5, 6, 7, 8, 9],
-        nroots=3,
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+        CISolver(
+            State(nel=14, multiplicity=1, ms=0.0),
+            core_orbitals=[0, 1, 2, 3],
+            active_orbitals=[4, 5, 6, 7, 8, 9],
+            nroots=3,
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+        )
     )(rhf)
     ci.run()
 
     for root_left in range(3):
         for root_right in range(3):
-            c_l = ci.sub_solvers[0].csf_C_to_det_C(
-                ci.sub_solvers[0].evecs[:, root_left]
+            c_l = ci.ci_solver.sub_solvers[0].csf_C_to_det_C(
+                ci.ci_solver.sub_solvers[0].evecs[:, root_left]
             )
-            state_left = ci.sub_solvers[0].ci_sigma_builder.make_sparse_state(c_l)
+            state_left = ci.ci_solver.sub_solvers[0].ci_sigma_builder.make_sparse_state(
+                c_l
+            )
 
-            c_r = ci.sub_solvers[0].csf_C_to_det_C(
-                ci.sub_solvers[0].evecs[:, root_right]
+            c_r = ci.ci_solver.sub_solvers[0].csf_C_to_det_C(
+                ci.ci_solver.sub_solvers[0].evecs[:, root_right]
             )
-            state_right = ci.sub_solvers[0].ci_sigma_builder.make_sparse_state(c_r)
+            state_right = ci.ci_solver.sub_solvers[
+                0
+            ].ci_sigma_builder.make_sparse_state(c_r)
 
             tdm1_a_ref = rdms.compute_a_1rdm(state_left, state_right, 6)
             tdm1_b_ref = rdms.compute_b_1rdm(state_left, state_right, 6)
 
-            tdm1_a, tdm1_b = ci.sub_solvers[0].make_rdm(
+            tdm1_a, tdm1_b = ci.ci_solver.sub_solvers[0].make_rdm(
                 root_left, root_right, order=1, spin_type="sd"
             )
             assert np.allclose(tdm1_a, tdm1_a_ref)
@@ -50,7 +56,7 @@ def test_ci_tdm_same_solver():
             tdm2_ab_ref = rdms.compute_ab_2rdm(state_left, state_right, 6)
             tdm2_bb_ref = rdms.compute_bb_2rdm(state_left, state_right, 6)
 
-            tdm2_aa, tdm2_ab, tdm2_bb = ci.sub_solvers[0].make_rdm(
+            tdm2_aa, tdm2_ab, tdm2_bb = ci.ci_solver.sub_solvers[0].make_rdm(
                 root_left, root_right, order=2, spin_type="sd"
             )
             tdm2_aa = cpp_helpers.packed_tensor4_to_tensor4(tdm2_aa)
@@ -73,19 +79,21 @@ def test_gasci_tdm_different_solvers():
 
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
-        core_orbitals=[1],
-        active_orbitals=[[0], [2, 3, 4, 5, 6]],
-        states=[
-            State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
-            State(nel=10, multiplicity=1, ms=0.0, gas_min=[2], gas_max=[2]),
-        ],
-        nroots=[1, 1],
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+        CISolver(
+            core_orbitals=[1],
+            active_orbitals=[[0], [2, 3, 4, 5, 6]],
+            states=[
+                State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
+                State(nel=10, multiplicity=1, ms=0.0, gas_min=[2], gas_max=[2]),
+            ],
+            nroots=[1, 1],
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+        )
     )(rhf)
     ci.run()
 
-    left_solver = ci.sub_solvers[0]
-    right_solver = ci.sub_solvers[1]
+    left_solver = ci.ci_solver.sub_solvers[0]
+    right_solver = ci.ci_solver.sub_solvers[1]
     left_sb = left_solver.ci_sigma_builder
     right_sb = right_solver.ci_sigma_builder
 

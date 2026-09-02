@@ -58,7 +58,6 @@ class LBFGS:
     max_step: float = 1.0e15
     c1: float = 1.0e-4
     c2: float = 0.9
-    log_level: int = field(default=logger.get_verbosity_level())
     warn_if_not_converged: bool = False
     dtype: type = np.float64
 

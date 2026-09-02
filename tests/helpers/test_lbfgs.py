@@ -70,7 +70,7 @@ class RosenbrockWrapper:
     def evaluate(self, x):
         fx = Rosenbrock.evaluate(x)
         return fx
-    
+
     def gradient(self, x):
         g = Rosenbrock.gradient(x)
         return g
