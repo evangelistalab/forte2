@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from pathlib import Path
 
-from forte2 import System, RHF, MCOptimizer, ASET, CI, State, CISolver
+from forte2 import ASET, CI, CISolver, MCOptimizer, RHF, State, System
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx, approx_abs
 from forte2.orbitals import mo_overlap
@@ -58,7 +58,7 @@ def test_aset_1_forte_v1_embedding_1():
         cutoff=0.1,
     )(mc)
     ci = CI(
-        State(system=system, multiplicity=1, ms=0.0),
+        CISolver(State(system=system, multiplicity=1, ms=0.0)),
         final_orbitals="semicanonical",
     )(aset)
     dsrg = DSRG_MRPT2(flow_param=0.5)(ci)
@@ -120,7 +120,7 @@ def test_aset_4_forte_v1_embedding_4():
         num_A_vir=1,
     )(mc)
     ci = CI(
-        State(system=system, multiplicity=1, ms=0.0),
+        CISolver(State(system=system, multiplicity=1, ms=0.0)),
         final_orbitals="semicanonical",
     )(aset)
     dsrg = DSRG_MRPT2(flow_param=0.5)(ci)
@@ -186,7 +186,7 @@ def test_aset_1():
         cutoff_method="threshold",
         cutoff=0.99,
     )(mc)
-    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
+    ci = CI(CISolver(State(system=system, multiplicity=1, ms=0.0)))(aset)
     ci.run()
 
     compare_orbital_coefficients(system, aset, "test_aset_1_orbitals.npy")
@@ -223,7 +223,7 @@ def test_aset_2():
         cutoff_method="threshold",
         cutoff=0.99,
     )(mc)
-    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
+    ci = CI(CISolver(State(system=system, multiplicity=1, ms=0.0)))(aset)
     ci.run()
 
     compare_orbital_coefficients(system, aset, "test_aset_2_orbitals.npy")
@@ -267,7 +267,7 @@ def test_aset_4():
         num_A_vir=1,
     )(mc)
     aset.run()
-    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
+    ci = CI(CISolver(State(system=system, multiplicity=1, ms=0.0)))(aset)
     ci.run()
 
     compare_orbital_coefficients(system, aset, "test_aset_4_orbitals.npy")
@@ -306,7 +306,7 @@ def test_aset_5():
     )
     mc = MCOptimizer(ci_solver)(rhf)
     aset = ASET(fragment=["C1-2", "H1-3"], cutoff_method="threshold")(mc)
-    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
+    ci = CI(CISolver(State(system=system, multiplicity=1, ms=0.0)))(aset)
     ci.run()
 
     compare_orbital_coefficients(system, aset, "test_aset_5_orbitals.npy")
@@ -354,7 +354,7 @@ def test_aset_gas():
     assert aset.mo_space.ngas == mc.mo_space.ngas
     assert aset.mo_space.active_orbitals == mc.mo_space.active_orbitals
 
-    ci = CI(state)(aset)
+    ci = CI(CISolver(state))(aset)
     ci.run()
     assert ci.mo_space.ngas == 2
 
@@ -410,7 +410,7 @@ def test_aset_gas_semicanonical_noncontiguous_mo_space():
         [1, 2, 0, 3, 4, 5, 6],
     )
 
-    ci = CI(state, final_orbitals="semicanonical")(aset)
+    ci = CI(CISolver(state), final_orbitals="semicanonical")(aset)
     ci.run()
 
     assert ci.E == approx(mc.E)
@@ -507,7 +507,7 @@ def test_aset_gas_semicanonical_noninteracting_fragments():
 
     assert mc.E == approx(hf_mc.E + he_rhf.E)
 
-    ci = CI(state, final_orbitals="semicanonical")(aset)
+    ci = CI(CISolver(state), final_orbitals="semicanonical")(aset)
     ci.run()
 
     assert ci.E == approx(mc.E)

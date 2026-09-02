@@ -16,12 +16,8 @@ from forte2.base_classes import CIBase
 from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals
-from forte2.orbitals import FinalOrbitals, validate_final_orbitals
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
-    pretty_print_ci_dets,
-    pretty_print_ci_transition_props,
-    pretty_print_ci_nat_occ_numbers,
     validate_single_state_rdm,
     make_cumulant_from_rdms,
 )
@@ -32,7 +28,7 @@ class _SelectedCISingleStateSolver:
     """
     A general selected configuration interaction (CI) solver class for a single `State`.
     Although possible, is not recommended to instantiate this class directly.
-    Consider using the `SelectedCI` class instead.
+    Consider using the `SelectedCISolver` class instead.
 
     Parameters
     ----------
@@ -51,7 +47,7 @@ class _SelectedCISingleStateSolver:
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
-        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+        The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
 
@@ -75,8 +71,8 @@ class _SelectedCISingleStateSolver:
     nroot: int = field(default=1)
     active_orbsym: list[int] = field(default_factory=list)
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level() + 1)
     die_if_not_converged: bool = False
+    log_level: int = logger.VERBOSITY_DEBUG
 
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
@@ -657,9 +653,8 @@ class _SelectedCISingleStateSolver:
             if self.die_if_not_converged:
                 raise RuntimeError("Davidson-Liu solver did not converge.")
             else:
-                logger.log(
-                    f"\nDavidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations.\n",
-                    self.log_level,
+                logger.log_warning(
+                    f"Davidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations."
                 )
 
     def _do_exact_diagonalization(self):
@@ -944,7 +939,7 @@ class SelectedCISolver(CIBase):
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
-        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+        The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
 
     Attributes
     ----------
@@ -975,12 +970,29 @@ class SelectedCISolver(CIBase):
         default_factory=DavidsonLiuParams
     )
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level() + 1)
 
+    # Label for the two energy tables this solver prints; the relativistic
+    # subclass differs only here.
+    _energy_summary_label: ClassVar[str] = "Selected CI energy"
     # Active-space integral class
     _integrals_cls: ClassVar[type] = RestrictedMOIntegrals
     # Per-state worker class
     _ss_solver_cls: ClassVar[type] = _SelectedCISingleStateSolver
+
+    def _print_energy_summary(self) -> None:
+        pretty_print_ci_summary(
+            self.sa_info,
+            self.evar_per_solver,
+            header=f"\n{self._energy_summary_label} (variational)",
+        )
+        pretty_print_ci_summary(
+            self.sa_info,
+            self.etot_per_solver,
+            header=f"\n{self._energy_summary_label} (variational + PT2)",
+        )
+
+    def _transition_property_energies(self):
+        return self.evar_per_solver
 
     def _validate_params(self):
         """
@@ -1126,56 +1138,3 @@ class SelectedCISolver(CIBase):
 
     def get_convergence_status(self):
         pass
-
-
-@dataclass
-class SelectedCI(SelectedCISolver):
-    """
-    Selected CI solver specialized for a single CI calculation. (i.e., not used in a loop).
-    See `SelectedCISolver` for all parameters and attributes.
-    """
-
-    die_if_not_converged: bool = True
-    final_orbitals: FinalOrbitals = "original"
-    do_transition_dipole: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
-
-    def __post_init__(self):
-        super().__post_init__()
-        validate_final_orbitals(self.final_orbitals)
-
-    def run(self):
-        self._solve()
-        self._rotate_final_orbitals(self.final_orbitals)
-        self._post_process()
-        return self
-
-    def _post_process(self):
-        pretty_print_ci_summary(
-            self.sa_info,
-            self.evar_per_solver,
-            header="\nSelected CI energy (variational)",
-        )
-        pretty_print_ci_summary(
-            self.sa_info,
-            self.etot_per_solver,
-            header="\nSelected CI energy (variational + PT2)",
-        )
-        self.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(
-            self.sa_info,
-            self.mo_space,
-            self.nat_occs,
-            getattr(self, "nat_occs_avg", None),
-        )
-        top_dets = self.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-
-        if self.do_transition_dipole:
-            self.compute_transition_properties()
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.transition_dipoles,
-                self.oscillator_strengths,
-                self.evar_per_solver,
-            )

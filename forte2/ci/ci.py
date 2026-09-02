@@ -13,17 +13,13 @@ from forte2.lib.ci_helpers import (
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
-from forte2.base_classes import CIBase
+from forte2.base_classes import ActiveSpaceDriver, CIBase, Method
 from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals
-from forte2.orbitals import FinalOrbitals, validate_final_orbitals
+from forte2.orbitals import FinalOrbitals
 from .ci_utils import (
     pretty_print_gas_info,
-    pretty_print_ci_summary,
-    pretty_print_ci_nat_occ_numbers,
-    pretty_print_ci_dets,
-    pretty_print_ci_transition_props,
     validate_single_state_rdm,
     make_cumulant_from_rdms,
 )
@@ -34,7 +30,7 @@ class _CISingleStateSolver:
     """
     A general configuration interaction (CI) solver class for a single `State`.
     Although possible, is not recommended to instantiate this class directly.
-    Consider using the `CI` class instead.
+    Consider using the `CISolver` class instead.
 
     Parameters
     ----------
@@ -53,7 +49,7 @@ class _CISingleStateSolver:
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
-        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+        The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
 
@@ -76,8 +72,8 @@ class _CISingleStateSolver:
     ci_params: CIParams = field(default_factory=CIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
     die_if_not_converged: bool = False
+    log_level: int = logger.VERBOSITY_DEBUG
 
     ### Non-init attributes
     rebuild_guess: bool = field(default=True, init=False)
@@ -301,9 +297,8 @@ class _CISingleStateSolver:
             if self.die_if_not_converged:
                 raise RuntimeError("Davidson-Liu solver did not converge.")
             else:
-                logger.log(
-                    f"\nDavidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations.\n",
-                    self.log_level,
+                logger.log_warning(
+                    f"Davidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations."
                 )
 
         self._log_sigma_build_times()
@@ -678,7 +673,7 @@ class CISolver(CIBase):
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
-        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+        The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
 
     Attributes
     ----------
@@ -697,8 +692,6 @@ class CISolver(CIBase):
     ci_params: CIParams = field(default_factory=CIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
-    # If used as a solver, log at warning level
-    log_level: int = field(default=logger.get_verbosity_level() + 1)
 
     # Active-space integral class
     _integrals_cls: ClassVar[type] = RestrictedMOIntegrals
@@ -777,44 +770,35 @@ class CISolver(CIBase):
 
 
 @dataclass
-class CI(CISolver):
+class CI(ActiveSpaceDriver, Method):
     """
-    CI solver specialized for a single CI calculation. (i.e., not used in a loop).
-    See `CISolver` for all parameters and attributes.
+    Driver for a single CI calculation, i.e. one not run in a loop.
+    This class is agnostic to the solver.
+
+    Parameters
+    ----------
+    ci_solver : CIBase | RelCIBase
+        The solver to drive, e.g. ``CISolver``, ``RelCISolver``,
+        ``SelectedCISolver`` or ``RelSelectedCISolver``.
+    final_orbitals : str, optional, default="original"
+        Orbitals to leave behind: "original", "semicanonical", or "natural".
+    do_transition_dipole : bool, optional, default=False
+        Whether to compute transition dipoles and oscillator strengths.
+    die_if_not_converged : bool, optional, default=True
+        Whether a solver that fails to converge raises instead of warning. Set on
+        the driver rather than the solver: a one-shot calculation has no later
+        iteration to recover from.
+
+    Attributes
+    ----------
+    E : float
+        The state-averaged energy.
+    E_ci : NDArray
+        A copy of the per-root energies.
     """
 
-    die_if_not_converged: bool = True
+    ci_solver: CIBase
+
     final_orbitals: FinalOrbitals = "original"
     do_transition_dipole: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
-
-    def __post_init__(self):
-        super().__post_init__()
-        validate_final_orbitals(self.final_orbitals)
-
-    def run(self):
-        self._solve()
-        self._rotate_final_orbitals(self.final_orbitals)
-        self._post_process()
-        return self
-
-    def _post_process(self):
-        pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
-        self.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(
-            self.sa_info,
-            self.mo_space,
-            self.nat_occs,
-            getattr(self, "nat_occs_avg", None),
-        )
-        top_dets = self.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-
-        if self.do_transition_dipole:
-            self.compute_transition_properties()
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.transition_dipoles,
-                self.oscillator_strengths,
-                self.evals_per_solver,
-            )
+    die_if_not_converged: bool = True

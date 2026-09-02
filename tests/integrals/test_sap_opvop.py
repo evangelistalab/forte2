@@ -3,10 +3,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from forte2 import System, integrals, X2CParams
+from forte2 import System, X2CParams, integrals
 from forte2.lib import ints
 from forte2.system.build_basis import build_sap_potential_basis
-
 
 THIS_DIR = Path(__file__).parent
 
@@ -23,10 +22,7 @@ def test_sap_density_normalization_and_opvop_reference():
 
     # Every contracted SAP density integrates to the corresponding atomic charge.
     integrated_charges = [
-        np.sum(
-            np.asarray(shell.coeff)
-            * (np.pi / np.asarray(shell.exponents)) ** 1.5
-        )
+        np.sum(np.asarray(shell.coeff) * (np.pi / np.asarray(shell.exponents)) ** 1.5)
         for shell in sap_basis
     ]
     assert integrated_charges == pytest.approx([8.0, 8.0, 1.0, 1.0], abs=1.0e-12)
@@ -53,9 +49,7 @@ def test_sap_density_normalization_and_opvop_reference():
     assert W_ref_order[3][3, 2] == pytest.approx(-7.639347452209898, abs=2.0e-7)
 
     if integrals.LIBCINT_AVAILABLE:
-        V = integrals.coulomb_3c(
-            system, sap_basis, system.basis, system.basis
-        )
+        V = integrals.coulomb_3c(system, sap_basis, system.basis, system.basis)
         V_cint = integrals.cint_coulomb_3c(
             system,
             sap_basis,
@@ -64,9 +58,7 @@ def test_sap_density_normalization_and_opvop_reference():
         )
         assert np.allclose(V_cint, V, atol=2.0e-10)
 
-        W_cint = integrals.cint_coulomb_3c_opVop(
-            system, sap_basis, system.basis
-        )
+        W_cint = integrals.cint_coulomb_3c_opVop(system, sap_basis, system.basis)
         for component_cint, component_libint in zip(W_cint, W):
             assert np.allclose(component_cint, component_libint, atol=2.0e-10)
 
@@ -81,9 +73,7 @@ def test_sap_opvop_high_l():
         minao_basis_set=None,
     )
 
-    W = integrals.cint_coulomb_3c_opVop(
-        system, system.basis, system.auxiliary_basis
-    )
+    W = integrals.cint_coulomb_3c_opVop(system, system.basis, system.auxiliary_basis)
     assert all(component.shape == (60, 60) for component in W)
     assert all(np.isfinite(component).all() for component in W)
     assert np.linalg.norm(W[0]) == pytest.approx(6398.564518450337, rel=1.0e-12)
@@ -119,9 +109,7 @@ def test_sap_x2c_high_l_preserves_density_norm(monkeypatch):
     # Libint2 and used as an independent physical-density reference.
     s_basis = ints.Basis()
     s_basis.add(system.x2c_helper.xbasis[0])
-    sap_basis = build_sap_potential_basis(
-        "sap_grasp_large", system.geom_helper
-    )
+    sap_basis = build_sap_potential_basis("sap_grasp_large", system.geom_helper)
     V_ss = np.einsum(
         "Pmn->mn",
         integrals.coulomb_3c(system, sap_basis, s_basis),
@@ -131,9 +119,7 @@ def test_sap_x2c_high_l_preserves_density_norm(monkeypatch):
 
     W_ss = integrals.coulomb_3c_opVop(system, sap_basis, s_basis)
     for W_component, W_ss_component in zip(system.x2c_helper.W_e, W_ss):
-        assert W_component[0, 0] == pytest.approx(
-            W_ss_component[0, 0], abs=1.0e-12
-        )
+        assert W_component[0, 0] == pytest.approx(W_ss_component[0, 0], abs=1.0e-12)
     assert np.linalg.norm(system.x2c_helper.V_e) == pytest.approx(
         1.3836703929853422, rel=1.0e-12
     )

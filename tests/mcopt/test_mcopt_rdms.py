@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, State, CISolver
+from forte2 import CISolver, MCOptimizer, RHF, State, System
 from forte2.base_classes import DavidsonLiuParams
 
 

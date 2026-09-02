@@ -1,16 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import (
-    System,
-    RHF,
-    CI,
-    MOSpace,
-    orbitals,
-    State,
-    MCOptimizer,
-    CISolver,
-)
+from forte2 import CI, CISolver, MCOptimizer, MOSpace, RHF, State, System, orbitals
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import (
     NaturalOrbitals,
@@ -57,23 +48,27 @@ def test_semican_ci():
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf.run()
     ci = CI(
-        State(nel=rhf.nel, multiplicity=1, ms=0.0),
-        core_orbitals=[0, 1, 2, 3],
-        active_orbitals=[4, 5, 6, 7, 8, 9],
+        CISolver(
+            State(nel=rhf.nel, multiplicity=1, ms=0.0),
+            core_orbitals=[0, 1, 2, 3],
+            active_orbitals=[4, 5, 6, 7, 8, 9],
+        ),
         final_orbitals="semicanonical",
     )(rhf)
     ci.run()
-    eci_orig = ci.evals_flat[0]
+    eci_orig = ci.ci_solver.evals_flat[0]
     assert eci_orig == approx(-109.01444624968038)
 
     rhf.mos = ci.mos.copy()
     ci = CI(
-        State(nel=rhf.nel, multiplicity=1, ms=0.0),
-        core_orbitals=[0, 1, 2, 3],
-        active_orbitals=[4, 5, 6, 7, 8, 9],
+        CISolver(
+            State(nel=rhf.nel, multiplicity=1, ms=0.0),
+            core_orbitals=[0, 1, 2, 3],
+            active_orbitals=[4, 5, 6, 7, 8, 9],
+        )
     )(rhf)
     ci.run()
-    assert ci.evals_flat[0] == approx(eci_orig)
+    assert ci.ci_solver.evals_flat[0] == approx(eci_orig)
 
 
 def test_semican_casscf():
@@ -125,13 +120,15 @@ def test_semican_fock_offdiag():
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf.run()
     ci = CI(
-        State(nel=rhf.nel, multiplicity=1, ms=0.0),
-        core_orbitals=[0, 1, 2, 3],
-        active_orbitals=[4, 5, 6, 7, 8, 9],
+        CISolver(
+            State(nel=rhf.nel, multiplicity=1, ms=0.0),
+            core_orbitals=[0, 1, 2, 3],
+            active_orbitals=[4, 5, 6, 7, 8, 9],
+        ),
         final_orbitals="original",
     )(rhf)
     ci.run()
-    assert ci.evals_flat[0] == approx(-109.01444624968038)
+    assert ci.ci_solver.evals_flat[0] == approx(-109.01444624968038)
 
     mo_space = ci.mo_space
     semi = orbitals.Semicanonicalizer(mo_space=mo_space, system=system)

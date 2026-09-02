@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, CI, State
+from forte2 import System, RHF, CI, CISolver, State
 from forte2.base_classes import CIParams
 from forte2.helpers.comparisons import approx
 from forte2.lib.ci_helpers import CISigmaBuilder, CIStrings
@@ -84,7 +84,7 @@ def _pack_abb_3rdm(full, norb):
 def compare_rdms(ci):
     rdm_threshold = 1e-12
 
-    ci_solver = ci.sub_solvers[0]
+    ci_solver = ci.ci_solver.sub_solvers[0]
     norb = ci_solver.norb
     dets = ci_solver.dets
 
@@ -169,16 +169,18 @@ def test_ci_rdms_1():
     )
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        states=State(nel=10, multiplicity=1, ms=0.0),
-        core_orbitals=[0],
-        active_orbitals=[1, 2, 3, 4, 5, 6],
-        do_test_rdms=True,
-        nroots=2,
+        CISolver(
+            states=State(nel=10, multiplicity=1, ms=0.0),
+            core_orbitals=[0],
+            active_orbitals=[1, 2, 3, 4, 5, 6],
+            do_test_rdms=True,
+            nroots=2,
+        )
     )(rhf)
     ci.run()
     compare_rdms(ci)
 
-    assert ci.E[0] == approx(-100.019788438077)
+    assert ci.E_ci[0] == approx(-100.019788438077)
 
 
 def test_ci_rdms_sa():
@@ -192,26 +194,28 @@ def test_ci_rdms_sa():
     )
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        states=[
-            State(nel=10, multiplicity=1, ms=0.0),
-            State(nel=10, multiplicity=3, ms=1.0),
-        ],
-        nroots=[2, 1],
-        core_orbitals=[0],
-        active_orbitals=[1, 2, 3, 4, 5, 6],
-        do_test_rdms=True,
+        CISolver(
+            states=[
+                State(nel=10, multiplicity=1, ms=0.0),
+                State(nel=10, multiplicity=3, ms=1.0),
+            ],
+            nroots=[2, 1],
+            core_orbitals=[0],
+            active_orbitals=[1, 2, 3, 4, 5, 6],
+            do_test_rdms=True,
+        )
     )(rhf)
     ci.run()
     compare_rdms(ci)
 
-    assert ci.E[0] == approx(-100.01978843799819)
-    assert ci.E[1] == approx(-99.68758394141096)
-    assert ci.E[2] == approx(-99.7052645828813)
+    assert ci.E_ci[0] == approx(-100.01978843799819)
+    assert ci.E_ci[1] == approx(-99.68758394141096)
+    assert ci.E_ci[2] == approx(-99.7052645828813)
 
     g1 = ci.make_average_rdm(1)
     l2 = ci.make_average_cumulant(2)
-    e_avg = ci.compute_average_energy()
-    ci_ints = ci.sub_solvers[0].ints
+    e_avg = ci.ci_solver.compute_average_energy()
+    ci_ints = ci.ci_solver.sub_solvers[0].ints
 
     e_from_cumulants = ci_ints.E
     e_from_cumulants += np.einsum("pq,pq->", ci_ints.H, g1)
@@ -233,16 +237,18 @@ def test_ci_rdm_validation():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        states=[
-            State(nel=2, multiplicity=1, ms=0.0),
-            State(nel=2, multiplicity=3, ms=1.0),
-        ],
-        nroots=[1, 1],
-        active_orbitals=[0, 1],
+        CISolver(
+            states=[
+                State(nel=2, multiplicity=1, ms=0.0),
+                State(nel=2, multiplicity=3, ms=1.0),
+            ],
+            nroots=[1, 1],
+            active_orbitals=[0, 1],
+        )
     )(rhf)
     ci.run()
 
-    solver = ci.sub_solvers[0]
+    solver = ci.ci_solver.sub_solvers[0]
 
     # The spelled-out spin types are aliases of the canonical two-letter forms.
     for alias in ("spin_free", "spin-free"):
@@ -287,17 +293,19 @@ def test_ci_rdm_validation():
     # A solver that never declared a capability is reported by name, rather than surfacing
     # as an AttributeError or a TypeError from the membership test. Shadow the class
     # variable on the instance to stand in for a subclass that forgot to declare it.
-    ci._rdm_spin_types = None
-    with pytest.raises(NotImplementedError, match=r"CI does not declare spin_types"):
-        ci.make_rdm(0, order=1, spin_type="sd")
-    del ci._rdm_spin_types
-
-    ci._rdm_cross_state_orders = None
+    ci.ci_solver._rdm_spin_types = None
     with pytest.raises(
-        NotImplementedError, match=r"CI does not declare cross_state_orders"
+        NotImplementedError, match=r"CISolver does not declare spin_types"
     ):
         ci.make_rdm(0, order=1, spin_type="sd")
-    del ci._rdm_cross_state_orders
+    del ci.ci_solver._rdm_spin_types
+
+    ci.ci_solver._rdm_cross_state_orders = None
+    with pytest.raises(
+        NotImplementedError, match=r"CISolver does not declare cross_state_orders"
+    ):
+        ci.make_rdm(0, order=1, spin_type="sd")
+    del ci.ci_solver._rdm_cross_state_orders
 
     solver._cumulant_orders = None
     with pytest.raises(
@@ -386,21 +394,26 @@ def test_sf_cumulants_are_ms_invariant():
 
     ms_values = [-2.0, -1.0, 0.0, 1.0, 2.0]
     ci = CI(
-        states=[State(nel=6, multiplicity=5, ms=ms) for ms in ms_values],
-        nroots=[1] * len(ms_values),
-        active_orbitals=[0, 1, 2, 3, 4, 5],
-        # Exact diagonalization, so the comparison isn't limited by Davidson convergence.
-        ci_params=CIParams(ci_algorithm="exact"),
+        CISolver(
+            states=[State(nel=6, multiplicity=5, ms=ms) for ms in ms_values],
+            nroots=[1] * len(ms_values),
+            active_orbitals=[0, 1, 2, 3, 4, 5],
+            # Exact diagonalization, so the comparison isn't limited by Davidson convergence.
+            ci_params=CIParams(ci_algorithm="exact"),
+        )
     )(rhf)
     ci.run()
 
     # differnt ms states are degenerate
-    for ms, energy in zip(ms_values, ci.E):
-        assert energy == approx(ci.E[0]), f"ms={ms} is not the same state as ms={-2.0}"
+    for ms, energy in zip(ms_values, ci.E_ci):
+        assert energy == approx(
+            ci.E_ci[0]
+        ), f"ms={ms} is not the same state as ms={-2.0}"
 
     for order in (2, 3):
         cumulants = [
-            ci.make_cumulant(i, order=order, spin_type="sf") for i in range(len(ci.E))
+            ci.make_cumulant(i, order=order, spin_type="sf")
+            for i in range(len(ci.E_ci))
         ]
         for ms, cumulant in zip(ms_values, cumulants):
             np.testing.assert_allclose(

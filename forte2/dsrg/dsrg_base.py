@@ -4,8 +4,7 @@ from abc import abstractmethod
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2.base_classes import Method, CIBase, RelCIBase
-from forte2.mcopt.mc_optimizer import MCOptimizerBase
+from forte2.base_classes import ActiveSpaceDriver, Method
 from forte2.helpers import logger
 from forte2.orbitals import Semicanonicalizer
 from forte2.ci.ci_utils import pretty_print_ci_summary
@@ -34,15 +33,15 @@ class DSRGBase(Method):
 
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
-        assert isinstance(
-            self.parent_method, (CIBase, RelCIBase, MCOptimizerBase)
-        ), "Parent method must be an instance of CIBase, RelCIBase, or MCOptimizerBase."
+        assert isinstance(self.parent_method, ActiveSpaceDriver), (
+            "Parent method must be a driver that owns an active-space solver "
+            f"(CI or MCOptimizer), got {type(self.parent_method).__name__}."
+        )
         return self
 
     def __post_init__(self):
         self.requires = {"system", "mos", "mo_space"}
         self.provides = {"system", "mos", "mo_space"}
-        self.requires_attrs.update({"final_orbitals": "semicanonical"})
 
         # parse reference relaxation options
         if isinstance(self.relax_reference, bool):
@@ -69,9 +68,6 @@ class DSRGBase(Method):
             self.nrelax = 0
 
     def _startup(self):
-        # Reset per-run reference-relaxation state: run() mutates
-        # relax_eigvals_history in place (list -> ndarray by the end), so a
-        # rebound/rerun object needs these rebuilt fresh rather than reused.
         # [Edsrg(fixed_reference), Edsrg(relaxed_reference), Eref]
         self.relax_energies = np.zeros((self.nrelax + 1, 3))
         self.relax_eigvals_history = []
@@ -115,9 +111,11 @@ class DSRGBase(Method):
         perm = self.mo_space.orig_to_contig
         self._C = self.mos.C[0][:, perm].copy()
 
-        # parent_method is either a bare CIBase/RelCIBase (its own ci_solver) or an
-        # MCOptimizerBase (which wraps one) - both expose .ci_solver uniformly.
         self.ci_solver = self.parent_method.ci_solver
+        if self.nrelax > 0:
+            # The parent has had its say by now; every further run of this solver
+            # is a relaxation cycle, so keep those quiet.
+            self.ci_solver.log_level = logger.VERBOSITY_DEBUG
 
         self.E_core_orig = self.ci_solver.sub_solvers[0].ints.E
         self.H_orig = self.ci_solver.sub_solvers[0].ints.H.copy()
