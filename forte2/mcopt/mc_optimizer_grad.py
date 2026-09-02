@@ -51,8 +51,8 @@ def _compute_nonrel_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
     if mc.ci_solver.sa_info.nroots_sum > 1:
         return _compute_nonrel_sa_casscf_gradient(mc, C, root)
 
-    gamma1_act = mc.ci_solver.make_rdm(root, order=1, kind="sf")
-    gamma2_act = mc.ci_solver.make_rdm(root, order=2, kind="sf")
+    gamma1_act = mc.ci_solver.make_rdm(root, order=1, spin_type="sf")
+    gamma2_act = mc.ci_solver.make_rdm(root, order=2, spin_type="sf")
     Ccore = C[:, mc.mo_space.core]
     Cact = C[:, mc.mo_space.actv]
 
@@ -321,8 +321,8 @@ def _build_sa_casscf_relaxed_density_weights(
 
 def _compute_rel_casscf_gradient(mc, C: NDArray) -> NDArray:
     """Compute a state-specific two-component CASSCF/GASSCF gradient."""
-    gamma1_act = mc.ci_solver.make_rdm(0, order=1, kind="so")
-    gamma2_act = mc.ci_solver.make_rdm(0, order=2, kind="so")
+    gamma1_act = mc.ci_solver.make_rdm(0, order=1, spin_type="so")
+    gamma2_act = mc.ci_solver.make_rdm(0, order=2, spin_type="so")
     Ccore = C[:, mc.mo_space.core]
     Cact = C[:, mc.mo_space.actv]
 

@@ -486,16 +486,19 @@ class MCOptimizerBase(Method):
         return conv, conv_str
 
     def make_rdm(
-        self, left_root: int, right_root: int | None = None, *, order: int, kind: str
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: int,
+        spin_type: str,
     ):
-        return self.ci_solver.make_rdm(left_root, right_root, order=order, kind=kind)
-
-    def make_cumulant(
-        self, left_root: int, right_root: int | None = None, *, order: int, kind: str
-    ):
-        return self.ci_solver.make_cumulant(
-            left_root, right_root, order=order, kind=kind
+        return self.ci_solver.make_rdm(
+            left_root, right_root, order=order, spin_type=spin_type
         )
+
+    def make_cumulant(self, root: int, *, order: int, spin_type: str):
+        return self.ci_solver.make_cumulant(root, order=order, spin_type=spin_type)
 
     def make_average_rdm(self, order: int):
         return self.ci_solver.make_average_rdm(order)

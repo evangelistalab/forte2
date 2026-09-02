@@ -37,27 +37,27 @@ def test_mcoptimizer_rdm_accessors_single_solver():
     assert len(ci_solver.sub_solvers) == 1
 
     assert_tuple_allclose(
-        mc.make_rdm(0, order=1, kind="sd"),
-        solver.make_rdm(0, order=1, kind="sd"),
+        mc.make_rdm(0, order=1, spin_type="sd"),
+        solver.make_rdm(0, order=1, spin_type="sd"),
     )
     assert_tuple_allclose(
-        mc.make_rdm(0, order=2, kind="sd"),
-        solver.make_rdm(0, order=2, kind="sd"),
+        mc.make_rdm(0, order=2, spin_type="sd"),
+        solver.make_rdm(0, order=2, spin_type="sd"),
     )
     assert_tuple_allclose(
-        mc.make_rdm(0, order=3, kind="sd"),
-        solver.make_rdm(0, order=3, kind="sd"),
+        mc.make_rdm(0, order=3, spin_type="sd"),
+        solver.make_rdm(0, order=3, spin_type="sd"),
     )
 
     np.testing.assert_allclose(
-        mc.make_rdm(1, order=1, kind="sf"),
-        solver.make_rdm(1, order=1, kind="sf"),
+        mc.make_rdm(1, order=1, spin_type="sf"),
+        solver.make_rdm(1, order=1, spin_type="sf"),
         rtol=0.0,
         atol=1e-12,
     )
     np.testing.assert_allclose(
-        mc.make_rdm(1, order=2, kind="sf"),
-        solver.make_rdm(1, order=2, kind="sf"),
+        mc.make_rdm(1, order=2, spin_type="sf"),
+        solver.make_rdm(1, order=2, spin_type="sf"),
         rtol=0.0,
         atol=1e-12,
     )
@@ -98,18 +98,18 @@ def test_mcoptimizer_rdm_accessors_multi_solver():
         ValueError,
         match="Cross-state RDMs are only supported for states with the same number of alpha and beta electrons",
     ):
-        mc.make_rdm(1, 2, order=1, kind="sd")
+        mc.make_rdm(1, 2, order=1, spin_type="sd")
 
     with pytest.raises(ValueError, match="absolute_root must be between 0"):
-        mc.make_rdm(1, 7, order=2, kind="sd")
+        mc.make_rdm(1, 7, order=2, spin_type="sd")
 
     np.testing.assert_allclose(
-        mc.make_rdm(1, order=1, kind="sf"),
-        singlet_solver.make_rdm(1, order=1, kind="sf"),
+        mc.make_rdm(1, order=1, spin_type="sf"),
+        singlet_solver.make_rdm(1, order=1, spin_type="sf"),
         rtol=0.0,
         atol=1e-12,
     )
     assert_tuple_allclose(
-        mc.make_rdm(2, order=2, kind="sd"),
-        triplet_solver.make_rdm(0, order=2, kind="sd"),
+        mc.make_rdm(2, order=2, spin_type="sd"),
+        triplet_solver.make_rdm(0, order=2, spin_type="sd"),
     )

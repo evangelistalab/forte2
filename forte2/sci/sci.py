@@ -688,8 +688,8 @@ class _SelectedCISingleStateSolver:
 
         for root in range(self.nroot):
             root_rdms = {}
-            root_rdms["rdm1"] = self.make_rdm(root, order=1, kind="sf")
-            rdm2_aa, rdm2_ab, rdm2_bb = self.make_rdm(root, order=2, kind="sd")
+            root_rdms["rdm1"] = self.make_rdm(root, order=1, spin_type="sf")
+            rdm2_aa, rdm2_ab, rdm2_bb = self.make_rdm(root, order=2, spin_type="sd")
             root_rdms["rdm2_aa"] = rdm2_aa
             root_rdms["rdm2_ab"] = rdm2_ab
             root_rdms["rdm2_bb"] = rdm2_bb
@@ -698,7 +698,7 @@ class _SelectedCISingleStateSolver:
             root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_aa)
             root_rdms["rdm2_bb_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_bb)
 
-            root_rdms["rdm2_sf"] = self.make_rdm(root, order=2, kind="sf")
+            root_rdms["rdm2_sf"] = self.make_rdm(root, order=2, spin_type="sf")
 
             # Compute the energy from the RDMs
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
@@ -760,10 +760,10 @@ class _SelectedCISingleStateSolver:
             )
 
     _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
-    _rdm_kinds: ClassVar[tuple[str, ...]] = ("sd", "sf")
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sd", "sf")
     # only the 2-cumulant: it needs the 1- and 2-RDMs, and selected CI has no 3-RDM
     _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
-    _cumulant_kinds: ClassVar[tuple[str, ...]] = ("sf",)
+    _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("sf",)
 
     def make_rdm(
         self,
@@ -771,7 +771,7 @@ class _SelectedCISingleStateSolver:
         right_root: int | None = None,
         *,
         order: Literal[1, 2],
-        kind: Literal["sd", "sf"],
+        spin_type: Literal["sd", "sf"],
     ):
         """
         Make the RDM of the given order and representation for two CI roots.
@@ -784,28 +784,29 @@ class _SelectedCISingleStateSolver:
             the CI root for the ket state.
         order : int
             The RDM order (1 or 2; selected CI has no 3-RDM).
-        kind : str
-            "sd" (spin-dependent) or "sf" (spin-free).
+        spin_type : str
+            "sd" (spin-dependent) or "sf" (spin-free). The aliases "spin_dependent",
+            "spin-dependent", "spin_free", and "spin-free" are also accepted.
 
         Returns
         -------
         NDArray or tuple[NDArray, ...]
-            order=1 kind=sd -> (a, b); order=2 kind=sd -> (aa, ab, bb);
-            kind=sf -> a single full tensor.
+            spin_type=sd -> (a, b) at order 1 and (aa, ab, bb) at order 2;
+            spin_type=sf -> a single full tensor.
         """
-        validate_single_state_rdm(
+        spin_type = validate_single_state_rdm(
             self,
             left_root,
             right_root,
             order,
             self._rdm_orders,
-            kind,
-            self._rdm_kinds,
+            spin_type,
+            self._rdm_spin_types,
         )
         if right_root is None:
             right_root = left_root
         helper = self.sci_helper
-        if kind == "sd":
+        if spin_type == "sd":
             if order == 1:
                 return helper.a_1rdm(left_root, right_root), helper.b_1rdm(
                     left_root, right_root
@@ -815,50 +816,47 @@ class _SelectedCISingleStateSolver:
                 helper.ab_2rdm(left_root, right_root),
                 helper.bb_2rdm(left_root, right_root),
             )
-        # kind == "sf"
+        # spin_type == "sf"
         if order == 1:
             return helper.sf_1rdm(left_root, right_root)
         return helper.sf_2rdm(left_root, right_root)
 
     def make_cumulant(
         self,
-        left_root: int,
-        right_root: int | None = None,
+        root: int,
         *,
         order: Literal[2, 3],
-        kind: Literal["sf", "so"],
+        spin_type: Literal["sf", "so"],
     ):
         """
-        Make the cumulant of the given order for two CI roots.
+        Make the cumulant of the given order for one CI root.
 
         Parameters
         ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
+        root : int
+            the CI root.
         order : int
             The cumulant order (2; selected CI has no 3-RDM).
-        kind : str
-            "sf" (spin-free) or "so" (spin-orbital), depending on the backend.
+        spin_type : str
+            "sf" (spin-free) or "so" (spin-orbital), depending on the backend. The
+            aliases "spin_free", "spin-free", "spin_orbital", "spin-orbital", and
+            "spinorbital" are also accepted.
 
         Returns
         -------
         NDArray
             The cumulant.
         """
-        validate_single_state_rdm(
+        spin_type = validate_single_state_rdm(
             self,
-            left_root,
-            right_root,
+            root,
+            None,
             order,
             self._cumulant_orders,
-            kind,
-            self._cumulant_kinds,
+            spin_type,
+            self._cumulant_spin_types,
         )
-        return make_cumulant_from_rdms(
-            self, left_root, right_root, order=order, kind=kind
-        )
+        return make_cumulant_from_rdms(self, root, order=order, spin_type=spin_type)
 
     def compute_natural_occupation_numbers(self):
         """
@@ -871,10 +869,10 @@ class _SelectedCISingleStateSolver:
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
-        kind = "so" if self.two_component else "sf"
+        spin_type = "so" if self.two_component else "sf"
         no = np.zeros((self.norb, self.nroot))
         for i in range(self.nroot):
-            g1 = self.make_rdm(i, order=1, kind=kind)
+            g1 = self.make_rdm(i, order=1, spin_type=spin_type)
             no[:, i] = np.linalg.eigvalsh(g1)[::-1]
 
         return no
@@ -1052,11 +1050,11 @@ class SelectedCISolver(CIBase):
         self.E_tot = self.etot_flat
 
     _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
-    _rdm_kinds: ClassVar[tuple[str, ...]] = ("sd", "sf")
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sd", "sf")
     _rdm_cross_state_orders: ClassVar[tuple[int, ...]] = (1,)
     # only the 2-cumulant: it needs the 1- and 2-RDMs, and selected CI has no 3-RDM
     _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
-    _cumulant_kinds: ClassVar[tuple[str, ...]] = ("sf",)
+    _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("sf",)
 
     def make_rdm(
         self,
@@ -1064,7 +1062,7 @@ class SelectedCISolver(CIBase):
         right_root: int | None = None,
         *,
         order: Literal[1, 2],
-        kind: Literal["sd", "sf"],
+        spin_type: Literal["sd", "sf"],
     ):
         """
         Make the RDM of the given order and representation for two absolute CI roots.
@@ -1078,34 +1076,38 @@ class SelectedCISolver(CIBase):
             the absolute CI root for the ket state.
         order : int
             The RDM order (1 or 2; selected CI has no 3-RDM).
-        kind : str
-            "sd" (spin-dependent) or "sf" (spin-free).
+        spin_type : str
+            "sd" (spin-dependent) or "sf" (spin-free). The aliases "spin_dependent",
+            "spin-dependent", "spin_free", and "spin-free" are also accepted.
 
         Returns
         -------
         NDArray or tuple[NDArray, ...]
-            order=1 kind=sd -> (a, b); order=2 kind=sd -> (aa, ab, bb);
-            kind=sf -> a single full tensor.
+            spin_type=sd -> (a, b) at order 1 and (aa, ab, bb) at order 2;
+            spin_type=sf -> a single full tensor.
         """
-        left_state, right_state, left_root_in_state, right_root_in_state = (
+        left_state, right_state, left_root_in_state, right_root_in_state, spin_type = (
             self._validate_rdm_inputs(
                 left_root,
                 right_root,
                 order,
                 self._rdm_orders,
-                kind,
-                self._rdm_kinds,
+                spin_type,
+                self._rdm_spin_types,
                 self._rdm_cross_state_orders,
             )
         )
         if left_state == right_state:
             return self.sub_solvers[left_state].make_rdm(
-                left_root_in_state, right_root_in_state, order=order, kind=kind
+                left_root_in_state,
+                right_root_in_state,
+                order=order,
+                spin_type=spin_type,
             )
         # Cross-state: the validator above only lets this fall through when order == 1.
         left_helper = self.sub_solvers[left_state].sci_helper
         right_helper = self.sub_solvers[right_state].sci_helper
-        if kind == "sd":
+        if spin_type == "sd":
             return (
                 left_helper.a_1trdm(
                     right_helper, left_root_in_state, right_root_in_state

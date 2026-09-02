@@ -653,8 +653,8 @@ def test_sa_casscf_response_omega_lih():
         target_A = _build_orbital_lagrangian_from_rdms(
             orbital_optimizer,
             1.0,
-            mc.ci_solver.make_rdm(root, order=1, kind="sf"),
-            mc.ci_solver.make_rdm(root, order=2, kind="sf"),
+            mc.ci_solver.make_rdm(root, order=1, spin_type="sf"),
+            mc.ci_solver.make_rdm(root, order=2, spin_type="sf"),
             density_intermediates,
         )
         ci_A = _build_orbital_lagrangian_from_rdms(

@@ -278,7 +278,7 @@ def test_sci_make_sf_1rdm():
     )(rhf)
     sci.run()
 
-    rdm1 = sci.sub_solvers[0].make_rdm(0, order=1, kind="sf")
+    rdm1 = sci.sub_solvers[0].make_rdm(0, order=1, spin_type="sf")
     assert rdm1.shape == (4, 4)
     assert np.trace(rdm1) == pytest.approx(4.0, abs=1e-8)
     assert sci.E[0] == approx(-2.180967812920)
@@ -513,8 +513,8 @@ def test_sci_transition_dipole_different_nroots_matches_ci():
 
     for key in [(0, 1), (0, 2)]:
         assert np.allclose(
-            sci.make_rdm(*key, order=1, kind="sf"),
-            ci.make_rdm(*key, order=1, kind="sf"),
+            sci.make_rdm(*key, order=1, spin_type="sf"),
+            ci.make_rdm(*key, order=1, spin_type="sf"),
             atol=1e-6,
         )
 
@@ -560,8 +560,8 @@ def test_sci_make_rdms():
 
     # Test the 2-cumulant, per-root and state-averaged
     assert np.allclose(
-        sci.make_cumulant(0, order=2, kind="sf"),
-        ci.make_cumulant(0, order=2, kind="sf"),
+        sci.make_cumulant(0, order=2, spin_type="sf"),
+        ci.make_cumulant(0, order=2, spin_type="sf"),
         atol=1e-8,
     )
     assert np.allclose(
@@ -570,7 +570,7 @@ def test_sci_make_rdms():
 
     # Selected CI has no 3-RDM, so it offers no 3-cumulant either
     with pytest.raises(ValueError, match=r"order must be one of \(2,\)"):
-        sci.make_cumulant(0, order=3, kind="sf")
+        sci.make_cumulant(0, order=3, spin_type="sf")
 
 
 def _lih_noncontiguous_mo_space(system):

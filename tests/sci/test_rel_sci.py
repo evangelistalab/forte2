@@ -117,8 +117,8 @@ def test_rel_sci_h2_rdms_match_rel_ci():
 
     # the 2-cumulant, per-root and state-averaged
     assert np.allclose(
-        sci.make_cumulant(0, order=2, kind="so"),
-        ci.make_cumulant(0, order=2, kind="so"),
+        sci.make_cumulant(0, order=2, spin_type="so"),
+        ci.make_cumulant(0, order=2, spin_type="so"),
         atol=1e-8,
     )
     assert np.allclose(
@@ -127,7 +127,7 @@ def test_rel_sci_h2_rdms_match_rel_ci():
 
     # Selected CI has no 3-RDM, so it offers no 3-cumulant either
     with pytest.raises(ValueError, match=r"order must be one of \(2,\)"):
-        sci.make_cumulant(0, order=3, kind="so")
+        sci.make_cumulant(0, order=3, spin_type="so")
 
 
 def test_rel_sci_hf_ghf():
@@ -200,13 +200,13 @@ def test_rel_sci_hf_ghf_transition_rdms():
 
     for left in range(nroots):
         for right in range(nroots):
-            g1 = sci.make_rdm(left, right, order=1, kind="so")
+            g1 = sci.make_rdm(left, right, order=1, spin_type="so")
             g1_ref = make_so_1rdm_debug(ref_solver, left, right)
             assert np.allclose(g1, g1_ref, atol=1e-10)
             # Hermiticity of the (transition) 1-RDM: gamma(l,r) = gamma(r,l)^dagger
             assert np.allclose(
                 g1,
-                sci.make_rdm(right, left, order=1, kind="so").conj().T,
+                sci.make_rdm(right, left, order=1, spin_type="so").conj().T,
                 atol=1e-10,
             )
             # Tr[gamma1(l,r)] = <l|N|r> = nel_active * delta_lr
@@ -215,12 +215,14 @@ def test_rel_sci_hf_ghf_transition_rdms():
     # 2-RDM: check a diagonal root and an off-diagonal transition pair against the
     # reference, plus the transition-RDM Hermiticity convention.
     for left, right in [(0, 0), (0, 1)]:
-        g2 = sci.make_rdm(left, right, order=2, kind="so")
+        g2 = sci.make_rdm(left, right, order=2, spin_type="so")
         g2_ref = make_so_2rdm_debug(ref_solver, left, right)
         assert np.allclose(g2, g2_ref, atol=1e-10)
         # gamma2(l,r)[p,q,r,s] = <l|a+_p a+_q a_s a_r|r> => gamma2(l,r) = conj(gamma2(r,l)^T_(2,3,0,1))
         g2_swapped = (
-            sci.make_rdm(right, left, order=2, kind="so").conj().transpose(2, 3, 0, 1)
+            sci.make_rdm(right, left, order=2, spin_type="so")
+            .conj()
+            .transpose(2, 3, 0, 1)
         )
         assert np.allclose(g2, g2_swapped, atol=1e-10)
 

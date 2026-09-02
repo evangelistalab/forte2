@@ -213,8 +213,8 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         # the CI energy.
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
         for root in range(self.nroot):
-            rdm1 = self.make_rdm(root, order=1, kind="so")
-            rdm2 = self.make_rdm(root, order=2, kind="so")
+            rdm1 = self.make_rdm(root, order=1, spin_type="so")
+            rdm2 = self.make_rdm(root, order=2, spin_type="so")
 
             rdms_energy = self.ints.E
             rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
@@ -230,10 +230,10 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
             )
 
     _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
-    _rdm_kinds: ClassVar[tuple[str, ...]] = ("so",)
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("so",)
     # only the 2-cumulant: it needs the 1- and 2-RDMs, and selected CI has no 3-RDM
     _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
-    _cumulant_kinds: ClassVar[tuple[str, ...]] = ("so",)
+    _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("so",)
 
     def make_rdm(
         self,
@@ -241,7 +241,7 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         right_root: int | None = None,
         *,
         order: Literal[1, 2],
-        kind: Literal["so"],
+        spin_type: Literal["so"],
     ):
         """
         Make the spin-orbital (spinor) RDM of the given order for two CI roots.
@@ -258,22 +258,23 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
             the CI root for the ket state.
         order : int
             The RDM order (1 or 2; two-component selected CI has no 3-RDM).
-        kind : str
-            Must be "so".
+        spin_type : str
+            Must be "so" (spin-orbital). The aliases "spin_orbital", "spin-orbital",
+            and "spinorbital" are also accepted.
 
         Returns
         -------
         NDArray
             The spin-orbital RDM.
         """
-        validate_single_state_rdm(
+        spin_type = validate_single_state_rdm(
             self,
             left_root,
             right_root,
             order,
             self._rdm_orders,
-            kind,
-            self._rdm_kinds,
+            spin_type,
+            self._rdm_spin_types,
         )
         if right_root is None:
             right_root = left_root
@@ -319,12 +320,12 @@ class RelSelectedCISolver(RelCIBase, SelectedCISolver):
     _ss_solver_cls: ClassVar[type] = _RelSelectedCISingleStateSolver
 
     _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
-    _rdm_kinds: ClassVar[tuple[str, ...]] = ("so",)
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("so",)
     # spinor RDMs between roots of *different* states are not implemented
     _rdm_cross_state_orders: ClassVar[tuple[int, ...]] = ()
     # only the 2-cumulant: it needs the 1- and 2-RDMs, and selected CI has no 3-RDM
     _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
-    _cumulant_kinds: ClassVar[tuple[str, ...]] = ("so",)
+    _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("so",)
 
     def make_rdm(
         self,
@@ -332,22 +333,22 @@ class RelSelectedCISolver(RelCIBase, SelectedCISolver):
         right_root: int | None = None,
         *,
         order: Literal[1, 2],
-        kind: Literal["so"],
+        spin_type: Literal["so"],
     ):
         """Spin-orbital RDM of the given order for two absolute CI roots (same-state only)."""
-        left_state, right_state, left_root_in_state, right_root_in_state = (
+        left_state, right_state, left_root_in_state, right_root_in_state, spin_type = (
             self._validate_rdm_inputs(
                 left_root,
                 right_root,
                 order,
                 self._rdm_orders,
-                kind,
-                self._rdm_kinds,
+                spin_type,
+                self._rdm_spin_types,
                 self._rdm_cross_state_orders,
             )
         )
         return self.sub_solvers[left_state].make_rdm(
-            left_root_in_state, right_root_in_state, order=order, kind=kind
+            left_root_in_state, right_root_in_state, order=order, spin_type=spin_type
         )
 
 

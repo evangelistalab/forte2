@@ -640,8 +640,8 @@ def _solve_response(mc, root, *, r_tol, maxiter):
     orbital_b = _compute_ci_orbital_response_from_rdms(
         mc.orb_opt,
         1.0,
-        mc.ci_solver.make_rdm(root, order=1, kind="sf"),
-        mc.ci_solver.make_rdm(root, order=2, kind="sf"),
+        mc.ci_solver.make_rdm(root, order=1, spin_type="sf"),
+        mc.ci_solver.make_rdm(root, order=2, spin_type="sf"),
         density_intermediates,
     )
     raw_ci_b = _compute_raw_ci_response_b_vector(mc, root, layout)
@@ -809,8 +809,8 @@ def _solve_state_specific_gradient_response(mc, root):
     )
     del ci_response
 
-    base_g1 = mc.ci_solver.make_rdm(root, order=1, kind="sf")
-    base_g2 = mc.ci_solver.make_rdm(root, order=2, kind="sf")
+    base_g1 = mc.ci_solver.make_rdm(root, order=1, spin_type="sf")
+    base_g2 = mc.ci_solver.make_rdm(root, order=2, spin_type="sf")
     base_g1 += ci_g1
     base_g2 += ci_g2
     del ci_g1, ci_g2
@@ -871,8 +871,8 @@ def compute_omega(mc, root, orbital_response, ci_response):
     ci_response, layout = _validate_ci_response_vector(mc, ci_response)
     ci_response = _project_ci_response_vector(mc, ci_response, layout)
     ci_overlap, ci_g1, ci_g2 = _compute_ci_response_rdms(mc, ci_response, layout)
-    base_g1 = mc.ci_solver.make_rdm(root, order=1, kind="sf")
-    base_g2 = mc.ci_solver.make_rdm(root, order=2, kind="sf")
+    base_g1 = mc.ci_solver.make_rdm(root, order=1, spin_type="sf")
+    base_g2 = mc.ci_solver.make_rdm(root, order=2, spin_type="sf")
     base_g1 += ci_g1
     base_g2 += ci_g2
 

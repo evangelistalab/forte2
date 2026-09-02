@@ -70,26 +70,30 @@ def test_ci_1rdm():
 
     # test the 1-RDMs
     rdm1_0_sparse = make_so_1rdm_debug(ci, 0)
-    rdm1_0_sigma = ci.make_rdm(0, order=1, kind="so")
+    rdm1_0_sigma = ci.make_rdm(0, order=1, spin_type="so")
     assert (
         np.linalg.norm(rdm1_0_sparse - rdm1_0_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm1_0_sparse and rdm1_0_sigma is too large: {np.linalg.norm(rdm1_0_sparse - rdm1_0_sigma):.12f}."
 
+    # "so" also has spelled-out aliases, including the one-word "spinorbital"
+    for alias in ("spin_orbital", "spin-orbital", "spinorbital"):
+        assert np.allclose(ci.make_rdm(0, order=1, spin_type=alias), rdm1_0_sigma)
+
     rdm1_1_sparse = make_so_1rdm_debug(ci, 1)
-    rdm1_1_sigma = ci.make_rdm(1, order=1, kind="so")
+    rdm1_1_sigma = ci.make_rdm(1, order=1, spin_type="so")
     assert (
         np.linalg.norm(rdm1_1_sparse - rdm1_1_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm1_1_sparse and rdm1_1_sigma is too large: {np.linalg.norm(rdm1_1_sparse - rdm1_1_sigma):.12f}."
 
     # test the 1-TDMs
     tdm1_01_sparse = make_so_1rdm_debug(ci, 0, 1)
-    tdm1_01_sigma = ci.make_rdm(0, 1, order=1, kind="so")
+    tdm1_01_sigma = ci.make_rdm(0, 1, order=1, spin_type="so")
     assert (
         np.linalg.norm(tdm1_01_sparse - tdm1_01_sigma) < rdm_threshold
     ), f"Norm of the difference between tdm1_01_sparse and tdm1_01_sigma is too large: {np.linalg.norm(tdm1_01_sparse - tdm1_01_sigma):.12f}."
 
     tdm_10_sparse = make_so_1rdm_debug(ci, 1, 0)
-    tdm_10_sigma = ci.make_rdm(1, 0, order=1, kind="so")
+    tdm_10_sigma = ci.make_rdm(1, 0, order=1, spin_type="so")
     assert (
         np.linalg.norm(tdm_10_sparse - tdm_10_sigma) < rdm_threshold
     ), f"Norm of the difference between tdm_10_sparse and tdm_10_sigma is too large: {np.linalg.norm(tdm_10_sparse - tdm_10_sigma):.12f}."
@@ -100,24 +104,24 @@ def test_ci_1rdm():
 def test_ci_2rdm():
     # test the 2-RDMs
     rdm2_0_sparse = make_so_2rdm_debug(ci, 0)
-    rdm2_0_sigma = ci.make_rdm(0, order=2, kind="so")
+    rdm2_0_sigma = ci.make_rdm(0, order=2, spin_type="so")
     assert (
         np.linalg.norm(rdm2_0_sparse - rdm2_0_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm2_0_sparse and rdm2_0_sigma is too large: {np.linalg.norm(rdm2_0_sparse - rdm2_0_sigma):.12f}."
     rdm2_1_sparse = make_so_2rdm_debug(ci, 1)
-    rdm2_1_sigma = ci.make_rdm(1, order=2, kind="so")
+    rdm2_1_sigma = ci.make_rdm(1, order=2, spin_type="so")
     assert (
         np.linalg.norm(rdm2_1_sparse - rdm2_1_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm2_1_sparse and rdm2_1_sigma is too large: {np.linalg.norm(rdm2_1_sparse - rdm2_1_sigma):.12f}."
 
     # test the 2-TDMs
     tdm2_01_sparse = make_so_2rdm_debug(ci, 0, 1)
-    tdm2_01_sigma = ci.make_rdm(0, 1, order=2, kind="so")
+    tdm2_01_sigma = ci.make_rdm(0, 1, order=2, spin_type="so")
     assert (
         np.linalg.norm(tdm2_01_sparse - tdm2_01_sigma) < rdm_threshold
     ), f"Norm of the difference between tdm2_01_sparse and tdm2_01_sigma is too large: {np.linalg.norm(tdm2_01_sparse - tdm2_01_sigma):.12f}."
     tdm2_10_sparse = make_so_2rdm_debug(ci, 1, 0)
-    tdm2_10_sigma = ci.make_rdm(1, 0, order=2, kind="so")
+    tdm2_10_sigma = ci.make_rdm(1, 0, order=2, spin_type="so")
     assert (
         np.linalg.norm(tdm2_10_sparse - tdm2_10_sigma) < rdm_threshold
     ), f"Norm of the difference between tdm2_10_sparse and tdm2_10_sigma is too large: {np.linalg.norm(tdm2_10_sparse - tdm2_10_sigma):.12f}."
@@ -128,24 +132,24 @@ def test_ci_2rdm():
 def test_ci_3rdm():
     # Test 3-RDMs
     rdm3_0_sparse = make_so_3rdm_debug(ci, 0)
-    rdm3_0_sigma = ci.make_rdm(0, order=3, kind="so")
+    rdm3_0_sigma = ci.make_rdm(0, order=3, spin_type="so")
     assert (
         np.linalg.norm(rdm3_0_sparse - rdm3_0_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm3_0_sparse and rdm3_0_sigma is too large: {np.linalg.norm(rdm3_0_sparse - rdm3_0_sigma):.12f}."
     rdm3_1_sparse = make_so_3rdm_debug(ci, 1)
-    rdm3_1_sigma = ci.make_rdm(1, order=3, kind="so")
+    rdm3_1_sigma = ci.make_rdm(1, order=3, spin_type="so")
     assert (
         np.linalg.norm(rdm3_1_sparse - rdm3_1_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm3_1_sparse and rdm3_1_sigma is too large: {np.linalg.norm(rdm3_1_sparse - rdm3_1_sigma):.12f}."
 
     # Test 3-TDMs
     tdm3_01_sparse = make_so_3rdm_debug(ci, 0, 1)
-    tdm3_01_sigma = ci.make_rdm(0, 1, order=3, kind="so")
+    tdm3_01_sigma = ci.make_rdm(0, 1, order=3, spin_type="so")
     assert (
         np.linalg.norm(tdm3_01_sparse - tdm3_01_sigma) < rdm_threshold
     ), f"Norm of the difference between tdm3_01_sparse and tdm3_01_sigma is too large: {np.linalg.norm(tdm3_01_sparse - tdm3_01_sigma):.12f}."
     tdm3_10_sparse = make_so_3rdm_debug(ci, 1, 0)
-    tdm3_10_sigma = ci.make_rdm(1, 0, order=3, kind="so")
+    tdm3_10_sigma = ci.make_rdm(1, 0, order=3, spin_type="so")
     assert (
         np.linalg.norm(tdm3_10_sparse - tdm3_10_sigma) < rdm_threshold
     ), f"Norm of the difference between tdm3_10_sparse and tdm3_10_sigma is too large: {np.linalg.norm(tdm3_10_sparse - tdm3_10_sigma):.12f}."
@@ -154,9 +158,9 @@ def test_ci_3rdm():
 
 
 def test_ci_2cumulant():
-    lambda2 = ci.make_cumulant(0, order=2, kind="so")
-    rdm1 = ci.make_rdm(0, order=1, kind="so")
-    rdm2 = ci.make_rdm(0, order=2, kind="so")
+    lambda2 = ci.make_cumulant(0, order=2, spin_type="so")
+    rdm1 = ci.make_rdm(0, order=1, spin_type="so")
+    rdm2 = ci.make_rdm(0, order=2, spin_type="so")
     lambda2_ref = (
         rdm2
         - np.einsum("pr,qs->pqrs", rdm1, rdm1)
@@ -169,10 +173,10 @@ def test_ci_3cumulant():
     # A different and "dumb" way to compute the 3-cumulant, from its definition
     # l^{pqr}_{stu} = g^{pqr}_{stu} - \sum(-1)^p (g^p_s l^{qr}_{tu}) - det(g^p_s g^q_t g^r_u)
     # see eqs (34) and (40a) in 10.1063/1.474405
-    lambda3 = ci.make_cumulant(0, order=3, kind="so")
-    rdm1 = ci.make_rdm(0, order=1, kind="so")
-    lambda2 = ci.make_cumulant(0, order=2, kind="so")
-    rdm3 = ci.make_rdm(0, order=3, kind="so")
+    lambda3 = ci.make_cumulant(0, order=3, spin_type="so")
+    rdm1 = ci.make_rdm(0, order=1, spin_type="so")
+    lambda2 = ci.make_cumulant(0, order=2, spin_type="so")
+    rdm3 = ci.make_rdm(0, order=3, spin_type="so")
     lambda3_ref = rdm3 - (
         +np.einsum("ps,qrtu->pqrstu", rdm1, lambda2, optimize=True)
         - np.einsum("pt,qrsu->pqrstu", rdm1, lambda2, optimize=True)
