@@ -5,6 +5,7 @@ from pathlib import Path
 from forte2 import System, RHF, MCOptimizer, ASET, CI, State, CISolver
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx, approx_abs
+from forte2.orbitals import mo_overlap
 from forte2.state import EmbeddingMOSpace
 
 # Directory containing *this* file
@@ -144,8 +145,7 @@ def compare_orbital_coefficients(system, aset, filename):
     Note: this can only handle nondegenerate orbitals.
     """
     C_test = np.load(THIS_DIR / f"reference_aset_orbitals/{filename}")
-    S = system.ints_overlap()
-    overlap = np.abs(aset.C[0].T @ S @ C_test)
+    overlap = np.abs(mo_overlap(aset.mos.C[0], system, C_test))
     assert np.allclose(overlap, np.eye(overlap.shape[0]), atol=1e-8, rtol=0.0)
 
 
@@ -415,7 +415,7 @@ def test_aset_gas_semicanonical_noncontiguous_mo_space():
 
     assert ci.E == approx(mc.E)
     np.testing.assert_allclose(
-        ci.C[0].conj().T @ system.ints_overlap() @ ci.C[0],
+        mo_overlap(ci.mos.C[0], system, ci.mos.C[0]),
         np.eye(system.nmo),
         atol=1e-10,
     )
@@ -512,23 +512,23 @@ def test_aset_gas_semicanonical_noninteracting_fragments():
 
     assert ci.E == approx(mc.E)
     np.testing.assert_allclose(
-        ci.C[0].conj().T @ system.ints_overlap() @ ci.C[0],
+        mo_overlap(ci.mos.C[0], system, ci.mos.C[0]),
         np.eye(system.nmo),
         atol=1e-10,
     )
 
 
-def spans_same_space(S, C1, C2):
+def spans_same_space(system, C1, C2):
     """
     Check whether the column sets C1 and C2 span the same space.
 
-    Both column sets are assumed orthonormal with respect to the metric S, as
-    MO coefficients always are. The singular values of C1^T S C2 are then the
-    cosines of the principal angles between the two subspaces, and they are all
-    equal to one if and only if the spans coincide.
+    Both column sets are assumed orthonormal with respect to `system`'s AO
+    overlap, as MO coefficients always are. The singular values of C1^H S C2
+    are then the cosines of the principal angles between the two subspaces,
+    and they are all equal to one if and only if the spans coincide.
     """
     assert C1.shape == C2.shape
-    sv = np.linalg.svd(C1.conj().T @ S @ C2, compute_uv=False)
+    sv = np.linalg.svd(mo_overlap(C1, system, C2), compute_uv=False)
     return np.allclose(sv, 1.0, atol=1e-8, rtol=0.0)
 
 
@@ -607,15 +607,14 @@ def test_aset_noncontiguous_frozen_core_orbital_ordering():
     assert not np.array_equal(orig_to_contig, np.arange(system.nmo))
     assert not np.array_equal(orig_to_contig, contig_to_orig)
 
-    S = system.ints_overlap()
-    C = aset.C[0]
-    np.testing.assert_allclose(C.conj().T @ S @ C, np.eye(system.nmo), atol=1e-10)
+    C = aset.mos.C[0]
+    np.testing.assert_allclose(mo_overlap(C, system, C), np.eye(system.nmo), atol=1e-10)
 
     # The orbitals the user pinned by index must still span the same space as
     # in the parent MCSCF, i.e. they must not have been permuted away.
     for indices in (frozen_core, mc.mo_space.active_indices):
         assert len(indices) > 0
-        assert spans_same_space(S, mc.C[0][:, indices], C[:, indices])
+        assert spans_same_space(system, mc.mos.C[0][:, indices], C[:, indices])
 
     # Every orbital assigned to fragment A must be more localized on the
     # fragment than any orbital assigned to environment B.

@@ -4,10 +4,10 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "forte2"
-version = "2026.6.4"
-description = "An example minimal project that compiles bindings using nanobind and scikit-build"
+version = "2026.9.1"
+description = "An open-source suite of quantum chemistry methods for strongly correlated electrons"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 authors = [
     { name = "FAE", email = "f.e@emory.edu" },
 ]
@@ -44,21 +44,6 @@ cmake.build-type = "Release"
 #   pip install . --config-settings=cmake.define.USE_LIBCINT=ON
 # or: CMAKE_ARGS="-DUSE_LIBCINT=ON" pip install .
 USE_LIBCINT = "ON"
-
-[tool.cibuildwheel]
-# Necessary to see build output from the actual compilation
-build-verbosity = 1
-
-# Run pytest to ensure that the package was correctly built
-test-command = "pytest {project}/tests"
-test-requires = "pytest"
-
-# Don't test Python 3.8 wheels on macOS/arm64
-test-skip="cp38-macosx_*:arm64"
-
-# Needed for full C++17 support
-[tool.cibuildwheel.macos.environment]
-MACOSX_DEPLOYMENT_TARGET = "10.14"
 
 # Pytest configuration
 [tool.pytest.ini_options]

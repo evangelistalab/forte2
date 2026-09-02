@@ -315,7 +315,7 @@ if __name__ == "__main__":
 
     mutual_correlation_plot(
         system,
-        ci.C[0],
+        ci.mos.C[0],
         indices=ci.mo_space.active_indices,
         mca=mca,
         output_file="mutual_correlation_N2",

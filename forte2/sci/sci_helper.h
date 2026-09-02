@@ -1,12 +1,15 @@
 #pragma once
 
+#include <concepts>
 #include <functional>
 #include <vector>
 #include <cmath>
+#include <optional>
 #include <span>
 
 #include "helpers/ndarray.h"
 #include "helpers/parallel.h"
+#include "helpers/random.hpp"
 #include "helpers/spin.h"
 
 #include "determinant/determinant.h"
@@ -31,6 +34,19 @@ enum class EnergyCorrection { PT2, Variational };
 
 /// @brief Energy correction regularization method
 enum class PT2Regularizer { None, Shift, DSRG };
+
+/// @brief Assign a string to one of `num_batches` batches
+/// @param s The string to assign
+/// @param num_batches The number of batches (must be > 0)
+/// @return The batch index in [0, num_batches)
+inline size_t batch_of(const String& s, size_t num_batches) {
+    // the hash returns just returns the string for Norb == 64
+    // so hash % num_batches directly would distribute determinants
+    // by the occupation of the lowest few orbitals, leading to load imbalance.
+    // Add a pass through a mixer to send determinants equally to all batches.
+    uint64_t x = splitmix64(static_cast<uint64_t>(String::Hash()(s)));
+    return static_cast<size_t>(x % num_batches);
+}
 
 /// @brief A helper class for selected CI methods such as CIPSI and HBCI
 /// This class manages selection and sigma vector computation for selected CI methods.
@@ -59,11 +75,27 @@ class SelectedCIHelper {
     /// @brief Return the determinants in the variational space
     const std::vector<Determinant>& variational_dets() const { return dets_; }
 
+    /// @brief Compute the Hamiltonian matrix element between two determinants.
+    /// @param dets The list of determinants
+    /// @param I The index of the first determinant
+    /// @param J The index of the second determinant
+    /// @return The Hamiltonian matrix element <I|H|J>
+    double slater_rules(const std::vector<Determinant>& dets, size_t I, size_t J) const {
+        if (I == J) {
+            return slater_rules_.energy(dets[I]);
+        }
+        return slater_rules_.slater_rules(dets[I], dets[J]);
+    }
+
     /// @brief Set the Hamiltonian integrals
-    /// @param E Hamiltonian scalar energy
-    /// @param H One-electron integrals
-    /// @param V Two-electron integrals in physicist notation
-    void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
+    /// @param E New Hamiltonian scalar energy, or nullopt to keep the current value
+    /// @param H New one-electron integrals, or nullopt to keep the current value
+    /// @param V New two-electron integrals in physicist notation, or nullopt to keep the
+    ///        current value
+    /// @note This method also updates slater_rules and det_energies.
+    void set_Hamiltonian(std::optional<double> E = std::nullopt,
+                         std::optional<np_matrix> H = std::nullopt,
+                         std::optional<np_tensor4> V = std::nullopt);
 
     /// @brief Set the CI coefficients
     /// @param c The CI coefficients for the determinants (shape: (n_dets, n_roots))
@@ -71,9 +103,6 @@ class SelectedCIHelper {
 
     /// @brief Set the energy of the roots (as computed externally by the Davidson solver)
     void set_energies(np_vector e);
-
-    /// @brief Set the number of threads to use for parallelization
-    void set_num_threads(size_t n) { num_threads_ = n; }
 
     /// @brief Set the number of batches per thread for parallelization
     void set_num_batches_per_thread(size_t n) { num_batches_per_thread_ = n; }
@@ -256,21 +285,40 @@ class SelectedCIHelper {
                             const SelectedCIStrings& list, size_t i, size_t j,
                             double int_sign) const;
 
-    /// @brief Select new variational and PT2 determinants using a batch approach
-    /// @param V_map The map to accumulate variational determinants and their contributions
-    /// @param PT_map The map to accumulate PT2 determinants and their contributions
-    /// @param V_coeffs The vector to accumulate the coefficients of the variational
-    /// determinants
-    /// @param PT_coeffs The vector to accumulate the coefficients of the PT2 determinants
-    /// @param var_threshold The threshold for variational selection
-    /// @param pt2_threshold The threshold for PT2 selection
+    /// @brief Reusable working buffers for select_hbci_batch
+    struct SelectHbciScratch {
+        /// @brief Maps each external determinant to the starting index of its coefficient block
+        DetRootMap map;
+        /// @brief The coupling <det|H|Psi_r> of each external determinant to each root, summed
+        /// over every parent that reaches it, as coeffs[idx + r]
+        std::vector<double> coeffs;
+        /// @brief One flag per external determinant, indexed as promoted[idx / nroots], set when
+        /// at least one of its connections exceeds var_threshold and it therefore will join the
+        /// variational space in the next iteration
+        std::vector<uint8_t> promoted;
+        /// @brief Largest |c| over all roots for each determinant of the current alpha string
+        std::vector<double> abs_c_max;
+        /// @brief Coefficients of the current alpha string's determinants, as
+        /// c_block[k * nroots + r]
+        std::vector<double> c_block;
+        /// @brief Scratch occupation vectors for alpha/beta occupied/virtual
+        std::vector<size_t> aocc, bocc, avir, bvir;
+    };
+
+    /// @brief Enumerate the determinants of one batch that are connected to the variational space
+    /// and accumulate their couplings
+    /// @param s Working buffers owned by the calling thread, cleared on entry
+    /// @param var_threshold Connections above this promote their determinant into the variational
+    /// space. Must not be negative.
+    /// @param pt2_threshold Connections whose criterion does not exceed this are discarded. Must
+    /// not be negative.
     /// @param num_batches The total number of batches
     /// @param batch_id The batch index to process
     /// @param existing_dets The set of determinants already in the variational space to skip
-    void select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map, std::vector<double>& V_coeffs,
-                           std::vector<double>& PT_coeffs, double var_threshold,
-                           double pt2_threshold, size_t num_batches, size_t batch_id,
-                           const DetSet& existing_dets);
+    /// @note Batch membership is decided by the external determinant alone, so every parent
+    /// that reaches a given determinant is guaranteed to be visited in the same batch
+    void select_hbci_batch(SelectHbciScratch& s, double var_threshold, double pt2_threshold,
+                           size_t num_batches, size_t batch_id, const DetSet& existing_dets);
 
     /// @brief Compute the expectation value of S^2 for a given batch of determinants
     /// @param num_batches The total number of batches
@@ -320,9 +368,6 @@ class SelectedCIHelper {
     /// @brief logging level for the class
     int log_level_ = 3;
 
-    /// @brief Number of threads to use for parallelization
-    size_t num_threads_ = 1;
-
     /// @brief Number of batches per thread for parallelization
     size_t num_batches_per_thread_ = 1;
 
@@ -341,10 +386,6 @@ class SelectedCIHelper {
 
     /// @brief The scalar energy
     double E_;
-    /// @brief One-electron integrals in the form of a matrix H[p][q] = <p|H|q> = h_pq
-    np_matrix H_;
-    /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
-    np_tensor4 V_;
 
     /// @brief The Slater rules for the current set of determinants
     SlaterRules slater_rules_;
@@ -424,6 +465,8 @@ class SelectedCIHelper {
 
     /// @brief The alpha and beta strings for the determinants in the variational space
     SelectedCIStrings ab_list_;
+    /// @brief The largest number of determinants sharing one alpha string in ab_list_
+    size_t max_block_size_ = 0;
     /// @brief The beta and alpha strings for the determinants in the variational space
     SelectedCIStrings ba_list_;
 

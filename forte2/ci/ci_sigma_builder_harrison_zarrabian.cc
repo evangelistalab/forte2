@@ -278,7 +278,7 @@ void CISigmaBuilder::H2_hz_opposite_spin(std::span<double> basis, std::span<doub
                     // The scatter accumulates into sigma(Ia,Ib), so parallelizing over Ka would
                     // race (many Ka map to the same output Ia). Instead we parallelize over the
                     // output alpha string Ia: each thread owns a disjoint stripe
-                    // of Ia values, iterates all Ka/Kb, but only writes rows it owns. 
+                    // of Ia values, iterates all Ka/Kb, but only writes rows it owns.
                     parallel_for_chunked(maxIa, [&](size_t Ia_begin, size_t Ia_end) {
                         for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
                             const auto& KaL = Ka_right_list[Ka_block_start + Ka];

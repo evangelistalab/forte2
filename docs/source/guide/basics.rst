@@ -27,6 +27,23 @@ You can then attach a Hartree-Fock calculation on the system:
 
 >>> rhf = forte2.scf.RHF(charge=-1)(system)
 
+The relativistic Hamiltonian is selected by passing a :class:`forte2.X2CParams`
+instance to the ``x2c`` option. SAP-X2C is available for both scalar-relativistic
+and spin-orbit calculations. For example:
+
+>>> system = forte2.System(
+    xyz="H 0 0 0; Br 0 0 1.4",
+    basis_set="cc-pvdz",
+    auxiliary_basis_set="cc-pvtz-jkfit",
+    x2c=forte2.X2CParams(x2c_type="so", x2c_model="sap"),
+    )
+>>> ghf = forte2.scf.GHF(charge=0)(system)
+
+Conventional one-electron X2C uses ``x2c_model="1e"`` with ``x2c_type="sf"`` or
+``"so"``. Screened nuclear spin-orbit variants set ``snso_type`` to
+``"boettger"``, ``"dc"``, ``"dcb"``, or ``"row-dependent"`` (only valid with
+``x2c_type="so"`` and ``x2c_model="1e"``).
+
 or for a restricted open-shell Hartree-Fock calculation:
 
 >>> rohf = forte2.scf.ROHF(charge=0, ms=0.5)(system)
@@ -50,3 +67,13 @@ If you execute the code now, the methods will click together under the hood, doi
 You can then run the whole chain with a single call:
 
 >>> casscf.run()
+
+Parallelism
+-----------
+
+Forte2 automatically detects the number of threads to use for some parallel sections that are not already parallelized by e.g. BLAS.
+The effective count is printed at ``import forte2``.
+
+The envioronment variable ``FORTE_NUM_THREADS_OVERRIDE`` will be used if set. 
+Otherwise, the smallest among the number of logical CPU counts, ``OMP_NUM_THREADS``,``OMP_THREAD_LIMIT``, and ``SLURM_CPUS_PER_TASK`` will be used if set.
+Note that the logical CPU count includes e.g., hyperthreads.

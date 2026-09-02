@@ -3,7 +3,7 @@ Obtaining integrals
 
 Forte2 uses the `Libint2 <https://github.com/evaleev/libint>`_ integral engine. 
 It provides a straightforward way of accessing atomic integrals through its API. 
-You can obtain the integrals for a given molecular system by first specifying a molecular system and using the ``forte2.lib.ints`` module. 
+You can obtain the integrals for a given molecular system by first specifying a molecular system and using the ``forte2.lib.ints`` module.
 Almost all operators supported by Libint2 (see `Libint2 documentation <https://github.com/evaleev/libint/wiki/using-modern-CPlusPlus-API#create-an-integral-engine>`_) are available.
 Forte2 also provides an interface with `libcint <https://github.com/sunqm/libcint>`_, with a templated API that supports easy addition of new integral types. Currently, only a small subset (mainly two-center integrals) of libcint integrals are imported, but more can be easily added as needed.
 Here are some examples of how to obtain the most common integrals. First one needs to set up the molecular system::

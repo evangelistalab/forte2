@@ -1,15 +1,15 @@
 from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import time
 
 import numpy as np
 from forte2.system import System, ModelSystem, BasisInfo
-from forte2.base_classes.mixins import MOsMixin, SystemMixin
+from forte2.base_classes import Method, MO
 from forte2.helpers import logger, DIIS
 
 
 @dataclass
-class SCFBase(ABC, SystemMixin, MOsMixin):
+class SCFBase(Method):
     """
     Abstract base class for SCF calculations.
 
@@ -75,6 +75,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
 
+    def __post_init__(self):
+        self.provides = {"system", "mos", "eps"}
+
     def __call__(self, system):
         assert isinstance(
             system, (System, ModelSystem)
@@ -91,6 +94,12 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
         self.C = None
         self.Xorth = self.system.get_Xorth()
+        self._validate_level_shift()
+        self.called = True
+        return self
+
+    def _validate_level_shift(self):
+        """Validate (and, for UHF, normalize) the configured level_shift."""
         if self.level_shift is not None:
             if isinstance(self.level_shift, (int, float)) and self.level_shift < 0.0:
                 raise ValueError("level_shift must be non-negative.")
@@ -100,7 +109,6 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
                 self.level_shift = (self.level_shift, self.level_shift)
             if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
-        return self
 
     def _eigh(self, F):
         Ftilde = self.Xorth.T @ F @ self.Xorth
@@ -119,6 +127,8 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             self : SCFBase
                 The SCF object.
         """
+        self._validate_level_shift()
+        self._current_level_shift = self.level_shift
         start = time.monotonic()
 
         diis = DIIS(
@@ -191,7 +201,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             # check convergence parameters
             deltaE = self.E - Eold
             if np.abs(deltaE) < self.level_shift_thresh:
-                self.level_shift = None
+                self._current_level_shift = None
             deltaD = sum([np.linalg.norm(d - dold) for d, dold in zip(self.D, Dold)])
             self.S2 = self._spin(S)
 
@@ -233,6 +243,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
         self._post_process()
+        self.mos = MO(
+            self.C, self.two_component, self.irrep_labels, self.irrep_indices
+        )
 
         self.executed = True
         return self

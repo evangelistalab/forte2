@@ -143,6 +143,10 @@ nanobind_add_module(
   sci/sci_helper_select_hbci.cc
   sci/sci_helper_sigma_build.cc
   sci/sci_helper_spin.cc
+  sci/rel_sci_helper.cc
+  sci/rel_sci_helper_rdm.cc
+  sci/rel_sci_helper_select_hbci.cc
+  sci/rel_sci_helper_sigma_build.cc
   sci/sci_strings.cc
   sparse/sparse_exp.cc
   sparse/sparse_operator.cc

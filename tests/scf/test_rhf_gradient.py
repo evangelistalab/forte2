@@ -5,15 +5,15 @@ import forte2
 from forte2 import System
 from forte2.gradients import nuclear_repulsion_deriv
 from forte2.scf import RHF
-from gradient_test_utils import (
-    _system,
+from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
+    make_test_system,
 )
 
 
 def _rhf(symbols, coordinates):
     rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(
-        _system(symbols, coordinates)
+        make_test_system(symbols, coordinates)
     )
     rhf.run()
     return rhf
@@ -28,7 +28,7 @@ def _rhf_gradient(symbols, coordinates):
 
 
 def _nuclear_repulsion_energy(symbols, coordinates):
-    return forte2.integrals.nuclear_repulsion(_system(symbols, coordinates))
+    return forte2.integrals.nuclear_repulsion(make_test_system(symbols, coordinates))
 
 
 def test_nuclear_repulsion_deriv_finite_difference():
@@ -42,7 +42,7 @@ def test_nuclear_repulsion_deriv_finite_difference():
     )
     for atom in range(3):
         for cart in range(3):
-            system0 = _system(symbols, coordinates)
+            system0 = make_test_system(symbols, coordinates)
             analytical = nuclear_repulsion_deriv(system0.atoms)
 
             numerical = four_point_central_difference_gradient_component(
@@ -89,7 +89,7 @@ def test_rhf_gradient_h2o_finite_difference_and_translation():
 
 
 def test_rhf_gradient_auto_runs_and_reuses_executed_object():
-    system = _system(["H", "H"], np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]))
+    system = make_test_system(["H", "H"], np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]))
     rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
 
     assert not rhf.executed

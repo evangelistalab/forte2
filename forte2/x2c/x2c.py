@@ -10,9 +10,10 @@ from forte2.helpers import (
     invsqrt_matrix,
     print_metric_info,
 )
-from forte2.system.build_basis import decontract_basis
+from forte2.system.build_basis import build_sap_potential_basis, decontract_basis
 
-LIGHT_SPEED = 137.035999177
+LIGHT_SPEED = 137.03599917697
+SAP_BASIS_NAME = "sap_grasp_large"
 ROW_Z_START = np.array([1, 3, 11, 19, 37, 55, 87])
 
 
@@ -42,25 +43,19 @@ class X2CHelper:
     -----
     Implementation follows the general algorithm of J. Chem. Phys. 135, 084114 (2011),
     but adopts some numerical tricks from J. Chem. Phys. 131, 031104 (2009), especially
-    for the spin-orbit case. See also PySCF's x2c module for reference.
+    for the spin-orbit case. See also PySCF's x2c module for reference. When
+    ``system.x2c_model == "sap"``, the decoupling
+    transformation follows the SAP-X2C
+    Hamiltonian of Surjuse and Valeev, J. Chem. Theory Comput. 22, 3443--3452 (2026),
+    https://doi.org/10.1021/acs.jctc.6c00032.
     """
 
     def __init__(self, system):
         self.system = system
         self.overlap_ortho_rtol = system.overlap_ortho_rtol
-        self.x2c_type = system.x2c_type.lower()
-        assert self.system.x2c_type in [
-            "sf",
-            "so",
-        ], f"Invalid x2c_type: {self.system.x2c_type}. Must be 'sf' or 'so'."
-        _snso_type = system.snso_type.lower() if system.snso_type else None
-        if _snso_type is not None:
-            assert _snso_type in [
-                "boettger",
-                "dc",
-                "dcb",
-                "row-dependent",
-            ], f"Invalid snso_type: {_snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+        self.x2c_type = system.x2c_type
+        self.x2c_model = system.x2c_model
+        self.snso_type = system.snso_type
 
         logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
@@ -80,6 +75,41 @@ class X2CHelper:
         # the V and W integrals know about Gaussian nuclear charges
         self.V = integrals.nuclear(self.system, self.xbasis)
         self.W = integrals.opVop(self.system, self.xbasis)
+        self.V_e = None
+        self.W_e = None
+        if self.x2c_model == "sap":
+            logger.log_info1(
+                f"Building the SAP-X2C screening potential with {SAP_BASIS_NAME}."
+            )
+            sap_basis = build_sap_potential_basis(
+                SAP_BASIS_NAME, self.system.geom_helper
+            )
+            self.V_e = np.einsum(
+                "Pmn->mn",
+                integrals.coulomb_3c(
+                    self.system,
+                    sap_basis,
+                    self.xbasis,
+                    preserve_density_norm=True,
+                ),
+                optimize=True,
+            )
+            if integrals.LIBCINT_AVAILABLE:
+                self.W_e = integrals.cint_coulomb_3c_opVop(
+                    self.system, sap_basis, self.xbasis
+                )
+            else:
+                self.W_e = integrals.coulomb_3c_opVop(
+                    self.system, sap_basis, self.xbasis
+                )
+
+            # Enforce the exact permutation symmetry of the Pauli components.
+            self.V_e = 0.5 * (self.V_e + self.V_e.T)
+            self.W_e[0] = 0.5 * (self.W_e[0] + self.W_e[0].T)
+            for component in range(1, 4):
+                self.W_e[component] = 0.5 * (
+                    self.W_e[component] - self.W_e[component].T
+                )
 
         # Get orthonormal transformation for X2C
         self.Xorth_l, self.Xorthm1_l, self.orth_info = canonical_orth(
@@ -113,28 +143,16 @@ class X2CHelper:
         # build the Foldy-Wouthuysen Hamiltonian
         h_fw = self._build_foldy_wouthuysen_hamiltonian(T, V, W)
 
+        # Remove the untransformed screening potential to avoid double counting it in
+        # subsequent mean-field or correlated treatments (SAP-X2C, Eq. 22).
+        if self.x2c_model == "sap":
+            h_fw -= self._get_sap_screening_potential()
+
         # return to original non-orthogonal AO basis
         _, Xorthm1 = self._get_Xorth()
         h_fw = Xorthm1.conj().T @ h_fw @ Xorthm1
 
-        if self.system.x2c_type.lower() == "so" and self.system.snso_type is not None:
-            nbf = len(self.xbasis)
-            haa = h_fw[:nbf, :nbf]
-            hab = h_fw[:nbf, nbf:]
-            hba = h_fw[nbf:, :nbf]
-            hbb = h_fw[nbf:, nbf:]
-            # the pauli representation of a spin-dependent operator.
-            # h0 is spin-free, h1-3 are spin-dependent
-            # SNSO is applied to the spin-dependent parts only.
-            # see for example eq 4-6 of 10.1002/wcms.1436
-            h0 = (haa + hbb) / 2
-            h1 = (hab + hba) / 2
-            h2 = (hab - hba) / (-2j)
-            h3 = (haa - hbb) / 2
-            h1 = self._apply_snso_scaling(h1)
-            h2 = self._apply_snso_scaling(h2)
-            h3 = self._apply_snso_scaling(h3)
-            h_fw = np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
+        h_fw = self._apply_snso_to_hcore(h_fw)
 
         # project back to the contracted basis
         proj = self._get_projection_matrix()
@@ -142,38 +160,67 @@ class X2CHelper:
 
         return h_fw
 
+    def hcore_gradient(self, density):
+        r"""Contract the analytic X2C Hamiltonian derivative with ``density``."""
+        from .x2c_grad import compute_hcore_gradient
+
+        return compute_hcore_gradient(self, density)
+
+    @staticmethod
+    def _build_nesc_matrix(T, V, W, X):
+        return (
+            T @ X
+            + X.conj().T @ T
+            - X.conj().T @ T @ X
+            + V
+            + (0.25 / LIGHT_SPEED**2) * X.conj().T @ W @ X
+        )
+
     def _get_projection_matrix(self):
-        return self.proj if self.system.x2c_type == "sf" else block_diag_2x2(self.proj)
+        return self.proj if self.x2c_type == "sf" else block_diag_2x2(self.proj)
 
     def _get_Xorth(self):
-        if self.system.x2c_type == "sf":
+        if self.x2c_type == "sf":
             return self.Xorth_l, self.Xorthm1_l
-        elif self.system.x2c_type == "so":
+        elif self.x2c_type == "so":
             return block_diag_2x2(self.Xorth_l), block_diag_2x2(self.Xorthm1_l)
 
     def _get_northo(self):
-        if self.system.x2c_type == "sf":
+        if self.x2c_type == "sf":
             return self.orth_info["n_kept"]
-        elif self.system.x2c_type == "so":
+        elif self.x2c_type == "so":
             return self.orth_info["n_kept"] * 2
 
     def _get_integrals(self):
         Xorth, _ = self._get_Xorth()
-        if self.system.x2c_type == "sf":
+        V_ao = self.V
+        W_ao = self.W
+        if self.x2c_model == "sap":
+            V_ao = self.V + self.V_e
+            W_ao = [W + W_e for W, W_e in zip(self.W, self.W_e)]
+        if self.x2c_type == "sf":
             S = np.eye(Xorth.shape[1])
             T = Xorth.conj().T @ self.T @ Xorth
-            V = Xorth.conj().T @ self.V @ Xorth
-            W = Xorth.conj().T @ self.W[0] @ Xorth
-        elif self.system.x2c_type == "so":
+            V = Xorth.conj().T @ V_ao @ Xorth
+            W = Xorth.conj().T @ W_ao[0] @ Xorth
+        elif self.x2c_type == "so":
             S = np.eye(Xorth.shape[1], dtype=complex)
             T = Xorth.conj().T @ block_diag_2x2(self.T) @ Xorth
-            V = Xorth.conj().T @ block_diag_2x2(self.V) @ Xorth
-            W = Xorth.conj().T @ i_sigma_dot(*self.W) @ Xorth
+            V = Xorth.conj().T @ block_diag_2x2(V_ao) @ Xorth
+            W = Xorth.conj().T @ i_sigma_dot(*W_ao) @ Xorth
 
         return S, T, V, W
 
+    def _get_sap_screening_potential(self):
+        """Return the untransformed SAP screening potential in the OAO basis."""
+        Xorth, _ = self._get_Xorth()
+        V_e = self.V_e
+        if self.x2c_type == "so":
+            V_e = block_diag_2x2(V_e)
+        return Xorth.conj().T @ V_e @ Xorth
+
     def _solve_dirac_eq(self, S, T, V, W):
-        dtype = np.float64 if self.system.x2c_type == "sf" else np.complex128
+        dtype = np.float64 if self.x2c_type == "sf" else np.complex128
         north = self._get_northo()
         D = np.zeros((north * 2,) * 2, dtype=dtype)
         M = np.zeros((north * 2,) * 2, dtype=dtype)
@@ -212,14 +259,24 @@ class X2CHelper:
         # return S12 @ SSS12 @ Ssqrt
 
     def _build_foldy_wouthuysen_hamiltonian(self, T, V, W):
-        L = (
-            T @ self.X
-            + self.X.conj().T @ T
-            - self.X.conj().T @ T @ self.X
-            + V
-            + (0.25 / LIGHT_SPEED**2) * self.X.conj().T @ W @ self.X
-        )
+        L = self._build_nesc_matrix(T, V, W, self.X)
         return self.R.conj().T @ L @ self.R
+
+    def _apply_snso_to_hcore(self, hcore):
+        # SAP-X2C already screens the spin-orbit interaction, so SNSO is 1e-only.
+        if self.x2c_model != "1e" or self.x2c_type != "so" or self.snso_type is None:
+            return hcore
+
+        nbf = len(self.xbasis)
+        haa = hcore[:nbf, :nbf]
+        hab = hcore[:nbf, nbf:]
+        hba = hcore[nbf:, :nbf]
+        hbb = hcore[nbf:, nbf:]
+        h0 = (haa + hbb) / 2
+        h1 = self._apply_snso_scaling((hab + hba) / 2)
+        h2 = self._apply_snso_scaling((hab - hba) / (-2j))
+        h3 = self._apply_snso_scaling((haa - hbb) / 2)
+        return np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
 
     def _apply_snso_scaling(self, ints):
         """
@@ -231,13 +288,13 @@ class X2CHelper:
         basis = self.xbasis
         atoms = self.system.atoms
 
-        if self.system.snso_type is None:
+        if self.snso_type is None:
             return ints
         if basis.max_l > 7:
             raise RuntimeError(
                 "SNSO scaling is not implemented for basis sets with l > 7."
             )
-        match self.system.snso_type.lower():
+        match self.snso_type:
             case "boettger":
                 Ql = np.array([0.0, 2.0, 10.0, 28.0, 60.0, 110.0, 182.0, 280.0])
             case "dc":
@@ -256,7 +313,7 @@ class X2CHelper:
                 }
             case _:
                 raise ValueError(
-                    f"Invalid SNSO type: {self.system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+                    f"Invalid SNSO type: {self.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
                 )
 
         center_first = np.array([_[0] for _ in basis.center_first_and_last_shell])

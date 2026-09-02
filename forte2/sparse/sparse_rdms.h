@@ -309,4 +309,80 @@ auto compute_bbbb_4rdm(const SparseState& state_left, const SparseState& state_r
     return compute_4rdm<Spin4::bbbb>(state_left, state_right, norb);
 }
 
+// == Complex (two-component) RDMs ==
+//
+// The relativistic (two-component) selected CI stores every active electron in the alpha
+// string (the beta string is empty), so only the alpha 1-RDM and the alpha-alpha 2-RDM are
+// needed. Unlike the real versions above (which drop the imaginary part via to_double and do
+// NOT conjugate the bra), these overloads accumulate the full complex value and conjugate the
+// left (bra) coefficient so the resulting RDMs are Hermitian. This matches the convention of
+// RelCISigmaBuilder::compute_1rdm / compute_2rdm (see rel_ci_sigma_builder_rdm.cc), so that
+// gamma1[p,q] = <L| a^+_p a_q |R> and gamma2[p,q,r,s] = <L| a^+_p a^+_q a_s a_r |R>.
+
+/// @brief Compute the complex alpha 1-RDM between two SparseStates
+/// @return gamma1[p][q] = <L| a^+_p a_q |R> as a complex (norb, norb) matrix
+inline np_matrix_complex compute_a_1rdm_complex(const SparseState& state_left,
+                                                const SparseState& state_right, std::size_t norb) {
+    auto g1 = make_zeros<nb::numpy, sparse_scalar_t, 2>({norb, norb});
+    auto g1_v = g1.view();
+
+    Determinant J;
+    for (std::size_t p{0}; p < norb; ++p) {
+        for (std::size_t q{0}; q < norb; ++q) {
+            sparse_scalar_t rdm = 0.0;
+            for (const auto& [I, c_I] : state_right) {
+                J = I;
+                double sign = 1.0;
+                sign *= J.destroy_alpha(q);
+                sign *= J.create_alpha(p);
+                if (sign != 0) {
+                    auto it = state_left.find(J);
+                    if (it != state_left.end()) {
+                        rdm += sign * std::conj(it->second) * c_I;
+                    }
+                }
+            }
+            g1_v(p, q) = rdm;
+        }
+    }
+    return g1;
+}
+
+/// @brief Compute the complex alpha-alpha 2-RDM between two SparseStates
+/// @return gamma2[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R> as a complex (norb, norb, norb, norb)
+///         tensor (full, antisymmetric in p<->q and r<->s)
+inline np_tensor4_complex compute_aa_2rdm_complex(const SparseState& state_left,
+                                                  const SparseState& state_right,
+                                                  std::size_t norb) {
+    auto g2 = make_zeros<nb::numpy, sparse_scalar_t, 4>({norb, norb, norb, norb});
+    auto g2_v = g2.view();
+
+    Determinant J;
+    for (std::size_t p{0}; p < norb; ++p) {
+        for (std::size_t q{0}; q < norb; ++q) {
+            for (std::size_t r{0}; r < norb; ++r) {
+                for (std::size_t s{0}; s < norb; ++s) {
+                    sparse_scalar_t rdm = 0.0;
+                    for (const auto& [I, c_I] : state_right) {
+                        J = I;
+                        double sign = 1.0;
+                        sign *= J.destroy_alpha(r);
+                        sign *= J.destroy_alpha(s);
+                        sign *= J.create_alpha(q);
+                        sign *= J.create_alpha(p);
+                        if (sign != 0) {
+                            auto it = state_left.find(J);
+                            if (it != state_left.end()) {
+                                rdm += sign * std::conj(it->second) * c_I;
+                            }
+                        }
+                    }
+                    g2_v(p, q, r, s) = rdm;
+                }
+            }
+        }
+    }
+    return g2;
+}
+
 } // namespace forte2

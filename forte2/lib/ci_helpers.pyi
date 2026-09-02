@@ -130,13 +130,10 @@ class CIStrings:
     def make_determinants(self) -> DeterminantVector: ...
 
 class CISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3, algorithm: str = 'kh') -> None:
         """
         Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
         """
-
-    def set_algorithm(self, algorithm: str) -> None:
-        """Set the sigma build algorithm (options = kh, hz)"""
 
     def get_algorithm(self) -> str:
         """Get the current sigma build algorithm"""
@@ -155,6 +152,19 @@ class CISigmaBuilder:
     def slater_rules_csf(self, dets: DeterminantVector, spin_adapter: CISpinAdapter, I: int, J: int) -> float: ...
 
     def Hamiltonian(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None: ...
+
+    def sigma_one_electron(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """
+        Apply the scalar and one-electron part of the Hamiltonian to the wave function
+        """
+
+    def sigma_two_electron(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Apply the two-electron part of the Hamiltonian to the wave function"""
+
+    def set_Hamiltonian(self, E: float | None = None, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))] | None = None, V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))] | None = None) -> None:
+        """
+        Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers. Any argument left as None keeps its current value.
+        """
 
     def make_sparse_state(self, C: Annotated[NDArray[numpy.float64], dict(shape=(None,))], threshold: float = 1e-12) -> forte2.lib.sparse_ops.SparseState:
         """Convert a CI vector to a sparse state"""
@@ -302,13 +312,10 @@ class CISpinAdapter:
         """Set the logging level for the class"""
 
 class RelCISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, algorithm: str = 'hz') -> None:
         """
         Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
         """
-
-    def set_algorithm(self, algorithm: str) -> None:
-        """Set the sigma build algorithm (options = kh, hz)"""
 
     def get_algorithm(self) -> str:
         """Get the current sigma build algorithm"""
@@ -321,6 +328,19 @@ class RelCISigmaBuilder:
     def slater_rules(self, dets: DeterminantVector, I: int, J: int) -> complex: ...
 
     def Hamiltonian(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None: ...
+
+    def sigma_one_electron(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None:
+        """
+        Apply the scalar and one-electron part of the Hamiltonian to the wave function
+        """
+
+    def sigma_two_electron(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None:
+        """Apply the two-electron part of the Hamiltonian to the wave function"""
+
+    def set_Hamiltonian(self, E: float | None = None, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))] | None = None, V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))] | None = None) -> None:
+        """
+        Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers. Any argument left as None keeps its current value.
+        """
 
     def so_1rdm(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
         """Compute the spin-orbital one-electron reduced density matrix"""
@@ -349,8 +369,10 @@ class SelectedCIHelper:
         Initialize the SelectedCIHelper with the number of orbitals, initial determinants, energy, Hamiltonian, and integrals
         """
 
-    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
-        """Set the Hamiltonian integrals"""
+    def set_Hamiltonian(self, E: float | None = None, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))] | None = None, V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))] | None = None) -> None:
+        """
+        Set the Hamiltonian integrals. Any argument left as None keeps its current value.
+        """
 
     def Hamiltonian(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
         """Apply the Hamiltonian to the basis and store the result in sigma"""
@@ -360,9 +382,6 @@ class SelectedCIHelper:
 
     def set_c(self, c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))]) -> None:
         """Set the CI coefficients"""
-
-    def set_num_threads(self, n: int) -> None:
-        """Set the number of threads to use in parallel sections"""
 
     def set_num_batches_per_thread(self, n: int) -> None:
         """
@@ -443,6 +462,109 @@ class SelectedCIHelper:
 
     def ndets(self) -> int:
         """Return the number of determinants in the variational space"""
+
+    def slater_rules(self, dets: DeterminantVector, I: int, J: int) -> float:
+        """Compute the Hamiltonian matrix element <I|H|J>"""
+
+    def energies(self) -> list[float]:
+        """Return the energies of the roots"""
+
+    def ept2_var(self) -> list[float]:
+        """
+        Return the variational part of the Epstein-Nesbet second-order energy correction
+        """
+
+    def ept2_pt(self) -> list[float]:
+        """
+        Return the perturbative part of the Epstein-Nesbet second-order energy correction
+        """
+
+    def num_new_dets_var(self) -> int:
+        """
+        Return the number of new variational determinants added in the last selection
+        """
+
+    def num_new_dets_pt2(self) -> int:
+        """
+        Return the number of new perturbative determinants added in the last selection
+        """
+
+    def selection_time(self) -> float:
+        """Return the total selection time"""
+
+class RelSelectedCIHelper:
+    def __init__(self, norb: int, dets: DeterminantVector, c: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, screening_criterion: str = 'hbci', frozen_creation: Sequence[int] = [], frozen_annihilation: Sequence[int] = []) -> None:
+        """
+        Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, energy, complex Hamiltonian, and complex integrals
+        """
+
+    def set_Hamiltonian(self, E: float | None = None, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))] | None = None, V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))] | None = None) -> None:
+        """
+        Set the (complex) Hamiltonian integrals. Any argument left as None keeps its current value.
+        """
+
+    def Hamiltonian(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None:
+        """
+        Apply the Hamiltonian to the (complex) basis and store the result in sigma
+        """
+
+    def Hdiag(self) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+        """Return the (real) diagonal of the Hamiltonian matrix"""
+
+    def set_c(self, c: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]) -> None:
+        """Set the (complex) CI coefficients"""
+
+    def set_num_batches_per_thread(self, n: int) -> None:
+        """
+        Set the number of batches each thread will process in parallel sections
+        """
+
+    def set_energies(self, e: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Set the energies of the roots"""
+
+    def set_frozen_creation(self, frozen_creation: Sequence[int]) -> None:
+        """Set orbitals excluded from creation in selection"""
+
+    def set_frozen_annihilation(self, frozen_annihilation: Sequence[int]) -> None:
+        """Set orbitals excluded from annihilation in selection"""
+
+    def set_screening_criterion(self, criterion: str) -> None:
+        """Set the screening criterion for selection (only 'hbci' is supported)"""
+
+    def set_energy_correction(self, correction: str) -> None:
+        """
+        Set the energy correction method for selection ('variational' or 'pt2')
+        """
+
+    def set_pt2_regularizer(self, regularizer: str, strength: float = 0.5) -> None:
+        """
+        Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength
+        """
+
+    def select_hbci_ref(self, var_threshold: float, pt2_threshold: float) -> None:
+        """Perform HBCI selection with the reference implementation"""
+
+    def select_hbci(self, var_threshold: float, pt2_threshold: float) -> None:
+        """Perform HBCI selection with the batched implementation"""
+
+    def a_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
+        """
+        Compute the complex alpha 1-RDM (or transition 1-RDM) between two roots
+        """
+
+    def aa_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
+        """
+        Compute the complex alpha-alpha 2-RDM (or transition 2-RDM) between two roots
+        """
+
+    def dets(self) -> DeterminantVector:
+        """Return the determinants in the variational space"""
+
+    def ndets(self) -> int:
+        """Return the number of determinants in the variational space"""
+
+    def slater_rules(self, dets: DeterminantVector, I: int, J: int) -> complex:
+        """Compute the Hamiltonian matrix element <I|H|J>"""
 
     def energies(self) -> list[float]:
         """Return the energies of the roots"""

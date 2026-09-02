@@ -39,7 +39,6 @@ def test_sci1():
             selection_algorithm="hbci",
             var_threshold=1e-12,
             pt2_threshold=0.0,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
     )(rhf)
@@ -62,7 +61,6 @@ def test_sci_pinned_only_guess():
             pt2_threshold=0.0,
             guess_dets=[],
             pinned_guess_dets=[Determinant("22")],
-            num_threads=4,
             num_batches_per_thread=16,
         ),
     )(rhf)
@@ -98,7 +96,6 @@ def test_sci2():
             guess_vir_window=0,
             pt2_regularizer="dsrg",
             pt2_regularizer_strength=0.2,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         nroots=1,
@@ -138,7 +135,6 @@ def test_sci3():
             guess_occ_window=2,
             guess_vir_window=2,
             do_spin_penalty=False,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         nroots=4,
@@ -178,7 +174,6 @@ def test_sci4():
             guess_occ_window=2,
             guess_vir_window=2,
             do_spin_penalty=True,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
     )(rhf)
@@ -208,14 +203,13 @@ def test_sci5():
             pt2_threshold=0.0,
             do_spin_penalty=True,
             guess_dets=[Determinant("a2222")],
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         nroots=1,
     )(rhf)
 
     sci.run()
-    assert sci.E[0] == pytest.approx(-96.6017082329, abs=1e-7)
+    assert sci.E[0] == pytest.approx(-96.60170826050286, abs=5e-7)
 
 
 @pytest.mark.skip(reason="Could not reproduce with FCI with energy_shift")
@@ -239,7 +233,6 @@ def test_sci6():
             guess_dets=[Determinant("a2222b"), Determinant("b2222a")],
             do_spin_penalty=True,
             screening_criterion="hbci",
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         nroots=1,
@@ -562,23 +555,83 @@ def test_sci_make_rdms():
     assert np.allclose(sf_2rdm, sf_2rdm_ci, atol=1e-8)
 
 
-def test_sci_semicanonical_final_orbital():
-    """Semicanonical final orbital path should execute without runtime errors."""
-    rhf = _h4_rhf()
+def _lih_noncontiguous_mo_space(system):
+    return MOSpace(
+        nmo=system.nmo,
+        active_orbitals=[0, 1, 2, 3],
+        frozen_virtual_orbitals=[4],
+    )
 
-    sci = SelectedCI(
+
+def _lih_rhf():
+    xyz = "Li 0.0 0.0 0.0\nH  0.0 0.0 3.0"
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    return RHF(charge=0, e_tol=1e-12)(system)
+
+
+def test_sci_semicanonical_noncontiguous_mo_space():
+    """final_orbitals='semicanonical' with a non-contiguous active space.
+
+    active_orbitals=[0, 1, 2, 3] is followed by a frozen virtual at original
+    index 4, which sits *before* the regular virtual in the original
+    ordering but *after* it in the contiguous [active, virt, frozen_virt]
+    ordering used internally, so mo_space.contig_to_orig is a genuine,
+    non-trivial permutation.
+    """
+    rhf = _lih_rhf()
+    mo_space = _lih_noncontiguous_mo_space(rhf.system)
+    sci_params = SelectedCIParams(var_threshold=1e-10, pt2_threshold=1e-12)
+
+    sci_original = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
-        active_orbitals=list(range(4)),
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-        ),
+        mo_space_override=mo_space,
+        sci_params=sci_params,
+    )(rhf)
+    sci_original.run()
+    sci_semicanonical = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        mo_space_override=mo_space,
+        sci_params=sci_params,
         final_orbitals="semicanonical",
     )(rhf)
-    sci.run()
+    sci_semicanonical.run()
 
-    assert sci.E[0] == approx(-2.180967812920)
+    np.testing.assert_array_equal(mo_space.orig_to_contig, [0, 1, 2, 3, 5, 4])
+    np.testing.assert_array_equal(mo_space.contig_to_orig, [0, 1, 2, 3, 5, 4])
+    assert sci_semicanonical.E[0] == approx(sci_original.E[0])
+
+
+def test_sci_natural_noncontiguous_mo_space():
+    """final_orbitals='natural' with the same non-contiguous active space as
+    test_sci_semicanonical_noncontiguous_mo_space."""
+    rhf = _lih_rhf()
+    mo_space = _lih_noncontiguous_mo_space(rhf.system)
+    sci_params = SelectedCIParams(var_threshold=1e-10, pt2_threshold=1e-12)
+
+    sci_original = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        mo_space_override=mo_space,
+        sci_params=sci_params,
+    )(rhf)
+    sci_original.run()
+    sci_natural = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        mo_space_override=mo_space,
+        sci_params=sci_params,
+        final_orbitals="natural",
+    )(rhf)
+    sci_natural.run()
+
+    assert sci_natural.E[0] == approx(sci_original.E[0])
+
+    g1_act = sci_natural.make_average_1rdm()
+    off_diag = g1_act - np.diag(np.diag(g1_act))
+    assert np.max(np.abs(off_diag)) < 1e-6
 
 
 @pytest.mark.slow
@@ -622,7 +675,6 @@ def test_sci_water_core_excited():
             # do not allow the core orbital occupation to change from the guess determinants
             frozen_annihilation=[0],
             frozen_creation=[0],
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         davidson_liu_params=DavidsonLiuParams(
@@ -708,7 +760,6 @@ def test_sci_water_core_excited_with_gasscf_orbs():
             # do not allow the core orbital occupation to change from the guess determinants
             frozen_annihilation=[0],
             frozen_creation=[0],
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         davidson_liu_params=DavidsonLiuParams(
@@ -741,7 +792,6 @@ def test_sci_n2_multiple_roots():
             screening_criterion="hbci",
             guess_occ_window=3,
             guess_vir_window=3,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         die_if_not_converged=False,
@@ -780,7 +830,6 @@ def test_sci_water_valence_excitation():
             screening_criterion="hbci",
             guess_occ_window=3,
             guess_vir_window=1,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         die_if_not_converged=False,
@@ -812,7 +861,6 @@ def test_sci_1tdm_water_core_excited_and_gs():
         pt2_threshold=1e-8,
         guess_occ_window=3,
         guess_vir_window=1,
-        num_threads=4,
         num_batches_per_thread=16,
     )
     gs_ci_params = DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5)
@@ -860,3 +908,144 @@ def test_sci_1tdm_water_core_excited_and_gs():
     assert sci.E[0] == pytest.approx(-56.36320838, abs=1e-8)
     assert sci.E[1] == pytest.approx(-76.12086372, abs=1e-8)
     assert sci.oscillator_strengths[(1, 0)] == pytest.approx(0.020634, abs=1e-4)
+
+
+def _lih_rhf_tight():
+    """Small LiH reference (tight SCF) shared by the regression tests below."""
+    system = System(
+        xyz="Li 0.0 0.0 0.0\nH  0.0 0.0 3.0",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    return system, RHF(charge=0, e_tol=1e-10)(system)
+
+
+def test_sci_per_state_params_are_not_shared():
+    """A single SelectedCIParams shared by several states must be copied per state.
+
+    ``_initial_guess`` rebinds ``sci_params.guess_dets``; when one object was
+    aliased across states, state 1 inherited state 0's guess determinants and
+    validated them against its own electron count. With states of differing
+    alpha/beta counts that raised
+    "Guess determinant ... has 1 alpha electrons, expected 2".
+    """
+    _, rhf = _lih_rhf_tight()
+    sci = SelectedCI(
+        states=[
+            State(nel=4, multiplicity=1, ms=0.0),  # active (na, nb) = (1, 1)
+            State(nel=4, multiplicity=3, ms=1.0),  # active (na, nb) = (2, 0)
+        ],
+        nroots=[1, 1],
+        core_orbitals=[0],
+        active_orbitals=[1, 2, 3, 4, 5],
+        sci_params=SelectedCIParams(guess_occ_window=1),
+    )(rhf)
+    sci.run()
+
+    # each sub-solver must own its params, and its own guess determinants
+    assert sci.sub_solvers[0].sci_params is not sci.sub_solvers[1].sci_params
+    assert sci.sub_solvers[0].davidson_liu_params is not (
+        sci.sub_solvers[1].davidson_liu_params
+    )
+    for solver, (na, nb) in zip(sci.sub_solvers, [(1, 1), (2, 0)]):
+        for d in solver.sci_params.guess_dets:
+            assert (d.count_alpha(), d.count_beta()) == (na, nb)
+
+
+def test_sci_set_ints_then_run_updates_slater_rules():
+    """set_ints followed by run() must push the new integrals into the sci helper's internal
+    SlaterRules -- there is no separate, persistent Python-level SlaterRules to keep in sync
+    anymore; see SelectedCIHelper.slater_rules."""
+    _, rhf = _lih_rhf_tight()
+    sci = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        core_orbitals=[0],
+        active_orbitals=[1, 2, 3, 4, 5],
+        sci_params=SelectedCIParams(guess_occ_window=1),
+    )(rhf)
+    sci.run()
+
+    worker = sci.sub_solvers[0]
+    sci_helper_before = worker.sci_helper
+    dets = worker.sci_helper.dets()
+    before = worker.sci_helper.slater_rules(dets, 0, 0)
+
+    # shifting only the scalar term must shift every diagonal element by the same amount
+    sci.set_ints(worker.ints.E + 1.0, worker.ints.H, worker.ints.V)
+    sci.run()
+
+    assert worker.sci_helper is sci_helper_before
+    dets = worker.sci_helper.dets()
+    after = worker.sci_helper.slater_rules(dets, 0, 0)
+    assert after - before == approx(1.0)
+
+
+@pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
+def test_sci_final_orbitals(final_orbitals):
+    rhf = _h4_rhf()
+
+    sci = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(4)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+        ),
+        final_orbitals=final_orbitals,
+    )(rhf)
+    sci.run()
+
+    assert sci.E[0] == approx(-2.180967812920)
+
+
+def test_sci_pt2_split_is_independent_of_var_threshold():
+    """
+    ept2_var + ept2_pt is the Epstein-Nesbet PT2 over the determinants outside the
+    variational space, so it cannot depend on var_threshold. That threshold only decides how the total is split between the two reported energies.
+    """
+    pt2_threshold = 1e-10
+    xyz = """
+        O 0.0000000 0.0000000 -0.0655905
+        H 0.0000000 -0.7578344 0.5203775
+        H 0.0000000  0.7578344 0.5203775
+        """
+    system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+
+    sci = SelectedCI(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(13)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-3,
+            pt2_threshold=pt2_threshold,
+            maxcycle=2,
+        ),
+    )(rhf)
+    sci.run()
+
+    # Freeze the variational space and its coefficients
+    # then run selection at different eps_var but fixed eps_pt2
+    worker = sci.sub_solvers[0]
+    dets = worker.dets
+    c = worker.evecs
+    energies = np.ascontiguousarray(np.asarray(worker.evals).real)
+
+    def probe(var_threshold):
+        helper = SelectedCIHelper(
+            worker.norb, dets, c, worker.ints.E, worker.ints.H, worker.ints.V, 0
+        )
+        helper.set_energies(energies)
+        helper.select_hbci(var_threshold=var_threshold, pt2_threshold=pt2_threshold)
+        return np.array(helper.ept2_var()), np.array(helper.ept2_pt())
+
+    # very large eps_var leaves all to PT2 space
+    # all subsequent e_var + e_pt2 must add to ref_pt
+    ref_var, ref_pt = probe(1e6)
+    assert np.all(ref_var == 0.0)
+
+    for var_threshold in (1e-3, 1e-4, 1e-5, 1e-7, 0.0):
+        var, pt = probe(var_threshold)
+        assert var + pt == approx(ref_pt)

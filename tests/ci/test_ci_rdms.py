@@ -1,7 +1,9 @@
 import numpy as np
+import pytest
 
 from forte2 import System, RHF, CI, State
 from forte2.helpers.comparisons import approx
+from forte2.lib.ci_helpers import CISigmaBuilder, CIStrings
 
 
 def compare_rdms(ci):
@@ -371,3 +373,63 @@ def test_ci_rdms_sa():
     e_from_cumulants -= 0.25 * np.einsum("pqrs,ps,qr->", ci_ints.V, g1, g1)
 
     assert e_avg == approx(e_from_cumulants)
+
+
+def test_ci_rdms_respect_small_builder_memory_across_composite_hole_chunks():
+    """Low-memory composite-hole chunks must agree with an unchunked contraction."""
+    norb = 12
+    lists = CIStrings(2, 5, 0, [[0] * norb], [], [])
+    H = np.zeros((norb, norb))
+    V = np.zeros((norb, norb, norb, norb))
+    low_memory_builder = CISigmaBuilder(lists, 0.0, H, V, 0)
+    reference_builder = CISigmaBuilder(lists, 0.0, H, V, 0)
+
+    rng = np.random.default_rng(204)
+    C_left = rng.normal(size=lists.ndet)
+    C_right = rng.normal(size=lists.ndet)
+    C_left /= np.linalg.norm(C_left)
+    C_right /= np.linalg.norm(C_right)
+
+    with pytest.raises(ValueError, match="memory must be non-negative"):
+        low_memory_builder.set_memory(-1)
+
+    # A zero-byte limit cannot hold even one column, and must fail without corrupting the builder.
+    low_memory_builder.set_memory(0)
+    with pytest.raises(RuntimeError, match="too small for one K-block column"):
+        low_memory_builder.ab_2rdm(C_left, C_right)
+
+    # One MiB forces chunks that split the flattened (Ka, Kb) index, including within Kb.
+    low_memory_builder.set_memory(1)
+    reference_builder.set_memory(64)
+    for method_name in ("ab_2rdm", "aab_3rdm", "abb_3rdm"):
+        low_memory_rdm = getattr(low_memory_builder, method_name)(C_left, C_right)
+        reference_rdm = getattr(reference_builder, method_name)(C_left, C_right)
+        np.testing.assert_allclose(
+            low_memory_rdm, reference_rdm, rtol=1e-12, atol=1e-12
+        )
+
+
+def test_ci_builder_memory_reconfiguration_is_retry_safe():
+    """A failed cached-buffer request must not corrupt a later sigma build."""
+    norb = 6
+    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
+    H = np.diag(np.linspace(-1.0, 1.0, norb))
+    V = np.zeros((norb, norb, norb, norb))
+    builder = CISigmaBuilder(lists, 0.25, H, V, 0, "hz")
+
+    rng = np.random.default_rng(205)
+    basis = rng.normal(size=lists.ndet)
+    basis /= np.linalg.norm(basis)
+
+    builder.set_memory(1)
+    expected = np.zeros(lists.ndet)
+    builder.Hamiltonian(basis, expected)
+
+    builder.set_memory(0)
+    with pytest.raises(RuntimeError, match="too small for one K-block column"):
+        builder.Hamiltonian(basis, np.zeros(lists.ndet))
+
+    builder.set_memory(1)
+    actual = np.zeros(lists.ndet)
+    builder.Hamiltonian(basis, actual)
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)

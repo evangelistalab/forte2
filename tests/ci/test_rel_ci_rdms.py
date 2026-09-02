@@ -2,7 +2,7 @@ import numpy as np
 
 from forte2 import State, MOSpace
 from forte2.jkbuilder import SpinorbitalIntegrals
-from forte2.ci.ci import _CISingleStateSolver
+from forte2.ci.rel_ci import _RelCISingleStateSolver
 from forte2.helpers.comparisons import approx
 
 rdm_threshold = 1e-12
@@ -45,13 +45,12 @@ def setup_ci():
     fakeints.V = h2
     mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
     state = State(nel=8, multiplicity=1, ms=0.0)
-    ci = _CISingleStateSolver(
+    ci = _RelCISingleStateSolver(
         mo_space=mo_space,
         state=state,
         ints=fakeints,
         nroot=2,
         active_orbsym=[[0] * norb],
-        two_component=True,
     )
     ci.run()
     assert ci.E[0] == approx(-80.435516431459)

@@ -1,18 +1,19 @@
 import numpy as np
 import pytest
 
-from forte2 import System
+from forte2 import System, X2CParams
+from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.scf import RHF, UHF
-from tests.scf.gradient_test_utils import (
-    _system,
+from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
+    make_test_system,
     six_point_central_difference_gradient_component,
 )
 
 
 def _uhf(symbols, coordinates, charge, ms):
     uhf = UHF(charge=charge, ms=ms, e_tol=1.0e-12, d_tol=1.0e-8, maxiter=100)(
-        _system(symbols, coordinates)
+        make_test_system(symbols, coordinates)
     )
     uhf.run()
     return uhf
@@ -132,8 +133,9 @@ def test_uhf_gradient_with_df_ortho_rtol():
 
     When ``df_ortho_rtol`` is set, the DF metric inverse is built from a truncated
     eigenspace rather than the default full Cholesky solve. This is a test
-    for that branch of ``build_metric_inverted_three_center`` inside the gradient
-    assembly; the finite-difference tests cover the numerical gradient formula.
+    for that branch of ``build_metric_inverted_density_contraction``/
+    ``build_metric_inverted_mo_block`` inside the gradient assembly; the
+    finite-difference tests cover the numerical gradient formula.
     """
     system = _h2_system(df_ortho_rtol=1.0e-8)
     uhf = UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
@@ -147,7 +149,7 @@ def test_uhf_gradient_closed_shell_matches_rhf_gradient():
     """Verify the spin-paired UHF gradient reduces to the RHF gradient."""
     symbols = ["H", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
-    system = _system(symbols, coordinates)
+    system = make_test_system(symbols, coordinates)
 
     rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
     uhf = UHF(charge=0, ms=0.0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
@@ -159,19 +161,43 @@ def test_uhf_gradient_closed_shell_matches_rhf_gradient():
     assert uhf_gradient == pytest.approx(rhf_gradient, abs=1.0e-10)
 
 
-def test_uhf_gradient_rejects_gaussian_nuclear_charges():
-    """Reject Gaussian nuclear charges until their derivative terms are added."""
-    system = _h2_system(use_gaussian_charges=True)
-    uhf = UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+@pytest.mark.parametrize(
+    "system_options",
+    [
+        pytest.param(
+            {"use_gaussian_charges": True},
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="Libcint is not available"
+            ),
+        ),
+        {"x2c": X2CParams(x2c_type="sf")},
+        pytest.param(
+            {"x2c": X2CParams(x2c_type="sf"), "use_gaussian_charges": True},
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="Libcint is not available"
+            ),
+        ),
+    ],
+)
+def test_uhf_gradient_nuclear_model_and_x2c_finite_difference(system_options):
+    def energy(distance):
+        system = System(
+            xyz=f"H 0 0 0\nH 0 0 {distance:.12f}",
+            basis_set="sto-3g",
+            auxiliary_basis_set="def2-universal-JKFIT",
+            unit="bohr",
+            **system_options,
+        )
+        return UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10)(system).run().E
 
-    with pytest.raises(NotImplementedError, match="Gaussian nuclear charges"):
-        uhf.gradient()
+    system = _h2_system(**system_options)
+    gradient = UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10)(system).gradient()
+    step = 1.0e-3
+    numerical = (
+        -energy(1.7 + 2.0 * step)
+        + 8.0 * energy(1.7 + step)
+        - 8.0 * energy(1.7 - step)
+        + energy(1.7 - 2.0 * step)
+    ) / (12.0 * step)
 
-
-def test_uhf_gradient_rejects_x2c():
-    """Reject X2C UHF gradients until relativistic derivative terms are added."""
-    system = _h2_system(x2c_type="sf")
-    uhf = UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
-
-    with pytest.raises(NotImplementedError, match="X2C"):
-        uhf.gradient()
+    assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-8)

@@ -23,7 +23,7 @@ NB_MODULE(lib, m) {
     export_dsrg_utils_api(m);
     export_sparse_ops_api(m);
     export_rdms_api(m);
-    m.attr("__version__") = "2026.6.4";
+    m.attr("__version__") = "2026.9.1";
     m.attr("__author__") = "Forte2 Developers";
 }
 } // namespace forte2
