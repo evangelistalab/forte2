@@ -17,7 +17,7 @@ from forte2.base_classes import CIBase
 from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals
-from forte2.orbitals import FinalOrbitals, validate_final_orbitals
+from forte2.orbitals import FinalOrbitals
 from .ci_utils import (
     pretty_print_gas_info,
     pretty_print_ci_summary,
@@ -1009,7 +1009,6 @@ class CI(CISolver):
 
     def __post_init__(self):
         super().__post_init__()
-        validate_final_orbitals(self.final_orbitals)
 
     def run(self):
         self._solve()

@@ -981,7 +981,10 @@ def test_sci_set_ints_then_run_updates_slater_rules():
     assert after - before == approx(1.0)
 
 
-@pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
+@pytest.mark.parametrize(
+    "final_orbitals",
+    ["original", "semicanonical", "natural", "ibo", "ibo_atomic"],
+)
 def test_sci_final_orbitals(final_orbitals):
     rhf = _h4_rhf()
 

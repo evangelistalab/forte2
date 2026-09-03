@@ -11,7 +11,7 @@ from forte2.base_classes import (
     RelCIBase,
     Method,
 )
-from forte2.orbitals import FinalOrbitals, validate_final_orbitals
+from forte2.orbitals import FinalOrbitals
 from forte2.helpers import logger, LBFGS
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
@@ -60,6 +60,12 @@ class MCOptimizerBase(Method):
         - "natural": Same as semicanonical, but the active orbitals are natural orbitals
           and diagonalize the spin- and state-averaged 1-RDM within the CAS
           subspace or within each of the GAS subspaces.
+        - "ibo": Localize only the active orbitals as intrinsic bond orbitals.
+          Inactive orbitals are semicanonical and GAS blocks are preserved.
+          This option is available only in C1 symmetry.
+        - "ibo_atomic": As ``"ibo"``, followed by alignment of atom-local
+          blocks with canonical axis-oriented IAOs and ordering by atom and
+          native MINAO basis-function index within each GAS partition.
         - "original": The orbitals are left in the original basis after the optimization.
           This option is only for debugging purposes and should generally be avoided
           as the active orbitals will not be uniquely defined and may not be suitable
@@ -106,8 +112,6 @@ class MCOptimizerBase(Method):
     def __post_init__(self):
         if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
             raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
-
-        validate_final_orbitals(self.final_orbitals)
 
         self.requires = {"system", "mos"}
         self.provides = {"system", "mos", "mo_space"}

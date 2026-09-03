@@ -142,6 +142,13 @@ class IBO(IAO):
     g_tol : float, optional, default=1e-8
         The RMS gradient convergence criterion for the IBO optimization.
 
+    Attributes
+    ----------
+    U_ibo : NDArray
+        The unitary rotation from the input orbitals to the IBOs.
+    C_ibo : NDArray
+        The IBO coefficients, formed as ``C_occ @ U_ibo``.
+
     Notes
     -----
     There are typos in the original paper, specifically for the Aij and Bij elements.
@@ -161,6 +168,7 @@ class IBO(IAO):
         # Occupied MO coefficients in the IAO basis
         # shape (nminao, nocc)
         C_occ_iao = self.C_iao.T @ self.S1 @ self.C_occ
+        U_ibo = np.eye(self.nocc, dtype=self.C_occ.dtype)
         center_first_and_last = self.system.minao_basis.center_first_and_last
         natoms = self.system.natoms
 
@@ -194,6 +202,13 @@ class IBO(IAO):
                     )
                     C_occ_iao[:, i] = i_new.copy()
                     C_occ_iao[:, j] = j_new.copy()
+
+                    # Accumulate the same Jacobi rotation in the input orbital
+                    # basis so the final IBOs remain exactly in that subspace.
+                    i_new = np.cos(phi_ij) * U_ibo[:, i] + np.sin(phi_ij) * U_ibo[:, j]
+                    j_new = -np.sin(phi_ij) * U_ibo[:, i] + np.cos(phi_ij) * U_ibo[:, j]
+                    U_ibo[:, i] = i_new.copy()
+                    U_ibo[:, j] = j_new.copy()
             if np.sqrt(grad) < self.g_tol:
                 logger.log_info1(f"\nIBO converged after {ibo_iter} iterations.")
                 break
@@ -203,5 +218,5 @@ class IBO(IAO):
                 f"IBO did not converge after {self.maxiter} iterations. Change `maxiter` or `g_tol`."
             )
 
-        # (nbf, nminao) @ (nminao, nocc) = (nbf, nocc)
-        return self.C_iao @ C_occ_iao
+        self.U_ibo = U_ibo
+        return self.C_occ @ self.U_ibo

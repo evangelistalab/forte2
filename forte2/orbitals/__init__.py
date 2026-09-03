@@ -7,11 +7,11 @@ from .final_orbitals import (
     VALID_FINAL_ORBITALS,
     check_final_orbital_energy_invariance,
     make_final_orbitals,
-    validate_final_orbitals,
 )
 from .orbital_blocks import OrbitalBlockBuilder
 from .aset import ASET
 from .iao import IAO, IBO
+from .ibo_align import AtomicOrbitalAssignment, IBOAligner
 from .converters import SpinorUpcaster
 from .orbital_overlap import mo_overlap, project_orbitals, project_occupied_orbitals
 

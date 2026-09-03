@@ -269,41 +269,45 @@ class CIBase(ActiveSpaceSolver):
 
     def _rotate_final_orbitals(self, final_orbitals):
         """
-        Apply the requested ``final_orbitals`` transformation and re-solve.
-        No-op unless "semicanonical" or "natural" is requested.
+        Apply the requested ``final_orbitals`` transformation.
 
         Parameters
         ----------
         final_orbitals : str
-            Type of final_orbitals. Validated by caller.
+            Type of final orbitals.
         """
         from forte2.orbitals import (
             check_final_orbital_energy_invariance,
             make_final_orbitals,
         )
 
-        if final_orbitals not in ("semicanonical", "natural"):
-            return
-
         irrep_indices = np.asarray(self.mos.irrep_indices[0], dtype=int)[
             self.mo_space.orig_to_contig
         ]
         C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
+        g1_act = (
+            self.make_average_1rdm()
+            if final_orbitals != "original"
+            else None
+        )
         C_final = make_final_orbitals(
             final_orbitals,
             system=self.system,
             mo_space=self.mo_space,
             irrep_indices=irrep_indices,
             C_contig=C_contig,
-            g1_act=self.make_average_1rdm(),
+            g1_act=g1_act,
         )
+        if final_orbitals == "original":
+            return
+
         # undo the contiguous ordering
         self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
 
         old_E = self.E.copy()
         old_E_avg = self.E_avg
 
-        # re-solve in the final orbital basis
+        # re-solve the CI in the final orbital basis
         ints = self._make_active_space_ints()
         self.set_ints(ints.E, ints.H, ints.V)
         # reset_eigensolver() drops the DavidsonLiuSolver, so the rerun rebuilds it

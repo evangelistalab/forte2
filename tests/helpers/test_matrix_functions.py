@@ -1,7 +1,13 @@
 import numpy as np
 import scipy as sp
 
-from forte2.helpers import invsqrt_matrix, eigh_gen, canonical_orth, random_unitary
+from forte2.helpers import (
+    invsqrt_matrix,
+    eigh_gen,
+    canonical_orth,
+    procrustes_rotation,
+    random_unitary,
+)
 from forte2.helpers.comparisons import approx
 
 
@@ -14,6 +20,18 @@ def test_invsqrt_matrix():
 
     Sm1_ref = np.linalg.inv(S)
     assert np.allclose(Sm12 @ Sm12, Sm1_ref)
+
+
+def test_procrustes_rotation():
+    rng = np.random.default_rng(12)
+    rotation = random_unitary(6, cmplx=False, rng=rng, rotation=False)
+    factor = rng.normal(size=(6, 6))
+    positive_matrix = factor.T @ factor + np.eye(6)
+
+    recovered = procrustes_rotation(positive_matrix @ rotation)
+
+    np.testing.assert_allclose(recovered, rotation, atol=1.0e-12)
+    np.testing.assert_allclose(recovered.T @ recovered, np.eye(6), atol=1.0e-12)
 
 
 def test_invsqrt_matrix_singular():
