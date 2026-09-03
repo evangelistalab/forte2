@@ -8,9 +8,9 @@ import pytest
 
 from forte2 import System
 
-with resources.files("forte2.data").joinpath("otterbein_symmetry_db.json").open(
-    "r"
-) as f:
+with (
+    resources.files("forte2.data").joinpath("otterbein_symmetry_db.json").open("r") as f
+):
     bfile = json.load(f)
 
 

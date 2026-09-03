@@ -271,7 +271,10 @@ class SelectedCIParams(ParamsBase):
     def __post_init__(self):
         super().__post_init__()
         if self.var_threshold < 0:
-            raise RuntimeError(f"var_threshold cannot be negative, got {self.var_threshold}")
+            raise RuntimeError(
+                f"var_threshold cannot be negative, got {self.var_threshold}"
+            )
         if self.pt2_threshold < 0:
-            raise RuntimeError(f"var_threshold cannot be negative, got {self.pt2_threshold}")
-
+            raise RuntimeError(
+                f"var_threshold cannot be negative, got {self.pt2_threshold}"
+            )

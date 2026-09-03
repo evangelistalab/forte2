@@ -1,14 +1,7 @@
 import pytest
 import numpy as np
 
-from forte2 import (
-    CISolver,
-    MCOptimizer,
-    RHF,
-    State,
-    System,
-    GHF,
-)
+from forte2 import CISolver, GHF, MCOptimizer, RHF, State, System
 from forte2.base_classes import X2CParams
 from forte2.gradients import FDGradient
 

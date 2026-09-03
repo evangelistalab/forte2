@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF
+from forte2 import RHF, System
 from forte2.lib.det import Determinant, SlaterRules, RelSlaterRules, hilbert_space
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx

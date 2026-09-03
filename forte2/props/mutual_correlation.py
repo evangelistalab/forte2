@@ -36,8 +36,9 @@ class MutualCorrelationAnalysis:
 
     Notes
     ----------------------
-    This analysis expects an active space solver with the following API
-    on the selected sub-solver `solver.sub_solvers[sub_solver_index]`:
+    This analysis takes a driver that owns an active-space solver (`CI` or
+    `MCOptimizer`) and reaches the workers through `solver.ci_solver.sub_solvers`.
+    It expects the following API on the selected sub-solver:
 
     - make_rdm(root, order=1, spin_type="sd") -> tuple[NDArray, NDArray]
             Returns (γa, γb) spin-dependent 1-RDMs with shape (norb, norb) each.
@@ -70,18 +71,16 @@ class MutualCorrelationAnalysis:
 
         self.active_mo_indices = solver.mo_space.active_indices[:]
 
+        sub_solver = solver.ci_solver.sub_solvers[sub_solver_index]
+
         # extract the spin-dependent 1-RDM  from the solver
-        γa, γb = solver.sub_solvers[sub_solver_index].make_rdm(
-            root, order=1, spin_type="sd"
-        )
+        γa, γb = sub_solver.make_rdm(root, order=1, spin_type="sd")
 
         # compute the spin-dependent 1-RDM
         self.Γ1 = γa + γb
 
         # extract the spin-dependent 2-RDM from the solver
-        γaa, γab, γbb = solver.sub_solvers[sub_solver_index].make_rdm(
-            root, order=2, spin_type="sd"
-        )
+        γaa, γab, γbb = sub_solver.make_rdm(root, order=2, spin_type="sd")
 
         # convert packed 2-RDMs to full tensors (only the aa and bb components are packed)
         γaa = cpp_helpers.packed_tensor4_to_tensor4(γaa)
