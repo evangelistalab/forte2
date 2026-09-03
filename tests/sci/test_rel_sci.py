@@ -9,6 +9,8 @@ from forte2.base_classes.params import SelectedCIParams
 from forte2.lib.det import Determinant
 from forte2.lib.ci_helpers import RelSelectedCIHelper
 
+from rdm_debug_utils import make_so_1rdm_debug, make_so_2rdm_debug
+
 
 def _h2_ghf_upcast():
     """Smallest 2c case: H2/STO-6G -> 4 spinors, 2 electrons (6 determinants)."""
@@ -110,8 +112,22 @@ def test_rel_sci_h2_rdms_match_rel_ci():
     sci.run()
 
     assert sci.E[0] == approx(ci.E[0])
-    assert np.allclose(sci.make_average_1rdm(), ci.make_average_1rdm(), atol=1e-8)
-    assert np.allclose(sci.make_average_2rdm(), ci.make_average_2rdm(), atol=1e-8)
+    assert np.allclose(sci.make_average_rdm(1), ci.make_average_rdm(1), atol=1e-8)
+    assert np.allclose(sci.make_average_rdm(2), ci.make_average_rdm(2), atol=1e-8)
+
+    # the 2-cumulant, per-root and state-averaged
+    assert np.allclose(
+        sci.make_cumulant(0, order=2, spin_type="so"),
+        ci.make_cumulant(0, order=2, spin_type="so"),
+        atol=1e-8,
+    )
+    assert np.allclose(
+        sci.make_average_cumulant(2), ci.make_average_cumulant(2), atol=1e-8
+    )
+
+    # Selected CI has no 3-RDM, so it offers no 3-cumulant either
+    with pytest.raises(ValueError, match=r"order must be one of \(2,\)"):
+        sci.make_cumulant(0, order=3, spin_type="so")
 
 
 def test_rel_sci_hf_ghf():
@@ -184,22 +200,30 @@ def test_rel_sci_hf_ghf_transition_rdms():
 
     for left in range(nroots):
         for right in range(nroots):
-            g1 = sci.make_1rdm(left, right)
-            g1_ref = ref_solver._make_so_1rdm_ref(left, right)
+            g1 = sci.make_rdm(left, right, order=1, spin_type="so")
+            g1_ref = make_so_1rdm_debug(ref_solver, left, right)
             assert np.allclose(g1, g1_ref, atol=1e-10)
             # Hermiticity of the (transition) 1-RDM: gamma(l,r) = gamma(r,l)^dagger
-            assert np.allclose(g1, sci.make_1rdm(right, left).conj().T, atol=1e-10)
+            assert np.allclose(
+                g1,
+                sci.make_rdm(right, left, order=1, spin_type="so").conj().T,
+                atol=1e-10,
+            )
             # Tr[gamma1(l,r)] = <l|N|r> = nel_active * delta_lr
             assert np.trace(g1) == approx(nel_active if left == right else 0.0)
 
     # 2-RDM: check a diagonal root and an off-diagonal transition pair against the
     # reference, plus the transition-RDM Hermiticity convention.
     for left, right in [(0, 0), (0, 1)]:
-        g2 = sci.make_2rdm(left, right)
-        g2_ref = ref_solver._make_so_2rdm_ref(left, right)
+        g2 = sci.make_rdm(left, right, order=2, spin_type="so")
+        g2_ref = make_so_2rdm_debug(ref_solver, left, right)
         assert np.allclose(g2, g2_ref, atol=1e-10)
         # gamma2(l,r)[p,q,r,s] = <l|a+_p a+_q a_s a_r|r> => gamma2(l,r) = conj(gamma2(r,l)^T_(2,3,0,1))
-        g2_swapped = sci.make_2rdm(right, left).conj().transpose(2, 3, 0, 1)
+        g2_swapped = (
+            sci.make_rdm(right, left, order=2, spin_type="so")
+            .conj()
+            .transpose(2, 3, 0, 1)
+        )
         assert np.allclose(g2, g2_swapped, atol=1e-10)
 
 
@@ -251,8 +275,8 @@ def test_rel_sci_natural_noncontiguous_mo_space():
         atol=1e-10,
     )
 
-    original_occs = np.sort(np.linalg.eigvalsh(sci_original.make_average_1rdm()))[::-1]
-    natural_occs = np.sort(np.linalg.eigvalsh(sci_natural.make_average_1rdm()))[::-1]
+    original_occs = np.sort(np.linalg.eigvalsh(sci_original.make_average_rdm(1)))[::-1]
+    natural_occs = np.sort(np.linalg.eigvalsh(sci_natural.make_average_rdm(1)))[::-1]
     assert natural_occs == approx(original_occs)
 
 

@@ -135,7 +135,7 @@ def test_semican_fock_offdiag():
 
     mo_space = ci.mo_space
     semi = orbitals.Semicanonicalizer(mo_space=mo_space, system=system)
-    semi.semi_canonicalize(g1=ci.make_average_1rdm(), C_contig=ci.mos.C[0])
+    semi.semi_canonicalize(g1=ci.make_average_rdm(1), C_contig=ci.mos.C[0])
 
     fock = semi.fock
     fock_cc = fock[mo_space.core, mo_space.core]
@@ -336,7 +336,7 @@ def test_semican_orbitals():
     assert mc.E == approx(eci)
 
     semi = Semicanonicalizer(mo_space=mc.mo_space, system=system)
-    semi.semi_canonicalize(g1=mc.ci_solver.make_average_1rdm(), C_contig=mc.mos.C[0])
+    semi.semi_canonicalize(g1=mc.ci_solver.make_average_rdm(1), C_contig=mc.mos.C[0])
     c_semi = semi.C_semican.copy()
 
     assert np.allclose(

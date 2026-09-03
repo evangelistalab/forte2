@@ -66,7 +66,10 @@ class DSRG_MRPT2(DSRGBase):
         self.requires_attrs.update({"two_component": False})
 
     def get_integrals(self):
-        g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
+        g1 = self.ci_solver.make_average_rdm(1)
+        g2 = self.ci_solver.make_average_rdm(2)
+        l2 = self.ci_solver.make_average_cumulant(2)
+        l3 = self.ci_solver.make_average_cumulant(3)
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
         self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
         # Freeze core orbitals by removing them from the semicanonicalized quantities

@@ -166,5 +166,5 @@ def test_casscf_water_nos():
     assert mc.E == approx(emcscf)
 
     # Check that the 1-RDM is diagonal in the active space block (natural orbitals)
-    g1 = mc.make_average_1rdm()
+    g1 = mc.make_average_rdm(1)
     assert is_diagonal_matrix(g1)
