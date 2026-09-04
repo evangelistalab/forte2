@@ -51,6 +51,23 @@ class ParamsBase(ABC):
             return False
         return True
 
+    def _validate_list(self, lst, pred):
+        """
+        validate that pred(i) for i in list is all true
+        """
+        for i in lst:
+            if not pred(i):
+                return False
+        return True
+
+    @staticmethod
+    def _is_nonneg_integer(i):
+        return isinstance(i, int) and i >= 0
+
+    @staticmethod
+    def _is_nonneg_float(i):
+        return isinstance(i, int | float) and i >= 0
+
 
 @dataclass
 class X2CParams(ParamsBase):
@@ -176,6 +193,83 @@ class CIParams(ParamsBase):
     ] = "hz"
     ci_builder_memory: int = 1024
     energy_shift: float = None
+
+
+@dataclass
+class DMRGParams(ParamsBase):
+    """
+    Parameters for the DMRG (block2) active-space solver.
+
+    Parameters
+    ----------
+    bond_dims : list[int], optional
+        The MPS bond-dimension schedule over the DMRG sweeps. If shorter than
+        ``n_sweeps``, the last value is repeated for the remaining sweeps.
+        Defaults to a ramp from 250 to 500.
+    noises : list[float], optional
+        The perturbative-noise schedule over the DMRG sweeps. Defaults to a
+        decreasing schedule ending at 0.
+    thrds : list[float], optional
+        The Davidson residual-convergence threshold schedule over the sweeps.
+    n_sweeps : int, optional, default=20
+        The maximum number of DMRG sweeps.
+    tol : float, optional, default=1e-8
+        The energy-convergence threshold used to terminate the sweeps early.
+    symm_type : str, optional, default="SU2"
+        The block2 symmetry type. Currently only ``"SU2"`` (spin-adapted) is
+        supported.
+    scratch : str, optional, default=None
+        The scratch directory used by block2. If ``None``, a temporary
+        directory is created.
+    n_threads : int, optional, default=4
+        The number of threads used by block2.
+    iprint : int, optional, default=0
+        The block2 verbosity level.
+    reorder_orbitals : bool, optional, default=False
+        Whether to let block2 reorder the active orbitals (via its Fiedler/gaopt
+        heuristics) before building the MPO.
+    """
+
+    bond_dims: list[int] = None
+    noises: list[float] = None
+    thrds: list[float] = None
+    n_sweeps: int = 20
+    tol: float = 1e-8
+    symm_type: str = "SU2"
+    scratch: str = None
+    n_threads: int = 4
+    iprint: int = 0
+    reorder_orbitals: bool = False
+
+    def __post_init__(self):
+        if not self.bond_dims:
+            self.bond_dims = [250] * 4 + [500] * 4
+        if not self._validate_list(self.bond_dims, self._is_nonneg_integer):
+            raise ValueError(
+                f"bond_dims must be a list of non-negative integers, got {self.bond_dims}."
+            )
+        if not self.noises:
+            self.noises = [1e-4] * 4 + [1e-5] * 4 + [0.0]
+        if not self._validate_list(self.noises, self._is_nonneg_float):
+            raise ValueError(
+                f"noises must be a list of non-negative floats, got {self.noises}."
+            )
+        if not self.thrds:
+            self.thrds = [1e-10] * 8
+        if not self._validate_list(self.thrds, self._is_nonneg_float):
+            raise ValueError(
+                f"thrds must be a list of non-negative floats, got {self.thrds}."
+            )
+        if self.symm_type.upper() != "SU2":
+            raise ValueError(
+                f"Only 'SU2' symm_type is currently supported, got '{self.symm_type}'."
+            )
+        if self.n_sweeps < 1:
+            raise ValueError(f"n_sweeps needs to be >= 1, got {self.n_sweeps}.")
+        if self.tol <= 0:
+            raise ValueError(f"tol needs to be > 0, got {self.tol}.")
+        if self.n_threads < 1:
+            raise ValueError(f"n_threads needs to be >= 1, got {self.n_threads}.")
 
 
 @dataclass

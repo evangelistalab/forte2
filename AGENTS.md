@@ -155,6 +155,11 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
   - `Libint2`, `Eigen3`, BLAS/LAPACK are required by CMake
 - `USE_LIBCINT` is enabled by default through `pyproject.toml`; override if needed:
   - `pip install . --config-settings=cmake.define.USE_LIBCINT=OFF`
+- Optional DMRG support (`forte2.dmrg`) needs `block2` (`pip install block2==0.5.3`), not part of
+  `environment.yml`. block2 links OpenMP/MKL in a way that can crash with an "MKL FATAL ERROR"
+  the first time a DMRG solver runs, if MKL-linked numpy/scipy are also loaded (common for
+  `defaults`-channel conda installs). CI sets `KMP_DUPLICATE_LIB_OK=TRUE` to avoid this
+  (`.github/workflows/build.yml`); set it yourself for local block2 use if you hit that crash.
 
 ## Test Commands
 - Fast local run:
