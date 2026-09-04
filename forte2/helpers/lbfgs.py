@@ -24,6 +24,10 @@ class LBFGS:
         Maximum number of trials for line search to find the optimal step length.
     max_dir : float, optional, default=1.0e15
         Maximum absolute value allowed in the direction vector.
+    h0_rel_tol : float, optional, default=1.0e-10
+        Diagonal-Hessian entries with ``abs(h0) <= h0_rel_tol * max(abs(h0))``
+        are treated as null and skipped when preconditioning, so a redundant
+        rotation cannot dominate the search direction.
     line_search_condition : str, optional, default='strong_wolfe'
         Condition to terminate line search backtracking. Options are 'armijo', 'wolfe',
         or 'strong_wolfe'.
@@ -52,6 +56,7 @@ class LBFGS:
     maxiter: int = 20
     maxiter_linesearch: int = 5
     max_dir: float = 1.0e15
+    h0_rel_tol: float = 1.0e-10
     line_search_condition: str = "strong_wolfe"
     step_length_method: str = "line_bracketing_zoom"
     min_step: float = 1.0e-15
@@ -333,8 +338,13 @@ class LBFGS:
         return fx, step
 
     def _apply_h0(self, q):
+        # Mask by a threshold relative to the largest entry. This avoids amplifying
+        # a small gradient component with a barely above-threshold diagonal Hessian.
         vh = self.h0
-        mask = np.abs(vh) > 1.0e-12
+        scale = np.max(np.abs(vh))
+        if scale <= 0.0:
+            return q
+        mask = np.abs(vh) > self.h0_rel_tol * scale
         q[mask] /= vh[mask]
         return q
 
