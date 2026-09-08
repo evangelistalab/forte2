@@ -155,6 +155,15 @@ class ActiveSpaceDriver:
         top_dets = self.ci_solver.get_top_determinants()
         pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)
         self._print_orbital_composition()
+        # spin is a good quantum number for the non-relativistic solvers, which report it
+        # with the state rather than measuring it
+        if self.do_compute_spin2 and self.ci_solver.two_component:
+            from forte2.ci.rel_ci_utils import pretty_print_rel_spin_summary
+
+            self.spin2, self.spin_vector = self.ci_solver.compute_spin2(self.mos.C[0])
+            pretty_print_rel_spin_summary(
+                self.ci_solver.sa_info, self.spin2, self.spin_vector
+            )
         if self.do_transition_dipole:
             self.ci_solver.compute_transition_properties(self.mos.C[0])
             pretty_print_ci_transition_props(
