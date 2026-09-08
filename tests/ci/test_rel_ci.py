@@ -3,7 +3,7 @@ import pytest
 
 from forte2 import CI, GHF, MOSpace, RHF, RelCISolver, SpinorUpcaster, System, X2CParams
 from forte2.base_classes import CIParams
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx, approx_abs
 from forte2 import CI
 
 
@@ -315,3 +315,72 @@ def test_rel_ci_24_spinors_matches_exact():
         + 0.5 * np.einsum("ijkl,ijkl", rdm2, solver.ints.V)
     )
     assert rdm_energy.real == approx(-1.165336729106)
+
+
+def _spin2_unfolded(system, C, dets, coefficients, ncore):
+    """
+    Reference <S^2>: core orbitals are explicitly treated
+    """
+    from forte2.ci.rel_ci_utils import spin_matrices
+    from forte2.lib import rdms
+    from forte2.lib.det import Determinant
+    from forte2.lib.sparse_ops import SparseState
+
+    nactv = C.shape[1] - ncore
+    shifted = {}
+    for d, c in zip(dets, coefficients):
+        new = Determinant.zero()
+        for i in range(ncore):
+            new.set_na(i, True)
+        for i in range(nactv):
+            if d.na(i):
+                new.set_na(i + ncore, True)
+        shifted[new] = c
+    state = SparseState(shifted)
+
+    S_z, S_plus, S_minus, S2_1e = spin_matrices(system, C)
+    g1 = rdms.compute_1rdm_2c(state, state, C.shape[1])
+    g2 = rdms.compute_2rdm_2c(state, state, C.shape[1])
+    value = np.einsum("pq,pq->", S2_1e, g1)
+    for A, B in ((S_z, S_z), (S_minus, S_plus)):
+        value -= np.einsum("ps,qr,pqrs->", A, B, g2, optimize=True)
+    return value.real
+
+
+def test_rel_ci_spin2_single_determinant():
+    """A one-determinant 2c CI reproduces the SCF spin expectation values."""
+    system = System(
+        xyz="C 0 0 0", basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT"
+    )
+    scf = GHF(charge=0, ms_guess=1.0)(system)
+    ci = CI(RelCISolver(nel=6, core_orbitals=5, active_orbitals=1))(scf)
+    ci.run()
+    assert scf.S2 == approx(2.0063122057820237)
+    assert ci.ci_solver.spin2[0] == approx(scf.S2)
+    assert ci.ci_solver.spin_vector[0] == approx([0.0, 0.0, 1.0])
+
+
+def test_rel_ci_spin2_spin_free_limit():
+    """Without spin-orbit coupling the 2c roots are exact spin eigenstates."""
+    system = System(
+        xyz="""
+        H 0.0 0.0 0.0
+        H 0.0 0.0 2.0
+        """,
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    scf = RHF(charge=0, e_tol=1e-12)(system)
+    conv = SpinorUpcaster(apply_random_phase=True)(scf)
+    ci = CI(RelCISolver(nel=2, active_orbitals=4, nroots=6))(conv)
+    ci.run()
+
+    # two electrons in two spatial orbitals: three singlets and one triplet
+    assert np.sort(ci.ci_solver.spin2) == approx([0.0, 0.0, 0.0, 2.0, 2.0, 2.0])
+
+    ci = CI(RelCISolver(nel=2, active_orbitals=4, nroots=6), do_compute_spin2=False)(
+        conv
+    )
+    ci.run()
+    assert not hasattr(ci.ci_solver, "spin2")

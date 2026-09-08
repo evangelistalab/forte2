@@ -784,6 +784,9 @@ class CI(ActiveSpaceDriver, Method):
         Orbitals to leave behind: "original", "semicanonical", or "natural".
     do_transition_dipole : bool, optional, default=False
         Whether to compute transition dipoles and oscillator strengths.
+    do_compute_spin2 : bool, optional, default=True
+        Whether to report the spin expectation values of each root. Two-component
+        solvers only, where the cost is one two-particle RDM build per root.
     die_if_not_converged : bool, optional, default=True
         Whether a solver that fails to converge raises instead of warning. Set on
         the driver rather than the solver: a one-shot calculation has no later
@@ -801,4 +804,5 @@ class CI(ActiveSpaceDriver, Method):
 
     final_orbitals: FinalOrbitals = "original"
     do_transition_dipole: bool = False
+    do_compute_spin2: bool = True
     die_if_not_converged: bool = True
