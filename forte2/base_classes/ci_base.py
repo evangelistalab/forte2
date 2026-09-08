@@ -545,3 +545,48 @@ class RelCIBase(RelActiveSpaceSolver, CIBase):
             raise ValueError(
                 "RelCISolver requires a two-component system. Please use a parent method that can provide a two-component wavefunction."
             )
+
+    def compute_spin2(self, C=None):
+        r"""
+        Compute :math:`\langle \hat{S}^2 \rangle` and :math:`\langle \hat{S}_x \rangle`,
+        :math:`\langle \hat{S}_y \rangle`, :math:`\langle \hat{S}_z \rangle` for each root.
+
+        Each root needs its own 1- and 2-RDM, so this costs one two-particle RDM build per
+        root.
+
+        Parameters
+        ----------
+        C : NDArray, optional
+            The MO coefficients. If not provided, ``self.mos.C[0]`` is used.
+
+        Returns
+        -------
+        spin2 : NDArray
+            :math:`\langle \hat{S}^2 \rangle` for each root. Also saved in ``self.spin2``.
+        spin_vector : NDArray
+            :math:`\langle \hat{S}_x \rangle`, :math:`\langle \hat{S}_y \rangle`, and
+            :math:`\langle \hat{S}_z \rangle` for each root, shape (nroots, 3). Also saved
+            in ``self.spin_vector``.
+        """
+        from forte2.ci.rel_ci_utils import compute_spin2
+
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        if C is None:
+            C = self.mos.C[0]
+        C = C[:, self.core_indices + self.active_indices]
+
+        nroots = self.sa_info.nroots_sum
+        self.spin2 = np.zeros(nroots)
+        self.spin_vector = np.zeros((nroots, 3))
+        for iroot in range(nroots):
+            istate, iroot_in_state = self._get_state_root(iroot)
+            solver = self.sub_solvers[istate]
+            g1 = solver.make_rdm(iroot_in_state, order=1, spin_type="so")
+            g2 = solver.make_rdm(iroot_in_state, order=2, spin_type="so")
+            self.spin2[iroot], self.spin_vector[iroot] = compute_spin2(
+                self.system, C, g1, g2
+            )
+
+        return self.spin2, self.spin_vector
