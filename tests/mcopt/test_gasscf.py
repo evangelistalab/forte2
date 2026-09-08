@@ -205,7 +205,7 @@ def test_gasscf_nos():
     assert mc.E == approx_loose(emcscf)
 
     # Check that the 1-RDM is diagonal within each GAS subspace (natural orbitals)
-    g1 = mc.make_average_1rdm()
+    g1 = mc.make_average_rdm(1)
     assert is_diagonal_matrix(g1[:3, :3])
     assert is_diagonal_matrix(g1[3:, 3:])
 

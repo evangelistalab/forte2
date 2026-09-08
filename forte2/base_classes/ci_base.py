@@ -21,10 +21,10 @@ class CIBase(ActiveSpaceSolver):
     - ``self.norb`` : number of active orbitals
     - ``self.evals_flat`` : flat array of eigenvalues over all roots
     - ``self.sub_solvers`` : list of per-state worker objects, each exposing
-      ``nroot`` and ``make_{1,2,3}rdm(root)`` returning the spin-free RDMs.
+      ``nroot`` and ``make_rdm(root, order=..., spin_type=...)``.
 
     Subclasses implement the eigensolve and RDM primitives (``run``,
-    ``reset_eigensolver``, ``get_convergence_status``, ``make_sf_*``/``make_sd_*``).
+    ``reset_eigensolver``, ``get_convergence_status``, ``make_rdm``).
     """
 
     ### Non-init attributes
@@ -34,6 +34,16 @@ class CIBase(ActiveSpaceSolver):
     # By default, assume the solver is not invariant to orbital rotations.
     # Subclasses can override this.
     orbital_rotation_invariant: ClassVar[bool] = False
+
+    # Capability declarations. Every concrete solver states which RDM/cumulant orders and
+    # representations it supports, and which orders accept cross-state (transition)
+    # requests. None means "never declared" and is reported as a NotImplementedError naming
+    # the class; an empty tuple is a valid declaration meaning "not supported".
+    _rdm_orders: ClassVar[tuple[int, ...] | None] = None
+    _rdm_spin_types: ClassVar[tuple[str, ...] | None] = None
+    _rdm_cross_state_orders: ClassVar[tuple[int, ...] | None] = None
+    _cumulant_orders: ClassVar[tuple[int, ...] | None] = None
+    _cumulant_spin_types: ClassVar[tuple[str, ...] | None] = None
 
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
@@ -69,7 +79,40 @@ class CIBase(ActiveSpaceSolver):
             )
         return self.sa_info.absolute_root_map[absolute_root]
 
-    def _validate_rdm_inputs(self, left_root, right_root):
+    def _validate_rdm_inputs(
+        self,
+        left_root,
+        right_root,
+        order,
+        allowed_orders,
+        spin_type,
+        allowed_spin_types,
+        cross_state_orders,
+    ):
+        """
+        Validate a state-averaged `make_rdm`/`make_cumulant` request: order and spin type
+        against the solver's allowed sets, and (if `left_root`/`right_root` resolve to
+        different states) that the requested order is one that supports cross-state
+        (transition) requests and that the two states have compatible electron counts.
+        Returns the resolved states and per-state roots, plus the canonical spin type.
+        """
+        # Defer import to avoid a circular import at module load
+        from forte2.ci.ci_utils import check_capability_declared, normalize_spin_type
+
+        check_capability_declared(
+            self,
+            orders=allowed_orders,
+            spin_types=allowed_spin_types,
+            cross_state_orders=cross_state_orders,
+        )
+        if order not in allowed_orders:
+            raise ValueError(f"order must be one of {allowed_orders}, got {order}.")
+        spin_type = normalize_spin_type(spin_type.lower())
+        if spin_type not in allowed_spin_types:
+            raise ValueError(
+                f"spin_type must be one of {allowed_spin_types}, got '{spin_type}'."
+            )
+
         left_state, left_root_in_state = self._get_state_root(left_root)
         if right_root is not None:
             right_state, right_root_in_state = self._get_state_root(right_root)
@@ -78,6 +121,11 @@ class CIBase(ActiveSpaceSolver):
             right_root_in_state = left_root_in_state
 
         if left_state != right_state:
+            if order not in cross_state_orders:
+                raise ValueError(
+                    f"Cross-state requests are not supported for order {order}. Got left_root "
+                    f"in state {left_state} and right_root in state {right_state}."
+                )
             if (
                 self.sa_info.states[left_state].na
                 != self.sa_info.states[right_state].na
@@ -88,7 +136,13 @@ class CIBase(ActiveSpaceSolver):
                     "Cross-state RDMs are only supported for states with the same number of alpha and beta electrons."
                 )
 
-        return left_state, right_state, left_root_in_state, right_root_in_state
+        return (
+            left_state,
+            right_state,
+            left_root_in_state,
+            right_root_in_state,
+            spin_type,
+        )
 
     def compute_average_energy(self):
         """
@@ -101,77 +155,47 @@ class CIBase(ActiveSpaceSolver):
         """
         return np.dot(self.weights_flat, self.evals_flat)
 
-    def make_average_1rdm(self):
+    def make_average_rdm(self, order: int):
         """
-        Make the average spin-free one-particle RDM from the CI vectors.
+        Make the state-averaged RDM of the given order, from the CI vectors, in each
+        sub-solver's native representation (spin-free for one-component backends,
+        spin-orbital for two-component backends).
+
+        Parameters
+        ----------
+        order : int
+            The RDM order. Availability depends on the backend (e.g. selected CI caps at 2).
 
         Returns
         -------
         NDArray
-            Average spin-free one-particle RDM.
+            The state-averaged RDM.
         """
-        rdm1 = np.zeros((self.norb,) * 2, dtype=self.dtype)
+        spin_type = "so" if self.two_component else "sf"
+        rdm = np.zeros((self.norb,) * (2 * order), dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm1 += ci_solver.make_1rdm(j) * self.sa_info.weights[i][j]
-        return rdm1
+                rdm += ci_solver.make_rdm(j, None, order=order, spin_type=spin_type) * (
+                    self.sa_info.weights[i][j]
+                )
+        return rdm
 
-    def make_average_2rdm(self):
+    def make_average_cumulant(self, order: int):
         """
-        Make the average spin-free two-particle RDM from the CI vectors.
+        Make the state-averaged cumulant of the given order, computed from the state-averaged
+        RDMs (cumulants are non-linear in the RDMs, so this cannot be a weighted sum of
+        per-root cumulants).
+
+        Parameters
+        ----------
+        order : int
+            The cumulant order (2 or 3).
 
         Returns
         -------
         NDArray
-            Average spin-free two-particle RDM.
+            The state-averaged cumulant.
         """
-        rdm2 = np.zeros((self.norb,) * 4, dtype=self.dtype)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm2 += ci_solver.make_2rdm(j) * self.sa_info.weights[i][j]
-
-        return rdm2
-
-    def make_average_3rdm(self):
-        """
-        Make the average spin-free three-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average spin-free three-particle RDM.
-        """
-        rdm3 = np.zeros((self.norb,) * 6, dtype=self.dtype)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm3 += ci_solver.make_3rdm(j) * self.sa_info.weights[i][j]
-
-        return rdm3
-
-    def make_average_2cumulant(self):
-        # Defer import to avoid a circular import at module load
-        from forte2.ci.ci_utils import make_2cumulant_sf, make_2cumulant_so
-
-        dm1 = self.make_average_1rdm()
-        dm2 = self.make_average_2rdm()
-        if self.two_component:
-            return make_2cumulant_so(dm1, dm2)
-        else:
-            return make_2cumulant_sf(dm1, dm2)
-
-    def make_average_3cumulant(self):
-        # Defer import to avoid a circular import at module load
-        from forte2.ci.ci_utils import make_3cumulant_sf, make_3cumulant_so
-
-        dm1 = self.make_average_1rdm()
-        dm2 = self.make_average_2rdm()
-        dm3 = self.make_average_3rdm()
-        if self.two_component:
-            return make_3cumulant_so(dm1, dm2, dm3)
-        else:
-            return make_3cumulant_sf(dm1, dm2, dm3)
-
-    def make_average_cumulants(self):
         # Defer import to avoid a circular import at module load
         from forte2.ci.ci_utils import (
             make_2cumulant_sf,
@@ -180,16 +204,19 @@ class CIBase(ActiveSpaceSolver):
             make_3cumulant_so,
         )
 
-        dm1 = self.make_average_1rdm()
-        dm2 = self.make_average_2rdm()
-        dm3 = self.make_average_3rdm()
-        if self.two_component:
-            lambda2 = make_2cumulant_so(dm1, dm2)
-            lambda3 = make_3cumulant_so(dm1, dm2, dm3)
-        else:
-            lambda2 = make_2cumulant_sf(dm1, dm2)
-            lambda3 = make_3cumulant_sf(dm1, dm2, dm3)
-        return dm1, dm2, lambda2, lambda3
+        if order not in (2, 3):
+            raise ValueError(f"order must be one of (2, 3), got {order}.")
+
+        dm1 = self.make_average_rdm(1)
+        dm2 = self.make_average_rdm(2)
+        if order == 2:
+            return (make_2cumulant_so if self.two_component else make_2cumulant_sf)(
+                dm1, dm2
+            )
+        dm3 = self.make_average_rdm(3)
+        return (make_3cumulant_so if self.two_component else make_3cumulant_sf)(
+            dm1, dm2, dm3
+        )
 
     def _make_active_space_ints(self):
         """Build the active-space integrals for the current ``self.mos``."""
@@ -295,7 +322,7 @@ class CIBase(ActiveSpaceSolver):
             mo_space=self.mo_space,
             irrep_indices=irrep_indices,
             C_contig=C_contig,
-            g1_act=self.make_average_1rdm(),
+            g1_act=self.make_average_rdm(1),
         )
         # undo the contiguous ordering
         self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
@@ -401,7 +428,7 @@ class CIBase(ActiveSpaceSolver):
         self.nat_occs = np.concatenate(nos, axis=1)
         self.nat_occs_avg = None
         if self.sa_info.nroots_sum > 1:
-            g1_avg = self.make_average_1rdm()
+            g1_avg = self.make_average_rdm(1)
             self.nat_occs_avg = np.linalg.eigvalsh(g1_avg)[::-1]
 
     def compute_transition_properties(self, C=None):
@@ -436,6 +463,7 @@ class CIBase(ActiveSpaceSolver):
 
         Cact = C[:, self.active_indices]
         Ccore = C[:, self.core_indices]
+        rdm_spin_type = "so" if self.two_component else "sf"
         # spin-summed 1-RDM for the spatial-orbital case; spinors are singly occupied
         factor = 1.0 if self.two_component else 2.0
         rdm_core = factor * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
@@ -448,7 +476,9 @@ class CIBase(ActiveSpaceSolver):
         self.vertical_transition_energies = OrderedDict()
         for ici in range(self.sa_info.nroots_sum):
             istate, iroot_in_state = self._get_state_root(ici)
-            rdm = self.sub_solvers[istate].make_1rdm(iroot_in_state)
+            rdm = self.sub_solvers[istate].make_rdm(
+                iroot_in_state, None, order=1, spin_type=rdm_spin_type
+            )
             # Different (back-)transformation rules for RDMs:
             # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
             # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
@@ -474,7 +504,7 @@ class CIBase(ActiveSpaceSolver):
                         vte = -vte
                     else:
                         _ici, _jci = ici, jci
-                    tdm = self.make_1rdm(_ici, _jci)
+                    tdm = self.make_rdm(_ici, _jci, order=1, spin_type=rdm_spin_type)
                     tdm = np.einsum(
                         "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
                     )
@@ -502,11 +532,49 @@ class CIBase(ActiveSpaceSolver):
             self.vertical_transition_energies,
         )
 
-    @abstractmethod
-    def make_1rdm(self, left_root: int, right_root: int | None = None): ...
+    def make_cumulant(self, root: int, *, order: int, spin_type: str):
+        """
+        Make the cumulant of the given order and representation for one absolute CI root.
+
+        Parameters
+        ----------
+        root : int
+            the absolute CI root.
+        order : int
+            The cumulant order (2 or 3, depending on the backend).
+        spin_type : str
+            "sf" (spin-free) or "so" (spin-orbital), depending on the backend. The
+            aliases "spin_free", "spin-free", "spin_orbital", "spin-orbital", and
+            "spinorbital" are also accepted.
+
+        Returns
+        -------
+        NDArray
+            The cumulant.
+        """
+        state, _, root_in_state, _, spin_type = self._validate_rdm_inputs(
+            root,
+            None,
+            order,
+            self._cumulant_orders,
+            spin_type,
+            self._cumulant_spin_types,
+            # a cumulant is defined for a single state, never between two
+            (),
+        )
+        return self.sub_solvers[state].make_cumulant(
+            root_in_state, order=order, spin_type=spin_type
+        )
 
     @abstractmethod
-    def make_2rdm(self, left_root: int, right_root: int | None = None): ...
+    def make_rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: int,
+        spin_type: str,
+    ): ...
 
 
 @dataclass

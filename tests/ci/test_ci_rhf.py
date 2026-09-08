@@ -386,7 +386,7 @@ def test_ci_natural_noncontiguous_mo_space():
         atol=1e-10,
     )
 
-    g1_act = ci_natural.make_average_1rdm()
+    g1_act = ci_natural.make_average_rdm(1)
     off_diag = g1_act - np.diag(np.diag(g1_act))
     assert np.max(np.abs(off_diag)) < 1e-8
 

@@ -50,12 +50,17 @@ def compute_abbb_4rdm(state_left: forte2.lib.sparse_ops.SparseState, state_right
 def compute_bbbb_4rdm(state_left: forte2.lib.sparse_ops.SparseState, state_right: forte2.lib.sparse_ops.SparseState, norb: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None, None, None))]:
     """Compute the beta-beta-beta-beta 4-RDM between two SparseStates"""
 
-def compute_a_1rdm_complex(state_left: forte2.lib.sparse_ops.SparseState, state_right: forte2.lib.sparse_ops.SparseState, norb: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
+def compute_1rdm_2c(state_left: forte2.lib.sparse_ops.SparseState, state_right: forte2.lib.sparse_ops.SparseState, norb: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
     """
-    Compute the complex alpha 1-RDM between two SparseStates (conjugates the bra)
+    Compute the two-component 1-RDM between two SparseStates (conjugates the bra)
     """
 
-def compute_aa_2rdm_complex(state_left: forte2.lib.sparse_ops.SparseState, state_right: forte2.lib.sparse_ops.SparseState, norb: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
+def compute_2rdm_2c(state_left: forte2.lib.sparse_ops.SparseState, state_right: forte2.lib.sparse_ops.SparseState, norb: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
     """
-    Compute the complex alpha-alpha 2-RDM between two SparseStates (conjugates the bra)
+    Compute the two-component 2-RDM between two SparseStates (conjugates the bra)
+    """
+
+def compute_3rdm_2c(state_left: forte2.lib.sparse_ops.SparseState, state_right: forte2.lib.sparse_ops.SparseState, norb: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))]:
+    """
+    Compute the two-component 3-RDM between two SparseStates (conjugates the bra)
     """
