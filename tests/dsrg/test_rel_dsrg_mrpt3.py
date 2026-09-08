@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, MCOptimizer, RelCISolver, X2CParams
+from forte2 import System, GHF, MCOptimizer, RelCISolver, X2CParams, AVAS
 from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT3, RelFNO_DSRG_MRPT3
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
@@ -212,3 +212,63 @@ def test_mrpt3_fno_vs_forte():
     )(mc)
     fno_relaxed.run()
     assert fno_relaxed.E_relaxed_ref.real == approx(e_pt3_relaxed_forte)
+
+
+def test_mrpt3_ch_snso_kramers():
+    """CH has an odd number of electrons, so its roots must be Kramers degenerate.
+
+    The reference is a 2-Pi state, so the four roots form two pairs that are exactly
+    degenerate by time-reversal symmetry. That makes this a zero-tolerance check
+    needing no external reference. It only has power when the state-averaged 1-RDM is
+    genuinely complex in the semicanonical basis, which is why the assertion on
+    max|Im(gamma1)| is here: an atomic reference has a real 1-RDM and would let a
+    convention error in the active mean field pass unnoticed.
+    """
+    escf = -38.286254865078
+    emcscf = -38.320115307064
+    edsrg = -38.433774865372
+    erelaxed = -38.434549231635
+    soc_wn = 27.424588
+
+    xyz = """
+    C 0.0 0.0 0.0
+    H 0.0 0.0 1.1199
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="decon-cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="ano-r0",
+        x2c=X2CParams(x2c_type="so", snso_type="row-dependent"),
+        use_gaussian_charges=True,
+    )
+    mf = GHF(charge=0, die_if_not_converged=False)(system)
+    avas = AVAS(
+        subspace=["H(1s)", "C(2s)", "C(2p)"],
+        selection_method="separate",
+        num_active_docc=5,
+        num_active_uocc=5,
+    )(mf)
+    mc = MCOptimizer(
+        RelCISolver(nel=7, nroots=4), e_tol=1e-9, g_tol=1e-7, die_if_not_converged=False
+    )(avas)
+    mc.run()
+
+    assert mf.E == approx(escf)
+    assert mc.E.real == approx(emcscf)
+    # Without a complex 1-RDM this test cannot see a conjugation error.
+    assert np.abs(np.imag(mc.make_average_1rdm())).max() > 1e-4
+
+    dsrg = RelDSRG_MRPT3(flow_param=0.5, relax_reference="once")(mc)
+    dsrg.run()
+
+    assert dsrg.E_dsrg.real == approx(edsrg)
+    assert dsrg.E_relaxed_ref.real == approx(erelaxed)
+
+    levels = np.sort(np.asarray(dsrg.relax_eigvals).ravel().real)
+    levels = (levels - levels[0]) * EH_TO_WN
+    kramers = [levels[1] - levels[0], levels[3] - levels[2]]
+    # Conjugating gamma1 in the active mean field splits these by ~16 cm^-1.
+    assert max(kramers) < 1e-2, f"Kramers pairs split by {max(kramers):.4f} cm^-1"
+    assert levels[2] == pytest.approx(soc_wn, abs=1e-2)

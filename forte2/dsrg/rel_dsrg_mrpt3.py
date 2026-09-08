@@ -256,10 +256,16 @@ class RelDSRG_MRPT3(DSRGBase):
             )
         ) + self._E_dsrg_bare
 
-        _hbar1 = np.conj(
-            _hbar1 - np.einsum("uxvy,xy->uv", _hbar2, self.cumulants["gamma1"])
-        )
+        # gamma1 is stored in the unconjugated convention, while hbar1/hbar2 are
+        # built in the conjugated one. Conjugate them first, then fold in the active
+        # mean field: wrapping the whole expression in np.conj sweeps up gamma1 too,
+        # and since gamma1 is Hermitian that silently transposes it. PT2 folds in an
+        # unconjugated gamma1 for the same reason (rel_dsrg_mrpt2.py), as does the
+        # _hbar0 expression above.
         _hbar2 = np.conj(_hbar2)
+        _hbar1 = np.conj(_hbar1) - np.einsum(
+            "uxvy,xy->uv", _hbar2, self.cumulants["gamma1"]
+        )
 
         self._hbar1_canon = np.einsum(
             "ip,pq,jq->ij", self.Uactv, _hbar1, self.Uactv.conj(), optimize=True
