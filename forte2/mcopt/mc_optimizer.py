@@ -46,6 +46,10 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
         Maximum orbital rotation size for L-BFGS.
     do_transition_dipole : bool, optional, default=False
         Whether to compute and report transition dipole moments at the end of the optimization.
+    do_compute_spin2 : bool, optional, default=True
+        Whether to report the spin expectation values of each root at the end of the
+        optimization. Two-component solvers only, where the cost is one two-particle RDM
+        build per root.
     final_orbitals : str, optional, default="semicanonical"
         Specify the type of final orbitals. Allowed values are:
 
@@ -83,6 +87,7 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
 
     ### Post-iteration
     do_transition_dipole: bool = False
+    do_compute_spin2: bool = True
     final_orbitals: FinalOrbitals = "semicanonical"
 
     ### Non-init attributes
