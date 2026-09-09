@@ -38,6 +38,19 @@ class RelDSRG_MRPT3(DSRGBase):
     relax_tol : float, optional, default=1e-6
         The convergence tolerance for reference relaxation (in Hartree).
 
+    Notes
+    -----
+    If the parent method publishes an hbar_shift, its energy contribution is
+    added to E_dsrg and, when relaxing the reference, the rest of it is folded
+    into the effective Hamiltonian handed to the CI solver, so relaxed and
+    state-averaged reference states are properly perturbed by the correction
+    rather than uniformly shifted after the fact. Nothing here is specific to
+    where that shift came from; see RelFNO_DSRG_MRPT3, which composes this
+    class with two DSRG-MRPT2 runs to produce the frozen natural orbital
+    truncation correction. Both the unrelaxed and relaxed energies of that
+    composition match forte's own spin-free FNO-DSRG-MRPT2/MRPT3
+    implementation to ~1e-9 Eh.
+
     Attributes
     ----------
     E_dsrg : float
@@ -62,6 +75,8 @@ class RelDSRG_MRPT3(DSRGBase):
               J. Chem. Phys. 2016, 144, 204111.
     .. [4] C. Li and F. A. Evangelista, "Driven similarity renormalization group for excited states: A state-averaged perturbation theory",
            J. Chem. Phys. 2018, 148, 124106.
+    .. [5] C. Li, S. Mao, R. Huang, F. A. Evangelista, "Frozen Natural Orbitals for the State-Averaged Driven Similarity Renormalization Group",
+           J. Chem. Theory Comput. 2024, 20, 4170-4181.
     """
 
     def _release_integrals(self):
@@ -220,14 +235,18 @@ class RelDSRG_MRPT3(DSRGBase):
         )
         return E
 
-    def do_reference_relaxation(self):
+    def _build_hbar(self):
+        # hbar1/hbar2 are left untouched so that this can be called more than
+        # once per solve (see DSRGBase._build_hbar).
         _hbar1 = self.hbar1 + self.hbar1.T.conj() + self.fock[self.actv, self.actv]
 
         _hbar2 = self.hbar2.copy()
         hermitize_and_antisymmetrize_two_body_dense(_hbar2)
         _hbar2 += self.ints["V"]["aaaa"]
 
-        # see eq 29 of Ann. Rev. Phys. Chem.
+        # see eq 29 of Ann. Rev. Phys. Chem. Built from the bare energy: an
+        # incoming shift is added below, and E_dsrg already carries its energy
+        # contribution.
         self._hbar0 = (
             -np.einsum("uv,uv->", _hbar1.conj(), self.cumulants["gamma1"])
             - 0.25 * np.einsum("uvxy,uvxy->", _hbar2.conj(), self.cumulants["lambda2"])
@@ -238,7 +257,7 @@ class RelDSRG_MRPT3(DSRGBase):
                 self.cumulants["gamma1"],
                 self.cumulants["gamma1"],
             )
-        ) + self.E_dsrg
+        ) + self._E_dsrg_bare
 
         # gamma1 is stored in the unconjugated convention, while hbar1/hbar2 are
         # built in the conjugated one. Conjugate them first, then fold in the active
@@ -266,6 +285,15 @@ class RelDSRG_MRPT3(DSRGBase):
         # _hbar2_canon is already antisymmetric (<pq||rs>) and the CI solver
         # antisymmetrizes it again, doubling it, hence the 0.5.
         self._hbar2_canon *= 0.5
+
+        shift = getattr(self.parent_method, "hbar_shift", None)
+        if shift is not None:
+            self._hbar0 += shift["hbar0"]
+            self._hbar1_canon += shift["hbar1"]
+            self._hbar2_canon += shift["hbar2"]
+
+    def do_reference_relaxation(self):
+        self._build_hbar()
         self.ci_solver.set_ints(self._hbar0, self._hbar1_canon, self._hbar2_canon)
         self.ci_solver.run()
         e_relaxed = self.ci_solver.compute_average_energy()
