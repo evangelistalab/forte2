@@ -35,15 +35,28 @@ class DSRGBase(Method):
 
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
-        assert isinstance(self.parent_method, ActiveSpaceDriver), (
+        assert isinstance(self.parent_method, (ActiveSpaceDriver, DSRGBase)), (
             "Parent method must be a driver that owns an active-space solver "
-            f"(CI or MCOptimizer), got {type(self.parent_method).__name__}."
+            "(CI or MCOptimizer), or another DSRG method, got "
+            f"{type(self.parent_method).__name__}."
         )
         return self
+
+    @property
+    def ci_solver(self):
+        """
+        The ci_solver of the parent method. A property (rather than a plain
+        attribute cached in _startup) so it is available immediately at
+        construction time, matching CIBase.ci_solver -- this lets a DSRGBase
+        object itself serve as a valid parent for another DSRG method before
+        it has necessarily been run.
+        """
+        return self.parent_method.ci_solver
 
     def __post_init__(self):
         self.requires = {"system", "mos", "mo_space"}
         self.provides = {"system", "mos", "mo_space"}
+        self.requires_attrs.update({"ci_solver": None})
 
         # parse reference relaxation options
         if isinstance(self.relax_reference, bool):
@@ -115,7 +128,6 @@ class DSRGBase(Method):
         perm = self.mo_space.orig_to_contig
         self._C = self.mos.C[0][:, perm].copy()
 
-        self.ci_solver = self.parent_method.ci_solver
         if self.nrelax > 0:
             # The parent has had its say by now; every further run of this solver
             # is a relaxation cycle, so keep those quiet.
@@ -146,6 +158,14 @@ class DSRGBase(Method):
         """
         self.ints = None
         self.cumulants = None
+
+    def _post_process(self):
+        """
+        Hook run at the end of run(), after the energy is available.
+        Subclasses override it to expose derived quantities -- e.g.
+        RelDSRG_MRPT2 uses it to truncate its virtual space to frozen natural
+        orbitals.
+        """
 
     def run(self):
         self._startup()
@@ -225,6 +245,7 @@ class DSRGBase(Method):
                     self.ci_solver.sa_info, self.ci_solver.evals_per_solver
                 )
         self.relax_eigvals_history = np.array(self.relax_eigvals_history)
+        self._post_process()
         self.executed = True
         return self
 

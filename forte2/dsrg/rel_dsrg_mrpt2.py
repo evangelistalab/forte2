@@ -1,8 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
+from forte2.helpers import logger
+
 from .dsrg_base import DSRGBase
+from .fno_utils import build_fno_virtual_space
 from .utils import (
     hermitize_and_antisymmetrize_two_body_dense,
     cas_energy_given_RDMs,
@@ -35,6 +38,20 @@ class RelDSRG_MRPT2(DSRGBase):
         The maximum number of reference relaxation iterations.
     relax_tol : float, optional, default=1e-6
         The convergence tolerance for reference relaxation (in Hartree).
+    fno_p_o : float, optional, default=None
+        Truncate the virtual space to frozen natural orbitals (FNO) once the
+        energy is computed, retaining the smallest set of leading virtual
+        natural orbitals whose cumulative occupation is at least this fraction
+        (0, 1] of the total. Mutually exclusive with fno_n_kappa.
+    fno_n_kappa : float, optional, default=None
+        As fno_p_o, but retaining all virtual natural orbitals with occupation
+        number >= fno_n_kappa. Mutually exclusive with fno_p_o.
+    fno_degeneracy_tol : float, optional, default=1e-2
+        When truncating, the boundary is pushed outward (more orbitals
+        retained) while the occupation numbers straddling it differ by less
+        than this fraction of the larger one, so that near-degenerate natural
+        orbitals (e.g. Kramers partners) are never split between the retained
+        and discarded sets.
 
     Attributes
     ----------
@@ -50,6 +67,12 @@ class RelDSRG_MRPT2(DSRGBase):
     relax_eigvals_history : NDArray
         The history of eigenvalues of the relaxed CI Hamiltonian during relaxation.
 
+    Notes
+    -----
+    Setting fno_p_o or fno_n_kappa truncates the virtual space *after* the
+    energy is computed, so it composes with everything else this class does
+    rather than replacing it; the truncated, natural-orbital-rotated space is
+    exposed as this object's own mos/mo_space for a chained method to pick up.
     References
     ----------
     .. [1] F. A. Evangelista, "A driven similarity renormalization group approach to quantum many-body problems",
@@ -60,11 +83,58 @@ class RelDSRG_MRPT2(DSRGBase):
               J. Chem. Phys. 2016, 144, 204111.
     .. [4] C. Li and F. A. Evangelista, "Driven similarity renormalization group for excited states: A state-averaged perturbation theory",
            J. Chem. Phys. 2018, 148, 124106.
+    .. [5] C. Li, S. Mao, R. Huang, F. A. Evangelista, "Frozen Natural Orbitals for the State-Averaged Driven Similarity Renormalization Group",
+           J. Chem. Theory Comput. 2024, 20, 4170-4181.
     """
+
+    fno_p_o: float | None = None
+    fno_n_kappa: float | None = None
+    fno_degeneracy_tol: float = 1e-2
 
     def __post_init__(self):
         super().__post_init__()
         self.requires_attrs.update({"two_component": True})
+
+        if self.fno_p_o is not None or self.fno_n_kappa is not None:
+            assert (self.fno_p_o is None) != (
+                self.fno_n_kappa is None
+            ), "Specify exactly one of fno_p_o or fno_n_kappa."
+    def _post_process(self):
+        """
+        Truncate the virtual space to frozen natural orbitals, if requested.
+        This is independent of how the energy itself was obtained, so it does
+        not need to branch run().
+        """
+        if self.fno_p_o is not None or self.fno_n_kappa is not None:
+            self._truncate_to_fno()
+
+    def _truncate_to_fno(self):
+        """
+        Diagonalize the unrelaxed virtual-virtual 1-RDM, truncate the virtual
+        space, and expose the truncated, natural-orbital-rotated space as this
+        object's own mos/mo_space, for a chained method to pick up.
+        """
+        nvirt_full = self.nvirt
+        gamma_vv = self.compute_unrelaxed_gamma_vv()
+        self.mos, self.mo_space = build_fno_virtual_space(
+            self,
+            gamma_vv,
+            p_o=self.fno_p_o,
+            n_kappa=self.fno_n_kappa,
+            degeneracy_tol=self.fno_degeneracy_tol,
+        )
+        logger.log_info1(
+            f"\nFrozen natural orbitals: retained {self.mo_space.nvirt} of "
+            f"{nvirt_full} virtual orbitals "
+            f"({100 * self.mo_space.nvirt / nvirt_full:.1f}%)."
+        )
+        self._release_integrals()
+
+    def _release_integrals(self):
+        super()._release_integrals()
+        self.T1 = None
+        self.T2 = None
+        self.F_tilde = None
 
     def get_integrals(self):
         g1 = self.ci_solver.make_average_rdm(1)
@@ -510,3 +580,177 @@ class RelDSRG_MRPT2(DSRGBase):
                 )
 
         return E
+
+    def compute_unrelaxed_gamma_vv(self):
+        """
+        Virtual-virtual block of the unrelaxed second-order 1-RDM,
+        Gamma_ef = (1/2) <Phi0| [[E^e_f, A], A] |Phi0>
+        Used to build FNOs; see eq 8-9 and Appendix A of
+        Li, Mao, Huang, Evangelista, J. Chem. Theory Comput. 2024, 20, 4170-4181.
+        "Unrelaxed" here is the response-theory sense of eq 7-8 of that paper (a
+        plain expectation value, with no orbital or amplitude response
+        contributions); it does not refer to DSRG reference relaxation.
+        The reference (CASSCF) contribution to Gamma_ef is exactly zero, since
+        virtual orbitals are unoccupied in every determinant of the CAS reference.
+        Requires self.T1/self.T2 (i.e. solve_dsrg must have already run).
+        The ccvv/cavv/ccav contributions are accumulated on the fly (mirroring
+        _compute_pt2_energy_ccvv/_cavv/_ccav) since those T2 blocks aren't
+        persisted by this class; the other terms use the persistently stored
+        T1/T2 blocks directly.
+        """
+        gamma1 = self.cumulants["gamma1"]
+        eta1 = self.cumulants["eta1"]
+        lambda2 = self.cumulants["lambda2"]
+        lambda3 = self.cumulants["lambda3"]
+        T1 = self.T1
+        T2 = self.T2
+
+        Gamma = np.zeros((self.nvirt, self.nvirt), dtype=complex)
+        Gamma += +1.000 * np.einsum(
+            "ia,ib->ab", T1["cv"], T1["cv"].conj(), optimize=True
+        )
+        Gamma += +1.000 * np.einsum(
+            "uv,va,ub->ab", gamma1, T1["av"], T1["av"].conj(), optimize=True
+        )
+        Gamma += -0.500 * np.einsum(
+            "uvwx,ub,wxva->ab", lambda2, T1["av"].conj(), T2["aaav"], optimize=True
+        )
+        Gamma += -0.500 * np.einsum(
+            "uvwx,wa,uvxb->ab", lambda2, T1["av"], T2["aaav"].conj(), optimize=True
+        )
+        Gamma += +1.000 * np.einsum(
+            "uv,wx,ixua,iwvb->ab",
+            eta1,
+            gamma1,
+            T2["caav"],
+            T2["caav"].conj(),
+            optimize=True,
+        )
+        Gamma += -1.000 * np.einsum(
+            "uvwx,iwva,iuxb->ab", lambda2, T2["caav"], T2["caav"].conj(), optimize=True
+        )
+        Gamma += +0.500 * np.einsum(
+            "uv,wx,yz,xzua,wyvb->ab",
+            eta1,
+            gamma1,
+            gamma1,
+            T2["aaav"],
+            T2["aaav"].conj(),
+            optimize=True,
+        )
+        Gamma += +0.250 * np.einsum(
+            "uv,wxyz,yzua,wxvb->ab",
+            eta1,
+            lambda2,
+            T2["aaav"],
+            T2["aaav"].conj(),
+            optimize=True,
+        )
+        Gamma += -1.000 * np.einsum(
+            "uv,wxyz,vyxa,uwzb->ab",
+            gamma1,
+            lambda2,
+            T2["aaav"],
+            T2["aaav"].conj(),
+            optimize=True,
+        )
+        Gamma += +0.500 * np.einsum(
+            "uv,wx,vxac,uwbc->ab",
+            gamma1,
+            gamma1,
+            T2["aavv"],
+            T2["aavv"].conj(),
+            optimize=True,
+        )
+        Gamma += +0.250 * np.einsum(
+            "uvwx,wxac,uvbc->ab", lambda2, T2["aavv"], T2["aavv"].conj(), optimize=True
+        )
+        Gamma += -0.250000 * np.einsum(
+            "uvwxyz,xywa,uvzb->ab",
+            lambda3,
+            T2["aaav"],
+            T2["aaav"].conj(),
+            optimize=True,
+        )
+
+        Gamma += self._compute_gamma_vv_ccvv()
+        Gamma += self._compute_gamma_vv_cavv()
+        Gamma += self._compute_gamma_vv_ccav()
+
+        # defensive Hermitization - Gamma should already be hermitian, this removes numerical noise
+        Gamma = 0.5 * (Gamma + Gamma.conj().T)
+        return Gamma
+
+    def _compute_gamma_vv_ccvv(self):
+        # Gamma["vv"] += 0.500 * einsum("ijac,ijbc->ab", T2["ccvv"], T2["ccvv"].conj())
+        Gamma = np.zeros((self.nvirt, self.nvirt), dtype=complex)
+        Vbare_i = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
+        Vtmp = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
+        B_cv = self.ints["B"]["cv"]
+        for i in range(self.ncore):
+            np.einsum("aB,jbB->jba", B_cv[i, :, :], B_cv, optimize=True, out=Vbare_i)
+            np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
+            Vbare_i -= Vtmp
+            T2_i = Vbare_i.conj()
+            compute_t2_block(
+                T2_i[None, :, :, :],
+                self.ints["eps"]["c"][i : i + 1],
+                self.ints["eps"]["c"],
+                self.ints["eps"]["v"],
+                self.ints["eps"]["v"],
+                self.flow_param,
+            )
+            Gamma += 0.500 * np.einsum("jec,jfc->ef", T2_i, T2_i.conj(), optimize=True)
+        return Gamma
+
+    def _compute_gamma_vv_cavv(self):
+        # Gamma["vv"] += 1.000 * einsum("uv,ivac,iubc->ab", gamma1, T2["cavv"], T2["cavv"].conj())
+        Gamma = np.zeros((self.nvirt, self.nvirt), dtype=complex)
+        Vbare_i = np.empty((self.nact, self.nvirt, self.nvirt), dtype=complex)
+        Vtmp = np.empty((self.nact, self.nvirt, self.nvirt), dtype=complex)
+        B_av = self.ints["B"]["av"]
+        B_cv = self.ints["B"]["cv"]
+        gamma1 = self.cumulants["gamma1"]
+        for i in range(self.ncore):
+            np.einsum("aB,ubB->uba", B_cv[i, :, :], B_av, optimize=True, out=Vbare_i)
+            np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
+            Vbare_i -= Vtmp
+            T2_i = Vbare_i.conj()
+            compute_t2_block(
+                T2_i[None, :, :, :],
+                self.ints["eps"]["c"][i : i + 1],
+                self.ints["eps"]["a"],
+                self.ints["eps"]["v"],
+                self.ints["eps"]["v"],
+                self.flow_param,
+            )
+            Gamma += np.einsum(
+                "uv,vec,ufc->ef", gamma1, T2_i, T2_i.conj(), optimize=True
+            )
+        return Gamma
+
+    def _compute_gamma_vv_ccav(self):
+        # Gamma["vv"] += 0.500 * einsum("uv,ijua,ijvb->ab", eta1, T2["ccav"], T2["ccav"].conj())
+        Gamma = np.zeros((self.nvirt, self.nvirt), dtype=complex)
+        Vbare_i = np.empty((self.ncore, self.nvirt, self.nact), dtype=complex)
+        Vtmp = np.empty((self.ncore, self.nvirt, self.nact), dtype=complex)
+        B_cv = self.ints["B"]["cv"]
+        B_ca = self.ints["B"]["ca"]
+        eta1 = self.cumulants["eta1"]
+        for i in range(self.ncore):
+            np.einsum("uB,jaB->jau", B_ca[i, :, :], B_cv, optimize=True, out=Vbare_i)
+            np.einsum("aB,juB->jau", B_cv[i, :, :], B_ca, optimize=True, out=Vtmp)
+            Vbare_i -= Vtmp
+            T2_i = Vbare_i.conj()
+            compute_t2_block(
+                T2_i[None, :, :, :],
+                self.ints["eps"]["c"][i : i + 1],
+                self.ints["eps"]["c"],
+                self.ints["eps"]["v"],
+                self.ints["eps"]["a"],
+                self.flow_param,
+            )
+            Gamma += 0.500 * np.einsum(
+                "uv,jeu,jfv->ef", eta1, T2_i, T2_i.conj(), optimize=True
+            )
+        return Gamma
