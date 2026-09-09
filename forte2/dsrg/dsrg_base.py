@@ -49,7 +49,6 @@ class DSRGBase(Method):
     # Used for FNO corrections
     hbar_shift: dict | None = field(init=False, default=None)
 
-
     def _warn_skip_3_cumulant(self):
         """Say once, at run time, what dropping the three-body cumulant costs."""
         if not self.skip_3_cumulant or self._warned_skip_3c:
@@ -61,6 +60,7 @@ class DSRGBase(Method):
             "from the unrelaxed 1-RDM omit theirs. Relaxed eigenvalues of "
             "DSRG-MRPT3 are unaffected."
         )
+
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
         assert isinstance(self.parent_method, (ActiveSpaceDriver, DSRGBase)), (
@@ -207,7 +207,15 @@ class DSRGBase(Method):
         Solve, keeping the unshifted energy in _E_dsrg_bare and returning it
         with any incoming hbar_shift's energy contribution applied.
         """
-        self._E_dsrg_bare = float(self.solve_dsrg(form_hbar))
+        e_dsrg = self.solve_dsrg(form_hbar)
+        # Two-component solvers return a complex energy whose imaginary part should
+        # be numerical noise. Check it before discarding it: casting first both
+        # warns and makes the diagnostic unreachable, since a float's .imag is 0.
+        if abs(np.imag(e_dsrg)) > 1e-12:
+            logger.log_warning(
+                f"DSRG energy has a significant imaginary component: {np.imag(e_dsrg)}"
+            )
+        self._E_dsrg_bare = float(np.real(e_dsrg))
         if self.save_hbar:
             self._build_hbar()
         shift = getattr(self.parent_method, "hbar_shift", None)
@@ -228,10 +236,6 @@ class DSRGBase(Method):
         form_hbar = self.nrelax > 0 or self.save_hbar
 
         self.E_dsrg = self._solve_dsrg_shifted(form_hbar)
-        if abs(self.E_dsrg.imag) > 1e-12:
-            logger.log_warning(
-                f"DSRG energy has a significant imaginary component: {self.E_dsrg.imag}"
-            )
 
         self.relax_energies[0, 0] = self.E_dsrg.real
         # self.ints["E"] is <Psi_current| bare H |Psi_current>
@@ -278,10 +282,6 @@ class DSRGBase(Method):
             self.cumulants = None
             self.ints, self.cumulants = self.get_integrals()
             self.E_dsrg = self._solve_dsrg_shifted(form_hbar)
-            if abs(self.E_dsrg.imag) > 1e-12:
-                logger.log_warning(
-                    f"DSRG energy has a significant imaginary component: {self.E_dsrg.imag}"
-                )
             self.E = self.E_dsrg
         else:
             if self.nrelax > 0:
