@@ -196,3 +196,6 @@ class ActiveSpaceDriver:
 
     def make_average_cumulant(self, order: int):
         return self.ci_solver.make_average_cumulant(order)
+
+    def make_average_cumulants(self, max_order: int = 3):
+        return self.ci_solver.make_average_cumulants(max_order=max_order)

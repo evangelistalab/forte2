@@ -188,10 +188,10 @@ class RelDSRG_MRPT2(DSRGBase):
         self.F_tilde = None
 
     def get_integrals(self):
-        g1 = self.ci_solver.make_average_rdm(1)
-        g2 = self.ci_solver.make_average_rdm(2)
-        l2 = self.ci_solver.make_average_cumulant(2)
-        l3 = self.ci_solver.make_average_cumulant(3)
+        g1, g2, l2, l3 = self.ci_solver.make_average_cumulants(
+            max_order=2 if self.skip_3_cumulant else 3
+        )
+        self._warn_skip_3_cumulant()
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
         self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
         # Freeze core orbitals by removing them from the semicanonicalized quantities
@@ -222,17 +222,20 @@ class RelDSRG_MRPT2(DSRGBase):
             self.Uactv.conj(),
             optimize=True,
         )
-        cumulants["lambda3"] = np.einsum(
-            "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
-            self.Uactv,
-            self.Uactv,
-            self.Uactv,
-            l3,
-            self.Uactv.conj(),
-            self.Uactv.conj(),
-            self.Uactv.conj(),
-            optimize=True,
-        )
+        if l3 is None:
+            cumulants["lambda3"] = None
+        else:
+            cumulants["lambda3"] = np.einsum(
+                "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
+                self.Uactv,
+                self.Uactv,
+                self.Uactv,
+                l3,
+                self.Uactv.conj(),
+                self.Uactv.conj(),
+                self.Uactv.conj(),
+                optimize=True,
+            )
 
         ints["E"] = cas_energy_given_RDMs(
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
@@ -729,13 +732,14 @@ class RelDSRG_MRPT2(DSRGBase):
         Gamma += +0.250 * np.einsum(
             "uvwx,wxac,uvbc->ab", lambda2, T2["aavv"], T2["aavv"].conj(), optimize=True
         )
-        Gamma += -0.250000 * np.einsum(
-            "uvwxyz,xywa,uvzb->ab",
-            lambda3,
-            T2["aaav"],
-            T2["aaav"].conj(),
-            optimize=True,
-        )
+        if lambda3 is not None:
+            Gamma += -0.250000 * np.einsum(
+                "uvwxyz,xywa,uvzb->ab",
+                lambda3,
+                T2["aaav"],
+                T2["aaav"].conj(),
+                optimize=True,
+            )
 
         Gamma += self._compute_gamma_vv_ccvv()
         Gamma += self._compute_gamma_vv_cavv()

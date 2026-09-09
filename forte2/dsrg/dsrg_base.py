@@ -30,7 +30,16 @@ class DSRGBase(Method):
     # Build the active-space effective Hamiltonian even when the reference is not relaxed
     save_hbar: bool = False
 
+    # Skip the three-body cumulant everywhere: the 3-RDM is never formed and lambda3
+    # is never transformed into the semicanonical basis. For DSRG-MRPT3 lambda3 only
+    # enters the energy, so the relaxed eigenvalues -- and hence any splitting -- are
+    # unchanged; E_dsrg loses one term. For MRPT2 it also drops a term from the
+    # virtual-virtual 1-RDM, so FNO natural orbitals (and anything downstream of them)
+    # do change. See _warn_skip_3_cumulant.
+    skip_3_cumulant: bool = False
+
     # Non-init attributes
+    _warned_skip_3c: bool = field(init=False, default=False)
     converged: bool = field(init=False, default=False)
     _hbar0: float | None = field(init=False, default=None)
     _hbar1_canon: NDArray | None = field(init=False, default=None)
@@ -40,6 +49,18 @@ class DSRGBase(Method):
     # Used for FNO corrections
     hbar_shift: dict | None = field(init=False, default=None)
 
+
+    def _warn_skip_3_cumulant(self):
+        """Say once, at run time, what dropping the three-body cumulant costs."""
+        if not self.skip_3_cumulant or self._warned_skip_3c:
+            return
+        self._warned_skip_3c = True
+        logger.log_warning(
+            "  skip_3_cumulant is set: the three-body cumulant is not built. "
+            "E_dsrg omits its lambda3 term, and any virtual natural orbitals built "
+            "from the unrelaxed 1-RDM omit theirs. Relaxed eigenvalues of "
+            "DSRG-MRPT3 are unaffected."
+        )
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
         assert isinstance(self.parent_method, (ActiveSpaceDriver, DSRGBase)), (
