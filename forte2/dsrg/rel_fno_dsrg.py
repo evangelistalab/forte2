@@ -38,6 +38,11 @@ class RelFNO_DSRG_MRPT3(Method):
     frozen_core_orbitals, frozen_virtual_orbitals : int | list[int], optional
         Orbitals frozen in the correlation treatment, applied to the
         full-space DSRG-MRPT2 step and inherited by the rest of the chain.
+    skip_3_cumulant : bool, optional, default=False
+        Skip the three-body cumulant in all three composed solvers. Unlike bare
+        DSRG-MRPT3, this is an approximation here: lambda3 contributes to the
+        virtual-virtual 1-RDM that defines the natural orbitals, so the retained
+        virtual space, and everything downstream of it, can change.
 
     Attributes
     ----------
@@ -85,6 +90,8 @@ class RelFNO_DSRG_MRPT3(Method):
     frozen_core_orbitals: int | list[int] = None
     frozen_virtual_orbitals: int | list[int] = None
 
+    skip_3_cumulant: bool = False
+
     pt2_full: RelDSRG_MRPT2 | None = field(init=False, default=None)
     pt2_fno: RelDSRG_MRPT2 | None = field(init=False, default=None)
     pt3: RelDSRG_MRPT3 | None = field(init=False, default=None)
@@ -113,6 +120,7 @@ class RelFNO_DSRG_MRPT3(Method):
             fno_n_kappa=self.fno_n_kappa,
             fno_degeneracy_tol=self.fno_degeneracy_tol,
             save_hbar=True,
+            skip_3_cumulant=self.skip_3_cumulant,
         )(self.parent_method)
 
         # Truncated space, same flow parameter: publishes the truncation
@@ -120,6 +128,7 @@ class RelFNO_DSRG_MRPT3(Method):
         self.pt2_fno = RelDSRG_MRPT2(
             flow_param=self.fno_flow_param,
             compute_hbar_shift=True,
+            skip_3_cumulant=self.skip_3_cumulant,
         )(self.pt2_full)
 
         # High-level method, own flow parameter: picks the shift up.
@@ -128,6 +137,7 @@ class RelFNO_DSRG_MRPT3(Method):
             relax_reference=self.relax_reference,
             relax_maxiter=self.relax_maxiter,
             relax_tol=self.relax_tol,
+            skip_3_cumulant=self.skip_3_cumulant,
         )(self.pt2_fno)
         self.pt3.run()
 

@@ -500,8 +500,8 @@ class MCOptimizerBase(Method):
     def make_average_3cumulant(self):
         return self.ci_solver.make_average_3cumulant()
 
-    def make_average_cumulants(self):
-        return self.ci_solver.make_average_cumulants()
+    def make_average_cumulants(self, max_order=3):
+        return self.ci_solver.make_average_cumulants(max_order=max_order)
 
 
 class MCOptimizer(MCOptimizerBase):

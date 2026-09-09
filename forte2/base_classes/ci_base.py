@@ -171,7 +171,21 @@ class CIBase(ActiveSpaceSolver):
         else:
             return make_3cumulant_sf(dm1, dm2, dm3)
 
-    def make_average_cumulants(self):
+    def make_average_cumulants(self, max_order=3):
+        """Return the state-averaged density matrices and cumulants.
+
+        Parameters
+        ----------
+        max_order : int, optional, default=3
+            Highest cumulant order to build. With ``max_order=2`` the 3-RDM is
+            never formed and ``lambda3`` comes back as None, which for a large
+            active space is the dominant saving in both time and memory.
+
+        Returns
+        -------
+        dm1, dm2, lambda2, lambda3 : NDArray
+            ``lambda3`` is None when ``max_order`` is 2.
+        """
         # Defer import to avoid a circular import at module load
         from forte2.ci.ci_utils import (
             make_2cumulant_sf,
@@ -180,14 +194,23 @@ class CIBase(ActiveSpaceSolver):
             make_3cumulant_so,
         )
 
+        if max_order not in (2, 3):
+            raise ValueError(f"max_order must be 2 or 3, got {max_order}")
+
         dm1 = self.make_average_1rdm()
         dm2 = self.make_average_2rdm()
-        dm3 = self.make_average_3rdm()
         if self.two_component:
             lambda2 = make_2cumulant_so(dm1, dm2)
-            lambda3 = make_3cumulant_so(dm1, dm2, dm3)
         else:
             lambda2 = make_2cumulant_sf(dm1, dm2)
+
+        if max_order == 2:
+            return dm1, dm2, lambda2, None
+
+        dm3 = self.make_average_3rdm()
+        if self.two_component:
+            lambda3 = make_3cumulant_so(dm1, dm2, dm3)
+        else:
             lambda3 = make_3cumulant_sf(dm1, dm2, dm3)
         return dm1, dm2, lambda2, lambda3
 

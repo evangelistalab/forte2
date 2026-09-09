@@ -101,13 +101,15 @@ class _RelDSRGHelper:
         C0 += scale * +0.500 * einsum('iuvw,ixyz,wz,vy,xu->', T2['caaa'], V['caaa'], e1, e1, g1)
         C0 += scale * +1.000 * einsum('iuvw,ixyz,wz,vxuy->', T2['caaa'], V['caaa'], e1, l2)
         C0 += scale * +0.250 * einsum('iuvw,ixyz,xu,vwyz->', T2['caaa'], V['caaa'], g1, l2)
-        C0 += scale * +0.250 * einsum('iuvw,ixyz,vwxuyz->', T2['caaa'], V['caaa'], l3)
+        if l3 is not None:
+            C0 += scale * +0.250 * einsum('iuvw,ixyz,vwxuyz->', T2['caaa'], V['caaa'], l3)
         C0 += scale * +1.000 * einsum('iuva,iwxa,vx,wu->', T2['caav'], V['caav'], e1, g1)
         C0 += scale * +1.000 * einsum('iuva,iwxa,vwux->', T2['caav'], V['caav'], l2)
         C0 += scale * +0.500 * einsum('uvwa,xyza,wz,yv,xu->', T2['aaav'], V['aaav'], e1, g1, g1)
         C0 += scale * +0.250 * einsum('uvwa,xyza,wz,xyuv->', T2['aaav'], V['aaav'], e1, l2)
         C0 += scale * +1.000 * einsum('uvwa,xyza,yv,wxuz->', T2['aaav'], V['aaav'], g1, l2)
-        C0 += scale * -0.250 * einsum('uvwa,xyza,wxyuvz->', T2['aaav'], V['aaav'], l3)
+        if l3 is not None:
+            C0 += scale * -0.250 * einsum('uvwa,xyza,wxyuvz->', T2['aaav'], V['aaav'], l3)
         C0 += scale * +0.250 * einsum('uvab,wxab,xv,wu->', T2['aavv'], V['aavv'], g1, g1)
         C0 += scale * +0.125 * einsum('uvab,wxab,wxuv->', T2['aavv'], V['aavv'], l2)
 
@@ -125,7 +127,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C1 += scale * -1.000 * einsum('iu,iv->uv', F['ca'], T1['ca'])
         C1 += scale * -1.000 * einsum('iu,ivwx,xu->vw', F['ca'], T2['caaa'], e1)
@@ -164,7 +165,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C2 += scale * -0.500 * einsum('iu,ivwx->uvwx', F['ca'], T2['caaa'])
         C2 += scale * -0.500 * einsum('ua,vwxa->vwux', F['av'], T2['aaav'])
@@ -185,7 +185,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C1["av"] += scale * -1.000 * einsum('iu,ia->ua', F['ca'], T1['cv'])
         C1["cv"] += scale * -1.000 * einsum('ui,ua->ia', F['ac'], T1['av'])
@@ -201,7 +200,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C1["av"] += scale * +1.000 * einsum('iu,ivwa,wu->va', F['ca'], T2['caav'], e1)
         C1["av"] += scale * -1.000 * einsum('ia,iuba->ub', F['cv'], T2['cavv'])
@@ -220,7 +218,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C1["vc"] += scale * -1.000 * einsum('iu,jiva,uv->aj', T1['ca'], V['ccav'], e1)
         C1["vc"] += scale * +1.000 * einsum('ia,jiba->bj', T1['cv'], V['ccvv'])
@@ -239,7 +236,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C1["av"] += scale * +0.500 * einsum('ijua,ijvw,uw->va', T2['ccav'], V['ccaa'], e1)
         C1["av"] += scale * -0.500 * einsum('iuva,iwxy,vwxy->ua', T2['caav'], V['caaa'], l2)
@@ -299,7 +295,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C2["ccvv"] += scale * +0.500 * einsum('ui,juab->ijab', F['ac'], T2['cavv'])
         C2["ccvv"] += scale * +0.500 * einsum('au,ijub->ijab', F['va'], T2['ccav'])
@@ -331,7 +326,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C2["ccvv"] += scale * -0.500 * einsum('iu,abju->ijab', T1['ca'], V['vvca'])
         C2["ccvv"] += scale * -0.500 * einsum('ua,ubij->ijab', T1['av'], V['avcc'])
@@ -363,7 +357,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C2["ccvv"] += scale * +0.125 * einsum('ijuv,abwx,vx,uw->ijab', T2['ccaa'], V['vvaa'], e1, e1)
         C2["ccvv"] += scale * -0.125 * einsum('ijuv,abwx,vx,uw->ijab', T2['ccaa'], V['vvaa'], g1, g1)
@@ -441,7 +434,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         # e1+g1=I merges the (e1) and (g1) terms below into one
         C1["av"] += scale * -1.000 * einsum('uv,ua->va', F['aa'], T1['av'])
@@ -459,7 +451,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C1["av"] += scale * -1.000 * einsum('iu,iavw,uw->va', T1['ca'], V['cvaa'], e1)
         C1["av"] += scale * -1.000 * einsum('ia,ibua->ub', T1['cv'], V['cvav'])
@@ -478,7 +469,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C1["av"] += scale * +0.500 * einsum('iuvw,iaxy,wy,vx->ua', T2['caaa'], V['cvaa'], e1, e1)
         C1["av"] += scale * +0.250 * einsum('iuvw,iaxy,vwxy->ua', T2['caaa'], V['cvaa'], l2)
@@ -578,7 +568,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C2["ccvv"] += scale * +0.500 * einsum('ij,kiab->jkab', F['cc'], T2['ccvv'])
         C2["ccvv"] += scale * -0.500 * einsum('ab,ijcb->ijac', F['vv'], T2['ccvv'])
@@ -610,7 +599,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C2["ccvv"] += scale * -0.500 * einsum('ia,ibjk->jkab', T1['cv'], V['cvcc'])
         C2["caav"] += scale * -1.000 * einsum('iu,iajv->jvua', T1['ca'], V['cvca'])
@@ -677,7 +665,6 @@ class _RelDSRGHelper:
         g1 = cumulants['gamma1']
         e1 = cumulants['eta1']
         l2 = cumulants['lambda2']
-        l3 = cumulants['lambda3']
 
         C2["ccvv"] += scale * +1.000 * einsum('ijua,jbkv,uv->ikab', T2['ccav'], V['cvca'], e1)
         C2["ccvv"] += scale * +0.125 * einsum('ijab,ijkl->klab', T2['ccvv'], V['cccc'])

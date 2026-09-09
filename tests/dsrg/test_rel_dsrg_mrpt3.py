@@ -272,3 +272,87 @@ def test_mrpt3_ch_snso_kramers():
     # Conjugating gamma1 in the active mean field splits these by ~16 cm^-1.
     assert max(kramers) < 1e-2, f"Kramers pairs split by {max(kramers):.4f} cm^-1"
     assert levels[2] == pytest.approx(soc_wn, abs=1e-2)
+
+
+def test_mrpt3_skip_3_cumulant_leaves_splittings_alone():
+    """skip_3_cumulant must not move a single splitting.
+
+    lambda3 reaches DSRG-MRPT3 only through the energy kernel, so it lands in the
+    scalar part of Hbar and shifts every root by the same amount. The splittings are
+    therefore untouched and E_dsrg simply loses that term. CH is used because its
+    1-RDM is genuinely complex, so the reference is not accidentally simple.
+
+    The reference is rebuilt for each variant on purpose: reference relaxation calls
+    set_ints on the shared parent solver, so a second DSRG run against the same
+    MCOptimizer would start from the first run's Hbar rather than the CASSCF
+    reference.
+    """
+    xyz = """
+    C 0.0 0.0 0.0
+    H 0.0 0.0 1.1199
+    """
+
+    def run(skip):
+        system = System(
+            xyz=xyz,
+            basis_set="decon-cc-pVDZ",
+            auxiliary_basis_set="cc-pVTZ-JKFIT",
+            minao_basis_set="ano-r0",
+            x2c=X2CParams(x2c_type="so", snso_type="row-dependent"),
+            use_gaussian_charges=True,
+        )
+        mf = GHF(charge=0, die_if_not_converged=False)(system)
+        avas = AVAS(
+            subspace=["H(1s)", "C(2s)", "C(2p)"],
+            selection_method="separate",
+            num_active_docc=5,
+            num_active_uocc=5,
+        )(mf)
+        mc = MCOptimizer(
+            RelCISolver(nel=7, nroots=4),
+            e_tol=1e-9,
+            g_tol=1e-7,
+            die_if_not_converged=False,
+        )(avas)
+        mc.run()
+        dsrg = RelDSRG_MRPT3(
+            flow_param=0.5, relax_reference="once", skip_3_cumulant=skip
+        )(mc)
+        dsrg.run()
+        e = np.sort(np.asarray(dsrg.relax_eigvals).ravel().real)
+        return (e - e.min()) * EH_TO_WN, dsrg.E_dsrg.real
+
+    levels_full, e_full = run(False)
+    levels_skip, e_skip = run(True)
+
+    assert np.abs(levels_skip - levels_full).max() < 1e-6
+    # The term is real and non-negligible, so the test cannot pass by doing nothing.
+    assert abs(e_skip - e_full) > 1e-4
+
+
+def test_make_average_cumulants_max_order():
+    """max_order=2 skips lambda3 entirely, and only 2 or 3 are accepted."""
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    rhf = GHF(charge=0)(system)
+    rhf.run()
+    ci = RelCISolver(nel=14, core_orbitals=8, active_orbitals=12)(rhf)
+    ci.run()
+
+    _, _, l2_3, l3 = ci.make_average_cumulants(max_order=3)
+    _, _, l2_2, none3 = ci.make_average_cumulants(max_order=2)
+    assert l3 is not None
+    assert none3 is None
+    assert np.abs(l2_3 - l2_2).max() == 0.0
+
+    with pytest.raises(ValueError):
+        ci.make_average_cumulants(max_order=4)

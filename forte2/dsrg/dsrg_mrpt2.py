@@ -66,7 +66,10 @@ class DSRG_MRPT2(DSRGBase):
         self.requires_attrs.update({"two_component": False})
 
     def get_integrals(self):
-        g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
+        g1, g2, l2, l3 = self.ci_solver.make_average_cumulants(
+            max_order=2 if self.skip_3_cumulant else 3
+        )
+        self._warn_skip_3_cumulant()
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
         self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
         # Freeze core orbitals by removing them from the semicanonicalized quantities
@@ -95,17 +98,20 @@ class DSRG_MRPT2(DSRGBase):
             self.Uactv.conj(),
             optimize=True,
         )
-        cumulants["lambda3"] = np.einsum(
-            "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
-            self.Uactv,
-            self.Uactv,
-            self.Uactv,
-            l3,
-            self.Uactv.conj(),
-            self.Uactv.conj(),
-            self.Uactv.conj(),
-            optimize=True,
-        )
+        if l3 is None:
+            cumulants["lambda3"] = None
+        else:
+            cumulants["lambda3"] = np.einsum(
+                "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
+                self.Uactv,
+                self.Uactv,
+                self.Uactv,
+                l3,
+                self.Uactv.conj(),
+                self.Uactv.conj(),
+                self.Uactv.conj(),
+                optimize=True,
+            )
 
         ints["E"] = cas_energy_given_RDMs(
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
