@@ -20,6 +20,17 @@ def antisymmetrize_2body(T, indices):
     return T_anti
 
 
+def hermitize_and_antisymmetrize_two_body_dense(T):
+    # antisymmetrize the residual
+    T += np.einsum(
+        "ijab->abij", T.conj()
+    )  # This is the Hermitized version (i.e., [H,A]), which should then be antisymmetrized
+    temp = T.copy()
+    T -= np.einsum("ijab->jiab", temp)
+    T += np.einsum("ijab->jiba", temp)
+    T -= np.einsum("ijab->ijba", temp)
+
+
 def cas_energy_given_RDMs(E_core, H_cas, V_cas, gamma1, gamma2):
     r"""
     Return the CAS energy.

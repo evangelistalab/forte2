@@ -4,7 +4,7 @@ import numpy as np
 
 from .dsrg_base import DSRGBase
 from .utils import (
-    antisymmetrize_2body,
+    hermitize_and_antisymmetrize_two_body_dense,
     cas_energy_given_RDMs,
     compute_t1_block,
     compute_t2_block,
@@ -199,21 +199,14 @@ class RelDSRG_MRPT2(DSRGBase):
         # The aaaa block is remains untouched, and can be safely used in reference relaxation
         self._renormalize_V_in_place()
         if form_hbar:
-            self.hbar_aa_df = np.zeros((self.nact, self.nact), dtype=complex)
+            self.hbar1 = np.zeros((self.nact, self.nact), dtype=complex)
         E = self._compute_pt2_energy(form_hbar=form_hbar)
         E += self.ints["E"]
         return E
 
     def do_reference_relaxation(self):
-        _hbar2 = self.ints["V"]["aaaa"].copy()
-        _C2 = 0.5 * self._compute_Hbar_aaaa()
-        # 0.5*[H, T-T+] = 0.5*([H, T] + [H, T]+)
-        _hbar2 += _C2 + np.einsum("ijab->abij", np.conj(_C2))
-
-        _hbar1 = self.fock[self.actv, self.actv].copy()
-        _C1 = 0.5 * self._compute_Hbar_aa()
-        # 0.5*[H, T-T+] = 0.5*([H, T] + [H, T]+)
-        _hbar1 += _C1 + _C1.conj().T
+        _hbar1 = self.hbar1 + self.fock[self.actv, self.actv]
+        _hbar2 = self.hbar2 + self.ints["V"]["aaaa"]
 
         # see eq 29 of Ann. Rev. Phys. Chem.
         self._hbar0 = (
@@ -228,7 +221,7 @@ class RelDSRG_MRPT2(DSRGBase):
             )
         ) + self.E_dsrg
 
-        _hbar1 -= np.einsum("uxvy,xy->uv", _hbar2, self.cumulants["gamma1"])
+        _hbar1 = _hbar1 - np.einsum("uxvy,xy->uv", _hbar2, self.cumulants["gamma1"])
 
         self._hbar1_canon = np.einsum(
             "ip,pq,jq->ij", self.Uactv, _hbar1, self.Uactv.conj(), optimize=True
@@ -242,9 +235,8 @@ class RelDSRG_MRPT2(DSRGBase):
             self.Uactv.conj(),
             optimize=True,
         )
-
-        # self._hbar2_canon is already antisymmetric (<pq||rs>),
-        # the CI solver antisymmetrizes it again, doubling it, hence the 0.5
+        # _hbar2_canon is already antisymmetric (<pq||rs>) and the CI solver
+        # antisymmetrizes it again, doubling it, hence the 0.5.
         self._hbar2_canon *= 0.5
         self.ci_solver.set_ints(self._hbar0, self._hbar1_canon, self._hbar2_canon)
         self.ci_solver.run()
@@ -292,7 +284,7 @@ class RelDSRG_MRPT2(DSRGBase):
         return t1, t2
 
     def _renormalize_F(self):
-        f_temp = np.conj(self.ints["F"][self.hole, self.part]).copy()
+        f_temp = np.conj(self.ints["F"][self.hole, self.part])
         delta_ia = self.eps[self.hole][:, None] - self.eps[self.part][None, :]
         exp_delta_1 = np.exp(-self.flow_param * delta_ia**2)
         t2_hapa = np.zeros(
@@ -330,169 +322,44 @@ class RelDSRG_MRPT2(DSRGBase):
             )
 
     def _compute_pt2_energy(self, form_hbar=False):
-        E = 0.0
-
-        E += +1.000 * np.einsum(
-            "iu,iv,vu->",
-            self.F_tilde["ca"],
-            self.T1["ca"],
-            self.cumulants["eta1"],
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "ia,ia->",
-            self.F_tilde["cv"],
-            self.T1["cv"],
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "ua,va,uv->",
-            self.F_tilde["av"],
-            self.T1["av"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        E += -0.500 * np.einsum(
-            "iu,ixvw,vwux->",
-            self.F_tilde["ca"],
-            self.T2["caaa"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += -0.500 * np.einsum(
-            "ua,wxva,uvwx->",
-            self.F_tilde["av"],
-            self.T2["aaav"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += -0.500 * np.einsum(
-            "iu,ivwx,uvwx->",
-            self.T1["ca"],
-            self.ints["V"]["caaa"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += -0.500 * np.einsum(
-            "ua,vwxa,vwux->",
-            self.T1["av"],
-            self.ints["V"]["aaav"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "ijuv,ijwx,vx,uw->",
-            self.T2["ccaa"],
-            self.ints["V"]["ccaa"],
-            self.cumulants["eta1"],
-            self.cumulants["eta1"],
-            optimize=True,
-        )
-        E += +0.125 * np.einsum(
-            "ijuv,ijwx,uvwx->",
-            self.T2["ccaa"],
-            self.ints["V"]["ccaa"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += +0.500 * np.einsum(
-            "iwuv,ixyz,vz,uy,xw->",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["eta1"],
-            self.cumulants["eta1"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "iwuv,ixyz,vz,uxwy->",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["eta1"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "iwuv,ixyz,xw,uvyz->",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["gamma1"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "iwuv,ixyz,uvxwyz->",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["lambda3"],
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "ivua,iwxa,ux,wv->",
-            self.T2["caav"],
-            self.ints["V"]["caav"],
-            self.cumulants["eta1"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "ivua,iwxa,uwvx->",
-            self.T2["caav"],
-            self.ints["V"]["caav"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += +0.500 * np.einsum(
-            "vwua,xyza,uz,yw,xv->",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["eta1"],
-            self.cumulants["gamma1"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "vwua,xyza,uz,xyvw->",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["eta1"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "vwua,xyza,yw,uxvz->",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["gamma1"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        E += -0.250 * np.einsum(
-            "vwua,xyza,uxyvwz->",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["lambda3"],
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "uvab,wxab,xv,wu->",
-            self.T2["aavv"],
-            self.ints["V"]["aavv"],
-            self.cumulants["gamma1"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        E += +0.125 * np.einsum(
-            "uvab,wxab,wxuv->",
-            self.T2["aavv"],
-            self.ints["V"]["aavv"],
-            self.cumulants["lambda2"],
-            optimize=True,
+        E = self.dsrg_helper.H_T_C0(
+            self.F_tilde,
+            self.ints["V"],
+            self.T1,
+            self.T2,
+            self.cumulants,
+            store_large=False,
         )
         E += self._compute_pt2_energy_ccvv()
         E += self._compute_pt2_energy_cavv(form_hbar=form_hbar)
         E += self._compute_pt2_energy_ccav(form_hbar=form_hbar)
 
+        if form_hbar:
+            self.hbar1 *= 0.5
+            self.dsrg_helper.H_T_C1_aa(
+                self.hbar1,
+                self.F_tilde,
+                self.ints["V"],
+                self.T1,
+                self.T2,
+                self.cumulants,
+                scale=0.5,
+                store_large=False,
+            )
+            np.conj(self.hbar1, out=self.hbar1)
+            self.hbar1 += self.hbar1.T.conj()
+            self.hbar2 = np.zeros((self.nact,) * 4, dtype=complex)
+            self.dsrg_helper.H_T_C2_aaaa(
+                self.hbar2,
+                self.F_tilde,
+                self.ints["V"],
+                self.T1,
+                self.T2,
+                self.cumulants,
+                scale=0.5,
+            )
+            np.conj(self.hbar2, out=self.hbar2)
+            hermitize_and_antisymmetrize_two_body_dense(self.hbar2)
         return E
 
     def _compute_pt2_energy_ccvv(self):
@@ -575,13 +442,13 @@ class RelDSRG_MRPT2(DSRGBase):
             )
             if form_hbar:
                 # optimal path, fastest varying indices contracted away
-                # self.hbar_aa_df += 0.500 * np.einsum(
+                # self.hbar1 += 0.500 * np.einsum(
                 #     "uba,vba->uv",
                 #     Vbare_i.conj(),
                 #     Vr_i,
                 #     optimize=True,
                 # )
-                self.hbar_aa_df += 0.500 * np.tensordot(
+                self.hbar1 += 0.500 * np.tensordot(
                     Vbare_i.conj(), Vr_i, axes=([1, 2], [1, 2])
                 )
 
@@ -635,7 +502,7 @@ class RelDSRG_MRPT2(DSRGBase):
                 optimize=True,
             )
             if form_hbar:
-                self.hbar_aa_df += -0.500 * np.einsum(
+                self.hbar1 += -0.500 * np.einsum(
                     "jau,jav->vu",
                     Vbare_i.conj(),
                     Vr_i,
@@ -643,263 +510,3 @@ class RelDSRG_MRPT2(DSRGBase):
                 )
 
         return E
-
-    def _compute_Hbar_aaaa(self):
-        _V = np.zeros((self.nact,) * 4, dtype=complex)
-        _V += -0.500 * np.einsum(
-            "ua,wxva->wxuv",
-            self.F_tilde["av"],
-            self.T2["aaav"],
-            optimize=True,
-        )
-        _V += -0.500 * np.einsum(
-            "iu,ixvw->uxvw",
-            self.F_tilde["ca"],
-            self.T2["caaa"],
-            optimize=True,
-        )
-        _V += -0.500 * np.einsum(
-            "iu,ivwx->wxuv",
-            self.T1["ca"],
-            self.ints["V"]["caaa"],
-            optimize=True,
-        )
-        _V += -0.500 * np.einsum(
-            "ua,vwxa->uxvw",
-            self.T1["av"],
-            self.ints["V"]["aaav"],
-            optimize=True,
-        )
-        _V += +0.125 * np.einsum(
-            "uvab,wxab->uvwx",
-            self.T2["aavv"],
-            self.ints["V"]["aavv"],
-            optimize=True,
-        )
-        _V += +0.250 * np.einsum(
-            "uvya,wxza,yz->uvwx",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["eta1"],
-            optimize=True,
-        )
-        _V += +0.125 * np.einsum(
-            "ijuv,ijwx->wxuv",
-            self.T2["ccaa"],
-            self.ints["V"]["ccaa"],
-            optimize=True,
-        )
-        _V += +0.250 * np.einsum(
-            "iyuv,izwx,zy->wxuv",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        _V += +1.000 * np.einsum(
-            "ivua,iwxa->vxuw",
-            self.T2["caav"],
-            self.ints["V"]["caav"],
-            optimize=True,
-        )
-        _V += +1.000 * np.einsum(
-            "ivuy,iwxz,yz->vxuw",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["eta1"],
-            optimize=True,
-        )
-        _V += +1.000 * np.einsum(
-            "vyua,wzxa,zy->vxuw",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-
-        return antisymmetrize_2body(_V.conj(), "aaaa")
-
-    def _compute_Hbar_aa(self):
-        _F = self.hbar_aa_df.copy()
-        _F += -1.000 * np.einsum(
-            "iu,iv->uv",
-            self.F_tilde["ca"],
-            self.T1["ca"],
-            optimize=True,
-        )
-        _F += -1.000 * np.einsum(
-            "iw,ivux,xw->vu",
-            self.F_tilde["ca"],
-            self.T2["caaa"],
-            self.cumulants["eta1"],
-            optimize=True,
-        )
-        _F += -1.000 * np.einsum(
-            "ia,ivua->vu",
-            self.F_tilde["cv"],
-            self.T2["caav"],
-            optimize=True,
-        )
-        _F += +1.000 * np.einsum(
-            "ua,va->vu",
-            self.F_tilde["av"],
-            self.T1["av"],
-            optimize=True,
-        )
-        _F += +1.000 * np.einsum(
-            "wa,vxua,wx->vu",
-            self.F_tilde["av"],
-            self.T2["aaav"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        _F += -1.000 * np.einsum(
-            "iw,iuvx,wx->vu",
-            self.T1["ca"],
-            self.ints["V"]["caaa"],
-            self.cumulants["eta1"],
-            optimize=True,
-        )
-        _F += -1.000 * np.einsum(
-            "ia,iuva->vu",
-            self.T1["cv"],
-            self.ints["V"]["caav"],
-            optimize=True,
-        )
-        _F += +1.000 * np.einsum(
-            "wa,uxva,xw->vu",
-            self.T1["av"],
-            self.ints["V"]["aaav"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        _F += -0.500 * np.einsum(
-            "ijuw,ijvx,wx->vu",
-            self.T2["ccaa"],
-            self.ints["V"]["ccaa"],
-            self.cumulants["eta1"],
-            optimize=True,
-        )
-        _F += +0.500 * np.einsum(
-            "ivuw,ixyz,wxyz->vu",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        _F += -1.000 * np.einsum(
-            "ixuw,iyvz,wz,yx->vu",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["eta1"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        _F += -1.000 * np.einsum(
-            "ixuw,iyvz,wyxz->vu",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        # _F += -0.500 * np.einsum(
-        #     "ijua,ijva->vu",
-        #     self.T2["ccav"],
-        #     self.ints["V"]["ccav"],
-        #     optimize=True,
-        # )
-        _F += -1.000 * np.einsum(
-            "iwua,ixva,xw->vu",
-            self.T2["caav"],
-            self.ints["V"]["caav"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        _F += -0.500 * np.einsum(
-            "vwua,xyza,xywz->vu",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        _F += -0.500 * np.einsum(
-            "wxua,yzva,zx,yw->vu",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["gamma1"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        _F += -0.250 * np.einsum(
-            "wxua,yzva,yzwx->vu",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        _F += +0.500 * np.einsum(
-            "iuwx,ivyz,xz,wy->uv",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["eta1"],
-            self.cumulants["eta1"],
-            optimize=True,
-        )
-        _F += +0.250 * np.einsum(
-            "iuwx,ivyz,wxyz->uv",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        _F += -0.500 * np.einsum(
-            "iywx,iuvz,wxyz->vu",
-            self.T2["caaa"],
-            self.ints["V"]["caaa"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        _F += +1.000 * np.einsum(
-            "iuwa,ivxa,wx->uv",
-            self.T2["caav"],
-            self.ints["V"]["caav"],
-            self.cumulants["eta1"],
-            optimize=True,
-        )
-        _F += +1.000 * np.einsum(
-            "uxwa,vyza,wz,yx->uv",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["eta1"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        _F += +1.000 * np.einsum(
-            "uxwa,vyza,wyxz->uv",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        _F += +0.500 * np.einsum(
-            "xywa,uzva,wzxy->vu",
-            self.T2["aaav"],
-            self.ints["V"]["aaav"],
-            self.cumulants["lambda2"],
-            optimize=True,
-        )
-        # _F += +0.500 * np.einsum(
-        #     "iuab,ivab->uv",
-        #     self.T2["cavv"],
-        #     self.ints["V"]["cavv"],
-        #     optimize=True,
-        # )
-        _F += +0.500 * np.einsum(
-            "uwab,vxab,xw->uv",
-            self.T2["aavv"],
-            self.ints["V"]["aavv"],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-
-        return _F.conj()
