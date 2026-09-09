@@ -421,6 +421,8 @@ def test_mrpt2_fno():
 
     pt2_fno_100 = RelDSRG_MRPT2(flow_param=0.5)(pt2_full_100)
     pt2_fno_100.run()
+    # a plain instance publishes no correction of its own
+    assert pt2_fno_100.hbar_shift is None
     assert pt2_fno_100.E_dsrg == approx(pt2_ref.E_dsrg)
 
     # a genuinely truncated case: fewer virtuals retained, energy deviates by

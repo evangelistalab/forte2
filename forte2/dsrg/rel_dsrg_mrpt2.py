@@ -52,6 +52,12 @@ class RelDSRG_MRPT2(DSRGBase):
         than this fraction of the larger one, so that near-degenerate natural
         orbitals (e.g. Kramers partners) are never split between the retained
         and discarded sets.
+    compute_hbar_shift : bool, optional, default=False
+        Publish this object's effective Hamiltonian subtracted from its
+        parent's as an hbar_shift, for a method chained onto this one to apply.
+        Requires the parent to expose its own effective Hamiltonian (i.e. to
+        have been run with save_hbar, or with reference relaxation) and to use
+        the same flow_param. Implies save_hbar.
 
     Attributes
     ----------
@@ -66,6 +72,10 @@ class RelDSRG_MRPT2(DSRGBase):
         The eigenvalues of the relaxed CI Hamiltonian.
     relax_eigvals_history : NDArray
         The history of eigenvalues of the relaxed CI Hamiltonian during relaxation.
+    hbar_shift : dict or None
+        Set when compute_hbar_shift is given: this object's effective
+        Hamiltonian subtracted from its parent's, for a method chained onto
+        this one to apply. None otherwise.
 
     Notes
     -----
@@ -73,6 +83,13 @@ class RelDSRG_MRPT2(DSRGBase):
     energy is computed, so it composes with everything else this class does
     rather than replacing it; the truncated, natural-orbital-rotated space is
     exposed as this object's own mos/mo_space for a chained method to pick up.
+    Setting compute_hbar_shift additionally publishes the difference between
+    the parent's effective Hamiltonian and this object's.
+
+    Chaining the two gives the FNO truncation correction of ref. [5]; see
+    RelFNO_DSRG_MRPT3, which composes exactly that and is the supported way
+    to run it.
+
     References
     ----------
     .. [1] F. A. Evangelista, "A driven similarity renormalization group approach to quantum many-body problems",
@@ -90,6 +107,7 @@ class RelDSRG_MRPT2(DSRGBase):
     fno_p_o: float | None = None
     fno_n_kappa: float | None = None
     fno_degeneracy_tol: float = 1e-2
+    compute_hbar_shift: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -99,14 +117,21 @@ class RelDSRG_MRPT2(DSRGBase):
             assert (self.fno_p_o is None) != (
                 self.fno_n_kappa is None
             ), "Specify exactly one of fno_p_o or fno_n_kappa."
+        if self.compute_hbar_shift:
+            # Both Hamiltonians in the difference must be available and built
+            # at the same flow parameter; see _post_process.
+            self.save_hbar = True
+
     def _post_process(self):
         """
-        Truncate the virtual space to frozen natural orbitals, if requested.
-        This is independent of how the energy itself was obtained, so it does
-        not need to branch run().
+        Truncate the virtual space to frozen natural orbitals and/or publish
+        an hbar_shift, as requested. Both are optional and independent of how
+        the energy itself was obtained, so neither needs to branch run().
         """
         if self.fno_p_o is not None or self.fno_n_kappa is not None:
             self._truncate_to_fno()
+        if self.compute_hbar_shift:
+            self._publish_hbar_shift()
 
     def _truncate_to_fno(self):
         """
@@ -129,6 +154,32 @@ class RelDSRG_MRPT2(DSRGBase):
             f"({100 * self.mo_space.nvirt / nvirt_full:.1f}%)."
         )
         self._release_integrals()
+
+    def _publish_hbar_shift(self):
+        """
+        Expose this object's effective Hamiltonian subtracted from its
+        parent's, for a method chained onto this one to apply (see the
+        hbar_shift attribute on DSRGBase for the dict's keys).
+
+        With an FNO-truncated parent this is the eq. 11 truncation correction
+        [H_PT2^MO(s1) - H_PT2^FNO(s1)] of Li, Mao, Huang, Evangelista, J.
+        Chem. Theory Comput. 2024, 20, 4170-4181: the parent spans the full
+        virtual space and this object the truncated one. Both must therefore
+        use the same flow parameter s1, and the two Hamiltonians are compared
+        in the shared basis of the initial CASSCF active orbitals (the
+        *_canon convention), which FNO truncation leaves untouched.
+        """
+        parent = self.parent_method
+        assert self.flow_param == parent.flow_param, (
+            "compute_hbar_shift compares this object's effective Hamiltonian "
+            "against its parent's, so the two must share flow_param."
+        )
+        self.hbar_shift = {
+            "e_dsrg": parent.E_dsrg - self.E_dsrg,
+            "hbar0": parent.hbar0 - self.hbar0,
+            "hbar1": parent.hbar1_canon - self.hbar1_canon,
+            "hbar2": parent.hbar2_canon - self.hbar2_canon,
+        }
 
     def _release_integrals(self):
         super()._release_integrals()
@@ -274,11 +325,15 @@ class RelDSRG_MRPT2(DSRGBase):
         E += self.ints["E"]
         return E
 
-    def do_reference_relaxation(self):
+    def _build_hbar(self):
+        # hbar1/hbar2 are left untouched so that this can be called more than
+        # once per solve (see DSRGBase._build_hbar).
         _hbar1 = self.hbar1 + self.fock[self.actv, self.actv]
         _hbar2 = self.hbar2 + self.ints["V"]["aaaa"]
 
-        # see eq 29 of Ann. Rev. Phys. Chem.
+        # see eq 29 of Ann. Rev. Phys. Chem. Built from the bare energy: an
+        # incoming shift is added below, and E_dsrg already carries its energy
+        # contribution.
         self._hbar0 = (
             -np.einsum("uv,uv->", _hbar1, self.cumulants["gamma1"])
             - 0.25 * np.einsum("uvxy,uvxy->", _hbar2, self.cumulants["lambda2"])
@@ -289,7 +344,7 @@ class RelDSRG_MRPT2(DSRGBase):
                 self.cumulants["gamma1"],
                 self.cumulants["gamma1"],
             )
-        ) + self.E_dsrg
+        ) + self._E_dsrg_bare
 
         _hbar1 = _hbar1 - np.einsum("uxvy,xy->uv", _hbar2, self.cumulants["gamma1"])
 
@@ -308,6 +363,15 @@ class RelDSRG_MRPT2(DSRGBase):
         # _hbar2_canon is already antisymmetric (<pq||rs>) and the CI solver
         # antisymmetrizes it again, doubling it, hence the 0.5.
         self._hbar2_canon *= 0.5
+
+        shift = getattr(self.parent_method, "hbar_shift", None)
+        if shift is not None:
+            self._hbar0 += shift["hbar0"]
+            self._hbar1_canon += shift["hbar1"]
+            self._hbar2_canon += shift["hbar2"]
+
+    def do_reference_relaxation(self):
+        self._build_hbar()
         self.ci_solver.set_ints(self._hbar0, self._hbar1_canon, self._hbar2_canon)
         self.ci_solver.run()
         e_relaxed = self.ci_solver.compute_average_energy()
