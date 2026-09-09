@@ -139,6 +139,14 @@ class DSRGBase(Method):
         self.fock_builder = self.system.fock_builder
         self.ints, self.cumulants = self.get_integrals()
 
+    def _release_integrals(self):
+        """
+        Release large per-run integral/cumulant state once it is no longer
+        needed, freeing the underlying memory.
+        """
+        self.ints = None
+        self.cumulants = None
+
     def run(self):
         self._startup()
         form_hbar = self.nrelax > 0
@@ -187,6 +195,11 @@ class DSRGBase(Method):
             if self.converged:
                 break
 
+            # Drop the previous set first: get_integrals() does not read self.ints,
+            # so holding both across the call would double the integral footprint on
+            # every relaxation iteration.
+            self.ints = None
+            self.cumulants = None
             self.ints, self.cumulants = self.get_integrals()
             self.E_dsrg = self.solve_dsrg(form_hbar=form_hbar)
             if abs(self.E_dsrg.imag) > 1e-12:

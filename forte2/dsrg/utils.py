@@ -31,6 +31,53 @@ def hermitize_and_antisymmetrize_two_body_dense(T):
     T -= np.einsum("ijab->ijba", temp)
 
 
+def hermitize_and_antisymmetrize_two_body(T):
+    blks = set(T.keys())
+    for Tblk in T.values():
+        np.conj(Tblk, out=Tblk)
+
+    # Hermitize first
+    for blk in T.keys():
+        if blk not in blks:
+            continue
+        herm_blk = blk[2:] + blk[:2]
+        if herm_blk in T.keys():
+            temp = T[blk].copy()
+            T[blk] += T[herm_blk].transpose(2, 3, 0, 1).conj()
+            T[herm_blk] += temp.transpose(2, 3, 0, 1).conj()
+            blks.remove(blk)
+            blks.remove(herm_blk)
+
+    for blk in T.keys():
+        ij_same = blk[0] == blk[1]
+        kl_same = blk[2] == blk[3]
+        if not (ij_same or kl_same):
+            continue
+        temp = T[blk].copy()
+        if ij_same:
+            T[blk] -= temp.transpose(1, 0, 2, 3)
+        if kl_same:
+            T[blk] -= temp.transpose(0, 1, 3, 2)
+        if ij_same and kl_same:
+            T[blk] += temp.transpose(1, 0, 3, 2)
+
+
+def hermitize_one_body(T):
+    blks = set(T.keys())
+    for Tblk in T.values():
+        np.conj(Tblk, out=Tblk)
+    for blk in T.keys():
+        if blk not in blks:
+            continue
+        herm_blk = blk[1] + blk[0]
+        if herm_blk in T.keys():
+            temp = T[blk].T.conj()
+            T[blk] += T[herm_blk].T.conj()
+            T[herm_blk] += temp
+            blks.remove(blk)
+            blks.remove(herm_blk)
+
+
 def cas_energy_given_RDMs(E_core, H_cas, V_cas, gamma1, gamma2):
     r"""
     Return the CAS energy.
