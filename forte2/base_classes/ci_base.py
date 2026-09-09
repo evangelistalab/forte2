@@ -228,6 +228,53 @@ class CIBase(ActiveSpaceSolver):
             dm1, dm2, dm3
         )
 
+    def make_average_cumulants(self, max_order: int = 3):
+        """
+        Make the state-averaged RDMs and cumulants in one pass, sharing the 1- and
+        2-RDM between them.
+
+        make_average_cumulant rebuilds the lower-order RDMs it needs on every call,
+        so asking for gamma1, gamma2, lambda2 and lambda3 one at a time builds the
+        1- and 2-RDM three times each. Callers that want the whole set, as the DSRG
+        solvers do, should use this instead.
+
+        Parameters
+        ----------
+        max_order : int, optional, default=3
+            Highest cumulant order to build. With ``max_order=2`` the 3-RDM is never
+            formed and ``lambda3`` comes back as None, which for a large active space
+            is the dominant saving in both time and memory.
+
+        Returns
+        -------
+        dm1, dm2, lambda2, lambda3 : NDArray
+            ``lambda3`` is None when ``max_order`` is 2.
+        """
+        # Defer import to avoid a circular import at module load
+        from forte2.ci.ci_utils import (
+            make_2cumulant_sf,
+            make_2cumulant_so,
+            make_3cumulant_sf,
+            make_3cumulant_so,
+        )
+
+        if max_order not in (2, 3):
+            raise ValueError(f"max_order must be one of (2, 3), got {max_order}.")
+
+        dm1 = self.make_average_rdm(1)
+        dm2 = self.make_average_rdm(2)
+        lambda2 = (make_2cumulant_so if self.two_component else make_2cumulant_sf)(
+            dm1, dm2
+        )
+        if max_order == 2:
+            return dm1, dm2, lambda2, None
+
+        dm3 = self.make_average_rdm(3)
+        lambda3 = (make_3cumulant_so if self.two_component else make_3cumulant_sf)(
+            dm1, dm2, dm3
+        )
+        return dm1, dm2, lambda2, lambda3
+
     def make_active_space_ints(self):
         """Build the active-space integrals for the current ``self.mos``."""
         return self._integrals_cls(

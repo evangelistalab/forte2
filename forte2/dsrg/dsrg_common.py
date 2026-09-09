@@ -217,20 +217,21 @@ class _DSRGHelper:
             l2,
             optimize=True,
         )
-        E += np.einsum(
-            "ewxy,uvez,xyzuwv->",
-            h2["vaaa"],
-            t2["aava"],
-            l3,
-            optimize=True,
-        )
-        E -= np.einsum(
-            "uvmz,mwxy,xyzuwv->",
-            h2["aaca"],
-            t2["caaa"],
-            l3,
-            optimize=True,
-        )
+        if l3 is not None:
+            E += np.einsum(
+                "ewxy,uvez,xyzuwv->",
+                h2["vaaa"],
+                t2["aava"],
+                l3,
+                optimize=True,
+            )
+            E -= np.einsum(
+                "uvmz,mwxy,xyzuwv->",
+                h2["aaca"],
+                t2["caaa"],
+                l3,
+                optimize=True,
+            )
         return E
 
     def H2_T2_C0_large(self, h2, s2, g1, e1):
