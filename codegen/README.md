@@ -19,8 +19,14 @@ indices from the three-index factors rather than storing it.
 
 ## Checking a change
 
-`tests/dsrg/test_dsrg_mrpt3_kernels.py` contracts random operands through both
-the generated kernels and `_DSRGDenseHelper`, which holds the same equations in
-composite indices and is kept as ground truth. Every kernel must agree to
-machine precision. That check is what catches an expansion or pruning mistake;
-the energy tests alone would not localize one.
+`tests/dsrg/test_dsrg_mrpt3.py` pins the four stage energies separately, both
+reference-relaxation trajectories, and equality with the two-component code
+under a GHF reference, where the two formalisms coincide. Regenerating and
+running those is the check on a change to the equations.
+
+The expansion was originally validated against a composite-index implementation
+of the same equations, kernel by kernel on random operands to machine
+precision. That reference has been removed now the generated kernels are
+established; if the pruning rules in `expand.py` are changed substantially, it
+is worth reinstating something equivalent, because the energy tests show a
+shifted total rather than naming the kernel at fault.
