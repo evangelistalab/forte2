@@ -12,10 +12,9 @@ from .iao import IBO
 class AtomicOrbitalAssignment:
     """Atomic MINAO target assigned to one atomically aligned IBO.
 
-    ``atom_index`` and ``minao_basis_index`` are zero-based. The latter is the
-    absolute basis-function index in Forte2's native MINAO ordering.
-    ``component_index`` is the function's index within its real-spherical
-    shell.
+    ``minao_basis_index`` is the absolute basis function index in Forte2's
+    native MINAO ordering. ``component_index`` is the function's index within
+    its real-spherical shell.
     """
 
     atom_index: int
@@ -68,33 +67,41 @@ class IBOAligner:
         NDArray
             The aligned IBO coefficient matrix.
         """
+        # compute the IAO/IBO overlap matrix
+        S_iao_ibo = self.C_iao.T @ self.S1 @ self.C_ibo
 
-        C_ibo_iao = self.C_iao.T @ self.S1 @ self.C_ibo
+        # align the IBOs with the axis-oriented IAOs
         _, self.U_ibo = self._align_cartesian_atomic_orbitals(
-            C_ibo_iao, self.U_ibo.copy()
+            S_iao_ibo, self.U_ibo.copy()
         )
+
+        # Update the MO coefficients
         self.C_ibo = self.C_occ @ self.U_ibo
         return self.C_ibo
 
-    def _align_cartesian_atomic_orbitals(self, C_ibo_iao, U_ibo):
-        """Fix atom-local blocks to the global axis-oriented IAOs.
+    def _align_cartesian_atomic_orbitals(self, S_iao_ibo, U_ibo):
+        """Align atom-local IBOs with the global axis-oriented IAOs.
 
-        Group all sufficiently atom-local IBOs by their dominant atom. Such a
-        block may span several radial and angular-momentum shells. Use an
-        orthogonal Procrustes rotation to maximize its overlap with the best
-        matching ordered minimal-basis atomic orbitals. This fixes phases and
-        orientations without imposing an artificial shell separation. A trial
-        rotation is accepted only if every output orbital remains predominantly
-        localized on the same atom.
+        Group all IBOs sufficiently localized on an atom by their dominant atom.
+        One block may span several radial and angular-momentum shells.
+
+        We then use an orthogonal Procrustes rotation to maximize its overlap with
+        a minimal basis of atomic orbitals. This fixes phases and orientations
+        without imposing an artificial shell separation. The smallest singular
+        value of the target overlap determines whether the block is accepted.
         """
 
         atom_local_threshold = 0.9
-        target_weight_threshold = 0.9
 
         center_ranges = self.system.minao_basis.center_first_and_last
+        # atom_populations[a, i] is the IAO population of IBO_i on atom a.
         atom_populations = np.vstack(
             [
-                np.einsum("mi,mi->i", C_ibo_iao[first:last], C_ibo_iao[first:last])
+                np.einsum(
+                    "mi,mi->i",
+                    S_iao_ibo[first:last].conj(),
+                    S_iao_ibo[first:last],
+                ).real
                 for first, last in center_ranges
             ]
         )
@@ -104,51 +111,66 @@ class IBOAligner:
             atom_rows.setdefault(label.iatom, []).append(row)
 
         alignment_groups = []
-        objective_before = self._ibo_objective(C_ibo_iao)
-        for iatom, rows in atom_rows.items():
-            group = [
+        objective_before = self._ibo_objective(S_iao_ibo)
+
+        for iatom, iaos_indices in atom_rows.items():
+            # Find the IBOs with significant population on this atom. If there are more
+            # important IBOs than available atomic orbitals, skip this atom.
+            important_ibos = [
                 i
                 for i in range(self.nocc)
-                if np.argmax(atom_populations[:, i]) == iatom
-                and atom_populations[iatom, i] > atom_local_threshold
+                if atom_populations[iatom, i] > atom_local_threshold
             ]
-            if not group or len(group) > len(rows):
+            niibos = len(important_ibos)
+            if not important_ibos or niibos > len(iaos_indices):
                 continue
 
-            row_weights = {row: np.sum(C_ibo_iao[row, group] ** 2) for row in rows}
-            target_rows = sorted(rows, key=row_weights.get, reverse=True)[: len(group)]
-            target_rows.sort(
-                key=lambda row: self._atomic_orbital_order(minao_labels[row])
+            # IAO weights computed from the important IBOs. The IAO with the largest total population
+            # from the important IBOs is the best candidate for alignment.
+            iaos_weights = {
+                iao: np.sum(np.abs(S_iao_ibo[iao, important_ibos]) ** 2)
+                for iao in iaos_indices
+            }
+
+            # Sort the important IAOs by their total population from the important IBOs,
+            # and select the top niibos.
+            target_iaos = sorted(iaos_indices, key=iaos_weights.get, reverse=True)[: niibos]
+            # Sort the selected IAOs by their atomic orbital order to ensure a
+            # consistent ordering of the aligned IBOs.
+            target_iaos.sort(
+                key=lambda iao: self._atomic_orbital_order(minao_labels[iao])
             )
-            target_weight = np.sum(C_ibo_iao[np.ix_(target_rows, group)] ** 2) / len(
-                group
+
+            # A = T.T @ S @ L is the target-IAO-by-IBO overlap.
+            target_overlap = S_iao_ibo[np.ix_(target_iaos, important_ibos)]
+
+            # The rotation acts as L -> L @ Q, so Procrustes requires
+            # M = L.T @ S @ T = target_overlap.T.
+            M = target_overlap.T
+            rotation, singular_values = procrustes_rotation(
+                M, return_singular_values=True
             )
-            if target_weight < target_weight_threshold:
+            # If the smallest singular value is too small, the IBOs cannot be aligned to
+            # the target IAOs, so we skip this atom.
+            if singular_values[-1] ** 2 < atom_local_threshold:
                 continue
 
-            # M = L^T S T. Because C_ibo_iao contains IBO coefficients in
-            # the orthonormal IAO basis, the selected rows are T^T S L.
-            M = C_ibo_iao[np.ix_(target_rows, group)].T
-            rotation = procrustes_rotation(M)
-
-            C_trial = C_ibo_iao.copy()
-            C_trial[:, group] = C_trial[:, group] @ rotation
-            first, last = center_ranges[iatom]
-            trial_populations = np.einsum(
-                "mi,mi->i", C_trial[first:last, group], C_trial[first:last, group]
+            # Update the IAO/IBO overlap.
+            S_iao_ibo[:, important_ibos] = (
+                S_iao_ibo[:, important_ibos] @ rotation
             )
-            if np.any(trial_populations < atom_local_threshold):
-                continue
+            
+            # Update the IBO coefficients with the rotation.
+            U_ibo[:, important_ibos] = U_ibo[:, important_ibos] @ rotation
 
-            C_ibo_iao = C_trial
-            U_ibo[:, group] = U_ibo[:, group] @ rotation
-            alignment_groups.append((iatom, tuple(group), tuple(target_rows)))
+            # Store the alignment group for later ordering.
+            alignment_groups.append((iatom, tuple(important_ibos), tuple(target_iaos)))
 
-        C_ibo_iao, U_ibo, alignment_groups = self._order_atomic_orbitals(
-            C_ibo_iao, U_ibo, alignment_groups, minao_labels
+        S_iao_ibo, U_ibo, alignment_groups = self._order_atomic_orbitals(
+            S_iao_ibo, U_ibo, alignment_groups, minao_labels
         )
         self._cartesian_alignment_groups = alignment_groups
-        objective_after = self._ibo_objective(C_ibo_iao)
+        objective_after = self._ibo_objective(S_iao_ibo)
         self._atomic_alignment_objective_change = objective_after - objective_before
         if alignment_groups:
             logger.log_info1(
@@ -157,9 +179,9 @@ class IBOAligner:
                 f"Atomic alignment change in IBO objective: "
                 f"{self._atomic_alignment_objective_change:+.3e}."
             )
-        return C_ibo_iao, U_ibo
+        return S_iao_ibo, U_ibo
 
-    def _order_atomic_orbitals(self, C_ibo_iao, U_ibo, alignment_groups, minao_labels):
+    def _order_atomic_orbitals(self, S_iao_ibo, U_ibo, alignment_groups, minao_labels):
         """Order assigned IBOs by atom and native MINAO function index."""
 
         assignment_rows = [None] * self.nocc
@@ -219,7 +241,7 @@ class IBOAligner:
 
         self.atomic_orbital_assignments = tuple(assignments)
         self.atomic_orbital_order = tuple(order)
-        return C_ibo_iao[:, order], U_ibo[:, order], reordered_groups
+        return S_iao_ibo[:, order], U_ibo[:, order], reordered_groups
 
     @staticmethod
     def _component_order(angular_momentum, component):
@@ -243,13 +265,13 @@ class IBOAligner:
             cls._component_order(label.l, label.m),
         )
 
-    def _ibo_objective(self, C_ibo_iao):
+    def _ibo_objective(self, S_iao_ibo):
         """Evaluate the atom-population objective used by the IBO optimizer."""
 
         objective = 0.0
         for first, last in self.system.minao_basis.center_first_and_last:
             populations = np.einsum(
-                "mi,mi->i", C_ibo_iao[first:last], C_ibo_iao[first:last]
+                "mi,mi->i", S_iao_ibo[first:last], S_iao_ibo[first:last]
             )
             objective += np.sum(populations**4)
         return objective

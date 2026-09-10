@@ -28,10 +28,17 @@ def test_procrustes_rotation():
     factor = rng.normal(size=(6, 6))
     positive_matrix = factor.T @ factor + np.eye(6)
 
-    recovered = procrustes_rotation(positive_matrix @ rotation)
+    recovered, singular_values = procrustes_rotation(
+        positive_matrix @ rotation, return_singular_values=True
+    )
 
     np.testing.assert_allclose(recovered, rotation, atol=1.0e-12)
     np.testing.assert_allclose(recovered.T @ recovered, np.eye(6), atol=1.0e-12)
+    np.testing.assert_allclose(
+        singular_values,
+        np.linalg.svd(positive_matrix @ rotation, compute_uv=False),
+        atol=1.0e-12,
+    )
 
 
 def test_invsqrt_matrix_singular():

@@ -222,6 +222,52 @@ def test_ibo_atomic_order_follows_atom_and_native_minao_index(monkeypatch):
     ]
 
 
+def test_ibo_alignment_rejects_a_weak_target_direction(monkeypatch):
+    labels = [
+        SimpleNamespace(abs_idx=0, iatom=0, n=1, l=0, m=0),
+        SimpleNamespace(abs_idx=1, iatom=0, n=2, l=0, m=0),
+        SimpleNamespace(abs_idx=2, iatom=0, n=2, l=1, m=0),
+        SimpleNamespace(abs_idx=3, iatom=1, n=1, l=0, m=0),
+    ]
+    monkeypatch.setattr(
+        ibo_align_module,
+        "BasisInfo",
+        lambda system, basis: SimpleNamespace(basis_labels=labels),
+    )
+
+    ibo_aligner = object.__new__(IBOAligner)
+    ibo_aligner.system = SimpleNamespace(
+        minao_basis=SimpleNamespace(center_first_and_last=[(0, 3), (3, 4)])
+    )
+    ibo_aligner.nocc = 2
+
+    # Both orbitals have at least 95% of their IAO norm on atom 0. The best two
+    # target IAOs have squared singular values 1.0 and 0.85, however. The old
+    # average-weight test saw 0.925 and accepted this incomplete target space.
+    S_iao_ibo = np.array(
+        [
+            [1.0, 0.0],
+            [0.0, np.sqrt(0.85)],
+            [0.0, np.sqrt(0.10)],
+            [0.0, np.sqrt(0.05)],
+        ]
+    )
+    angle = 0.37
+    rotation = np.array(
+        [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
+    )
+    S_rotated = S_iao_ibo @ rotation
+
+    S_aligned, U_aligned = ibo_aligner._align_cartesian_atomic_orbitals(
+        S_rotated.copy(), rotation.copy()
+    )
+
+    np.testing.assert_allclose(S_aligned, S_rotated, atol=1.0e-12)
+    np.testing.assert_allclose(U_aligned, rotation, atol=1.0e-12)
+    assert ibo_aligner._cartesian_alignment_groups == []
+    assert ibo_aligner.atomic_orbital_assignments == (None, None)
+
+
 @pytest.mark.parametrize("mode", ["ibo", "ibo_atomic"])
 def test_ibo_final_orbitals_semicanonicalizes_inactive_space(mode):
     system = System(
