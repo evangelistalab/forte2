@@ -238,17 +238,11 @@ class DSRG_MRPT3(DSRGBase):
         particle-hole direction, and the all-active block is dropped: it is an
         internal excitation, which the amplitudes never carry.
         """
-        tmp = src[self.part, self.hole] + src[self.hole, self.part].T
-        tmp[self.pa, self.ha] = 0.0
-        dest += tmp
+        dest += src[0] + src[1].T
 
     def _fold_pphh(self, dest, src):
         """The two-body counterpart of _fold_ph."""
-        tmp = src[self.part, self.part, self.hole, self.hole] + src[
-            self.hole, self.hole, self.part, self.part
-        ].transpose(2, 3, 0, 1)
-        tmp[self.pa, self.pa, self.ha, self.ha] = 0.0
-        dest += tmp
+        dest += src[0] + src[1].transpose(2, 3, 0, 1)
 
     # ------------------------------------------------------------------
     # amplitudes and renormalization
@@ -318,7 +312,7 @@ class DSRG_MRPT3(DSRGBase):
         helper.H1_T1_C1(C1, self.F0th, self.T1, -1.0)
         helper.H1_T2_C1(C1, self.F0th, self.T2, -1.0)
         helper.H1_T2_C2(C2, self.F0th, self.T2, -1.0)
-        self._project_od(C1, C2)
+        C1, C2 = self._project_od(C1, C2)
 
         # -[[H0th, A1st], A1st]
         D1 = helper.make_1body()
@@ -349,26 +343,16 @@ class DSRG_MRPT3(DSRGBase):
         The commutator of a block-diagonal operator with an excitation operator
         has no diagonal part, so this only removes the all-active block.
 
-        Done in place, via the two off-diagonal blocks rather than a second
-        full-sized buffer: those blocks are a couple of percent of the whole
-        operator, so saving and restoring them is far cheaper than copying it.
+        The kernels already produce nothing but off-diagonal blocks, so this
+        folds the hole-particle direction into the particle-hole one --
+        C1["ai"] += C1["ia"] and its two-body counterpart -- and then places the
+        result back into the whole correlated space, which is the form the
+        kernels take their inputs in.
         """
-        h, p, a = self.hole, self.part, self.actv
-
-        ph, hp = C1[p, h].copy(), C1[h, p].copy()
-        C1[...] = 0.0
-        C1[p, h], C1[h, p] = ph, hp
-        C1[a, a] = 0.0
-
-        pphh = C2[p, p, h, h].copy()
-        hhpp = C2[h, h, p, p].copy()
-        C2[...] = 0.0
-        C2[p, p, h, h], C2[h, h, p, p] = pphh, hhpp
-        C2[a, a, a, a] = 0.0
-
-        # C1["ai"] += C1["ia"] and its two-body counterpart
-        C1[p, h] += C1[h, p].T.copy()
-        C2[p, p, h, h] += C2[h, h, p, p].transpose(2, 3, 0, 1).copy()
+        C1[0][...] += C1[1].T
+        C2[0][...] += C2[1].transpose(2, 3, 0, 1)
+        helper = self.dense_helper
+        return helper.expand(C1), helper.expand(C2)
 
     def _compute_energy_pt2(self, form_hbar):
         """The second-order term, from the once-renormalized bare Hamiltonian."""

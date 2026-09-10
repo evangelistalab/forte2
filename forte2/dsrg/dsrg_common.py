@@ -797,40 +797,88 @@ class _DSRGHelper:
 
 
 class _DSRGDenseHelper:
-    """Spin-adapted commutator kernels acting on dense correlated-space operators.
+    """Spin-adapted commutator kernels for DSRG-MRPT3.
 
-    `_DSRGHelper` only produces scalars and the active-active block of Hbar, which
-    is all DSRG-MRPT2 ever needs. DSRG-MRPT3 additionally has to carry one- and
-    two-body commutators over the whole correlated space between its stages, which
-    is what these kernels are for.
+    `_DSRGHelper` only produces scalars and the active-active block of Hbar,
+    which is all DSRG-MRPT2 ever needs. DSRG-MRPT3 additionally has to carry
+    one- and two-body commutators between its stages, which is what these are
+    for.
 
-    Every operator is a dense array over the correlated space: one-body terms are
-    ``(ncorr, ncorr)`` and two-body terms are ``(ncorr,) * 4``. Amplitudes are
-    stored the same way, zero outside their hole-particle blocks. This trades
-    memory for a direct term-by-term correspondence with the reference
-    implementation; blocking it is a later optimization.
+    Each term is written once, in the index letters the reference
+    implementation uses: ``m, n`` are core, ``u, v, w, x, y, z`` active,
+    ``e, f`` virtual, ``i, j, k, l`` hole, ``a, b`` particle and ``p, q, r, s``
+    general. Those letters carry enough information to derive every slice, so
+    `_emit` builds them rather than having them spelled out per term.
 
-    Index letters follow that reference: ``m, n`` are core, ``u, v, w, x, y, z``
-    active, ``e, f`` virtual, ``i, j, k, l`` hole, ``a, b, c, d`` particle, and
-    ``p, q, r, s`` general.
+    Results are accumulated into the two off-diagonal directions separately --
+    particle-hole and hole-particle for one-body operators, pphh and hhpp for
+    two-body ones -- because that is all a commutator of the Hamiltonian with
+    an excitation operator can have. Restricting an output index to one of
+    those directions narrows the operands feeding it too, which is where the
+    saving comes from: a `pphh`-shaped result can never carry more than two
+    virtual indices.
     """
 
+    # index letter -> the space it runs over
+    _LETTER = {}
+    for _l in "mn":
+        _LETTER[_l] = "c"
+    for _l in "uvwxyz":
+        _LETTER[_l] = "a"
+    for _l in "ef":
+        _LETTER[_l] = "v"
+    for _l in "ijkl":
+        _LETTER[_l] = "h"
+    for _l in "ab":
+        _LETTER[_l] = "p"
+    for _l in "pqrs":
+        _LETTER[_l] = "g"
+    del _l
+
+    # intersection of a space with the hole or particle space
+    _ISECT = {
+        ("c", "h"): "c",
+        ("c", "p"): None,
+        ("a", "h"): "a",
+        ("a", "p"): "a",
+        ("v", "h"): None,
+        ("v", "p"): "v",
+        ("h", "h"): "h",
+        ("h", "p"): "a",
+        ("p", "h"): "a",
+        ("p", "p"): "p",
+        ("g", "h"): "h",
+        ("g", "p"): "p",
+    }
+
     def __init__(self, dsrg_obj):
-        self.c = dsrg_obj.core
-        self.a = dsrg_obj.actv
-        self.v = dsrg_obj.virt
-        self.h = dsrg_obj.hole
-        self.p = dsrg_obj.part
-        self.g = slice(None)
         self.ncorr = dsrg_obj.ncorr
-        # Amplitudes are stored blocked: T1 is (nhole, npart) and T2/S2 are
-        # (nhole, nhole, npart, npart), so their indices need slices relative
-        # to the hole and particle spaces rather than to the correlated space.
-        self.hc = dsrg_obj.hc
-        self.ha = dsrg_obj.ha
-        self.pa = dsrg_obj.pa
-        self.pv = dsrg_obj.pv
-        self.A = slice(None)
+        self.nhole = dsrg_obj.nhole
+        self.npart = dsrg_obj.npart
+        # a space -> the slice addressing it, in each of the three frames
+        self._corr = {
+            "c": dsrg_obj.core,
+            "a": dsrg_obj.actv,
+            "v": dsrg_obj.virt,
+            "h": dsrg_obj.hole,
+            "p": dsrg_obj.part,
+            "g": slice(None),
+        }
+        self._hole = {
+            "c": dsrg_obj.hc,
+            "a": dsrg_obj.ha,
+            "h": slice(None),
+            "p": dsrg_obj.ha,
+            "g": slice(None),
+        }
+        self._part = {
+            "a": dsrg_obj.pa,
+            "v": dsrg_obj.pv,
+            "p": slice(None),
+            "h": dsrg_obj.pa,
+            "g": slice(None),
+        }
+        self._frames = {"h": self._hole, "p": self._part}
         self.g1 = None
         self.e1 = None
         self.l2 = None
@@ -844,603 +892,187 @@ class _DSRGDenseHelper:
         self.e1 = cumulants["eta1"]
         self.l2 = cumulants["lambda2"]
 
+    # ------------------------------------------------------------------
+    # off-diagonal operators, stored as (particle-hole, hole-particle)
+    # ------------------------------------------------------------------
+
     def make_1body(self):
-        return np.zeros((self.ncorr,) * 2)
+        return (
+            np.zeros((self.npart, self.nhole)),
+            np.zeros((self.nhole, self.npart)),
+        )
 
     def make_2body(self):
-        return np.zeros((self.ncorr,) * 4)
+        return (
+            np.zeros((self.npart, self.npart, self.nhole, self.nhole)),
+            np.zeros((self.nhole, self.nhole, self.npart, self.npart)),
+        )
+
+    def expand(self, op):
+        """Place an off-diagonal operator back into the whole correlated space.
+
+        Needed only where an operator built by these kernels is fed back in as
+        an input, since the inputs are still contracted over general index
+        patterns. The all-active corner is an internal excitation and is
+        dropped, matching the reference implementation's block declarations.
+        """
+        c = self._corr
+        if op[0].ndim == 2:
+            out = np.zeros((self.ncorr,) * 2)
+            out[c["p"], c["h"]] = op[0]
+            out[c["h"], c["p"]] = op[1]
+            out[c["a"], c["a"]] = 0.0
+        else:
+            out = np.zeros((self.ncorr,) * 4)
+            out[c["p"], c["p"], c["h"], c["h"]] = op[0]
+            out[c["h"], c["h"], c["p"], c["p"]] = op[1]
+            out[c["a"], c["a"], c["a"], c["a"]] = 0.0
+        return out
+
+    # ------------------------------------------------------------------
+    # term engine
+    # ------------------------------------------------------------------
+
+    def _slices(self, kind, idx, eff):
+        """Slice one operand, given the space each of its indices runs over."""
+        if kind == "act":
+            return None
+        frames = {
+            "corr": (self._corr,) * len(idx),
+            "hp": (self._hole, self._part),
+            "hhpp": (self._hole, self._hole, self._part, self._part),
+        }[kind]
+        return tuple(f[eff.get(L, self._LETTER[L])] for L, f in zip(idx, frames))
+
+    def _emit(self, out, coef, spec, operands, pair=False):
+        """Accumulate one term into both off-diagonal directions of `out`.
+
+        `pair` also adds the result under the bra/ket exchange of the output
+        indices, which is how the reference implementation writes the two index
+        orders of a two-body commutator.
+        """
+        ins, res = spec.split("->")
+        ins = ins.split(",")
+        ndim = len(res)
+        directions = (
+            ("p", "h") if ndim == 2 else ("p", "p", "h", "h"),
+            ("h", "p") if ndim == 2 else ("h", "h", "p", "p"),
+        )
+
+        for arr, dirs in zip(out, directions):
+            eff = {}
+            for k, L in enumerate(res):
+                r = self._ISECT[(self._LETTER[L], dirs[k])]
+                if r is None:
+                    break
+                eff[L] = r
+            else:
+                args = []
+                for idx, (tensor, kind) in zip(ins, operands):
+                    sl = self._slices(kind, idx, eff)
+                    args.append(tensor if sl is None else tensor[sl])
+                val = coef * np.einsum(spec, *args, optimize=True)
+                osl = tuple(self._frames[dirs[k]][eff[L]] for k, L in enumerate(res))
+                arr[osl] += val
+                if pair:
+                    perm = (1, 0) if ndim == 2 else (1, 0, 3, 2)
+                    arr[tuple(osl[i] for i in perm)] += val.transpose(perm)
+
+    # ------------------------------------------------------------------
+    # kernels
+    # ------------------------------------------------------------------
 
     def H1_T1_C1(self, C1, H1, T1, alpha=1.0):
-        c, a, v, h, p, g = self.c, self.a, self.v, self.h, self.p, self.g
-
-        C1[h, g] += alpha * np.einsum(
-            "ap,ia->ip", H1[p, g], T1[self.A, self.A], optimize=True
-        )
-        C1[g, p] -= alpha * np.einsum(
-            "qi,ia->qa", H1[g, h], T1[self.A, self.A], optimize=True
-        )
+        H, T = (H1, "corr"), (T1, "hp")
+        self._emit(C1, alpha, "ap,ia->ip", (H, T))
+        self._emit(C1, -alpha, "qi,ia->qa", (H, T))
 
     def H1_T2_C1(self, C1, H1, T2, alpha=1.0):
-        c, a, v, h, p, g = self.c, self.a, self.v, self.h, self.p, self.g
-
-        C1[h, p] += (
-            2.0
-            * alpha
-            * np.einsum(
-                "bm,imab->ia",
-                H1[p, c],
-                T2[self.A, self.hc, self.A, self.A],
-                optimize=True,
-            )
-        )
-        C1[h, p] -= alpha * np.einsum(
-            "bm,miab->ia", H1[p, c], T2[self.hc, self.A, self.A, self.A], optimize=True
-        )
-
-        C1[h, p] += alpha * np.einsum(
-            "bu,ivab,uv->ia",
-            H1[p, a],
-            T2[self.A, self.ha, self.A, self.A],
-            self.g1,
-            optimize=True,
-        )
-        C1[h, p] -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "bu,viab,uv->ia",
-                H1[p, a],
-                T2[self.ha, self.A, self.A, self.A],
-                self.g1,
-                optimize=True,
-            )
-        )
-
-        C1[h, p] -= alpha * np.einsum(
-            "vj,ijau,uv->ia",
-            H1[a, h],
-            T2[self.A, self.A, self.A, self.pa],
-            self.g1,
-            optimize=True,
-        )
-        C1[h, p] += (
-            0.5
-            * alpha
-            * np.einsum(
-                "vj,jiau,uv->ia",
-                H1[a, h],
-                T2[self.A, self.A, self.A, self.pa],
-                self.g1,
-                optimize=True,
-            )
-        )
+        H, T, G = (H1, "corr"), (T2, "hhpp"), (self.g1, "act")
+        self._emit(C1, 2.0 * alpha, "bm,imab->ia", (H, T))
+        self._emit(C1, -alpha, "bm,miab->ia", (H, T))
+        self._emit(C1, alpha, "bu,ivab,uv->ia", (H, T, G))
+        self._emit(C1, -0.5 * alpha, "bu,viab,uv->ia", (H, T, G))
+        self._emit(C1, -alpha, "vj,ijau,uv->ia", (H, T, G))
+        self._emit(C1, 0.5 * alpha, "vj,jiau,uv->ia", (H, T, G))
 
     def H2_T1_C1(self, C1, H2, T1, alpha=1.0):
-        c, a, v, h, p, g = self.c, self.a, self.v, self.h, self.p, self.g
-
-        C1 += (
-            2.0
-            * alpha
-            * np.einsum(
-                "ma,qapm->qp", T1[self.hc, self.A], H2[g, p, g, c], optimize=True
-            )
-        )
-        C1 -= alpha * np.einsum(
-            "ma,aqpm->qp", T1[self.hc, self.A], H2[p, g, g, c], optimize=True
-        )
-
-        C1 += alpha * np.einsum(
-            "xe,yx,qepy->qp",
-            T1[self.ha, self.pv],
-            self.g1,
-            H2[g, v, g, a],
-            optimize=True,
-        )
-        C1 -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "xe,yx,eqpy->qp",
-                T1[self.ha, self.pv],
-                self.g1,
-                H2[v, g, g, a],
-                optimize=True,
-            )
-        )
-
-        C1 -= alpha * np.einsum(
-            "mu,uv,qvpm->qp",
-            T1[self.hc, self.pa],
-            self.g1,
-            H2[g, a, g, c],
-            optimize=True,
-        )
-        C1 += (
-            0.5
-            * alpha
-            * np.einsum(
-                "mu,uv,vqpm->qp",
-                T1[self.hc, self.pa],
-                self.g1,
-                H2[a, g, g, c],
-                optimize=True,
-            )
-        )
+        H, T, G = (H2, "corr"), (T1, "hp"), (self.g1, "act")
+        self._emit(C1, 2.0 * alpha, "ma,qapm->qp", (T, H))
+        self._emit(C1, -alpha, "ma,aqpm->qp", (T, H))
+        self._emit(C1, alpha, "xe,yx,qepy->qp", (T, G, H))
+        self._emit(C1, -0.5 * alpha, "xe,yx,eqpy->qp", (T, G, H))
+        self._emit(C1, -alpha, "mu,uv,qvpm->qp", (T, G, H))
+        self._emit(C1, 0.5 * alpha, "mu,uv,vqpm->qp", (T, G, H))
 
     def H2_T2_C1(self, C1, H2, T2, S2, alpha=1.0):
-        c, a, v, h, p, g = self.c, self.a, self.v, self.h, self.p, self.g
-        g1, e1, l2 = self.g1, self.e1, self.l2
+        H, T, S = (H2, "corr"), (T2, "hhpp"), (S2, "hhpp")
+        G, E, L = (self.g1, "act"), (self.e1, "act"), (self.l2, "act")
 
-        # particle contractions -> C1["ir"]
-        C1[h, g] += alpha * np.einsum(
-            "abrm,imab->ir",
-            H2[p, p, g, c],
-            S2[self.A, self.hc, self.A, self.A],
-            optimize=True,
-        )
-        C1[h, g] += (
-            0.5
-            * alpha
-            * np.einsum(
-                "uv,ivab,abru->ir",
-                g1,
-                S2[self.A, self.ha, self.A, self.A],
-                H2[p, p, g, a],
-                optimize=True,
-            )
-        )
-        C1[h, g] += (
-            0.25
-            * alpha
-            * np.einsum(
-                "ijux,xy,uv,vyrj->ir",
-                S2[self.A, self.A, self.pa, self.pa],
-                g1,
-                g1,
-                H2[a, a, g, h],
-                optimize=True,
-            )
-        )
-        C1[h, g] -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "uv,imub,vbrm->ir",
-                g1,
-                S2[self.A, self.hc, self.pa, self.A],
-                H2[a, p, g, c],
-                optimize=True,
-            )
-        )
-        C1[h, g] -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "uv,miub,bvrm->ir",
-                g1,
-                S2[self.hc, self.A, self.pa, self.A],
-                H2[p, a, g, c],
-                optimize=True,
-            )
-        )
-        C1[h, g] -= (
-            0.25
-            * alpha
-            * np.einsum(
-                "iyub,uv,xy,vbrx->ir",
-                S2[self.A, self.ha, self.pa, self.A],
-                g1,
-                g1,
-                H2[a, p, g, a],
-                optimize=True,
-            )
-        )
-        C1[h, g] -= (
-            0.25
-            * alpha
-            * np.einsum(
-                "iybu,uv,xy,bvrx->ir",
-                S2[self.A, self.ha, self.A, self.pa],
-                g1,
-                g1,
-                H2[p, a, g, a],
-                optimize=True,
-            )
-        )
+        # particle contractions
+        self._emit(C1, alpha, "abrm,imab->ir", (H, S))
+        self._emit(C1, 0.5 * alpha, "uv,ivab,abru->ir", (G, S, H))
+        self._emit(C1, 0.25 * alpha, "ijux,xy,uv,vyrj->ir", (S, G, G, H))
+        self._emit(C1, -0.5 * alpha, "uv,imub,vbrm->ir", (G, S, H))
+        self._emit(C1, -0.5 * alpha, "uv,miub,bvrm->ir", (G, S, H))
+        self._emit(C1, -0.25 * alpha, "iyub,uv,xy,vbrx->ir", (S, G, G, H))
+        self._emit(C1, -0.25 * alpha, "iybu,uv,xy,bvrx->ir", (S, G, G, H))
+        self._emit(C1, 0.5 * alpha, "ijxy,xyuv,uvrj->ir", (T, L, H))
+        self._emit(C1, 0.5 * alpha, "aurx,ivay,xyuv->ir", (H, S, L))
+        self._emit(C1, -0.5 * alpha, "uarx,ivay,xyuv->ir", (H, T, L))
+        self._emit(C1, -0.5 * alpha, "uarx,ivya,xyvu->ir", (H, T, L))
 
-        # C_4 C_2 2:2 -> C1["ir"]
-        C1[h, g] += (
-            0.5
-            * alpha
-            * np.einsum(
-                "ijxy,xyuv,uvrj->ir",
-                T2[self.A, self.A, self.pa, self.pa],
-                l2,
-                H2[a, a, g, h],
-                optimize=True,
-            )
-        )
-        C1[h, g] += (
-            0.5
-            * alpha
-            * np.einsum(
-                "aurx,ivay,xyuv->ir",
-                H2[p, a, g, a],
-                S2[self.A, self.ha, self.A, self.pa],
-                l2,
-                optimize=True,
-            )
-        )
-        C1[h, g] -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "uarx,ivay,xyuv->ir",
-                H2[a, p, g, a],
-                T2[self.A, self.ha, self.A, self.pa],
-                l2,
-                optimize=True,
-            )
-        )
-        C1[h, g] -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "uarx,ivya,xyvu->ir",
-                H2[a, p, g, a],
-                T2[self.A, self.ha, self.pa, self.A],
-                l2,
-                optimize=True,
-            )
-        )
+        # hole contractions
+        self._emit(C1, -alpha, "peij,ijae->pa", (H, S))
+        self._emit(C1, -0.5 * alpha, "uv,ijau,pvij->pa", (E, S, H))
+        self._emit(C1, -0.25 * alpha, "vyab,uv,xy,pbux->pa", (S, E, E, H))
+        self._emit(C1, 0.5 * alpha, "uv,vjae,peuj->pa", (E, S, H))
+        self._emit(C1, 0.5 * alpha, "uv,jvae,peju->pa", (E, S, H))
+        self._emit(C1, 0.25 * alpha, "vjax,uv,xy,pyuj->pa", (S, E, E, H))
+        self._emit(C1, 0.25 * alpha, "jvax,xy,uv,pyju->pa", (S, E, E, H))
+        self._emit(C1, -0.5 * alpha, "xyuv,uvab,pbxy->pa", (L, T, H))
+        self._emit(C1, -0.5 * alpha, "puix,ivay,xyuv->pa", (H, S, L))
+        self._emit(C1, 0.5 * alpha, "puxi,ivay,xyuv->pa", (H, T, L))
+        self._emit(C1, 0.5 * alpha, "puxi,viay,xyvu->pa", (H, T, L))
 
-        # hole contractions -> C1["pa"]
-        C1[g, p] -= alpha * np.einsum(
-            "peij,ijae->pa",
-            H2[g, v, h, h],
-            S2[self.A, self.A, self.A, self.pv],
-            optimize=True,
-        )
-        C1[g, p] -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "uv,ijau,pvij->pa",
-                e1,
-                S2[self.A, self.A, self.A, self.pa],
-                H2[g, a, h, h],
-                optimize=True,
-            )
-        )
-        C1[g, p] -= (
-            0.25
-            * alpha
-            * np.einsum(
-                "vyab,uv,xy,pbux->pa",
-                S2[self.ha, self.ha, self.A, self.A],
-                e1,
-                e1,
-                H2[g, p, a, a],
-                optimize=True,
-            )
-        )
-        C1[g, p] += (
-            0.5
-            * alpha
-            * np.einsum(
-                "uv,vjae,peuj->pa",
-                e1,
-                S2[self.ha, self.A, self.A, self.pv],
-                H2[g, v, a, h],
-                optimize=True,
-            )
-        )
-        C1[g, p] += (
-            0.5
-            * alpha
-            * np.einsum(
-                "uv,jvae,peju->pa",
-                e1,
-                S2[self.A, self.ha, self.A, self.pv],
-                H2[g, v, h, a],
-                optimize=True,
-            )
-        )
-        C1[g, p] += (
-            0.25
-            * alpha
-            * np.einsum(
-                "vjax,uv,xy,pyuj->pa",
-                S2[self.ha, self.A, self.A, self.pa],
-                e1,
-                e1,
-                H2[g, a, a, h],
-                optimize=True,
-            )
-        )
-        C1[g, p] += (
-            0.25
-            * alpha
-            * np.einsum(
-                "jvax,xy,uv,pyju->pa",
-                S2[self.A, self.ha, self.A, self.pa],
-                e1,
-                e1,
-                H2[g, a, h, a],
-                optimize=True,
-            )
-        )
-
-        # C_4 C_2 2:2 -> C1["pa"]
-        C1[g, p] -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "xyuv,uvab,pbxy->pa",
-                l2,
-                T2[self.ha, self.ha, self.A, self.A],
-                H2[g, p, a, a],
-                optimize=True,
-            )
-        )
-        C1[g, p] -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "puix,ivay,xyuv->pa",
-                H2[g, a, h, a],
-                S2[self.A, self.ha, self.A, self.pa],
-                l2,
-                optimize=True,
-            )
-        )
-        C1[g, p] += (
-            0.5
-            * alpha
-            * np.einsum(
-                "puxi,ivay,xyuv->pa",
-                H2[g, a, a, h],
-                T2[self.A, self.ha, self.A, self.pa],
-                l2,
-                optimize=True,
-            )
-        )
-        C1[g, p] += (
-            0.5
-            * alpha
-            * np.einsum(
-                "puxi,viay,xyvu->pa",
-                H2[g, a, a, h],
-                T2[self.ha, self.A, self.A, self.pa],
-                l2,
-                optimize=True,
-            )
-        )
-
-        # C_4 C_2 1:3 -> C1
-        C1[h, p] += (
-            0.5
-            * alpha
-            * np.einsum(
-                "avxy,ujab,xyuv->jb",
-                H2[p, a, a, a],
-                S2[self.ha, self.A, self.A, self.A],
-                l2,
-                optimize=True,
-            )
-        )
-        C1[h, p] -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "uviy,ijxb,xyuv->jb",
-                H2[a, a, h, a],
-                S2[self.A, self.A, self.pa, self.A],
-                l2,
-                optimize=True,
-            )
-        )
-
-        C1 += alpha * np.einsum(
-            "eqxs,uvey,xyuv->qs",
-            H2[v, g, a, g],
-            T2[self.ha, self.ha, self.pv, self.pa],
-            l2,
-            optimize=True,
-        )
-        C1 -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "eqsx,uvey,xyuv->qs",
-                H2[v, g, g, a],
-                T2[self.ha, self.ha, self.pv, self.pa],
-                l2,
-                optimize=True,
-            )
-        )
-        C1 -= alpha * np.einsum(
-            "uqms,mvxy,xyuv->qs",
-            H2[a, g, c, g],
-            T2[self.hc, self.ha, self.pa, self.pa],
-            l2,
-            optimize=True,
-        )
-        C1 += (
-            0.5
-            * alpha
-            * np.einsum(
-                "uqsm,mvxy,xyuv->qs",
-                H2[a, g, g, c],
-                T2[self.hc, self.ha, self.pa, self.pa],
-                l2,
-                optimize=True,
-            )
-        )
+        # one active index on the amplitude
+        self._emit(C1, 0.5 * alpha, "avxy,ujab,xyuv->jb", (H, S, L))
+        self._emit(C1, -0.5 * alpha, "uviy,ijxb,xyuv->jb", (H, S, L))
+        self._emit(C1, alpha, "eqxs,uvey,xyuv->qs", (H, T, L))
+        self._emit(C1, -0.5 * alpha, "eqsx,uvey,xyuv->qs", (H, T, L))
+        self._emit(C1, -alpha, "uqms,mvxy,xyuv->qs", (H, T, L))
+        self._emit(C1, 0.5 * alpha, "uqsm,mvxy,xyuv->qs", (H, T, L))
 
     def H1_T2_C2(self, C2, H1, T2, alpha=1.0):
-        c, a, v, h, p, g = self.c, self.a, self.v, self.h, self.p, self.g
-
-        temp = alpha * np.einsum(
-            "ijab,ap->ijpb", T2[self.A, self.A, self.A, self.A], H1[p, g], optimize=True
-        )
-        C2[h, h, g, p] += temp
-        C2[h, h, p, g] += np.einsum("ijpb->jibp", temp)
-
-        temp = alpha * np.einsum(
-            "ijab,qi->qjab", T2[self.A, self.A, self.A, self.A], H1[g, h], optimize=True
-        )
-        C2[g, h, p, p] -= temp
-        C2[h, g, p, p] -= np.einsum("qjab->jqba", temp)
+        H, T = (H1, "corr"), (T2, "hhpp")
+        self._emit(C2, alpha, "ijab,ap->ijpb", (T, H), pair=True)
+        self._emit(C2, -alpha, "ijab,qi->qjab", (T, H), pair=True)
 
     def H2_T1_C2(self, C2, H2, T1, alpha=1.0):
-        c, a, v, h, p, g = self.c, self.a, self.v, self.h, self.p, self.g
-
-        temp = alpha * np.einsum(
-            "ia,arpq->irpq", T1[self.A, self.A], H2[p, g, g, g], optimize=True
-        )
-        C2[h, g, g, g] += temp
-        C2[g, h, g, g] += np.einsum("irpq->riqp", temp)
-
-        temp = alpha * np.einsum(
-            "ia,rsiq->rsaq", T1[self.A, self.A], H2[g, g, h, g], optimize=True
-        )
-        C2[g, g, p, g] -= temp
-        C2[g, g, g, p] -= np.einsum("rsaq->srqa", temp)
+        H, T = (H2, "corr"), (T1, "hp")
+        self._emit(C2, alpha, "ia,arpq->irpq", (T, H), pair=True)
+        self._emit(C2, -alpha, "ia,rsiq->rsaq", (T, H), pair=True)
 
     def H2_T2_C2(self, C2, H2, T2, S2, alpha=1.0):
-        c, a, v, h, p, g = self.c, self.a, self.v, self.h, self.p, self.g
-        g1, e1 = self.g1, self.e1
+        H, T, S = (H2, "corr"), (T2, "hhpp"), (S2, "hhpp")
+        G, E = (self.g1, "act"), (self.e1, "act")
 
-        # particle-particle contractions
-        C2[h, h, g, g] += alpha * np.einsum(
-            "abrs,ijab->ijrs",
-            H2[p, p, g, g],
-            T2[self.A, self.A, self.A, self.A],
-            optimize=True,
-        )
-        temp = (
-            0.5
-            * alpha
-            * np.einsum(
-                "xy,ijxb,ybrs->ijrs",
-                g1,
-                T2[self.A, self.A, self.pa, self.A],
-                H2[a, p, g, g],
-                optimize=True,
-            )
-        )
-        C2[h, h, g, g] -= temp
-        C2[h, h, g, g] -= np.einsum("ijrs->jisr", temp)
+        # particle-particle
+        self._emit(C2, alpha, "abrs,ijab->ijrs", (H, T))
+        self._emit(C2, -0.5 * alpha, "xy,ijxb,ybrs->ijrs", (G, T, H), pair=True)
 
-        # hole-hole contractions
-        C2[g, g, p, p] += alpha * np.einsum(
-            "pqij,ijab->pqab",
-            H2[g, g, h, h],
-            T2[self.A, self.A, self.A, self.A],
-            optimize=True,
-        )
-        temp = (
-            0.5
-            * alpha
-            * np.einsum(
-                "xy,yjab,pqxj->pqab",
-                e1,
-                T2[self.ha, self.A, self.A, self.A],
-                H2[g, g, a, h],
-                optimize=True,
-            )
-        )
-        C2[g, g, p, p] -= temp
-        C2[g, g, p, p] -= np.einsum("pqab->qpba", temp)
+        # hole-hole
+        self._emit(C2, alpha, "pqij,ijab->pqab", (H, T))
+        self._emit(C2, -0.5 * alpha, "xy,yjab,pqxj->pqab", (E, T, H), pair=True)
 
-        # hole-particle contractions
-        temp = alpha * np.einsum(
-            "aqms,mjab->qjsb",
-            H2[p, g, c, g],
-            S2[self.hc, self.A, self.A, self.A],
-            optimize=True,
-        )
-        temp -= alpha * np.einsum(
-            "aqsm,mjab->qjsb",
-            H2[p, g, g, c],
-            T2[self.hc, self.A, self.A, self.A],
-            optimize=True,
-        )
-        temp += (
-            0.5
-            * alpha
-            * np.einsum(
-                "xy,yjab,aqxs->qjsb",
-                g1,
-                S2[self.ha, self.A, self.A, self.A],
-                H2[p, g, a, g],
-                optimize=True,
-            )
-        )
-        temp -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "xy,yjab,aqsx->qjsb",
-                g1,
-                T2[self.ha, self.A, self.A, self.A],
-                H2[p, g, g, a],
-                optimize=True,
-            )
-        )
-        temp -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "xy,ijxb,yqis->qjsb",
-                g1,
-                S2[self.A, self.A, self.pa, self.A],
-                H2[a, g, h, g],
-                optimize=True,
-            )
-        )
-        temp += (
-            0.5
-            * alpha
-            * np.einsum(
-                "xy,ijxb,yqsi->qjsb",
-                g1,
-                T2[self.A, self.A, self.pa, self.A],
-                H2[a, g, g, h],
-                optimize=True,
-            )
-        )
-        C2[g, h, g, p] += temp
-        C2[h, g, p, g] += np.einsum("qjsb->jqbs", temp)
+        # hole-particle
+        self._emit(C2, alpha, "aqms,mjab->qjsb", (H, S), pair=True)
+        self._emit(C2, -alpha, "aqsm,mjab->qjsb", (H, T), pair=True)
+        self._emit(C2, 0.5 * alpha, "xy,yjab,aqxs->qjsb", (G, S, H), pair=True)
+        self._emit(C2, -0.5 * alpha, "xy,yjab,aqsx->qjsb", (G, T, H), pair=True)
+        self._emit(C2, -0.5 * alpha, "xy,ijxb,yqis->qjsb", (G, S, H), pair=True)
+        self._emit(C2, 0.5 * alpha, "xy,ijxb,yqsi->qjsb", (G, T, H), pair=True)
 
-        temp = -alpha * np.einsum(
-            "aqsm,mjba->jqsb",
-            H2[p, g, g, c],
-            T2[self.hc, self.A, self.A, self.A],
-            optimize=True,
-        )
-        temp -= (
-            0.5
-            * alpha
-            * np.einsum(
-                "xy,yjba,aqsx->jqsb",
-                g1,
-                T2[self.ha, self.A, self.A, self.A],
-                H2[p, g, g, a],
-                optimize=True,
-            )
-        )
-        temp += (
-            0.5
-            * alpha
-            * np.einsum(
-                "xy,ijbx,yqsi->jqsb",
-                g1,
-                T2[self.A, self.A, self.A, self.pa],
-                H2[a, g, g, h],
-                optimize=True,
-            )
-        )
-        C2[h, g, g, p] += temp
-        C2[g, h, p, g] += np.einsum("jqsb->qjbs", temp)
+        self._emit(C2, -alpha, "aqsm,mjba->jqsb", (H, T), pair=True)
+        self._emit(C2, -0.5 * alpha, "xy,yjba,aqsx->jqsb", (G, T, H), pair=True)
+        self._emit(C2, 0.5 * alpha, "xy,ijbx,yqsi->jqsb", (G, T, H), pair=True)
