@@ -143,9 +143,10 @@ class RelDSRG_MRPT3(DSRGBase):
         _sl = {"c": self.core, "a": self.actv, "v": self.virt}
         # we store the F and V tensors transposed to help with cache locality in contractions.
         F_temp = np.conj(self.fock - np.diag(np.diag(self.fock)))  # remove diagonal
-        ints["F"] = self.dsrg_helper.make_tensor(self.dsrg_helper.all_1_labels)
-        for blk in ints["F"].keys():
-            ints["F"][blk] = F_temp[_sl[blk[0]], _sl[blk[1]]].copy()
+        ints["F"] = {
+            blk: F_temp[_sl[blk[0]], _sl[blk[1]]].copy()
+            for blk in self.dsrg_helper.all_1_labels
+        }
 
         ints["E"] = cas_energy_given_RDMs(
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
@@ -172,8 +173,11 @@ class RelDSRG_MRPT3(DSRGBase):
             if y + x not in B_so:
                 B_so[y + x] = B_so[x + y].transpose(0, 2, 1).conj()
 
-        ints["V"] = self.dsrg_helper.make_tensor(self.dsrg_helper.all_2_labels)
-        for blk in ints["V"].keys():
+        # built block by block rather than into a zeroed tensor: every block is
+        # overwritten below, so pre-allocating the whole set only doubles the
+        # largest block and wastes a pass over all of it
+        ints["V"] = dict()
+        for blk in self.dsrg_helper.all_2_labels:
             p, q, r, s = blk
             V_blk = np.einsum("Ppr,Pqs->pqrs", B_so[p + r], B_so[q + s], optimize=True)
             # The exchange term (ps|qr) is a transpose of the direct term whenever the
@@ -504,12 +508,14 @@ class RelDSRG_MRPT3(DSRGBase):
             self.Htilde1A1_2b, self.H0A1_2b, self.T2_1, self.cumulants
         )
 
-        _temp_1b = self.dsrg_helper.make_tensor(self.dsrg_helper.non_od_1_labels)
-        _temp_2b = self.dsrg_helper.make_tensor(self.dsrg_helper.non_od_2_labels)
-        for blk in _temp_1b.keys():
-            _temp_1b[blk] = 2 * self.ints["F"][blk].conj()
-        for blk in _temp_2b.keys():
-            _temp_2b[blk] = 2 * self.ints["V"][blk].conj()
+        _temp_1b = {
+            blk: 2 * self.ints["F"][blk].conj()
+            for blk in self.dsrg_helper.non_od_1_labels
+        }
+        _temp_2b = {
+            blk: 2 * self.ints["V"][blk].conj()
+            for blk in self.dsrg_helper.non_od_2_labels
+        }
 
         self.dsrg_helper.H1_T1_C1_non_od(
             self.Htilde1A1_1b, _temp_1b, self.T1_1, self.cumulants
@@ -529,6 +535,10 @@ class RelDSRG_MRPT3(DSRGBase):
         self.dsrg_helper.H2_T2_C2_non_od(
             self.Htilde1A1_2b, _temp_2b, self.T2_1, self.cumulants
         )
+        # last read of the doubled integrals; the streaming kernels below work
+        # from the three-index tensors and carry this stage's peak
+        del _temp_1b, _temp_2b
+
         self.dsrg_helper.H2_T2_C1_non_od_large(
             self.Htilde1A1_1b, self.ints["B"], self.T2_1, self.cumulants, scale=2.0
         )
@@ -565,6 +575,9 @@ class RelDSRG_MRPT3(DSRGBase):
                 self.cumulants,
                 scale=0.5,
             )
+        # last read of the first-order commutator: the third stage works from
+        # Htilde1A1 and the first-order amplitudes
+        self.H0A1_1b = self.H0A1_2b = None
         return E
 
     def _compute_energy_pt3_3(self, form_hbar):
