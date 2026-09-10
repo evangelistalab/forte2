@@ -131,7 +131,7 @@ def main():
         + fmt("OD2_LABELS", OD2)
         + fmt("T2_LABELS", T2_SUPPORT)
         + fmt("T1_LABELS", T1_SUPPORT)
-        + "_DF_TARGET = 250_000\n"
+        + "_DF_TARGET = 1_000_000\n"
     )
     src = header + "\n" + "\n\n".join(chunks) + "\n" + labels
     return src.rstrip("\n") + "\n"
