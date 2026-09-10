@@ -4,7 +4,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from .dsrg_base import DSRGBase
-from .dsrg_common import _DSRGDenseHelper
+from .dsrg_mrpt3_kernels import (
+    ALL1_LABELS,
+    T1_LABELS,
+    T2_LABELS,
+    _DSRGBlockHelper,
+)
 from .utils import (
     cas_energy_given_RDMs,
     compute_t1_block,
@@ -13,6 +18,30 @@ from .utils import (
     renormalize_V_block,
     rotate_active_ints,
 )
+
+# The running one- and two-body operators are Hbar, not commutators, so unlike
+# the off-diagonal blocks they keep their all-active piece.
+PH_LABELS = tuple("".join(t) for t in itertools.product("av", "ca"))
+PPHH_LABELS = tuple("".join(t) for t in itertools.product("av", "av", "ca", "ca"))
+# Integral blocks with three or more virtual indices are rebuilt from the
+# three-index factors where they are needed, so they are never stored: at
+# cc-pVQZ they are all but a tenth of what the integrals would otherwise be.
+V_LABELS = tuple(
+    b
+    for b in ("".join(t) for t in itertools.product("cav", repeat=4))
+    if b.count("v") < 3
+)
+B2_LABELS = tuple("".join(t) for t in itertools.product("cav", repeat=2))
+
+
+def _is_pphh(label):
+    """Whether a two-body block is particle-particle-hole-hole.
+
+    Both halves must be checked: a label like "ccaa" ends in two active indices
+    yet is hole-hole-particle-particle, and testing only the trailing pair
+    silently folds it the wrong way round.
+    """
+    return all(c in "av" for c in label[:2]) and all(c in "ca" for c in label[2:])
 
 
 @dataclass
@@ -127,127 +156,57 @@ class DSRG_MRPT3(DSRGBase):
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
         )
 
-        # Dense two-electron integrals over the whole correlated space:
-        # <pq|rs> = (pr|qs).
         B = self.fock_builder.B_tensor_gen_block(self._C_semican, self._C_semican)
-        ints["V"] = self._build_v_blocks(B)
-        # kept for the contractions that would otherwise reach the four-virtual
-        # integrals; a few MiB against tens for the block they replace
-        c, a, v, h, p = self.core, self.actv, self.virt, self.hole, self.part
+        sp = {"c": self.core, "a": self.actv, "v": self.virt}
         ints["B"] = {
-            "part": np.ascontiguousarray(B[:, p, p]),
-            "vv": np.ascontiguousarray(B[:, v, v]),
-            "vc": np.ascontiguousarray(B[:, v, c]),
-            "va": np.ascontiguousarray(B[:, v, a]),
-            "hv": np.ascontiguousarray(B[:, h, v]),
-            "av": np.ascontiguousarray(B[:, a, v]),
+            b: np.ascontiguousarray(B[:, sp[b[0]], sp[b[1]]]) for b in B2_LABELS
         }
+        ints["V"] = self._build_v_blocks(ints["B"])
 
-        ints["eps"] = dict()
-        for key, sl in (
-            ("c", self.core),
-            ("a", self.actv),
-            ("v", self.virt),
-            ("h", self.hole),
-            ("p", self.part),
-        ):
-            ints["eps"][key] = self.eps[sl].copy()
+        ints["eps"] = {k: self.eps[sl].copy() for k, sl in sp.items()}
 
         return ints, cumulants
 
-    # Blocks of the two-electron integrals that no contraction reaches once the
-    # particle ladder is streamed. Together they are most of the array: at
-    # cc-pVTZ the four-virtual block alone is 55% of it. Verified by
-    # temp/big_block_terms.py; a contraction that reached one anyway would raise
-    # rather than silently read zeros.
-    _DEAD_V_BLOCKS = frozenset(
-        {
-            ("v", "v", "h", "v"),
-            ("v", "v", "v", "v"),
-            ("v", "v", "v", "h"),
-            ("v", "h", "v", "v"),
-            ("h", "v", "v", "v"),
-        }
-    )
+    def _build_v_blocks(self, Bb):
+        """Two-electron integrals, block by block, from the three-index factors.
 
-    def _build_v_blocks(self, B):
-        """Two-electron integrals, tiled by which of the four indices are virtual.
-
-        The correlated space is the hole space followed by the virtual space, so
-        tagging each index one or the other tiles the integrals exactly, into
-        sixteen rectangles rather than the eighty-one elementary blocks a
-        core/active/virtual split would give. Each is built straight from the
-        three-index integrals, so the blocks that are never read cost nothing.
+        <pq|rs> = sum_Q B[Q,p,r] B[Q,q,s]. Blocks with three or more virtual
+        indices are not built at all: every contraction that would reach one
+        rebuilds it from the same factors instead, so the largest arrays the
+        method would otherwise hold never exist.
         """
-        span = {"h": self.hole, "v": self.virt}
         return {
-            m: np.einsum(
-                "Bpr,Bqs->pqrs",
-                B[:, span[m[0]], span[m[2]]],
-                B[:, span[m[1]], span[m[3]]],
-                optimize=True,
+            b: np.einsum(
+                "Qpr,Qqs->pqrs", Bb[b[0] + b[2]], Bb[b[1] + b[3]], optimize=True
             )
-            for m in itertools.product("hv", repeat=4)
-            if m not in self._DEAD_V_BLOCKS
+            for b in V_LABELS
         }
 
-    def _v_pphh(self, vb):
-        """Assemble the pphh rectangle from the block-stored integrals."""
-        ha, pa, pv = self.ha, self.pa, self.pv
-        out = np.zeros((self.npart, self.npart, self.nhole, self.nhole))
-        out[pa, pa] = vb["h", "h", "h", "h"][ha, ha]
-        out[pv, pa] = vb["v", "h", "h", "h"][:, ha]
-        out[pa, pv] = vb["h", "v", "h", "h"][ha, :]
-        out[pv, pv] = vb["v", "v", "h", "h"]
+    # ------------------------------------------------------------------
+    # adapters: the MRPT2 scalar and active-space kernels want dense operands
+    # ------------------------------------------------------------------
+
+    def _h1_dense(self, F):
+        out = np.zeros((self.npart, self.nhole))
+        out[self.pa, self.hc] = F["ac"]
+        out[self.pa, self.ha] = F["aa"]
+        out[self.pv, self.hc] = F["vc"]
+        out[self.pv, self.ha] = F["va"]
         return out
 
-    # ------------------------------------------------------------------
-    # block adapters: the MRPT2 kernels take dicts of individual blocks
-    # ------------------------------------------------------------------
-
-    def _h2_blocks(self, V):
-        """Name the blocks the MRPT2 kernels want out of a pphh-shaped operator.
-
-        Every block they ask for lies inside pphh, which is why the running
-        two-body operators never have to be stored over the whole space.
-        """
-        hc, ha, pa, pv = self.hc, self.ha, self.pa, self.pv
-        return {
-            "vvaa": V[pv, pv, ha, ha],
-            "aacc": V[pa, pa, hc, hc],
-            "avca": V[pa, pv, hc, ha],
-            "avac": V[pa, pv, ha, hc],
-            "vaaa": V[pv, pa, ha, ha],
-            "aaca": V[pa, pa, hc, ha],
-            "aaaa": V[pa, pa, ha, ha],
-            "vvcc": V[pv, pv, hc, hc],
-            "vvac": V[pv, pv, ha, hc],
-            "vacc": V[pv, pa, hc, hc],
-        }
-
-    def _t2_blocks(self, T2, S2):
-        hc, ha, pa, pv = self.hc, self.ha, self.pa, self.pv
-        keys = {
-            "aavv": (ha, ha, pv, pv),
-            "ccaa": (hc, hc, pa, pa),
-            "caav": (hc, ha, pa, pv),
-            "acav": (ha, hc, pa, pv),
-            "aava": (ha, ha, pv, pa),
-            "caaa": (hc, ha, pa, pa),
-        }
-        t2 = {k: T2[sl] for k, sl in keys.items()}
-        s2 = {k: S2[sl] for k, sl in keys.items()}
-        s2["ccvv"] = S2[hc, hc, pv, pv]
-        s2["acvv"] = S2[ha, hc, pv, pv]
-        s2["ccva"] = S2[hc, hc, pv, pa]
-        return {"T2": t2, "S2": s2}
+    def _t1_dense(self, T1):
+        out = np.zeros((self.nhole, self.npart))
+        out[self.hc, self.pa] = T1["ca"]
+        out[self.hc, self.pv] = T1["cv"]
+        out[self.ha, self.pv] = T1["av"]
+        return out
 
     def _evaluate_C0(self, F, V, T1, T2, S2):
         return self.dsrg_helper.evaluate_H_T_C0(
-            T1,
-            self._t2_blocks(T2, S2),
-            F,
-            self._h2_blocks(V),
+            self._t1_dense(T1),
+            {"T2": T2, "S2": S2},
+            self._h1_dense(F),
+            V,
             self.cumulants,
             store_large=True,
         )
@@ -258,105 +217,106 @@ class DSRG_MRPT3(DSRGBase):
         Each stage contributes half of its Hermitian completion; `_build_hbar`
         closes the sum once, after all four stages have accumulated.
         """
-        t1 = T1
-        blocks = self._t2_blocks(T2, S2)
-        h1 = F
-        h2 = self._h2_blocks(V)
+        t1 = self._t1_dense(T1)
+        h1 = self._h1_dense(F)
         g1, e1 = self.cumulants["gamma1"], self.cumulants["eta1"]
-
         self.hbar1 += scale * self.dsrg_helper.H_T_C1_active(
-            t1,
-            blocks["T2"],
-            blocks["S2"],
-            h1,
-            h2,
-            g1,
-            e1,
-            self.cumulants["lambda2"],
-            store_large=True,
+            t1, T2, S2, h1, V, g1, e1, self.cumulants["lambda2"], store_large=True
         )
-        self.hbar2 += scale * self.dsrg_helper.H_T_C2_active(
-            t1, blocks["T2"], blocks["S2"], h1, h2, g1, e1
-        )
+        self.hbar2 += scale * self.dsrg_helper.H_T_C2_active(t1, T2, S2, h1, V, g1, e1)
 
     # ------------------------------------------------------------------
-    # off-diagonal projections
+    # the running operators, held over their own block sets
     # ------------------------------------------------------------------
 
     def _make_ph(self):
-        return np.zeros((self.npart, self.nhole))
+        return {b: np.zeros(self._shape(b)) for b in PH_LABELS}
 
     def _make_pphh(self):
-        return np.zeros((self.npart, self.npart, self.nhole, self.nhole))
+        return {b: np.zeros(self._shape(b)) for b in PPHH_LABELS}
+
+    def _shape(self, label):
+        d = {"c": self.ncore, "a": self.nact, "v": self.nvirt}
+        return tuple(d[c] for c in label)
 
     def _fold_ph(self, dest, src):
-        """dest[particle, hole] += src[particle, hole] + src[hole, particle].T
-
-        The two index orders of the same commutator are summed into the
-        particle-hole direction, and the all-active block is dropped: it is an
-        internal excitation, which the amplitudes never carry.
-        """
-        dest += src[0]
-        dest += src[1].T
+        """Fold a commutator's two index orders into the particle-hole one."""
+        for b in dest:
+            if b in src:
+                dest[b] += src[b]
+            rev = b[1] + b[0]
+            if rev in src:
+                dest[b] += src[rev].T
 
     def _fold_pphh(self, dest, src):
         """The two-body counterpart of _fold_ph."""
-        dest += src[0]
-        dest += src[1].transpose(2, 3, 0, 1)
+        for b in dest:
+            if b in src:
+                dest[b] += src[b]
+            rev = b[2] + b[3] + b[0] + b[1]
+            if rev in src:
+                dest[b] += src[rev].transpose(2, 3, 0, 1)
 
     # ------------------------------------------------------------------
     # amplitudes and renormalization
     # ------------------------------------------------------------------
 
-    def _build_tamps(self, F, V):
-        """First- or second-order amplitudes, depending on what F and V hold."""
-        h, p, a = self.hole, self.part, self.actv
-        eps = self.ints["eps"]
-
-        T2 = np.ascontiguousarray(V.transpose(2, 3, 0, 1))
-        compute_t2_block(T2, eps["h"], eps["h"], eps["p"], eps["p"], self.flow_param)
-        T2[self.ha, self.ha, self.pa, self.pa] = 0.0
-        S2 = 2 * T2 - T2.swapaxes(2, 3)
-
-        T1 = np.ascontiguousarray(F.T)
-        T1 += self._t1_active_correction(S2)
-        compute_t1_block(T1, eps["h"], eps["p"], self.flow_param)
-        T1[self.ha, self.pa] = 0.0
-
-        return T1, T2, S2
-
-    def _t1_active_correction(self, S2):
+    def _t1_correction(self, label, S2):
         """The generalized-Fock off-diagonal correction shared by T1 and F-tilde."""
-        faa = self.F0th[self.actv, self.actv]
+        faa = self.F0th["aa"]
         g1 = self.cumulants["gamma1"]
-        s2 = S2[:, self.ha, :, self.pa]
+        s2 = S2[label[0] + "a" + label[1] + "a"]
         corr = 0.5 * np.einsum("ivaw,wu,uv->ia", s2, faa, g1, optimize=True)
         corr -= 0.5 * np.einsum("iwau,vw,uv->ia", s2, faa, g1, optimize=True)
         return corr
 
+    def _build_tamps(self, F, V):
+        """First- or second-order amplitudes, depending on what F and V hold."""
+        eps = self.ints["eps"]
+
+        T2 = {}
+        for b in T2_LABELS:
+            src = V[b[2] + b[3] + b[0] + b[1]]
+            T2[b] = np.ascontiguousarray(src.transpose(2, 3, 0, 1))
+            compute_t2_block(
+                T2[b], eps[b[0]], eps[b[1]], eps[b[2]], eps[b[3]], self.flow_param
+            )
+        S2 = {
+            b: 2 * T2[b] - T2[b[0] + b[1] + b[3] + b[2]].transpose(0, 1, 3, 2)
+            for b in T2_LABELS
+        }
+
+        T1 = {}
+        for b in T1_LABELS:
+            T1[b] = np.ascontiguousarray(F[b[1] + b[0]].T)
+            T1[b] += self._t1_correction(b, S2)
+            compute_t1_block(T1[b], eps[b[0]], eps[b[1]], self.flow_param)
+
+        return T1, T2, S2
+
     def _renormalize(self, F, V, add):
         """Scale F and V by (1 + R) if `add`, by R otherwise.
 
-        R is the DSRG source factor exp(-s * denominator^2). Only the
-        particle-hole (and particle-particle-hole-hole) parts carry a
-        denominator, so only those are touched.
+        R is the DSRG source factor exp(-s * denominator^2); only the blocks
+        that carry a denominator are touched.
         """
-        h, p = self.hole, self.part
         eps = self.ints["eps"]
-
-        bare = V.copy()
-        renormalize_V_block(V, eps["p"], eps["p"], eps["h"], eps["h"], self.flow_param)
-        if not add:
-            V -= bare
-
-        d = eps["p"][:, None] - eps["h"][None, :]
-        f = (F + self._t1_active_correction(self.S2).T) * np.exp(
-            -self.flow_param * d**2
-        )
-        if add:
-            F += f
-        else:
-            F[:] = f
+        for b, blk in V.items():
+            bare = blk.copy()
+            renormalize_V_block(
+                blk, eps[b[0]], eps[b[1]], eps[b[2]], eps[b[3]], self.flow_param
+            )
+            if not add:
+                blk -= bare
+        for b, blk in F.items():
+            rev = b[1] + b[0]
+            corr = self._t1_correction(rev, self.S2).T if rev in T1_LABELS else 0.0
+            d = eps[b[0]][:, None] - eps[b[1]][None, :]
+            f = (blk + corr) * np.exp(-self.flow_param * d**2)
+            if add:
+                blk += f
+            else:
+                blk[:] = f
 
     # ------------------------------------------------------------------
     # the four energy contributions
@@ -364,26 +324,27 @@ class DSRG_MRPT3(DSRGBase):
 
     def _compute_energy_pt3_1(self, form_hbar):
         """-1/12 [[[H0th, A1st], A1st], A1st]."""
-        helper = self.dense_helper
+        helper = self.helper
+        cum = self.cumulants
 
         # -[H0th, A1st]
         C1 = helper.make_1body()
         C2 = helper.make_2body()
-        helper.H1_T1_C1(C1, self.F0th, self.T1, -1.0)
-        helper.H1_T2_C1(C1, self.F0th, self.T2, -1.0)
-        helper.H1_T2_C2(C2, self.F0th, self.T2, -1.0)
-        C1, C2 = self._project_od(C1, C2)
+        helper.H1_T1_C1(C1, self.F0th, self.T1, cum, -1.0)
+        helper.H1_T2_C1(C1, self.F0th, self.T2, cum, -1.0)
+        helper.H1_T2_C2(C2, self.F0th, self.T2, cum, -1.0)
+        self._project_od(C1, C2)
 
         # -[[H0th, A1st], A1st]
         D1 = helper.make_1body()
         D2 = helper.make_2body()
-        helper.H1_T1_C1(D1, C1, self.T1, 1.0)
-        helper.H1_T2_C1(D1, C1, self.T2, 1.0)
-        helper.H2_T1_C1(D1, C2, self.T1, 1.0)
-        helper.H2_T2_C1(D1, C2, self.T2, self.S2, 1.0)
-        helper.H1_T2_C2(D2, C1, self.T2, 1.0)
-        helper.H2_T1_C2(D2, C2, self.T1, 1.0)
-        helper.H2_T2_C2(D2, C2, self.T2, self.S2, 1.0)
+        helper.H1_T1_C1(D1, C1, self.T1, cum, 1.0)
+        helper.H1_T2_C1(D1, C1, self.T2, cum, 1.0)
+        helper.H2_T1_C1_od(D1, C2, self.T1, cum, 1.0)
+        helper.H2_T2_C1_od(D1, C2, self.T2, self.S2, cum, 1.0)
+        helper.H1_T2_C2(D2, C1, self.T2, cum, 1.0)
+        helper.H2_T1_C2_od(D2, C2, self.T1, cum, 1.0)
+        helper.H2_T2_C2_od(D2, C2, self.T2, self.S2, cum, 1.0)
 
         self.O1 = self._make_ph()
         self.O2 = self._make_pphh()
@@ -398,27 +359,16 @@ class DSRG_MRPT3(DSRGBase):
         return E
 
     def _project_od(self, C1, C2):
-        """Keep the off-diagonal blocks in both index orders, drop the internal ones.
+        """Fold the hole-particle direction into the particle-hole one.
 
-        The commutator of a block-diagonal operator with an excitation operator
-        has no diagonal part, so this only removes the all-active block.
-
-        The kernels already produce nothing but off-diagonal blocks, so this
-        only drops the all-active corner -- an internal excitation, which the
-        amplitudes never carry, and which would otherwise be counted twice since
-        it is the one place the two directions overlap -- and folds the
-        hole-particle direction into the particle-hole one:
-        C1["ai"] += C1["ia"] and its two-body counterpart.
+        The kernels already produce nothing but off-diagonal blocks, so this is
+        C1["ai"] += C1["ia"] and its two-body counterpart, block by block.
         """
-        pa, ha = self.pa, self.ha
-        C1[0][pa, ha] = 0.0
-        C1[1][ha, pa] = 0.0
-        C2[0][pa, pa, ha, ha] = 0.0
-        C2[1][ha, ha, pa, pa] = 0.0
-
-        C1[0][...] += C1[1].T
-        C2[0][...] += C2[1].transpose(2, 3, 0, 1)
-        return C1, C2
+        for b in ("ac", "vc", "va"):
+            C1[b] += C1[b[1] + b[0]].T
+        for b in C2:
+            if _is_pphh(b):
+                C2[b] += C2[b[2] + b[3] + b[0] + b[1]].transpose(2, 3, 0, 1)
 
     def _compute_energy_pt2(self, form_hbar):
         """The second-order term, from the once-renormalized bare Hamiltonian."""
@@ -430,32 +380,31 @@ class DSRG_MRPT3(DSRGBase):
 
     def _compute_energy_pt3_2(self, form_hbar):
         """1/2 [H1st + Hbar1st, A2nd], which also produces the second-order amplitudes."""
-        helper = self.dense_helper
-        h, p = self.hole, self.part
+        helper = self.helper
+        cum = self.cumulants
 
         # keep H1st + Hbar1st before F/V are repurposed
-        X1 = self.F
-        X2 = self.V
+        X1, X2 = self.F, self.V
 
         # 0.5 * [H1st + Hbar1st, A1st] = [H1st, A1st] + 0.5 * [[H0th, A1st], A1st]
-        self.F = -0.5 * self.O1
-        self.V = -0.5 * self.O2
+        self.F = {b: -0.5 * self.O1[b] for b in self.O1}
+        self.V = {b: -0.5 * self.O2[b] for b in self.O2}
 
         D1 = helper.make_1body()
         D2 = helper.make_2body()
-        helper.H1_T1_C1(D1, self.F1st, self.T1, 1.0)
-        helper.H1_T2_C1(D1, self.F1st, self.T2, 1.0)
-        helper.H1_T2_C2(D2, self.F1st, self.T2, 1.0)
+        helper.H1_T1_C1(D1, self.F1st, self.T1, cum, 1.0)
+        helper.H1_T2_C1(D1, self.F1st, self.T2, cum, 1.0)
+        helper.H1_T2_C2(D2, self.F1st, self.T2, cum, 1.0)
         self._fold_ph(self.F, D1)
         self._fold_pphh(self.V, D2)
 
+        Bblk = self.ints["B"]
         D1 = helper.make_1body()
         D2 = helper.make_2body()
-        Bblk = self.ints["B"]
-        helper.H2_T1_C1(D1, self.V_bare, self.T1, 1.0)
-        helper.H2_T2_C1(D1, self.V_bare, self.T2, self.S2, 1.0, B=Bblk)
-        helper.H2_T1_C2(D2, self.V_bare, self.T1, 1.0, B=Bblk)
-        helper.H2_T2_C2(D2, self.V_bare, self.T2, self.S2, 1.0, B=Bblk)
+        helper.H2_T1_C1(D1, self.V_bare, self.T1, cum, 1.0)
+        helper.H2_T2_C1(D1, self.V_bare, self.T2, self.S2, cum, 1.0, B=Bblk)
+        helper.H2_T1_C2(D2, self.V_bare, self.T1, cum, 1.0, B=Bblk)
+        helper.H2_T2_C2(D2, self.V_bare, self.T2, self.S2, cum, 1.0, B=Bblk)
         self._fold_ph(self.F, D1)
         self._fold_pphh(self.V, D2)
 
@@ -474,7 +423,11 @@ class DSRG_MRPT3(DSRGBase):
         self._renormalize(self.F, self.V, add=False)
 
         # S2 must go back to first order: the previous stage left it at second
-        S2 = 2 * self.T2_1st - self.T2_1st.swapaxes(2, 3)
+        S2 = {
+            b: 2 * self.T2_1st[b]
+            - self.T2_1st[b[0] + b[1] + b[3] + b[2]].transpose(0, 1, 3, 2)
+            for b in T2_LABELS
+        }
 
         E = self._evaluate_C0(self.F, self.V, self.T1_1st, self.T2_1st, S2)
         if form_hbar:
@@ -486,24 +439,24 @@ class DSRG_MRPT3(DSRGBase):
     # ------------------------------------------------------------------
 
     def solve_dsrg(self, form_hbar=False):
-        self.dense_helper = _DSRGDenseHelper(self)
-        self.dense_helper.set_cumulants(self.cumulants)
+        self.helper = _DSRGBlockHelper(self)
 
         if form_hbar:
             self.hbar1 = np.zeros((self.nact,) * 2)
             self.hbar2 = np.zeros((self.nact,) * 4)
 
-        c, a, v = self.core, self.actv, self.virt
-        self.F0th = np.zeros_like(self.fock)
-        for sl in (c, a, v):
-            self.F0th[sl, sl] = self.fock[sl, sl]
-        self.F1st = self.fock - self.F0th
+        sp = {"c": self.core, "a": self.actv, "v": self.virt}
+        Fb = {b: self.fock[sp[b[0]], sp[b[1]]].copy() for b in ALL1_LABELS}
+        self.F0th = {
+            b: (Fb[b] if b[0] == b[1] else np.zeros_like(Fb[b])) for b in ALL1_LABELS
+        }
+        self.F1st = {
+            b: (np.zeros_like(Fb[b]) if b[0] == b[1] else Fb[b]) for b in ALL1_LABELS
+        }
 
-        # V_bare stays dense: unlike the running operators it is contracted
-        # over general index patterns by the commutator kernels.
         self.V_bare = self.ints["V"]
-        self.F = np.ascontiguousarray(self.fock[self.part, self.hole])
-        self.V = self._v_pphh(self.ints["V"])
+        self.F = {b: Fb[b].copy() for b in PH_LABELS}
+        self.V = {b: self.ints["V"][b].copy() for b in PPHH_LABELS}
 
         self.T1, self.T2, self.S2 = self._build_tamps(self.F, self.V)
 
@@ -541,8 +494,7 @@ class DSRG_MRPT3(DSRGBase):
         # hbar1/hbar2 are left untouched so this can be called more than once.
         _hbar1 = self.hbar1 + self.hbar1.T + self.fock[self.actv, self.actv]
         _hbar2 = self.hbar2 + np.einsum("ijab->abij", self.hbar2)
-        ha = self.ha
-        _hbar2 = _hbar2 + self.V_bare["h", "h", "h", "h"][ha, ha, ha, ha]
+        _hbar2 = _hbar2 + self.V_bare["aaaa"]
 
         self._hbar0, _hbar1 = degno_active_sf(
             self.E_dsrg,
