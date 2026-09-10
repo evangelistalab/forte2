@@ -7,8 +7,10 @@ from .utils import (
     cas_energy_given_RDMs,
     compute_t1_block,
     compute_t2_block,
+    degno_active_sf,
     renormalize_V_block,
     renormalize_3index,
+    rotate_active_ints,
 )
 
 
@@ -212,31 +214,15 @@ class DSRG_MRPT2(DSRGBase):
         # 0.5*[H, T-T+] = 0.5*([H, T] + [H, T]+)
         _hbar1 += _C1 + _C1.conj().T
 
-        hbar2_temp = 2 * _hbar2 - _hbar2.swapaxes(2, 3)
-
-        self._hbar0 = self.E_dsrg
-        self._hbar0 -= np.einsum("vu,vu->", _hbar1, self.cumulants["gamma1"])
-        self._hbar0 += 0.25 * np.einsum(
-            "uv,vyux,xy->",
-            self.cumulants["gamma1"],
-            hbar2_temp,
-            self.cumulants["gamma1"],
-        )
-        self._hbar0 -= 0.5 * np.einsum("xyuv,uvxy->", _hbar2, self.cumulants["lambda2"])
-
-        _hbar1 -= 0.5 * np.einsum("uxvy,yx->uv", hbar2_temp, self.cumulants["gamma1"])
-
-        self._hbar1_canon = np.einsum(
-            "ip,pq,jq->ij", self.Uactv, _hbar1, self.Uactv.conj(), optimize=True
-        )
-        self._hbar2_canon = np.einsum(
-            "ip,jq,pqrs,kr,ls->ijkl",
-            self.Uactv,
-            self.Uactv,
+        self._hbar0, _hbar1 = degno_active_sf(
+            self.E_dsrg,
+            _hbar1,
             _hbar2,
-            self.Uactv.conj(),
-            self.Uactv.conj(),
-            optimize=True,
+            self.cumulants["gamma1"],
+            self.cumulants["lambda2"],
+        )
+        self._hbar1_canon, self._hbar2_canon = rotate_active_ints(
+            _hbar1, _hbar2, self.Uactv
         )
 
         self.ci_solver.set_ints(self._hbar0, self._hbar1_canon, self._hbar2_canon)

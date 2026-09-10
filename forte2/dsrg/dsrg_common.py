@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 
 
@@ -794,3 +796,491 @@ class _DSRGHelper:
         C2 += temp
         C2 += np.einsum("uvxy->vuyx", temp, optimize=True)
         return C2
+
+
+class _DSRGDenseHelper:
+    """Spin-adapted commutator kernels for DSRG-MRPT3.
+
+    `_DSRGHelper` only produces scalars and the active-active block of Hbar,
+    which is all DSRG-MRPT2 ever needs. DSRG-MRPT3 additionally has to carry
+    one- and two-body commutators between its stages, which is what these are
+    for.
+
+    Each term is written once, in the index letters the reference
+    implementation uses: ``m, n`` are core, ``u, v, w, x, y, z`` active,
+    ``e, f`` virtual, ``i, j, k, l`` hole, ``a, b`` particle and ``p, q, r, s``
+    general. Those letters carry enough information to derive every slice, so
+    `_emit` builds them rather than having them spelled out per term.
+
+    Results are accumulated into the two off-diagonal directions separately --
+    particle-hole and hole-particle for one-body operators, pphh and hhpp for
+    two-body ones -- because that is all a commutator of the Hamiltonian with
+    an excitation operator can have. Restricting an output index to one of
+    those directions narrows the operands feeding it too, which is where the
+    saving comes from: a `pphh`-shaped result can never carry more than two
+    virtual indices.
+    """
+
+    # index letter -> the space it runs over
+    _LETTER = {}
+    for _l in "mn":
+        _LETTER[_l] = "c"
+    for _l in "uvwxyz":
+        _LETTER[_l] = "a"
+    for _l in "ef":
+        _LETTER[_l] = "v"
+    for _l in "ijkl":
+        _LETTER[_l] = "h"
+    for _l in "ab":
+        _LETTER[_l] = "p"
+    for _l in "pqrs":
+        _LETTER[_l] = "g"
+    del _l
+
+    # intersection of a space with the hole or virtual space: how the integrals
+    # are tiled, correlated = hole + virtual being disjoint and contiguous
+    _ISECT_HV = {
+        ("c", "h"): "c",
+        ("c", "v"): None,
+        ("a", "h"): "a",
+        ("a", "v"): None,
+        ("v", "h"): None,
+        ("v", "v"): "v",
+        ("h", "h"): "h",
+        ("h", "v"): None,
+        ("p", "h"): "a",
+        ("p", "v"): "v",
+        ("g", "h"): "h",
+        ("g", "v"): "v",
+    }
+
+    # intersection of a space with the hole or particle space
+    _ISECT = {
+        ("c", "h"): "c",
+        ("c", "p"): None,
+        ("a", "h"): "a",
+        ("a", "p"): "a",
+        ("v", "h"): None,
+        ("v", "p"): "v",
+        ("h", "h"): "h",
+        ("h", "p"): "a",
+        ("p", "h"): "a",
+        ("p", "p"): "p",
+        ("g", "h"): "h",
+        ("g", "p"): "p",
+    }
+
+    def __init__(self, dsrg_obj):
+        self.ncorr = dsrg_obj.ncorr
+        self.nhole = dsrg_obj.nhole
+        self.npart = dsrg_obj.npart
+        # a space -> the slice addressing it, in each of the three frames
+        self._corr = {
+            "c": dsrg_obj.core,
+            "a": dsrg_obj.actv,
+            "v": dsrg_obj.virt,
+            "h": dsrg_obj.hole,
+            "p": dsrg_obj.part,
+            "g": slice(None),
+        }
+        self._hole = {
+            "c": dsrg_obj.hc,
+            "a": dsrg_obj.ha,
+            "h": slice(None),
+            "p": dsrg_obj.ha,
+            "g": slice(None),
+        }
+        self._part = {
+            "a": dsrg_obj.pa,
+            "v": dsrg_obj.pv,
+            "p": slice(None),
+            "h": dsrg_obj.pa,
+            "g": slice(None),
+        }
+        self._frames = {"h": self._hole, "p": self._part}
+        # inside a block whose index is already virtual there is nothing to slice
+        self._hv = {"h": self._hole, "v": {"v": slice(None)}}
+        # named slices the streamed kernels address their operands with
+        self.hc = self._hole["c"]
+        self.ha = self._hole["a"]
+        self.pa = self._part["a"]
+        self.pv = self._part["v"]
+        self.g1 = None
+        self.e1 = None
+        self.l2 = None
+
+    def set_cumulants(self, cumulants):
+        """Bind the reference densities the kernels contract against.
+
+        Called once per solve, since reference relaxation replaces them.
+        """
+        self.g1 = cumulants["gamma1"]
+        self.e1 = cumulants["eta1"]
+        self.l2 = cumulants["lambda2"]
+
+    # ------------------------------------------------------------------
+    # off-diagonal operators, stored as (particle-hole, hole-particle)
+    # ------------------------------------------------------------------
+
+    def make_1body(self):
+        return (
+            np.zeros((self.npart, self.nhole)),
+            np.zeros((self.nhole, self.npart)),
+        )
+
+    def make_2body(self):
+        return (
+            np.zeros((self.npart, self.npart, self.nhole, self.nhole)),
+            np.zeros((self.nhole, self.nhole, self.npart, self.npart)),
+        )
+
+    # ------------------------------------------------------------------
+    # term engine
+    # ------------------------------------------------------------------
+
+    def _slices(self, kind, idx, eff):
+        """Slice one operand, given the space each of its indices runs over."""
+        if kind == "act":
+            return None
+        frames = {
+            "corr": (self._corr,) * len(idx),
+            "hp": (self._hole, self._part),
+            "hhpp": (self._hole, self._hole, self._part, self._part),
+        }[kind]
+        return tuple(f[eff.get(L, self._LETTER[L])] for L, f in zip(idx, frames))
+
+    @staticmethod
+    def _directions(ndim):
+        """The two off-diagonal directions of an operator of this rank."""
+        if ndim == 2:
+            return ("p", "h"), ("h", "p")
+        return ("p", "p", "h", "h"), ("h", "h", "p", "p")
+
+    def _emit(self, out, coef, spec, operands, pair=False, only=None):
+        """Accumulate one term into both off-diagonal directions of `out`.
+
+        `only` restricts the term to one direction, for the case where the other
+        one is handled separately.
+
+        One operand may be stored in pieces rather than over the whole
+        correlated space, in which case the contraction splits over them and any
+        combination whose spaces do not intersect is skipped rather than
+        computed against zeros. Two kinds occur:
+
+        - an off-diagonal operator, held as its particle-hole and hole-particle
+          blocks. About a third of the combinations reached in the first stage
+          cannot be occupied by a commutator at all.
+        - the two-electron integrals, tiled by which indices are virtual.
+          Correlated = hole + virtual is a disjoint, contiguous split, so the
+          sixteen combinations cover the integrals exactly, and the ones no
+          contraction reaches are never built.
+
+        `pair` also adds the result under the bra/ket exchange of the output
+        indices, which is how the reference implementation writes the two index
+        orders of a two-body commutator.
+        """
+        ins, res = spec.split("->")
+        ins = ins.split(",")
+        ndim = len(res)
+
+        split_at, split_kind, blocks = None, None, [None]
+        for i, (tensor, _) in enumerate(operands):
+            if isinstance(tensor, tuple):
+                split_at, split_kind = i, "od"
+                blocks = list(enumerate(self._directions(len(ins[i]))))
+                break
+            if isinstance(tensor, dict):
+                split_at, split_kind = i, "vblk"
+                blocks = [(m, m) for m in itertools.product("hv", repeat=len(ins[i]))]
+                break
+        table = self._ISECT if split_kind == "od" else self._ISECT_HV
+
+        targets = list(zip(out, self._directions(ndim)))
+        if only is not None:
+            targets = [targets[only]]
+
+        for arr, dirs in targets:
+            for block in blocks:
+                eff = {}
+                for k, L in enumerate(res):
+                    r = self._ISECT[(self._LETTER[L], dirs[k])]
+                    if r is None:
+                        break
+                    eff[L] = r
+                else:
+                    if block is not None:
+                        for k, L in enumerate(ins[split_at]):
+                            r = table[(eff.get(L, self._LETTER[L]), block[1][k])]
+                            if r is None:
+                                break
+                            eff[L] = r
+                        else:
+                            self._contract(
+                                arr,
+                                dirs,
+                                coef,
+                                spec,
+                                ins,
+                                res,
+                                operands,
+                                eff,
+                                split_at,
+                                split_kind,
+                                block,
+                                pair,
+                            )
+                        continue
+                    self._contract(
+                        arr,
+                        dirs,
+                        coef,
+                        spec,
+                        ins,
+                        res,
+                        operands,
+                        eff,
+                        split_at,
+                        split_kind,
+                        block,
+                        pair,
+                    )
+
+    def _contract(
+        self,
+        arr,
+        dirs,
+        coef,
+        spec,
+        ins,
+        res,
+        operands,
+        eff,
+        split_at,
+        split_kind,
+        block,
+        pair,
+    ):
+        args = []
+        for i, (idx, (tensor, kind)) in enumerate(zip(ins, operands)):
+            if i == split_at:
+                bkey, bdirs = block
+                if split_kind == "od":
+                    sl = tuple(self._frames[d][eff[L]] for L, d in zip(idx, bdirs))
+                else:
+                    if bkey not in tensor:
+                        # tiles with three or more virtual indices are never
+                        # stored; this term's streamed companion contracts them
+                        # from the three-index integrals
+                        return
+                    sl = tuple(self._hv[d][eff[L]] for L, d in zip(idx, bdirs))
+                args.append(tensor[bkey][sl])
+            else:
+                sl = self._slices(kind, idx, eff)
+                args.append(tensor if sl is None else tensor[sl])
+        val = np.einsum(spec, *args, optimize=True)
+        val *= coef
+        osl = tuple(self._frames[dirs[k]][eff[L]] for k, L in enumerate(res))
+        arr[osl] += val
+        if pair:
+            perm = (1, 0) if len(res) == 2 else (1, 0, 3, 2)
+            arr[tuple(osl[i] for i in perm)] += val.transpose(perm)
+
+    def H1_T1_C1(self, C1, H1, T1, alpha=1.0):
+        H, T = (H1, "corr"), (T1, "hp")
+        self._emit(C1, alpha, "ap,ia->ip", (H, T))
+        self._emit(C1, -alpha, "qi,ia->qa", (H, T))
+
+    def H1_T2_C1(self, C1, H1, T2, alpha=1.0):
+        H, T, G = (H1, "corr"), (T2, "hhpp"), (self.g1, "act")
+        self._emit(C1, 2.0 * alpha, "bm,imab->ia", (H, T))
+        self._emit(C1, -alpha, "bm,miab->ia", (H, T))
+        self._emit(C1, alpha, "bu,ivab,uv->ia", (H, T, G))
+        self._emit(C1, -0.5 * alpha, "bu,viab,uv->ia", (H, T, G))
+        self._emit(C1, -alpha, "vj,ijau,uv->ia", (H, T, G))
+        self._emit(C1, 0.5 * alpha, "vj,jiau,uv->ia", (H, T, G))
+
+    def H2_T1_C1(self, C1, H2, T1, alpha=1.0):
+        H, T, G = (H2, "corr"), (T1, "hp"), (self.g1, "act")
+        self._emit(C1, 2.0 * alpha, "ma,qapm->qp", (T, H))
+        self._emit(C1, -alpha, "ma,aqpm->qp", (T, H))
+        self._emit(C1, alpha, "xe,yx,qepy->qp", (T, G, H))
+        self._emit(C1, -0.5 * alpha, "xe,yx,eqpy->qp", (T, G, H))
+        self._emit(C1, -alpha, "mu,uv,qvpm->qp", (T, G, H))
+        self._emit(C1, 0.5 * alpha, "mu,uv,vqpm->qp", (T, G, H))
+
+    def H2_T2_C1(self, C1, H2, T2, S2, alpha=1.0, B=None):
+        H, T, S = (H2, "corr"), (T2, "hhpp"), (S2, "hhpp")
+        G, E, L = (self.g1, "act"), (self.e1, "act"), (self.l2, "act")
+
+        # particle contractions
+        self._emit(C1, alpha, "abrm,imab->ir", (H, S))
+        if B is not None:
+            self._stream_c1_particle(
+                C1[1], alpha, B["vv"], B["vc"], S2[:, self.hc, self.pv, self.pv]
+            )
+        self._emit(C1, 0.5 * alpha, "uv,ivab,abru->ir", (G, S, H))
+        if B is not None:
+            self._stream_c1_particle(
+                C1[1],
+                0.5 * alpha,
+                B["vv"],
+                B["va"],
+                np.einsum(
+                    "uv,ivab->iuab",
+                    self.g1,
+                    S2[:, self.ha, self.pv, self.pv],
+                    optimize=True,
+                ),
+            )
+        self._emit(C1, 0.25 * alpha, "ijux,xy,uv,vyrj->ir", (S, G, G, H))
+        self._emit(C1, -0.5 * alpha, "uv,imub,vbrm->ir", (G, S, H))
+        self._emit(C1, -0.5 * alpha, "uv,miub,bvrm->ir", (G, S, H))
+        self._emit(C1, -0.25 * alpha, "iyub,uv,xy,vbrx->ir", (S, G, G, H))
+        self._emit(C1, -0.25 * alpha, "iybu,uv,xy,bvrx->ir", (S, G, G, H))
+        self._emit(C1, 0.5 * alpha, "ijxy,xyuv,uvrj->ir", (T, L, H))
+        self._emit(C1, 0.5 * alpha, "aurx,ivay,xyuv->ir", (H, S, L))
+        self._emit(C1, -0.5 * alpha, "uarx,ivay,xyuv->ir", (H, T, L))
+        self._emit(C1, -0.5 * alpha, "uarx,ivya,xyvu->ir", (H, T, L))
+
+        # hole contractions
+        self._emit(C1, -alpha, "peij,ijae->pa", (H, S))
+        self._emit(C1, -0.5 * alpha, "uv,ijau,pvij->pa", (E, S, H))
+        self._emit(C1, -0.25 * alpha, "vyab,uv,xy,pbux->pa", (S, E, E, H))
+        self._emit(C1, 0.5 * alpha, "uv,vjae,peuj->pa", (E, S, H))
+        self._emit(C1, 0.5 * alpha, "uv,jvae,peju->pa", (E, S, H))
+        self._emit(C1, 0.25 * alpha, "vjax,uv,xy,pyuj->pa", (S, E, E, H))
+        self._emit(C1, 0.25 * alpha, "jvax,xy,uv,pyju->pa", (S, E, E, H))
+        self._emit(C1, -0.5 * alpha, "xyuv,uvab,pbxy->pa", (L, T, H))
+        self._emit(C1, -0.5 * alpha, "puix,ivay,xyuv->pa", (H, S, L))
+        self._emit(C1, 0.5 * alpha, "puxi,ivay,xyuv->pa", (H, T, L))
+        self._emit(C1, 0.5 * alpha, "puxi,viay,xyvu->pa", (H, T, L))
+
+        # one active index on the amplitude
+        self._emit(C1, 0.5 * alpha, "avxy,ujab,xyuv->jb", (H, S, L))
+        self._emit(C1, -0.5 * alpha, "uviy,ijxb,xyuv->jb", (H, S, L))
+        self._emit(C1, alpha, "eqxs,uvey,xyuv->qs", (H, T, L))
+        self._emit(C1, -0.5 * alpha, "eqsx,uvey,xyuv->qs", (H, T, L))
+        self._emit(C1, -alpha, "uqms,mvxy,xyuv->qs", (H, T, L))
+        self._emit(C1, 0.5 * alpha, "uqsm,mvxy,xyuv->qs", (H, T, L))
+
+    def _stream_c1_particle(self, C1hp, coef, Bvv, Bx, S2x):
+        """C1[ir] += coef * sum_ab V[abr?] S2[i?ab], every particle index virtual.
+
+        `Bx` is the three-index integral block carrying the fourth index and
+        `S2x` the matching amplitude slice, already contracted with any density.
+        The intermediate is auxiliary by hole by virtual, so no chunking is
+        needed: it is smaller than the block it replaces by a factor of the
+        virtual space squared.
+        """
+        W = np.einsum("Qbm,imab->Qia", Bx, S2x, optimize=True)
+        C1hp[:, self.pv] += coef * np.einsum("Qar,Qia->ir", Bvv, W, optimize=True)
+
+    def _stream_c2_particle(self, C2h, coef, Bvv, Bhv, T1v):
+        """C2[irpq] += coef * sum_a T1[ia] V[arpq], with a, p and q virtual."""
+        X = np.einsum("ia,Qap->Qip", T1v, Bvv, optimize=True)
+        val = np.einsum("Qip,Qrq->irpq", X, Bhv, optimize=True)
+        val *= coef
+        out = C2h[:, :, self.pv, self.pv]
+        out += val
+        out += val.transpose(1, 0, 3, 2)
+
+    def _stream_c2_ring(self, C2h, coef, Bav, Bvv, U):
+        """C2[ijrs] += coef * sum_yb U[ijyb] V[ybrs], with b, r and s virtual.
+
+        Walks the auxiliary index in chunks; the intermediate would otherwise
+        carry both hole indices and an active one alongside it.
+        """
+        naux = Bvv.shape[0]
+        per = max(U.shape[0] * U.shape[1] * U.shape[2] * Bvv.shape[2], 1)
+        chunk = max(1, min(naux, 500_000 // per))
+        for q0 in range(0, naux, chunk):
+            av, vv = Bav[q0 : q0 + chunk], Bvv[q0 : q0 + chunk]
+            W = np.einsum("ijyb,Qbs->Qijys", U, vv, optimize=True)
+            val = np.einsum("Qyr,Qijys->ijrs", av, W, optimize=True)
+            val *= coef
+            out = C2h[:, :, self.pv, self.pv]
+            out += val
+            out += val.transpose(1, 0, 3, 2)
+
+    def _stream_ladder(self, C2h, alpha, B, T2):
+        """The particle ladder, contracted from the three-index integrals.
+
+        C2[ijrs] += alpha * sum_ab V[abrs] T2[ijab], with every index in the
+        particle space and V[abrs] = sum_Q B[Q,a,r] B[Q,b,s]. Walking the
+        auxiliary index in chunks keeps the intermediate small, where forming
+        V[abrs] outright would be the largest allocation in the calculation.
+        """
+        npart = B.shape[1]
+        # Walk one particle index rather than the auxiliary one: the slice of the
+        # integrals needed for a few values of r is three-index-sized, whereas
+        # batching over the auxiliary index would carry the amplitudes along with
+        # it and grow with the hole space too.
+        chunk = max(1, min(npart, 1_000_000 // max(npart**3, 1)))
+        for r0 in range(0, npart, chunk):
+            Br = B[:, :, r0 : r0 + chunk]
+            Vr = np.einsum("Qar,Qbs->arbs", Br, B, optimize=True)
+            C2h[:, :, r0 : r0 + chunk, :] += alpha * np.einsum(
+                "arbs,ijab->ijrs", Vr, T2, optimize=True
+            )
+
+    def H1_T2_C2(self, C2, H1, T2, alpha=1.0):
+        H, T = (H1, "corr"), (T2, "hhpp")
+        self._emit(C2, alpha, "ijab,ap->ijpb", (T, H), pair=True)
+        self._emit(C2, -alpha, "ijab,qi->qjab", (T, H), pair=True)
+
+    def H2_T1_C2(self, C2, H2, T1, alpha=1.0, B=None):
+        H, T = (H2, "corr"), (T1, "hp")
+        self._emit(C2, alpha, "ia,arpq->irpq", (T, H), pair=True)
+        if B is not None:
+            self._stream_c2_particle(C2[1], alpha, B["vv"], B["hv"], T1[:, self.pv])
+        self._emit(C2, -alpha, "ia,rsiq->rsaq", (T, H), pair=True)
+
+    def H2_T2_C2(self, C2, H2, T2, S2, alpha=1.0, B=None):
+        H, T, S = (H2, "corr"), (T2, "hhpp"), (S2, "hhpp")
+        G, E = (self.g1, "act"), (self.e1, "act")
+
+        # particle-particle. In the hole-hole-particle-particle direction this
+        # term reaches every four-virtual integral, which is the single largest
+        # array the method would otherwise touch, so it is contracted straight
+        # from the three-index integrals when they are available.
+        if B is None:
+            self._emit(C2, alpha, "abrs,ijab->ijrs", (H, T))
+        else:
+            self._emit(C2, alpha, "abrs,ijab->ijrs", (H, T), only=0)
+            self._stream_ladder(C2[1], alpha, B["part"], T2)
+        self._emit(
+            C2,
+            -0.5 * alpha,
+            "xy,ijxb,ybrs->ijrs",
+            (G, T, H),
+            pair=True,
+        )
+        if B is not None:
+            self._stream_c2_ring(
+                C2[1],
+                -0.5 * alpha,
+                B["av"],
+                B["vv"],
+                np.einsum(
+                    "ijxb,xy->ijyb",
+                    T2[:, :, self.pa, self.pv],
+                    self.g1,
+                    optimize=True,
+                ),
+            )
+
+        # hole-hole
+        self._emit(C2, alpha, "pqij,ijab->pqab", (H, T))
+        self._emit(C2, -0.5 * alpha, "xy,yjab,pqxj->pqab", (E, T, H), pair=True)
+
+        # hole-particle
+        self._emit(C2, alpha, "aqms,mjab->qjsb", (H, S), pair=True)
+        self._emit(C2, -alpha, "aqsm,mjab->qjsb", (H, T), pair=True)
+        self._emit(C2, 0.5 * alpha, "xy,yjab,aqxs->qjsb", (G, S, H), pair=True)
+        self._emit(C2, -0.5 * alpha, "xy,yjab,aqsx->qjsb", (G, T, H), pair=True)
+        self._emit(C2, -0.5 * alpha, "xy,ijxb,yqis->qjsb", (G, S, H), pair=True)
+        self._emit(C2, 0.5 * alpha, "xy,ijxb,yqsi->qjsb", (G, T, H), pair=True)
+
+        self._emit(C2, -alpha, "aqsm,mjba->jqsb", (H, T), pair=True)
+        self._emit(C2, -0.5 * alpha, "xy,yjba,aqsx->jqsb", (G, T, H), pair=True)
+        self._emit(C2, 0.5 * alpha, "xy,ijbx,yqsi->jqsb", (G, T, H), pair=True)
