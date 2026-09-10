@@ -344,15 +344,21 @@ class DSRG_MRPT3(DSRGBase):
         has no diagonal part, so this only removes the all-active block.
 
         The kernels already produce nothing but off-diagonal blocks, so this
-        folds the hole-particle direction into the particle-hole one --
-        C1["ai"] += C1["ia"] and its two-body counterpart -- and then places the
-        result back into the whole correlated space, which is the form the
-        kernels take their inputs in.
+        only drops the all-active corner -- an internal excitation, which the
+        amplitudes never carry, and which would otherwise be counted twice since
+        it is the one place the two directions overlap -- and folds the
+        hole-particle direction into the particle-hole one:
+        C1["ai"] += C1["ia"] and its two-body counterpart.
         """
+        pa, ha = self.pa, self.ha
+        C1[0][pa, ha] = 0.0
+        C1[1][ha, pa] = 0.0
+        C2[0][pa, pa, ha, ha] = 0.0
+        C2[1][ha, ha, pa, pa] = 0.0
+
         C1[0][...] += C1[1].T
         C2[0][...] += C2[1].transpose(2, 3, 0, 1)
-        helper = self.dense_helper
-        return helper.expand(C1), helper.expand(C2)
+        return C1, C2
 
     def _compute_energy_pt2(self, form_hbar):
         """The second-order term, from the once-renormalized bare Hamiltonian."""

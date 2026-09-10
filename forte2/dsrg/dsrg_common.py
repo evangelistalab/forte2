@@ -908,27 +908,6 @@ class _DSRGDenseHelper:
             np.zeros((self.nhole, self.nhole, self.npart, self.npart)),
         )
 
-    def expand(self, op):
-        """Place an off-diagonal operator back into the whole correlated space.
-
-        Needed only where an operator built by these kernels is fed back in as
-        an input, since the inputs are still contracted over general index
-        patterns. The all-active corner is an internal excitation and is
-        dropped, matching the reference implementation's block declarations.
-        """
-        c = self._corr
-        if op[0].ndim == 2:
-            out = np.zeros((self.ncorr,) * 2)
-            out[c["p"], c["h"]] = op[0]
-            out[c["h"], c["p"]] = op[1]
-            out[c["a"], c["a"]] = 0.0
-        else:
-            out = np.zeros((self.ncorr,) * 4)
-            out[c["p"], c["p"], c["h"], c["h"]] = op[0]
-            out[c["h"], c["h"], c["p"], c["p"]] = op[1]
-            out[c["a"], c["a"], c["a"], c["a"]] = 0.0
-        return out
-
     # ------------------------------------------------------------------
     # term engine
     # ------------------------------------------------------------------
@@ -944,8 +923,22 @@ class _DSRGDenseHelper:
         }[kind]
         return tuple(f[eff.get(L, self._LETTER[L])] for L, f in zip(idx, frames))
 
+    @staticmethod
+    def _directions(ndim):
+        """The two off-diagonal directions of an operator of this rank."""
+        if ndim == 2:
+            return ("p", "h"), ("h", "p")
+        return ("p", "p", "h", "h"), ("h", "h", "p", "p")
+
     def _emit(self, out, coef, spec, operands, pair=False):
         """Accumulate one term into both off-diagonal directions of `out`.
+
+        An operand may itself be an off-diagonal operator, supplied as its two
+        blocks rather than over the whole correlated space. The contraction then
+        splits over those blocks, and any combination whose spaces do not
+        intersect is skipped rather than computed against zeros -- about a third
+        of the block combinations in the first stage, where the operand is the
+        commutator built by the stage before it.
 
         `pair` also adds the result under the bra/ket exchange of the output
         indices, which is how the reference implementation writes the two index
@@ -954,29 +947,78 @@ class _DSRGDenseHelper:
         ins, res = spec.split("->")
         ins = ins.split(",")
         ndim = len(res)
-        directions = (
-            ("p", "h") if ndim == 2 else ("p", "p", "h", "h"),
-            ("h", "p") if ndim == 2 else ("h", "h", "p", "p"),
-        )
 
-        for arr, dirs in zip(out, directions):
-            eff = {}
-            for k, L in enumerate(res):
-                r = self._ISECT[(self._LETTER[L], dirs[k])]
-                if r is None:
-                    break
-                eff[L] = r
+        od_at = next(
+            (i for i, (t, _) in enumerate(operands) if isinstance(t, tuple)), None
+        )
+        if od_at is None:
+            blocks = [None]
+        else:
+            blocks = list(enumerate(self._directions(len(ins[od_at]))))
+
+        for arr, dirs in zip(out, self._directions(ndim)):
+            for block in blocks:
+                eff = {}
+                for k, L in enumerate(res):
+                    r = self._ISECT[(self._LETTER[L], dirs[k])]
+                    if r is None:
+                        break
+                    eff[L] = r
+                else:
+                    if block is not None:
+                        _, bdirs = block
+                        for k, L in enumerate(ins[od_at]):
+                            r = self._ISECT[(eff.get(L, self._LETTER[L]), bdirs[k])]
+                            if r is None:
+                                break
+                            eff[L] = r
+                        else:
+                            self._contract(
+                                arr,
+                                dirs,
+                                coef,
+                                spec,
+                                ins,
+                                res,
+                                operands,
+                                eff,
+                                od_at,
+                                block,
+                                pair,
+                            )
+                        continue
+                    self._contract(
+                        arr,
+                        dirs,
+                        coef,
+                        spec,
+                        ins,
+                        res,
+                        operands,
+                        eff,
+                        od_at,
+                        block,
+                        pair,
+                    )
+
+    def _contract(
+        self, arr, dirs, coef, spec, ins, res, operands, eff, od_at, block, pair
+    ):
+        args = []
+        for i, (idx, (tensor, kind)) in enumerate(zip(ins, operands)):
+            if i == od_at:
+                bi, bdirs = block
+                sl = tuple(self._frames[d][eff[L]] for L, d in zip(idx, bdirs))
+                args.append(tensor[bi][sl])
             else:
-                args = []
-                for idx, (tensor, kind) in zip(ins, operands):
-                    sl = self._slices(kind, idx, eff)
-                    args.append(tensor if sl is None else tensor[sl])
-                val = coef * np.einsum(spec, *args, optimize=True)
-                osl = tuple(self._frames[dirs[k]][eff[L]] for k, L in enumerate(res))
-                arr[osl] += val
-                if pair:
-                    perm = (1, 0) if ndim == 2 else (1, 0, 3, 2)
-                    arr[tuple(osl[i] for i in perm)] += val.transpose(perm)
+                sl = self._slices(kind, idx, eff)
+                args.append(tensor if sl is None else tensor[sl])
+        val = coef * np.einsum(spec, *args, optimize=True)
+        osl = tuple(self._frames[dirs[k]][eff[L]] for k, L in enumerate(res))
+        arr[osl] += val
+        if pair:
+            perm = (1, 0) if len(res) == 2 else (1, 0, 3, 2)
+            arr[tuple(osl[i] for i in perm)] += val.transpose(perm)
 
     # ------------------------------------------------------------------
     # kernels
