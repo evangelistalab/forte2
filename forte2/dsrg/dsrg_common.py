@@ -840,12 +840,18 @@ class _DSRGDenseHelper:
     # intersection of a space with the hole or virtual space: how the integrals
     # are tiled, correlated = hole + virtual being disjoint and contiguous
     _ISECT_HV = {
-        ("c", "h"): "c", ("c", "v"): None,
-        ("a", "h"): "a", ("a", "v"): None,
-        ("v", "h"): None, ("v", "v"): "v",
-        ("h", "h"): "h", ("h", "v"): None,
-        ("p", "h"): "a", ("p", "v"): "v",
-        ("g", "h"): "h", ("g", "v"): "v",
+        ("c", "h"): "c",
+        ("c", "v"): None,
+        ("a", "h"): "a",
+        ("a", "v"): None,
+        ("v", "h"): None,
+        ("v", "v"): "v",
+        ("h", "h"): "h",
+        ("h", "v"): None,
+        ("p", "h"): "a",
+        ("p", "v"): "v",
+        ("g", "h"): "h",
+        ("g", "v"): "v",
     }
 
     # intersection of a space with the hole or particle space
@@ -894,6 +900,11 @@ class _DSRGDenseHelper:
         self._frames = {"h": self._hole, "p": self._part}
         # inside a block whose index is already virtual there is nothing to slice
         self._hv = {"h": self._hole, "v": {"v": slice(None)}}
+        # named slices the streamed kernels address their operands with
+        self.hc = self._hole["c"]
+        self.ha = self._hole["a"]
+        self.pa = self._part["a"]
+        self.pv = self._part["v"]
         self.g1 = None
         self.e1 = None
         self.l2 = None
@@ -945,7 +956,7 @@ class _DSRGDenseHelper:
             return ("p", "h"), ("h", "p")
         return ("p", "p", "h", "h"), ("h", "h", "p", "p")
 
-    def _emit(self, out, coef, spec, operands, pair=False, only=None):
+    def _emit(self, out, coef, spec, operands, pair=False, only=None, streamed=False):
         """Accumulate one term into both off-diagonal directions of `out`.
 
         `only` restricts the term to one direction, for the case where the other
@@ -1005,17 +1016,53 @@ class _DSRGDenseHelper:
                             eff[L] = r
                         else:
                             self._contract(
-                                arr, dirs, coef, spec, ins, res, operands, eff,
-                                split_at, split_kind, block, pair,
+                                arr,
+                                dirs,
+                                coef,
+                                spec,
+                                ins,
+                                res,
+                                operands,
+                                eff,
+                                split_at,
+                                split_kind,
+                                block,
+                                pair,
+                                streamed,
                             )
                         continue
                     self._contract(
-                        arr, dirs, coef, spec, ins, res, operands, eff,
-                        split_at, split_kind, block, pair,
+                        arr,
+                        dirs,
+                        coef,
+                        spec,
+                        ins,
+                        res,
+                        operands,
+                        eff,
+                        split_at,
+                        split_kind,
+                        block,
+                        pair,
+                        streamed,
                     )
 
-    def _contract(self, arr, dirs, coef, spec, ins, res, operands, eff,
-                  split_at, split_kind, block, pair):
+    def _contract(
+        self,
+        arr,
+        dirs,
+        coef,
+        spec,
+        ins,
+        res,
+        operands,
+        eff,
+        split_at,
+        split_kind,
+        block,
+        pair,
+        streamed=False,
+    ):
         args = []
         for i, (idx, (tensor, kind)) in enumerate(zip(ins, operands)):
             if i == split_at:
@@ -1024,6 +1071,10 @@ class _DSRGDenseHelper:
                     sl = tuple(self._frames[d][eff[L]] for L, d in zip(idx, bdirs))
                 else:
                     if bkey not in tensor:
+                        if streamed:
+                            # this block is contracted from the three-index
+                            # integrals by the term's streamed companion
+                            return
                         raise KeyError(
                             f"contraction {spec} reaches integral block {bkey}, "
                             "which is not stored"
@@ -1033,7 +1084,8 @@ class _DSRGDenseHelper:
             else:
                 sl = self._slices(kind, idx, eff)
                 args.append(tensor if sl is None else tensor[sl])
-        val = coef * np.einsum(spec, *args, optimize=True)
+        val = np.einsum(spec, *args, optimize=True)
+        val *= coef
         osl = tuple(self._frames[dirs[k]][eff[L]] for k, L in enumerate(res))
         arr[osl] += val
         if pair:
@@ -1063,13 +1115,32 @@ class _DSRGDenseHelper:
         self._emit(C1, -alpha, "mu,uv,qvpm->qp", (T, G, H))
         self._emit(C1, 0.5 * alpha, "mu,uv,vqpm->qp", (T, G, H))
 
-    def H2_T2_C1(self, C1, H2, T2, S2, alpha=1.0):
+    def H2_T2_C1(self, C1, H2, T2, S2, alpha=1.0, B=None):
         H, T, S = (H2, "corr"), (T2, "hhpp"), (S2, "hhpp")
         G, E, L = (self.g1, "act"), (self.e1, "act"), (self.l2, "act")
 
         # particle contractions
-        self._emit(C1, alpha, "abrm,imab->ir", (H, S))
-        self._emit(C1, 0.5 * alpha, "uv,ivab,abru->ir", (G, S, H))
+        self._emit(C1, alpha, "abrm,imab->ir", (H, S), streamed=B is not None)
+        if B is not None:
+            self._stream_c1_particle(
+                C1[1], alpha, B["vv"], B["vc"], S2[:, self.hc, self.pv, self.pv]
+            )
+        self._emit(
+            C1, 0.5 * alpha, "uv,ivab,abru->ir", (G, S, H), streamed=B is not None
+        )
+        if B is not None:
+            self._stream_c1_particle(
+                C1[1],
+                0.5 * alpha,
+                B["vv"],
+                B["va"],
+                np.einsum(
+                    "uv,ivab->iuab",
+                    self.g1,
+                    S2[:, self.ha, self.pv, self.pv],
+                    optimize=True,
+                ),
+            )
         self._emit(C1, 0.25 * alpha, "ijux,xy,uv,vyrj->ir", (S, G, G, H))
         self._emit(C1, -0.5 * alpha, "uv,imub,vbrm->ir", (G, S, H))
         self._emit(C1, -0.5 * alpha, "uv,miub,bvrm->ir", (G, S, H))
@@ -1101,6 +1172,45 @@ class _DSRGDenseHelper:
         self._emit(C1, -alpha, "uqms,mvxy,xyuv->qs", (H, T, L))
         self._emit(C1, 0.5 * alpha, "uqsm,mvxy,xyuv->qs", (H, T, L))
 
+    def _stream_c1_particle(self, C1hp, coef, Bvv, Bx, S2x):
+        """C1[ir] += coef * sum_ab V[abr?] S2[i?ab], every particle index virtual.
+
+        `Bx` is the three-index integral block carrying the fourth index and
+        `S2x` the matching amplitude slice, already contracted with any density.
+        The intermediate is auxiliary by hole by virtual, so no chunking is
+        needed: it is smaller than the block it replaces by a factor of the
+        virtual space squared.
+        """
+        W = np.einsum("Qbm,imab->Qia", Bx, S2x, optimize=True)
+        C1hp[:, self.pv] += coef * np.einsum("Qar,Qia->ir", Bvv, W, optimize=True)
+
+    def _stream_c2_particle(self, C2h, coef, Bvv, Bhv, T1v):
+        """C2[irpq] += coef * sum_a T1[ia] V[arpq], with a, p and q virtual."""
+        X = np.einsum("ia,Qap->Qip", T1v, Bvv, optimize=True)
+        val = np.einsum("Qip,Qrq->irpq", X, Bhv, optimize=True)
+        val *= coef
+        out = C2h[:, :, self.pv, self.pv]
+        out += val
+        out += val.transpose(1, 0, 3, 2)
+
+    def _stream_c2_ring(self, C2h, coef, Bav, Bvv, U):
+        """C2[ijrs] += coef * sum_yb U[ijyb] V[ybrs], with b, r and s virtual.
+
+        Walks the auxiliary index in chunks; the intermediate would otherwise
+        carry both hole indices and an active one alongside it.
+        """
+        naux = Bvv.shape[0]
+        per = max(U.shape[0] * U.shape[1] * U.shape[2] * Bvv.shape[2], 1)
+        chunk = max(1, min(naux, 500_000 // per))
+        for q0 in range(0, naux, chunk):
+            av, vv = Bav[q0 : q0 + chunk], Bvv[q0 : q0 + chunk]
+            W = np.einsum("ijyb,Qbs->Qijys", U, vv, optimize=True)
+            val = np.einsum("Qyr,Qijys->ijrs", av, W, optimize=True)
+            val *= coef
+            out = C2h[:, :, self.pv, self.pv]
+            out += val
+            out += val.transpose(1, 0, 3, 2)
+
     def _stream_ladder(self, C2h, alpha, B, T2):
         """The particle ladder, contracted from the three-index integrals.
 
@@ -1127,9 +1237,13 @@ class _DSRGDenseHelper:
         self._emit(C2, alpha, "ijab,ap->ijpb", (T, H), pair=True)
         self._emit(C2, -alpha, "ijab,qi->qjab", (T, H), pair=True)
 
-    def H2_T1_C2(self, C2, H2, T1, alpha=1.0):
+    def H2_T1_C2(self, C2, H2, T1, alpha=1.0, B=None):
         H, T = (H2, "corr"), (T1, "hp")
-        self._emit(C2, alpha, "ia,arpq->irpq", (T, H), pair=True)
+        self._emit(
+            C2, alpha, "ia,arpq->irpq", (T, H), pair=True, streamed=B is not None
+        )
+        if B is not None:
+            self._stream_c2_particle(C2[1], alpha, B["vv"], B["hv"], T1[:, self.pv])
         self._emit(C2, -alpha, "ia,rsiq->rsaq", (T, H), pair=True)
 
     def H2_T2_C2(self, C2, H2, T2, S2, alpha=1.0, B=None):
@@ -1144,8 +1258,28 @@ class _DSRGDenseHelper:
             self._emit(C2, alpha, "abrs,ijab->ijrs", (H, T))
         else:
             self._emit(C2, alpha, "abrs,ijab->ijrs", (H, T), only=0)
-            self._stream_ladder(C2[1], alpha, B, T2)
-        self._emit(C2, -0.5 * alpha, "xy,ijxb,ybrs->ijrs", (G, T, H), pair=True)
+            self._stream_ladder(C2[1], alpha, B["part"], T2)
+        self._emit(
+            C2,
+            -0.5 * alpha,
+            "xy,ijxb,ybrs->ijrs",
+            (G, T, H),
+            pair=True,
+            streamed=B is not None,
+        )
+        if B is not None:
+            self._stream_c2_ring(
+                C2[1],
+                -0.5 * alpha,
+                B["av"],
+                B["vv"],
+                np.einsum(
+                    "ijxb,xy->ijyb",
+                    T2[:, :, self.pa, self.pv],
+                    self.g1,
+                    optimize=True,
+                ),
+            )
 
         # hole-hole
         self._emit(C2, alpha, "pqij,ijab->pqab", (H, T))

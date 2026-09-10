@@ -133,7 +133,15 @@ class DSRG_MRPT3(DSRGBase):
         ints["V"] = self._build_v_blocks(B)
         # kept for the contractions that would otherwise reach the four-virtual
         # integrals; a few MiB against tens for the block they replace
-        ints["B_part"] = np.ascontiguousarray(B[:, self.part, self.part])
+        c, a, v, h, p = self.core, self.actv, self.virt, self.hole, self.part
+        ints["B"] = {
+            "part": np.ascontiguousarray(B[:, p, p]),
+            "vv": np.ascontiguousarray(B[:, v, v]),
+            "vc": np.ascontiguousarray(B[:, v, c]),
+            "va": np.ascontiguousarray(B[:, v, a]),
+            "hv": np.ascontiguousarray(B[:, h, v]),
+            "av": np.ascontiguousarray(B[:, a, v]),
+        }
 
         ints["eps"] = dict()
         for key, sl in (
@@ -152,7 +160,15 @@ class DSRG_MRPT3(DSRGBase):
     # cc-pVTZ the four-virtual block alone is 55% of it. Verified by
     # temp/big_block_terms.py; a contraction that reached one anyway would raise
     # rather than silently read zeros.
-    _DEAD_V_BLOCKS = frozenset({("v", "v", "h", "v"), ("v", "v", "v", "v")})
+    _DEAD_V_BLOCKS = frozenset(
+        {
+            ("v", "v", "h", "v"),
+            ("v", "v", "v", "v"),
+            ("v", "v", "v", "h"),
+            ("v", "h", "v", "v"),
+            ("h", "v", "v", "v"),
+        }
+    )
 
     def _build_v_blocks(self, B):
         """Two-electron integrals, tiled by which of the four indices are virtual.
@@ -280,11 +296,13 @@ class DSRG_MRPT3(DSRGBase):
         particle-hole direction, and the all-active block is dropped: it is an
         internal excitation, which the amplitudes never carry.
         """
-        dest += src[0] + src[1].T
+        dest += src[0]
+        dest += src[1].T
 
     def _fold_pphh(self, dest, src):
         """The two-body counterpart of _fold_ph."""
-        dest += src[0] + src[1].transpose(2, 3, 0, 1)
+        dest += src[0]
+        dest += src[1].transpose(2, 3, 0, 1)
 
     # ------------------------------------------------------------------
     # amplitudes and renormalization
@@ -433,10 +451,11 @@ class DSRG_MRPT3(DSRGBase):
 
         D1 = helper.make_1body()
         D2 = helper.make_2body()
+        Bblk = self.ints["B"]
         helper.H2_T1_C1(D1, self.V_bare, self.T1, 1.0)
-        helper.H2_T2_C1(D1, self.V_bare, self.T2, self.S2, 1.0)
-        helper.H2_T1_C2(D2, self.V_bare, self.T1, 1.0)
-        helper.H2_T2_C2(D2, self.V_bare, self.T2, self.S2, 1.0, B=self.ints["B_part"])
+        helper.H2_T2_C1(D1, self.V_bare, self.T2, self.S2, 1.0, B=Bblk)
+        helper.H2_T1_C2(D2, self.V_bare, self.T1, 1.0, B=Bblk)
+        helper.H2_T2_C2(D2, self.V_bare, self.T2, self.S2, 1.0, B=Bblk)
         self._fold_ph(self.F, D1)
         self._fold_pphh(self.V, D2)
 
