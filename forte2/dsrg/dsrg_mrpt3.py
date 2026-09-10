@@ -1,3 +1,4 @@
+import itertools
 from dataclasses import dataclass
 
 import numpy as np
@@ -129,7 +130,10 @@ class DSRG_MRPT3(DSRGBase):
         # Dense two-electron integrals over the whole correlated space:
         # <pq|rs> = (pr|qs).
         B = self.fock_builder.B_tensor_gen_block(self._C_semican, self._C_semican)
-        ints["V"] = np.einsum("Bpr,Bqs->pqrs", B, B, optimize=True)
+        ints["V"] = self._build_v_blocks(B)
+        # kept for the contractions that would otherwise reach the four-virtual
+        # integrals; a few MiB against tens for the block they replace
+        ints["B_part"] = np.ascontiguousarray(B[:, self.part, self.part])
 
         ints["eps"] = dict()
         for key, sl in (
@@ -142,6 +146,44 @@ class DSRG_MRPT3(DSRGBase):
             ints["eps"][key] = self.eps[sl].copy()
 
         return ints, cumulants
+
+    # Blocks of the two-electron integrals that no contraction reaches once the
+    # particle ladder is streamed. Together they are most of the array: at
+    # cc-pVTZ the four-virtual block alone is 55% of it. Verified by
+    # temp/big_block_terms.py; a contraction that reached one anyway would raise
+    # rather than silently read zeros.
+    _DEAD_V_BLOCKS = frozenset({("v", "v", "h", "v"), ("v", "v", "v", "v")})
+
+    def _build_v_blocks(self, B):
+        """Two-electron integrals, tiled by which of the four indices are virtual.
+
+        The correlated space is the hole space followed by the virtual space, so
+        tagging each index one or the other tiles the integrals exactly, into
+        sixteen rectangles rather than the eighty-one elementary blocks a
+        core/active/virtual split would give. Each is built straight from the
+        three-index integrals, so the blocks that are never read cost nothing.
+        """
+        span = {"h": self.hole, "v": self.virt}
+        return {
+            m: np.einsum(
+                "Bpr,Bqs->pqrs",
+                B[:, span[m[0]], span[m[2]]],
+                B[:, span[m[1]], span[m[3]]],
+                optimize=True,
+            )
+            for m in itertools.product("hv", repeat=4)
+            if m not in self._DEAD_V_BLOCKS
+        }
+
+    def _v_pphh(self, vb):
+        """Assemble the pphh rectangle from the block-stored integrals."""
+        ha, pa, pv = self.ha, self.pa, self.pv
+        out = np.zeros((self.npart, self.npart, self.nhole, self.nhole))
+        out[pa, pa] = vb["h", "h", "h", "h"][ha, ha]
+        out[pv, pa] = vb["v", "h", "h", "h"][:, ha]
+        out[pa, pv] = vb["h", "v", "h", "h"][ha, :]
+        out[pv, pv] = vb["v", "v", "h", "h"]
+        return out
 
     # ------------------------------------------------------------------
     # block adapters: the MRPT2 kernels take dicts of individual blocks
@@ -394,7 +436,7 @@ class DSRG_MRPT3(DSRGBase):
         helper.H2_T1_C1(D1, self.V_bare, self.T1, 1.0)
         helper.H2_T2_C1(D1, self.V_bare, self.T2, self.S2, 1.0)
         helper.H2_T1_C2(D2, self.V_bare, self.T1, 1.0)
-        helper.H2_T2_C2(D2, self.V_bare, self.T2, self.S2, 1.0)
+        helper.H2_T2_C2(D2, self.V_bare, self.T2, self.S2, 1.0, B=self.ints["B_part"])
         self._fold_ph(self.F, D1)
         self._fold_pphh(self.V, D2)
 
@@ -442,9 +484,7 @@ class DSRG_MRPT3(DSRGBase):
         # over general index patterns by the commutator kernels.
         self.V_bare = self.ints["V"]
         self.F = np.ascontiguousarray(self.fock[self.part, self.hole])
-        self.V = np.ascontiguousarray(
-            self.ints["V"][self.part, self.part, self.hole, self.hole]
-        )
+        self.V = self._v_pphh(self.ints["V"])
 
         self.T1, self.T2, self.S2 = self._build_tamps(self.F, self.V)
 
@@ -482,7 +522,8 @@ class DSRG_MRPT3(DSRGBase):
         # hbar1/hbar2 are left untouched so this can be called more than once.
         _hbar1 = self.hbar1 + self.hbar1.T + self.fock[self.actv, self.actv]
         _hbar2 = self.hbar2 + np.einsum("ijab->abij", self.hbar2)
-        _hbar2 = _hbar2 + self.V_bare[self.actv, self.actv, self.actv, self.actv]
+        ha = self.ha
+        _hbar2 = _hbar2 + self.V_bare["h", "h", "h", "h"][ha, ha, ha, ha]
 
         self._hbar0, _hbar1 = degno_active_sf(
             self.E_dsrg,

@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 
 
@@ -835,6 +837,17 @@ class _DSRGDenseHelper:
         _LETTER[_l] = "g"
     del _l
 
+    # intersection of a space with the hole or virtual space: how the integrals
+    # are tiled, correlated = hole + virtual being disjoint and contiguous
+    _ISECT_HV = {
+        ("c", "h"): "c", ("c", "v"): None,
+        ("a", "h"): "a", ("a", "v"): None,
+        ("v", "h"): None, ("v", "v"): "v",
+        ("h", "h"): "h", ("h", "v"): None,
+        ("p", "h"): "a", ("p", "v"): "v",
+        ("g", "h"): "h", ("g", "v"): "v",
+    }
+
     # intersection of a space with the hole or particle space
     _ISECT = {
         ("c", "h"): "c",
@@ -879,6 +892,8 @@ class _DSRGDenseHelper:
             "g": slice(None),
         }
         self._frames = {"h": self._hole, "p": self._part}
+        # inside a block whose index is already virtual there is nothing to slice
+        self._hv = {"h": self._hole, "v": {"v": slice(None)}}
         self.g1 = None
         self.e1 = None
         self.l2 = None
@@ -930,15 +945,24 @@ class _DSRGDenseHelper:
             return ("p", "h"), ("h", "p")
         return ("p", "p", "h", "h"), ("h", "h", "p", "p")
 
-    def _emit(self, out, coef, spec, operands, pair=False):
+    def _emit(self, out, coef, spec, operands, pair=False, only=None):
         """Accumulate one term into both off-diagonal directions of `out`.
 
-        An operand may itself be an off-diagonal operator, supplied as its two
-        blocks rather than over the whole correlated space. The contraction then
-        splits over those blocks, and any combination whose spaces do not
-        intersect is skipped rather than computed against zeros -- about a third
-        of the block combinations in the first stage, where the operand is the
-        commutator built by the stage before it.
+        `only` restricts the term to one direction, for the case where the other
+        one is handled separately.
+
+        One operand may be stored in pieces rather than over the whole
+        correlated space, in which case the contraction splits over them and any
+        combination whose spaces do not intersect is skipped rather than
+        computed against zeros. Two kinds occur:
+
+        - an off-diagonal operator, held as its particle-hole and hole-particle
+          blocks. About a third of the combinations reached in the first stage
+          cannot be occupied by a commutator at all.
+        - the two-electron integrals, tiled by which indices are virtual.
+          Correlated = hole + virtual is a disjoint, contiguous split, so the
+          sixteen combinations cover the integrals exactly, and the ones no
+          contraction reaches are never built.
 
         `pair` also adds the result under the bra/ket exchange of the output
         indices, which is how the reference implementation writes the two index
@@ -948,15 +972,23 @@ class _DSRGDenseHelper:
         ins = ins.split(",")
         ndim = len(res)
 
-        od_at = next(
-            (i for i, (t, _) in enumerate(operands) if isinstance(t, tuple)), None
-        )
-        if od_at is None:
-            blocks = [None]
-        else:
-            blocks = list(enumerate(self._directions(len(ins[od_at]))))
+        split_at, split_kind, blocks = None, None, [None]
+        for i, (tensor, _) in enumerate(operands):
+            if isinstance(tensor, tuple):
+                split_at, split_kind = i, "od"
+                blocks = list(enumerate(self._directions(len(ins[i]))))
+                break
+            if isinstance(tensor, dict):
+                split_at, split_kind = i, "vblk"
+                blocks = [(m, m) for m in itertools.product("hv", repeat=len(ins[i]))]
+                break
+        table = self._ISECT if split_kind == "od" else self._ISECT_HV
 
-        for arr, dirs in zip(out, self._directions(ndim)):
+        targets = list(zip(out, self._directions(ndim)))
+        if only is not None:
+            targets = [targets[only]]
+
+        for arr, dirs in targets:
             for block in blocks:
                 eff = {}
                 for k, L in enumerate(res):
@@ -966,50 +998,38 @@ class _DSRGDenseHelper:
                     eff[L] = r
                 else:
                     if block is not None:
-                        _, bdirs = block
-                        for k, L in enumerate(ins[od_at]):
-                            r = self._ISECT[(eff.get(L, self._LETTER[L]), bdirs[k])]
+                        for k, L in enumerate(ins[split_at]):
+                            r = table[(eff.get(L, self._LETTER[L]), block[1][k])]
                             if r is None:
                                 break
                             eff[L] = r
                         else:
                             self._contract(
-                                arr,
-                                dirs,
-                                coef,
-                                spec,
-                                ins,
-                                res,
-                                operands,
-                                eff,
-                                od_at,
-                                block,
-                                pair,
+                                arr, dirs, coef, spec, ins, res, operands, eff,
+                                split_at, split_kind, block, pair,
                             )
                         continue
                     self._contract(
-                        arr,
-                        dirs,
-                        coef,
-                        spec,
-                        ins,
-                        res,
-                        operands,
-                        eff,
-                        od_at,
-                        block,
-                        pair,
+                        arr, dirs, coef, spec, ins, res, operands, eff,
+                        split_at, split_kind, block, pair,
                     )
 
-    def _contract(
-        self, arr, dirs, coef, spec, ins, res, operands, eff, od_at, block, pair
-    ):
+    def _contract(self, arr, dirs, coef, spec, ins, res, operands, eff,
+                  split_at, split_kind, block, pair):
         args = []
         for i, (idx, (tensor, kind)) in enumerate(zip(ins, operands)):
-            if i == od_at:
-                bi, bdirs = block
-                sl = tuple(self._frames[d][eff[L]] for L, d in zip(idx, bdirs))
-                args.append(tensor[bi][sl])
+            if i == split_at:
+                bkey, bdirs = block
+                if split_kind == "od":
+                    sl = tuple(self._frames[d][eff[L]] for L, d in zip(idx, bdirs))
+                else:
+                    if bkey not in tensor:
+                        raise KeyError(
+                            f"contraction {spec} reaches integral block {bkey}, "
+                            "which is not stored"
+                        )
+                    sl = tuple(self._hv[d][eff[L]] for L, d in zip(idx, bdirs))
+                args.append(tensor[bkey][sl])
             else:
                 sl = self._slices(kind, idx, eff)
                 args.append(tensor if sl is None else tensor[sl])
@@ -1019,10 +1039,6 @@ class _DSRGDenseHelper:
         if pair:
             perm = (1, 0) if len(res) == 2 else (1, 0, 3, 2)
             arr[tuple(osl[i] for i in perm)] += val.transpose(perm)
-
-    # ------------------------------------------------------------------
-    # kernels
-    # ------------------------------------------------------------------
 
     def H1_T1_C1(self, C1, H1, T1, alpha=1.0):
         H, T = (H1, "corr"), (T1, "hp")
@@ -1085,6 +1101,27 @@ class _DSRGDenseHelper:
         self._emit(C1, -alpha, "uqms,mvxy,xyuv->qs", (H, T, L))
         self._emit(C1, 0.5 * alpha, "uqsm,mvxy,xyuv->qs", (H, T, L))
 
+    def _stream_ladder(self, C2h, alpha, B, T2):
+        """The particle ladder, contracted from the three-index integrals.
+
+        C2[ijrs] += alpha * sum_ab V[abrs] T2[ijab], with every index in the
+        particle space and V[abrs] = sum_Q B[Q,a,r] B[Q,b,s]. Walking the
+        auxiliary index in chunks keeps the intermediate small, where forming
+        V[abrs] outright would be the largest allocation in the calculation.
+        """
+        npart = B.shape[1]
+        # Walk one particle index rather than the auxiliary one: the slice of the
+        # integrals needed for a few values of r is three-index-sized, whereas
+        # batching over the auxiliary index would carry the amplitudes along with
+        # it and grow with the hole space too.
+        chunk = max(1, min(npart, 1_000_000 // max(npart**3, 1)))
+        for r0 in range(0, npart, chunk):
+            Br = B[:, :, r0 : r0 + chunk]
+            Vr = np.einsum("Qar,Qbs->arbs", Br, B, optimize=True)
+            C2h[:, :, r0 : r0 + chunk, :] += alpha * np.einsum(
+                "arbs,ijab->ijrs", Vr, T2, optimize=True
+            )
+
     def H1_T2_C2(self, C2, H1, T2, alpha=1.0):
         H, T = (H1, "corr"), (T2, "hhpp")
         self._emit(C2, alpha, "ijab,ap->ijpb", (T, H), pair=True)
@@ -1095,12 +1132,19 @@ class _DSRGDenseHelper:
         self._emit(C2, alpha, "ia,arpq->irpq", (T, H), pair=True)
         self._emit(C2, -alpha, "ia,rsiq->rsaq", (T, H), pair=True)
 
-    def H2_T2_C2(self, C2, H2, T2, S2, alpha=1.0):
+    def H2_T2_C2(self, C2, H2, T2, S2, alpha=1.0, B=None):
         H, T, S = (H2, "corr"), (T2, "hhpp"), (S2, "hhpp")
         G, E = (self.g1, "act"), (self.e1, "act")
 
-        # particle-particle
-        self._emit(C2, alpha, "abrs,ijab->ijrs", (H, T))
+        # particle-particle. In the hole-hole-particle-particle direction this
+        # term reaches every four-virtual integral, which is the single largest
+        # array the method would otherwise touch, so it is contracted straight
+        # from the three-index integrals when they are available.
+        if B is None:
+            self._emit(C2, alpha, "abrs,ijab->ijrs", (H, T))
+        else:
+            self._emit(C2, alpha, "abrs,ijab->ijrs", (H, T), only=0)
+            self._stream_ladder(C2[1], alpha, B, T2)
         self._emit(C2, -0.5 * alpha, "xy,ijxb,ybrs->ijrs", (G, T, H), pair=True)
 
         # hole-hole

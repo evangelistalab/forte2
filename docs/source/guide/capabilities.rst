@@ -39,8 +39,9 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
 * Multi-reference driven similarity renormalization group (MR-DSRG) methods
   
   * Non-relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
+  * Non-relativistic DSRG-MRPT3 with reference relaxation and state-averaging [11]_
   * Two-component relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
-  * Two-component relativistic DSRG-MRPT3 with reference relaxation and state-averaging
+  * Two-component relativistic DSRG-MRPT3 with reference relaxation and state-averaging [11]_
   * Frozen natural orbital (FNO) truncation of the virtual space for the two-component methods [10]_
 
 * Various orbital manipulation routines
@@ -63,3 +64,4 @@ References
 .. [8] Li, C.; Evangelista, F. A. Multireference Driven Similarity Renormalization Group: A Second-Order Perturbative Analysis. J. Chem. Theory Comput. 2015, 11 (5), 2097-2108. https://doi.org/10.1021/acs.jctc.5b00134.
 .. [9] Surjuse, K. A.; Valeev, E. F. SAP-X2C: Optimally-Simple Two-Component Relativistic Hamiltonian with Size-Intensive Picture Change. J. Chem. Theory Comput. 2026, 22 (7), 3443-3452. https://doi.org/10.1021/acs.jctc.6c00032.
 .. [10] Li, C.; Mao, S.; Huang, R.; Evangelista, F. A. Frozen Natural Orbitals for the State-Averaged Driven Similarity Renormalization Group. J. Chem. Theory Comput. 2024, 20, 4170-4181.
+.. [11] Li, C.; Evangelista, F. A. Driven Similarity Renormalization Group: Third-Order Multireference Perturbation Theory. J. Chem. Phys. 2017, 146 (12), 124132. https://doi.org/10.1063/1.4979016.
