@@ -11,16 +11,24 @@ Do not edit by hand. Change codegen/terms.py and regenerate.
 
 import numpy as np
 
-# Blocking makes most contractions small, and for those numpy spends longer
-# deriving a contraction path than performing the contraction: at cc-pVDZ block
-# sizes a two-operand term costs ~50 us with optimize=True against ~11 us
-# without. Deriving the path only pays once the contraction is big enough for
-# the order to matter, so pick per call, on the cost of doing it naively --
-# the product over the union of the indices, not the operand sizes, which can
-# understate it by orders of magnitude. Three or more operands always go
-# through the optimizer: an unoptimized multi-operand einsum contracts over
-# every index at once, which is the trap `_df` sidesteps.
-_NAIVE_MAX = 20_000
+# Blocking makes most contractions small, and for a small one numpy spends
+# longer deriving a contraction path than performing the contraction. Choosing
+# per call is worth about 10% end to end (N2/cc-pVTZ 4.6 -> 4.0 s; cc-pVDZ
+# 1.66 -> 1.44 s) -- far less than a single-contraction microbenchmark suggests,
+# since most of the work sits in the contractions large enough to take the
+# optimized path either way.
+#
+# The test is the cost of contracting naively: the product over the union of the
+# indices, not the operand sizes, which understate it by orders of magnitude.
+# Because that is a count of operations rather than a size, the threshold does
+# not need retuning per system. Measured optimum, flat to within a few percent
+# between 20_000 and 200_000 and rising sharply above it (2e6 -> 5.2 s,
+# 2e7 -> 12.4 s at cc-pVTZ).
+#
+# Three or more operands always go through the optimizer: an unoptimized
+# multi-operand einsum contracts over every index at once, which is the trap
+# `_df` sidesteps.
+_NAIVE_MAX = 200_000
 
 
 def einsum(spec, *ops, **kwargs):
