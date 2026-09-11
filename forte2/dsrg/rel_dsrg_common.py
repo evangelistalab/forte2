@@ -748,7 +748,22 @@ class _RelDSRGHelper:
         C2["aavv"] += scale * -0.125 * einsum('uvab,wxyz,xv,wu->yzab', T2['aavv'], V['aaaa'], e1, e1)
         C2["aavv"] += scale * +0.125 * einsum('uvab,wxyz,xv,wu->yzab', T2['aavv'], V['aaaa'], g1, g1)
         C2["aavv"] += scale * +1.000 * einsum('iuab,icvb->uvac', T2['cavv'], V['cvav'])
-        C2["aavv"] += scale * -1.000 * einsum('uvab,wcxb,wv->uxac', T2['aavv'], V['avav'], g1)
+        # C2["aavv"] += scale * -1.000 * einsum('uvab,wcxb,wv->uxac', T2['aavv'], V['avav'], g1)
+        # The largest allocation in this kernel by a wide margin. As one
+        # contraction it needs three full-size relayouts of its operands --
+        # both four-index factors and the result -- because the summed indices
+        # sit apart in every one of them. Folding the density into the integral
+        # once, in the layout the product wants, and then walking the leading
+        # output index leaves that fold as the only full-size array: each slice
+        # relays out and accumulates a single u at a time.
+        Vg = einsum('wcxb,wv->vbxc', V['avav'], g1)
+        na, nv = Vg.shape[0], Vg.shape[1]
+        Vg = Vg.reshape(na * nv, na * nv)
+        Taavv = T2['aavv']
+        for u in range(Taavv.shape[0]):
+            Tu = np.ascontiguousarray(Taavv[u].transpose(1, 0, 2)).reshape(nv, na * nv)
+            C2["aavv"][u] += (scale * -1.000) * (Tu @ Vg).reshape(nv, na, nv).transpose(1, 0, 2)
+        del Vg, Taavv
 
     def H2_T2_C2_non_od_large(self, C2, B, T2, cumulants, scale=1.0):
         e1 = cumulants['eta1']
