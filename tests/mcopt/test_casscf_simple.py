@@ -1,3 +1,6 @@
+import numpy as np
+import pytest
+
 from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx, is_diagonal_matrix
 
@@ -71,6 +74,49 @@ def test_casscf_h2_all_orbitals_active_positive_maxiter():
     assert mc.iter == 0
     assert mc.converged
     assert mc.E == approx(-1.096071975854)
+
+
+@pytest.mark.parametrize("final_orbitals", ["ibo", "ibo_atomic"])
+def test_casscf_h2_ibo_final_orbitals(final_orbitals):
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    rhf.run()
+    C_canonical = rhf.mos.C[0].copy()
+
+    ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=2)
+    mc = MCOptimizer(ci_solver, final_orbitals=final_orbitals)(rhf)
+    mc.run()
+
+    assert mc.E == approx(-1.096071975854)
+    overlap = C_canonical.T @ system.ints_overlap() @ mc.mos.C[0]
+    np.testing.assert_allclose(overlap.T @ overlap, np.eye(2), atol=1e-12)
+    assert not np.allclose(np.abs(overlap), np.eye(2), atol=1e-3)
+
+
+@pytest.mark.parametrize("final_orbitals", ["ibo", "ibo_atomic"])
+def test_casscf_ibo_final_orbitals_rejects_non_c1_symmetry(final_orbitals):
+    system = System(
+        xyz="H 0.0 0.0 0.0\nH 0.0 0.0 1.0",
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=True,
+    )
+    assert system.point_group.upper() != "C1"
+
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])
+    mc = MCOptimizer(ci_solver, final_orbitals=final_orbitals)(rhf)
+
+    with pytest.raises(ValueError, match="only available in C1 symmetry"):
+        mc.run()
 
 
 def test_casscf_n2():

@@ -391,7 +391,10 @@ def test_ci_natural_noncontiguous_mo_space():
     assert np.max(np.abs(off_diag)) < 1e-8
 
 
-@pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
+@pytest.mark.parametrize(
+    "final_orbitals",
+    ["original", "semicanonical", "natural", "ibo", "ibo_atomic"],
+)
 def test_ci_final_orbitals(final_orbitals):
     eref = -99.82331087176414
     xyz = """
@@ -422,3 +425,24 @@ def test_ci_final_orbitals(final_orbitals):
     )(rhf)
     ci_solver.run()
     assert ci_solver.E_avg == approx(eref)
+
+
+@pytest.mark.parametrize("final_orbitals", ["ibo", "ibo_atomic"])
+def test_ci_ibo_final_orbitals_rejects_non_c1_symmetry(final_orbitals):
+    system = System(
+        xyz="H 0.0 0.0 0.0\nH 0.0 0.0 1.0",
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=True,
+    )
+    assert system.point_group.upper() != "C1"
+
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CI(
+        State(nel=2, multiplicity=1, ms=0.0),
+        active_orbitals=[0, 1],
+        final_orbitals=final_orbitals,
+    )(rhf)
+
+    with pytest.raises(ValueError, match="only available in C1 symmetry"):
+        ci_solver.run()

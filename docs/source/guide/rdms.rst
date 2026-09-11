@@ -110,7 +110,7 @@ belong to different states are more restricted.
 
 A transition RDM between two states also requires the two states to have the same number of alpha
 and beta electrons.
-State-averaged RDMs can be obtained by ``make_average_rdm(order)``. 
+State-averaged RDMs can be obtained by ``make_average_rdm(order)``.
 There, the spin type is automatically deduced: if a non-relativistic solver is used, the averaged spin-free RDM is returned, otherwise the averaged spin-orbital RDM is returned.
 
 Cumulant capabilities
@@ -141,7 +141,7 @@ transition counterpart.
 
 To get a state-averaged cumulant, call ``make_average_cumulant(order)`` instead. Cumulants are
 nonlinear in the RDMs, so a state-averaged cumulant is built from the state-averaged RDMs rather
-than from a weighted sum of per-root cumulants. 
+than from a weighted sum of per-root cumulants.
 The same deduction of spin-type as ``make_average_rdm`` is in effect.
 
 References

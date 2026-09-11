@@ -3,7 +3,7 @@ import itertools
 import numpy as np
 import scipy as sp
 
-from forte2.helpers import logger
+from forte2.helpers import logger, procrustes_rotation
 from .sym_utils import rotation_mat, reflection_mat, equivalent_under_operation
 
 
@@ -94,8 +94,7 @@ class PGSymmetryDetector:
 
         if not np.isclose(np.abs(det), 1.0, atol=self.tol):
             # re-orthogonalize
-            u, _, vh = np.linalg.svd(self.prinrot)
-            self.prinrot = u @ vh
+            self.prinrot = procrustes_rotation(self.prinrot)
             det = np.linalg.det(self.prinrot)
 
         if det < 0:

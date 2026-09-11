@@ -6,6 +6,38 @@ from . import logger
 MACHEPS = 1e-14
 
 
+def procrustes_rotation(overlap, *, return_singular_values=False):
+    """Return the unitary polar factor of a square overlap matrix.
+
+    This is the orthogonal Procrustes solution that maximizes the overlap with
+    the input matrix. If ``overlap = L @ diag(s) @ R.conj().T``, the returned
+    rotation is ``L @ R.conj().T``.
+
+    Parameters
+    ----------
+    overlap : NDArray
+        Square real or complex overlap matrix.
+    return_singular_values : bool, optional
+        If ``True``, also return the singular values of ``overlap``.
+
+    Returns
+    -------
+    NDArray or tuple[NDArray, NDArray]
+        The closest orthogonal or unitary matrix, optionally followed by the
+        singular values of ``overlap``.
+    """
+
+    overlap = np.asarray(overlap)
+    if overlap.ndim != 2 or overlap.shape[0] != overlap.shape[1]:
+        raise ValueError("The Procrustes overlap matrix must be square.")
+
+    left, singular_values, right_h = np.linalg.svd(overlap, full_matrices=False)
+    rotation = left @ right_h
+    if return_singular_values:
+        return rotation, singular_values
+    return rotation
+
+
 def _eigh_metric_kernel(S, rtol=1e-7):
     info = {}
     sevals, sevecs = np.linalg.eigh(S)

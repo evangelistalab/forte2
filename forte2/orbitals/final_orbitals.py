@@ -5,34 +5,15 @@ from numpy.typing import ArrayLike, NDArray
 
 from forte2.helpers import logger
 
+from .iao import IBO
+from .ibo_align import IBOAligner
 from .natural_orbitals import NaturalOrbitals
+from .orbital_blocks import OrbitalBlockBuilder
 from .semicanonicalizer import Semicanonicalizer
 
-FinalOrbitals = Literal["original", "semicanonical", "natural"]
+FinalOrbitals = Literal["original", "semicanonical", "natural", "ibo", "ibo_atomic"]
 
 VALID_FINAL_ORBITALS = get_args(FinalOrbitals)
-
-
-def validate_final_orbitals(value: str) -> None:
-    """
-    Validate a final_orbitals option value.
-
-    Parameters
-    ----------
-    value : str
-        The requested value.
-
-    Raises
-    ------
-    ValueError
-        If value is not in the FinalOrbitals literal.
-    """
-    if value not in VALID_FINAL_ORBITALS:
-        raise ValueError(
-            f"final_orbitals must be one of {VALID_FINAL_ORBITALS}, "
-            f"but got {value!r}."
-        )
-    return
 
 
 def make_final_orbitals(
@@ -42,22 +23,28 @@ def make_final_orbitals(
     mo_space,
     irrep_indices: ArrayLike,
     C_contig: NDArray,
-    g1_act: NDArray,
+    g1_act: NDArray | None,
 ) -> NDArray:
     """
     Build the requested final orbitals, in contiguous MO-space ordering.
 
-    The inactive subspaces are always semicanonicalized. The active space is
-    semicanonicalized for mode="semicanonical", or left alone by the
-    semicanonicalizer and then diagonalized against the active 1-RDM for
-    mode="natural" (separately within each GAS partition and irrep block, so
-    those structures are preserved).
+    For every mode except ``"original"``, the inactive subspaces are
+    semicanonicalized. For ``mode``:
+
+    - ``"semicanonical"``: The active space is semicanonicalized.
+    - ``"natural"``: The active space is rotated to make the active 1-RDM diagonal.
+    - ``"ibo"``: The active orbitals are localized as intrinsic bond orbitals (IBOs).
+    - ``"ibo_atomic"``: The active orbitals are localized and aligned to the
+      global axis-oriented IAOs and ordered by atom and native MINAO
+      basis-function index. Localization and ordering are applied separately
+      within each GAS partition, and both modes are available only in C1
+      symmetry.
 
     Parameters
     ----------
     mode : str
-        Either "semicanonical" or "natural". Callers are expected to skip
-        this function entirely for "original".
+        Either "original", "semicanonical", "natural", "ibo", or
+        "ibo_atomic".
     system : System
         The system, used to build the generalized Fock matrix.
     mo_space : MOSpace or EmbeddingMOSpace
@@ -66,23 +53,42 @@ def make_final_orbitals(
         Orbital irrep labels in the same contiguous ordering as C_contig.
     C_contig : NDArray
         Full MO coefficient matrix in contiguous MO-space ordering.
-    g1_act : NDArray
+    g1_act : NDArray or None
         Active-space one-particle density matrix (spin-summed if non-relativistic,
-        spin-orbital if relativistic).
+        spin-orbital if relativistic). May be ``None`` only for ``"original"``.
 
     Returns
     -------
     NDArray
         The transformed coefficient matrix, still in contiguous ordering.
     """
-    if mode not in ("semicanonical", "natural"):
+    if mode not in VALID_FINAL_ORBITALS:
         raise ValueError(
-            "make_final_orbitals expects mode to be 'semicanonical' or 'natural', "
-            f"but got {mode}."
+            f"final_orbitals must be one of {VALID_FINAL_ORBITALS}, "
+            f"but got {mode!r}."
         )
 
-    # Semicanonicalize the orbital subspaces (except the CAS/GAS in the case of
-    # natural orbitals, which are defined by the 1-RDM instead).
+    C_final = np.asarray(C_contig).copy()
+    if mode == "original":
+        return C_final
+
+    ibo_mode = mode in ("ibo", "ibo_atomic")
+    if ibo_mode:
+        point_group = str(getattr(system, "point_group", "C1")).upper()
+        if point_group != "C1":
+            raise ValueError(
+                f"final_orbitals={mode!r} is only available in C1 symmetry, but the "
+                f"system uses point group {point_group!r}. Construct the System with "
+                "symmetry=False to disable point-group symmetry."
+            )
+        if getattr(system, "two_component", False) or np.iscomplexobj(C_contig):
+            raise NotImplementedError(
+                f"final_orbitals={mode!r} is currently implemented only for real, "
+                "nonrelativistic orbitals."
+            )
+
+    # Semicanonicalize every inactive subspace. The active space is included
+    # only for semicanonical mode; natural and IBO modes define it separately.
     semi = Semicanonicalizer(
         mo_space=mo_space,
         system=system,
@@ -91,8 +97,25 @@ def make_final_orbitals(
         mix_active=False,
         do_active=(mode == "semicanonical"),
     )
-    semi.semi_canonicalize(g1=g1_act, C_contig=C_contig)
+    semi.semi_canonicalize(g1=g1_act, C_contig=C_final)
     C_final = semi.C_semican.copy()
+
+    if ibo_mode:
+        # Rotations across GAS partitions change the variational space of a GAS
+        # calculation, so localize each active partition independently. Since
+        # do_active=False above, these columns are still the input active MOs.
+        orbital_blocks = OrbitalBlockBuilder(mo_space)
+        for active_block in orbital_blocks.active_blocks(relative_index=False):
+            if active_block.size < 2 and mode == "ibo":
+                continue
+            ibo = IBO(system, C_final[:, active_block])
+            if mode == "ibo_atomic":
+                ibo_aligner = IBOAligner(ibo)
+                ibo_aligner.align_to_atomic_orbitals()
+                C_final[:, active_block] = ibo_aligner.C_ibo
+            else:
+                C_final[:, active_block] = ibo.C_ibo
+        return C_final
 
     if mode == "natural":
         natural_orbital = NaturalOrbitals(mo_space, irrep_indices=irrep_indices)
