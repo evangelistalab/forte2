@@ -2,7 +2,6 @@ import numpy as np
 from forte2.lib import sparse_ops
 from forte2.lib.sparse_ops import SparseOperator
 
-
 # Description:
 # This file contains tests for the SparseOperator class
 # and its algebraic operations.

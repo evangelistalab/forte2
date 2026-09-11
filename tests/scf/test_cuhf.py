@@ -15,9 +15,7 @@ def test_cuhf_singlet():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
-    )
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = CUHF(charge=0, ms=0)(system)
     scf.run()

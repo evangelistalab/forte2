@@ -13,14 +13,7 @@ from forte2.base_classes import RelCIBase
 from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.helpers import logger
 from forte2.jkbuilder import SpinorbitalIntegrals
-from forte2.orbitals import FinalOrbitals, validate_final_orbitals
-from .ci_utils import (
-    pretty_print_ci_summary,
-    pretty_print_ci_nat_occ_numbers,
-    pretty_print_ci_dets,
-    pretty_print_ci_transition_props,
-    validate_single_state_rdm,
-)
+from .ci_utils import validate_single_state_rdm
 from .ci import _CISingleStateSolver
 
 
@@ -228,7 +221,7 @@ class RelCISolver(RelCIBase):
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
-        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+        The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
     """
 
     orbital_rotation_invariant: ClassVar[bool] = True
@@ -237,9 +230,8 @@ class RelCISolver(RelCIBase):
     ci_params: CIParams = field(default_factory=CIParams)
 
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level() + 1)
 
-    # Active-space integral class used by CIBase._make_active_space_ints
+    # Active-space integral class used by CIBase.make_active_space_ints
     _integrals_cls: ClassVar[type] = SpinorbitalIntegrals
     # Per-state worker class used by CIBase._startup
     _ss_solver_cls: ClassVar[type] = _RelCISingleStateSolver
@@ -274,41 +266,3 @@ class RelCISolver(RelCIBase):
         return self.sub_solvers[left_state].make_rdm(
             left_root_in_state, right_root_in_state, order=order, spin_type=spin_type
         )
-
-
-@dataclass
-class RelCI(RelCISolver):
-    final_orbitals: FinalOrbitals = "original"
-    do_transition_dipole: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
-
-    def __post_init__(self):
-        super().__post_init__()
-        validate_final_orbitals(self.final_orbitals)
-
-    def run(self):
-        self._solve()
-        self._rotate_final_orbitals(self.final_orbitals)
-        self._post_process()
-        return self
-
-    def _post_process(self):
-        pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
-        self.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(
-            self.sa_info,
-            self.mo_space,
-            self.nat_occs,
-            getattr(self, "nat_occs_avg", None),
-        )
-        top_dets = self.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-
-        if self.do_transition_dipole:
-            self.compute_transition_properties()
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.transition_dipoles,
-                self.oscillator_strengths,
-                self.evals_per_solver,
-            )
