@@ -277,9 +277,10 @@ class DSRGBase(Method):
 
             # Drop the previous set first: get_integrals() does not read self.ints,
             # so holding both across the call would double the integral footprint on
-            # every relaxation iteration.
-            self.ints = None
-            self.cumulants = None
+            # every relaxation iteration. Subclasses extend this to the working
+            # tensors they hang off self, which for MRPT3 is most of the footprint
+            # and would otherwise accumulate across iterations.
+            self._release_integrals()
             self.ints, self.cumulants = self.get_integrals()
             self.E_dsrg = self._solve_dsrg_shifted(form_hbar)
             self.E = self.E_dsrg
