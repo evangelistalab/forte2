@@ -31,10 +31,7 @@ class _HermitianBlocks(dict):
     """
 
     def __missing__(self, blk):
-        rev = blk[2:] + blk[:2]
-        if not dict.__contains__(self, rev):
-            raise KeyError(blk)
-        return dict.__getitem__(self, rev).transpose(2, 3, 0, 1).conj()
+        return dict.__getitem__(self, blk[2:] + blk[:2]).transpose(2, 3, 0, 1).conj()
 
 
 @dataclass

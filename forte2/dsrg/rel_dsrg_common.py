@@ -4,24 +4,6 @@ from itertools import product
 einsum = lambda *args, **kwargs: np.einsum(*args, **kwargs, optimize=True)
 
 
-def _df_ladder(left, T, right, nrow, buf):
-    """Contract ``sum_{P,k,m} Bl[P,o,k] T[k,m] Br[P,o',m]`` as two GEMMs.
-
-    The density-fitted ladder terms all have this shape, with the two
-    three-index factors fixed across a loop and only ``T`` varying. Written as
-    a single three-operand einsum, numpy re-lays-out both factors into matrix
-    form on every call, and for the virtual-virtual blocks those copies cost
-    more than the arithmetic.
-
-    Callers relay the factors out once and pass them here already flattened:
-    ``left`` is ``Bl`` as ``(o*naux, k)``, ``right`` is ``Br`` as
-    ``(naux*m, o')``, and ``buf`` is an ``(o*naux, m)`` scratch array holding
-    the first product. ``nrow`` is ``o``, the leading dimension of the result.
-    """
-    np.matmul(left, T, out=buf)
-    return buf.reshape(nrow, -1) @ right
-
-
 class _RelDSRGHelper:
     def __init__(self, dsrg_obj):
         self.hc = dsrg_obj.hc
@@ -778,7 +760,8 @@ class _RelDSRGHelper:
         # both factors out into matrix form again on every call, and those
         # copies -- not the arithmetic -- dominate the kernel. Relaying them
         # out once here lets each contraction run as two GEMMs on contiguous
-        # memory; see _df_ladder.
+        # memory: each contraction becomes a pair of GEMMs, the first into a
+        # scratch buffer and the second straight out of its reshape.
         vv_L = np.ascontiguousarray(B['vv'].transpose(1, 0, 2)).reshape(nv * naux, nv)
         vv_R = np.ascontiguousarray(B['vv'].transpose(0, 2, 1)).reshape(naux * nv, nv)
         av_L = np.ascontiguousarray(B['av'].transpose(1, 0, 2)).reshape(na * naux, nv)
@@ -804,12 +787,14 @@ class _RelDSRGHelper:
                 Tij = Ti[j]
                 np.subtract(Tij, Tij.T, out=temp)
 
-                contrib_vv = _df_ladder(vv_L, temp, vv_R, nv, buf_v)
+                np.matmul(vv_L, temp, out=buf_v)
+                contrib_vv = buf_v.reshape(nv, -1) @ vv_R
                 contrib_vv *= scale * 0.125
                 Ci_vv[j] += contrib_vv
                 C2["ccvv"][j, i] -= contrib_vv
 
-                contrib_av = _df_ladder(av_L, temp, vv_R, na, buf_a)
+                np.matmul(av_L, temp, out=buf_a)
+                contrib_av = buf_a.reshape(na, -1) @ vv_R
                 contrib_av *= scale * 0.250
                 Ci_av[j] += contrib_av
                 C2["ccav"][j, i] -= contrib_av
@@ -826,8 +811,10 @@ class _RelDSRGHelper:
             for u in range(na):
                 Tiu = Ti[u]
                 np.subtract(Tiu, Tiu.T, out=temp)
-                Ci_vv[u] += scale * 0.250 * _df_ladder(vv_L, temp, vv_R, nv, buf_v)
-                Ci_av[u] += scale * 0.500 * _df_ladder(av_L, temp, vv_R, na, buf_a)
+                np.matmul(vv_L, temp, out=buf_v)
+                Ci_vv[u] += scale * 0.250 * (buf_v.reshape(nv, -1) @ vv_R)
+                np.matmul(av_L, temp, out=buf_a)
+                Ci_av[u] += scale * 0.500 * (buf_a.reshape(na, -1) @ vv_R)
 
         # T2['aavv'][u,v] = -T2['aavv'][v,u] (both indices are active): same
         # triangular-plus-mirror trick as the ccvv/ccav pair above.
@@ -841,12 +828,14 @@ class _RelDSRGHelper:
                 Tuv = Tu[v]
                 np.subtract(Tuv, Tuv.T, out=temp)
 
-                contrib_vv = _df_ladder(vv_L, temp, vv_R, nv, buf_v)
+                np.matmul(vv_L, temp, out=buf_v)
+                contrib_vv = buf_v.reshape(nv, -1) @ vv_R
                 contrib_vv *= scale * 0.125
                 Cu_vv[v] += contrib_vv
                 C2["aavv"][v, u] -= contrib_vv
 
-                contrib_av = _df_ladder(av_L, temp, vv_R, na, buf_a)
+                np.matmul(av_L, temp, out=buf_a)
+                contrib_av = buf_a.reshape(na, -1) @ vv_R
                 contrib_av *= scale * 0.250
                 Cu_av[v] += contrib_av
                 C2["aaav"][v, u] -= contrib_av
@@ -857,7 +846,8 @@ class _RelDSRGHelper:
             Ti = T2['caav'][i]
             Ci = C2["cavv"][i]
             for u in range(na):
-                temp[:] = _df_ladder(bva_L, Ti[u], vv_R, nv, buf_v)
+                np.matmul(bva_L, Ti[u], out=buf_v)
+                temp[:] = buf_v.reshape(nv, -1) @ vv_R
                 temp *= scale * +0.500
                 Ci[u] += temp
                 Ci[u] -= temp.T
@@ -867,7 +857,8 @@ class _RelDSRGHelper:
         for u in range(na):
             Tu = T2['aaav'][u]
             for v in range(u + 1, na):
-                temp[:] = _df_ladder(bva_L, Tu[v], vv_R, nv, buf_v)
+                np.matmul(bva_L, Tu[v], out=buf_v)
+                temp[:] = buf_v.reshape(nv, -1) @ vv_R
                 temp *= scale * +0.250
                 contrib = temp - temp.T
                 C2["aavv"][u, v] += contrib
@@ -878,7 +869,8 @@ class _RelDSRGHelper:
         for i in range(nc):
             Ti = T2['ccav'][i]
             for j in range(i + 1, nc):
-                temp[:] = _df_ladder(bva_L, Ti[j], vv_R, nv, buf_v)
+                np.matmul(bva_L, Ti[j], out=buf_v)
+                temp[:] = buf_v.reshape(nv, -1) @ vv_R
                 temp *= scale * +0.250
                 contrib = temp - temp.T
                 C2["ccvv"][i, j] += contrib
