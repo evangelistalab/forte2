@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 
 import numpy as np
+from numpy.typing import NDArray
 
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
 from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
-from .rhf import RHF
 from .scf_utils import guess_mix
 
 
@@ -26,6 +26,11 @@ class UHF(SCFBase):
 
     ms: float = None
     guess_mix: bool = False  # only used if ms == 0
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
+        self.provides.add("gradient")
 
     def __call__(self, system):
         system.two_component = False
@@ -54,8 +59,9 @@ class UHF(SCFBase):
         ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
-        Ja, Jb = fock_builder.build_J(self.D)
-        K = fock_builder.build_K([self.C[0][:, : self.na], self.C[1][:, : self.nb]])
+        (Ja, Jb), K = fock_builder.build_JK(
+            [self.C[0][:, : self.na], self.C[1][:, : self.nb]]
+        )
         F = [H + Ja + Jb - k for k in K]
 
         F_canon = F
@@ -72,6 +78,8 @@ class UHF(SCFBase):
         return D_a + D_b
 
     def _initial_guess(self, H, guess_type="minao"):
+        from .rhf import RHF
+
         C = RHF._initial_guess(self, H, guess_type=guess_type)[0]
 
         if self.twicems == 0 and self.guess_mix:
@@ -118,6 +126,19 @@ class UHF(SCFBase):
         )
         return energy
 
+    def gradient(self) -> NDArray:
+        """
+        Compute the UHF analytic nuclear gradient with density fitting.
+
+        Returns
+        -------
+        NDArray
+            Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
+        """
+        from .uhf_grad import _compute_uhf_gradient
+
+        return _compute_uhf_gradient(self)
+
     def _diis_update(self, diis, F, AO_grad):
         F_flat = diis.update(np.hstack([f.flatten() for f in F]), AO_grad)
         F = [
@@ -127,11 +148,15 @@ class UHF(SCFBase):
         return F
 
     def _apply_level_shift(self, F, S):
-        if self.level_shift is None or all(ls < 1e-4 for ls in self.level_shift):
+        if self._current_level_shift is None or all(
+            ls < 1e-4 for ls in self._current_level_shift
+        ):
             return F
         D_vir = [S - S @ d @ S for d in self.D]
 
-        return [f + ls * d for ls, f, d in zip(self.level_shift, F, D_vir)]
+        return [
+            f + ls * d for ls, f, d in zip(self._current_level_shift, F, D_vir)
+        ]
 
     def _get_occupation(self):
         self.aocc = self.na

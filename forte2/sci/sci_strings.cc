@@ -5,7 +5,7 @@
 #include "helpers/ndarray.h"
 #include "helpers/np_vector_functions.h"
 
-#include "ci/determinant_helpers.h"
+#include "determinant/determinant_helpers.h"
 #include "sci_helper.h"
 
 namespace forte2 {

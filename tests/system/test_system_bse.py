@@ -4,7 +4,8 @@ from pathlib import Path
 
 THIS_DIR = Path(__file__).parent
 
-from forte2 import System, ints
+from forte2 import System
+from forte2.lib import ints
 from forte2.helpers.comparisons import approx
 from forte2.system.build_basis import BSE_AVAILABLE
 

@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "ci/determinant.h"
+#include "determinant/determinant.h"
 
 #include "sparse/sparse.h"
 #include "sparse/sparse_operator.h"

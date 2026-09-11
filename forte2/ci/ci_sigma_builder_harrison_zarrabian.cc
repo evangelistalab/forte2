@@ -5,6 +5,7 @@
 #include "helpers/np_vector_functions.h"
 #include "helpers/indexing.hpp"
 #include "helpers/blas.h"
+#include "helpers/parallel.h"
 
 #include "ci_sigma_builder.h"
 
@@ -20,14 +21,14 @@ void CISigmaBuilder::H1_hz(std::span<double> basis, std::span<double> sigma, Spi
     if ((is_alpha(spin) and (na < 1)) or (is_beta(spin) and (nb < 1)))
         return;
 
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
-    const int num_1h_classes = is_alpha(spin) ? lists_.alfa_address_1h()->nclasses()
+    const int num_1h_classes = is_alpha(spin) ? lists_.alpha_address_1h()->nclasses()
                                               : lists_.beta_address_1h()->nclasses();
 
     // |K>|L> = ± a_p |I>|L>
     for (int class_K = 0; class_K < num_1h_classes; ++class_K) {
-        const size_t maxK = is_alpha(spin) ? lists_.alfa_address_1h()->strpcls(class_K)
+        const size_t maxK = is_alpha(spin) ? lists_.alpha_address_1h()->strpcls(class_K)
                                            : lists_.beta_address_1h()->strpcls(class_K);
 
         if (maxK == 0)
@@ -41,7 +42,7 @@ void CISigmaBuilder::H1_hz(std::span<double> basis, std::span<double> sigma, Spi
 
             // size of the strings with opposite spin to the one on which we act
             const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
+                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
 
             if (maxL > 0) {
                 // Grab the temporary buffers that will hold intermediates D(i,[K L])
@@ -68,7 +69,7 @@ void CISigmaBuilder::H1_hz(std::span<double> basis, std::span<double> sigma, Spi
                     for (size_t K = 0; K < K_size; ++K) {
                         const auto& Klist =
                             is_alpha(spin)
-                                ? lists_.get_alfa_1h_list(class_K, K_start + K, class_Ia)
+                                ? lists_.get_alpha_1h_list(class_K, K_start + K, class_Ia)
                                 : lists_.get_beta_1h_list(class_K, K_start + K, class_Ib);
                         // D(q,[K L]) += <K|a_q|I> C(I,L)
                         for (const auto& [sign_K, q, I] : Klist) {
@@ -91,7 +92,7 @@ void CISigmaBuilder::H1_hz(std::span<double> basis, std::span<double> sigma, Spi
                         for (size_t K = 0; K < K_size; ++K) {
                             const auto& Klist =
                                 is_alpha(spin)
-                                    ? lists_.get_alfa_1h_list(class_K, K_start + K, class_Ja)
+                                    ? lists_.get_alpha_1h_list(class_K, K_start + K, class_Ja)
                                     : lists_.get_beta_1h_list(class_K, K_start + K, class_Jb);
                             for (const auto& [sign_K, p, I] : Klist) {
                                 add(maxL, sign_K, &Kblock1_[p * dimKL + K * maxL], 1, &TL[I * maxL],
@@ -114,14 +115,14 @@ void CISigmaBuilder::H2_hz_same_spin(std::span<double> basis, std::span<double> 
     const size_t norb = lists_.norb();
     const size_t npairs = norb * (norb - 1) / 2;
 
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
 
-    const int num_2h_classes = is_alpha(spin) ? lists_.alfa_address_2h()->nclasses()
+    const int num_2h_classes = is_alpha(spin) ? lists_.alpha_address_2h()->nclasses()
                                               : lists_.beta_address_2h()->nclasses();
 
     for (int class_K = 0; class_K < num_2h_classes; ++class_K) {
-        const size_t maxK = is_alpha(spin) ? lists_.alfa_address_2h()->strpcls(class_K)
+        const size_t maxK = is_alpha(spin) ? lists_.alpha_address_2h()->strpcls(class_K)
                                            : lists_.beta_address_2h()->strpcls(class_K);
 
         if (maxK == 0)
@@ -133,7 +134,7 @@ void CISigmaBuilder::H2_hz_same_spin(std::span<double> basis, std::span<double> 
                 continue;
 
             const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
+                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
 
             if (maxL > 0) {
                 // grab temporary buffers and the maximum size of a chunk of K indices
@@ -156,7 +157,7 @@ void CISigmaBuilder::H2_hz_same_spin(std::span<double> basis, std::span<double> 
                     for (size_t K = 0; K < K_size; ++K) {
                         const auto& Krlist =
                             is_alpha(spin)
-                                ? lists_.get_alfa_2h_list(class_K, K + K_start, class_Ia)
+                                ? lists_.get_alpha_2h_list(class_K, K + K_start, class_Ia)
                                 : lists_.get_beta_2h_list(class_K, K + K_start, class_Ib);
                         for (const auto& [sign_K, q, s, I] : Krlist) {
                             const size_t qs_index = pair_index_gt(q, s);
@@ -177,7 +178,7 @@ void CISigmaBuilder::H2_hz_same_spin(std::span<double> basis, std::span<double> 
                         for (size_t K = 0; K < K_size; ++K) {
                             const auto& Klist =
                                 is_alpha(spin)
-                                    ? lists_.get_alfa_2h_list(class_K, K + K_start, class_Ja)
+                                    ? lists_.get_alpha_2h_list(class_K, K + K_start, class_Ja)
                                     : lists_.get_beta_2h_list(class_K, K + K_start, class_Jb);
                             for (const auto& [sign_K, p, r, I] : Klist) {
                                 const size_t pr_index = pair_index_gt(p, r);
@@ -200,13 +201,13 @@ void CISigmaBuilder::H2_hz_opposite_spin(std::span<double> basis, std::span<doub
     size_t norb = lists_.norb();
     const auto norb2 = norb * norb;
 
-    const int num_1h_class_Ka = lists_.alfa_address_1h()->nclasses();
+    const int num_1h_class_Ka = lists_.alpha_address_1h()->nclasses();
     const int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
     // loop over blocks of N-2 space
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
         for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
-            const auto maxKa = lists_.alfa_address_1h()->strpcls(class_Ka);
+            const auto maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
             const auto maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
 
             if ((maxKa == 0) or (maxKb == 0))
@@ -234,57 +235,72 @@ void CISigmaBuilder::H2_hz_opposite_spin(std::span<double> basis, std::span<doub
                         continue;
                     const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                     const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Ka_right_list = lists_.get_alfa_1h_list2(class_Ka, class_Ia);
+                    const auto& Ka_right_list = lists_.get_alpha_1h_list2(class_Ka, class_Ia);
                     const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
                     if (Ka_right_list.empty() || Kb_right_list.empty())
                         continue;
-                    for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
-                        const auto& KaL = Ka_right_list[Ka_block_start + Ka];
-                        for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
-                            const auto& KbL = Kb_right_list[Kb_block_start + Kb];
-                            const auto Kidx = Ka * Kb_block_size + Kb;
-                            for (const auto& [sign_q, q, Ia] : KaL) {
-                                const size_t qnorb = q * norb;
-                                const size_t b_offset = Cr_offset + Ia * maxIb;
-                                for (const auto& [sign_s, s, Ib] : KbL) {
-                                    const size_t qs_index = qnorb + s;
-                                    Kblock1[qs_index * Kdim + Kidx] =
-                                        sign_q * sign_s * basis[b_offset + Ib];
+                    // Parallelize over Ka: each Ka writes a disjoint block of columns
+                    // (Kidx = Ka * Kb_block_size + Kb) of Kblock1, so there is no write race.
+                    parallel_for_chunked(Ka_block_size, [&](size_t Ka_begin, size_t Ka_end) {
+                        for (size_t Ka = Ka_begin; Ka < Ka_end; ++Ka) {
+                            const auto& KaL = Ka_right_list[Ka_block_start + Ka];
+                            for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
+                                const auto& KbL = Kb_right_list[Kb_block_start + Kb];
+                                const auto Kidx = Ka * Kb_block_size + Kb;
+                                for (const auto& [sign_q, q, Ia] : KaL) {
+                                    const size_t qnorb = q * norb;
+                                    const size_t b_offset = Cr_offset + Ia * maxIb;
+                                    for (const auto& [sign_s, s, Ib] : KbL) {
+                                        const size_t qs_index = qnorb + s;
+                                        Kblock1[qs_index * Kdim + Kidx] =
+                                            sign_q * sign_s * basis[b_offset + Ib];
+                                    }
                                 }
                             }
                         }
-                    }
+                    });
                 }
 
                 matrix_product('N', 'N', norb2, Kdim, norb2, 1.0, v_pr_qs.data(), norb2,
                                Kblock1.data(), Kdim, 0.0, Kblock2.data(), Kdim);
 
-                // D([qs],[Ka Kb]) = \sum_{Ia,Ib} B^{Ka,Kb,Ia,Ib}_{pq} C_{Ia,Ib}
+                // sigma(Ia,Ib) += \sum_{p,r,Ka,Kb} sign_p sign_r E([pr],[Ka Kb])
                 for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
                     if (lists_.block_size(nI) == 0)
                         continue;
+                    const auto maxIa = lists_.alpha_address()->strpcls(class_Ia);
                     const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                     const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Ka_right_list = lists_.get_alfa_1h_list2(class_Ka, class_Ia);
+                    const auto& Ka_right_list = lists_.get_alpha_1h_list2(class_Ka, class_Ia);
                     const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
                     if (Ka_right_list.empty() || Kb_right_list.empty())
                         continue;
-                    for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
-                        const auto& KaL = Ka_right_list[Ka_block_start + Ka];
-                        for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
-                            const auto& KbL = Kb_right_list[Kb_block_start + Kb];
-                            const auto Kidx = Ka * Kb_block_size + Kb;
+                    // The scatter accumulates into sigma(Ia,Ib), so parallelizing over Ka would
+                    // race (many Ka map to the same output Ia). Instead we parallelize over the
+                    // output alpha string Ia: each thread owns a disjoint stripe
+                    // of Ia values, iterates all Ka/Kb, but only writes rows it owns.
+                    parallel_for_chunked(maxIa, [&](size_t Ia_begin, size_t Ia_end) {
+                        for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
+                            const auto& KaL = Ka_right_list[Ka_block_start + Ka];
+                            const size_t Ka_col = Ka * Kb_block_size;
                             for (const auto& [sign_p, p, Ia] : KaL) {
+                                // skip if this thread does not own this row
+                                if (Ia < Ia_begin || Ia >= Ia_end)
+                                    continue;
                                 const size_t pnorb = p * norb;
                                 const size_t s_offset = Cr_offset + Ia * maxIb;
-                                for (const auto& [sign_r, r, Ib] : KbL) {
-                                    const size_t pr_index = pnorb + r;
-                                    sigma[s_offset + Ib] +=
-                                        sign_p * sign_r * Kblock2[pr_index * Kdim + Kidx];
+                                for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
+                                    const auto& KbL = Kb_right_list[Kb_block_start + Kb];
+                                    const auto Kidx = Ka_col + Kb;
+                                    for (const auto& [sign_r, r, Ib] : KbL) {
+                                        const size_t pr_index = pnorb + r;
+                                        sigma[s_offset + Ib] +=
+                                            sign_p * sign_r * Kblock2[pr_index * Kdim + Kidx];
+                                    }
                                 }
                             }
                         }
-                    }
+                    });
                 }
             }
         }

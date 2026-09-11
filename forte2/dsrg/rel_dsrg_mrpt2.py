@@ -62,8 +62,15 @@ class RelDSRG_MRPT2(DSRGBase):
            J. Chem. Phys. 2018, 148, 124106.
     """
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.requires_attrs.update({"two_component": True})
+
     def get_integrals(self):
-        g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
+        g1 = self.ci_solver.make_average_rdm(1)
+        g2 = self.ci_solver.make_average_rdm(2)
+        l2 = self.ci_solver.make_average_cumulant(2)
+        l3 = self.ci_solver.make_average_cumulant(3)
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
         self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
         # Freeze core orbitals by removing them from the semicanonicalized quantities
@@ -78,7 +85,7 @@ class RelDSRG_MRPT2(DSRGBase):
         ints["F"] = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
 
         cumulants = dict()
-        # g1 = self.ci_solver.make_average_1rdm()
+        # g1 = self.ci_solver.make_average_rdm(1)
         cumulants["gamma1"] = np.einsum(
             "ip,ij,jq->pq", self.Uactv, g1, self.Uactv.conj(), optimize=True
         )
@@ -209,7 +216,7 @@ class RelDSRG_MRPT2(DSRGBase):
         _hbar1 += _C1 + _C1.conj().T
 
         # see eq 29 of Ann. Rev. Phys. Chem.
-        _e_scalar = (
+        self._hbar0 = (
             -np.einsum("uv,uv->", _hbar1, self.cumulants["gamma1"])
             - 0.25 * np.einsum("uvxy,uvxy->", _hbar2, self.cumulants["lambda2"])
             + 0.5
@@ -223,10 +230,10 @@ class RelDSRG_MRPT2(DSRGBase):
 
         _hbar1 -= np.einsum("uxvy,xy->uv", _hbar2, self.cumulants["gamma1"])
 
-        _hbar1_canon = np.einsum(
+        self._hbar1_canon = np.einsum(
             "ip,pq,jq->ij", self.Uactv, _hbar1, self.Uactv.conj(), optimize=True
         )
-        _hbar2_canon = np.einsum(
+        self._hbar2_canon = np.einsum(
             "ip,jq,pqrs,kr,ls->ijkl",
             self.Uactv,
             self.Uactv,
@@ -236,8 +243,11 @@ class RelDSRG_MRPT2(DSRGBase):
             optimize=True,
         )
 
-        self.ci_solver.set_ints(_e_scalar, _hbar1_canon, _hbar2_canon)
-        self.ci_solver.run(use_asym_ints=True)
+        # self._hbar2_canon is already antisymmetric (<pq||rs>),
+        # the CI solver antisymmetrizes it again, doubling it, hence the 0.5
+        self._hbar2_canon *= 0.5
+        self.ci_solver.set_ints(self._hbar0, self._hbar1_canon, self._hbar2_canon)
+        self.ci_solver.run()
         e_relaxed = self.ci_solver.compute_average_energy()
         self.relax_eigvals = self.ci_solver.evals_flat.copy()
         return e_relaxed

@@ -1,7 +1,10 @@
 import pytest
+import numpy as np
 
 from forte2 import System
-from forte2.system.basis_utils import BasisInfo, get_shell_label, shell_label_to_lm
+from forte2.system.basis_utils import AM_LABELS, BasisInfo, get_shell_label, shell_label_to_lm, get_spinor_label
+from forte2.system.build_basis import decontract_basis, build_basis, BSE_AVAILABLE
+from forte2.integrals import overlap
 
 
 def test_basis_info():
@@ -18,6 +21,33 @@ def test_basis_info():
     basis_info = BasisInfo(system, system.basis)
     assert basis_info.basis_labels[23] == BasisInfo._AOLabel(23, 0, 6, 1, 4, 3, -3, 0)
     assert basis_info.atom_to_aos[8][2] == list(range(40, 45))
+
+
+def test_basis_serialize():
+    xyz = """
+    C 0 0 0
+    O 0 0 1.2
+    N 0 0 2.4
+    O 2 1 0
+    """
+    system = System(
+        xyz=xyz,
+        basis_set={"C": "cc-pvtz", "O": "sto-6g", "default": "sto-3g"},
+    )
+    res = system.basis.serialize()
+
+    # this test needs to be updated when the schema version is updated
+    assert res["schema_version"] == 1
+    assert res["nshells"] == 19
+    shells = res["shells"]
+    for i in range(system.basis.nshells):
+        sh = system.basis[i]
+        sh_json = shells[i]
+        assert sh_json["nprim"] == sh.nprim
+        assert sh_json["l"] == sh.l
+        assert sh_json["exponents"] == pytest.approx(sh.exponents, abs=1e-10)
+        assert sh_json["coefficients"] == pytest.approx(sh.coeff, abs=1e-10)
+        assert sh_json["center"] == pytest.approx(sh.center, abs=1e-10)
 
 
 def test_get_shell_label():
@@ -41,17 +71,53 @@ def test_get_shell_label():
     assert get_shell_label(4, 0) == "g(0)"
     assert get_shell_label(11, 22) == "n(22)"
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(-1, 0)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(0, -3)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(0, 4)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(5, 11)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(12, 2)
+    with pytest.raises(ValueError):
+        get_shell_label(len(AM_LABELS), 0)
 
+def test_get_spinor_label():
+    # s shell: only j = 1/2 (jdouble = 1), mj = -1/2, +1/2
+    assert get_spinor_label(0, 1, -1) == "s1/2, -1/2"
+    assert get_spinor_label(0, 1, 1) == "s1/2, +1/2"
+
+    # p shell: j = 1/2 (jdouble = 1) and j = 3/2 (jdouble = 3)
+    assert get_spinor_label(1, 1, -1) == "p1/2, -1/2"
+    assert get_spinor_label(1, 1, 1) == "p1/2, +1/2"
+    assert get_spinor_label(1, 3, -3) == "p3/2, -3/2"
+    assert get_spinor_label(1, 3, -1) == "p3/2, -1/2"
+    assert get_spinor_label(1, 3, 1) == "p3/2, +1/2"
+    assert get_spinor_label(1, 3, 3) == "p3/2, +3/2"
+
+    # d shell: j = 3/2 (jdouble = 3) and j = 5/2 (jdouble = 5)
+    assert get_spinor_label(2, 3, -3) == "d3/2, -3/2"
+    assert get_spinor_label(2, 5, 5) == "d5/2, +5/2"
+
+    # f shell: j = 5/2 (jdouble = 5) and j = 7/2 (jdouble = 7)
+    assert get_spinor_label(3, 5, -5) == "f5/2, -5/2"
+    assert get_spinor_label(3, 7, 7) == "f7/2, +7/2"
+
+    # higher angular momenta use the plain AM label as well
+    assert get_spinor_label(4, 7, -1) == "g7/2, -1/2"
+    assert get_spinor_label(11, 23, 23) == "n23/2, +23/2"
+
+    # negative angular momentum quantum number
+    with pytest.raises(Exception):
+        get_spinor_label(-1, 1, -1)
+    # negative total angular momentum
+    with pytest.raises(Exception):
+        get_spinor_label(0, -1, -1)
+    # angular momentum beyond the defined labels
+    with pytest.raises(Exception):
+        get_spinor_label(12, 1, -1)
 
 def test_shell_label_to_lm():
     assert shell_label_to_lm("s") == [(0, 0)]
@@ -93,3 +159,29 @@ def test_basis_info_spinor():
     assert basis_info.basis_labels_spinor[22] == BasisInfo._SpinorAOLabel(
         22, 0, 6, 1, 3, 2, 5, -5
     )
+
+
+@pytest.mark.skipif(not BSE_AVAILABLE, reason="Basis set exchange is not available")
+def test_decontract():
+    xyz = """
+    C 0 0 0
+    O 0 0 1
+    H 0 0 2
+    O 1 0 1
+    """
+    basis_set = {
+        "C": "cc-pvdz",
+        "O1": "sto-6g",
+        "O2": "def2-svp",
+        "default": "cc-pvtz",
+    }
+    system = System(xyz=xyz, basis_set=basis_set)
+    basis_decon1 = build_basis(basis_set, system.geom_helper, decontract=True)
+    basis_decon2 = decontract_basis(system.basis)
+    assert len(basis_decon1) == len(basis_decon2)
+    ovlp1 = overlap(system, basis_decon1)
+    ovlp_cross = overlap(system, basis_decon1, basis_decon2)
+    ovlp2 = overlap(system, basis_decon2)
+    # S22 = S21 @ S11^{-1} @ S12
+    ovlp2_recon = ovlp_cross.T @ np.linalg.solve(ovlp1, ovlp_cross)
+    assert np.linalg.norm(ovlp2 - ovlp2_recon) <= 1e-11

@@ -1,17 +1,36 @@
 #include <algorithm>
-#include <future>
-#include <iostream>
+#include <limits>
+#include <stdexcept>
 
 #include "helpers/timer.hpp"
 #include "helpers/blas.h"
 #include "helpers/logger.h"
-#include "helpers/memory.h"
+#include "helpers/parallel.h"
 
 #include "ci_sigma_builder.h"
 
 namespace forte2 {
 
 namespace {
+size_t Kblock_column_capacity(size_t nrows, size_t ncols, size_t memory_size) {
+    if ((nrows == 0) or (ncols == 0)) {
+        throw std::invalid_argument("K-block dimensions must be nonzero.");
+    }
+
+    // The memory setting covers both equally sized K-block buffers.
+    const size_t max_elements_per_buffer = memory_size / (2 * sizeof(double));
+    if (max_elements_per_buffer < nrows) {
+        throw std::runtime_error("The CI builder memory limit (" + std::to_string(memory_size) +
+                                 " bytes) is too small for one K-block column of " +
+                                 std::to_string(nrows) + " elements per buffer.");
+    }
+
+    // BLAS dimensions are 32-bit integers, so a single contraction must not exceed INT_MAX
+    // columns even when the configured memory limit is larger.
+    return std::min({max_elements_per_buffer / nrows, ncols,
+                     static_cast<size_t>(std::numeric_limits<int>::max())});
+}
+
 void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size_t dim2,
                   size_t dim3);
 void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,
@@ -49,9 +68,9 @@ void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, Spi
             std::fill_n(TL.begin(), lists_.block_size(nJ), 0.0);
 
             const size_t maxL = is_alpha(spin) ? lists_.beta_address()->strpcls(class_Ib)
-                                               : lists_.alfa_address()->strpcls(class_Ia);
+                                               : lists_.alpha_address()->strpcls(class_Ia);
 
-            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alfa_vo_list(class_Ia, class_Ja)
+            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alpha_vo_list(class_Ia, class_Ja)
                                                     : lists_.get_beta_vo_list(class_Ib, class_Jb);
 
             for (const auto& [pq, vo_list] : pq_vo_list) {
@@ -70,13 +89,13 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
     size_t norb = lists_.norb();
     const auto npairs = norb * (norb + 1) / 2; // Number of pairs (p, r) with p >= r
 
-    const int num_class_Ka = lists_.alfa_address_1h1p()->nclasses();
+    const int num_class_Ka = lists_.alpha_address_1h1p()->nclasses();
     const int num_class_Kb = lists_.beta_address_1h1p()->nclasses();
 
     // Loop over the Ka and Kb string classes of the D([qs],[Ka Kb]) matrix
     for (size_t class_Ka = 0; class_Ka < num_class_Ka; ++class_Ka) {
         for (size_t class_Kb = 0; class_Kb < num_class_Kb; ++class_Kb) {
-            const auto maxKa = lists_.alfa_address_1h1p()->strpcls(class_Ka);
+            const auto maxKa = lists_.alpha_address_1h1p()->strpcls(class_Ka);
             const auto maxKb = lists_.beta_address_1h1p()->strpcls(class_Kb);
 
             // Set the size of the Kb range. Here we process all Kb values.
@@ -153,39 +172,52 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
 
 std::tuple<std::span<double>, std::span<double>, size_t>
 CISigmaBuilder::get_Kblock_spans(size_t nrows, size_t ncols) const {
-    // Find the maximum size of the temporary block to allocate. This is either set by the full
-    // size of the block (nrows * ncols) or by the available memory size, whichever is smaller
-    std::size_t block_size = std::min(nrows * ncols, memory_size_ / (2 * sizeof(double)));
+    const size_t cols_chunk_size = Kblock_column_capacity(nrows, ncols, memory_size_);
+    const size_t block_size = nrows * cols_chunk_size;
+    const size_t max_elements_per_buffer = memory_size_ / (2 * sizeof(double));
 
-    // Find the corresponding chunk size for K
-    size_t cols_chunk_size = std::min(block_size / nrows, ncols);
-
-    // If the chunk size is too small to store one row, resize it
-    bool need_resize = false;
-    if (cols_chunk_size < 1) {
-        // resize to a reasonable minimum and update block_size
-        cols_chunk_size = std::min(static_cast<size_t>(64), ncols);
-        block_size = nrows * cols_chunk_size;
-        need_resize = true;
-    }
-
-    // If the temporary buffers are too small, resize them
-    if (Kblock1_.size() < block_size) {
-        Kblock1_.resize(block_size);
-        Kblock2_.resize(block_size);
-        if (need_resize) {
-            auto block_size_MB = to_mb<double>(2 * block_size);
-            LOG(log_level_) << "Available memory is too small to hold a row of the CI buffers.\n"
-                               "Block size has been adjusted to 2 x "
-                            << block_size << " (" << block_size_MB << " MB) to hold "
-                            << cols_chunk_size
-                            << " columns.\n"
-                               "For best performance, increase the memory limit.";
-        }
+    // Keep a larger live size: shrinking here makes a later larger kernel value-initialize the
+    // same scratch storage again. The returned spans still expose only block_size elements.
+    const bool can_reuse = Kblock1_.size() >= block_size && Kblock2_.size() >= block_size &&
+                           Kblock1_.capacity() <= max_elements_per_buffer &&
+                           Kblock2_.capacity() <= max_elements_per_buffer;
+    if (!can_reuse) {
+        // Drop both allocations before growing either one.
+        Kblock1_ = std::vector<double>(block_size);
+        Kblock2_ = std::vector<double>(block_size);
     }
 
     return {std::span<double>{Kblock1_.data(), block_size},
             std::span<double>{Kblock2_.data(), block_size}, cols_chunk_size};
+}
+
+size_t CISigmaBuilder::acquire_local_Kblock_buffers(std::vector<double>& Kblock1,
+                                                    std::vector<double>& Kblock2, size_t nrows,
+                                                    size_t ncols) const {
+    // Transfer ownership so sigma-build cache and RDM-local scratch never coexist. The local
+    // vectors release the storage when the RDM call returns, avoiding permanent cache inflation.
+    Kblock1.swap(Kblock1_);
+    Kblock2.swap(Kblock2_);
+
+    const size_t cols_chunk_size = Kblock_column_capacity(nrows, ncols, memory_size_);
+    const size_t block_size = nrows * cols_chunk_size;
+    const size_t max_elements_per_buffer = memory_size_ / (2 * sizeof(double));
+
+    const bool can_reuse = Kblock1.capacity() >= block_size && Kblock2.capacity() >= block_size &&
+                           Kblock1.capacity() <= max_elements_per_buffer &&
+                           Kblock2.capacity() <= max_elements_per_buffer;
+    if (can_reuse) {
+        Kblock1.resize(block_size);
+        Kblock2.resize(block_size);
+    } else {
+        // Release both old allocations before growing either one, keeping peak scratch within the
+        // configured pair budget even when the limit was lowered after a sigma build.
+        std::vector<double>{}.swap(Kblock1);
+        std::vector<double>{}.swap(Kblock2);
+        Kblock1 = std::vector<double>(block_size);
+        Kblock2 = std::vector<double>(block_size);
+    }
+    return cols_chunk_size;
 }
 
 // The following functions are used to gather and scatter blocks of data and
@@ -217,25 +249,8 @@ void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size
     };
 
     assert(in.size() == out.size());
-    unsigned int nthreads = std::thread::hardware_concurrency() / 2;
-    if (nthreads == 0)
-        nthreads = 1;
-    size_t chunk = (dim1 + nthreads - 1) / nthreads;
 
-    std::vector<std::future<void>> futures;
-    futures.reserve(nthreads);
-
-    for (unsigned int t = 0; t < nthreads; ++t) {
-        size_t b_begin = t * chunk;
-        size_t b_end = std::min(b_begin + chunk, dim1);
-        if (b_begin >= b_end)
-            break;
-        futures.emplace_back(std::async(std::launch::async, kernel, b_begin, b_end));
-    }
-
-    for (auto& f : futures) {
-        f.get();
-    }
+    parallel_for_chunked(dim1, kernel);
 }
 
 void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,
@@ -251,8 +266,8 @@ void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
             continue;
 
         // get all Ka/Ia pairs connected to the current class_Ka and class_Ia
-        const auto alfa_vo_list = lists.get_alfa_vo_list2(class_Ka, class_Ia);
-        if (alfa_vo_list.empty())
+        const auto alpha_vo_list = lists.get_alpha_vo_list2(class_Ka, class_Ia);
+        if (alpha_vo_list.empty())
             continue;
 
         size_t maxIb = lists.beta_address()->strpcls(class_Ib);
@@ -260,7 +275,7 @@ void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
 
         // add contributions to the Kblock
         for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
-            const auto& vo_alist = alfa_vo_list[Ka + Ka_start];
+            const auto& vo_alist = alpha_vo_list[Ka + Ka_start];
             for (auto const& [sign_ij, ij, Ia] : vo_alist) {
                 size_t K_offset = ij * Kdim + Ka * maxKb;
                 size_t basis_Ia_offset = basis_offset + Ia * maxIb;
@@ -274,9 +289,9 @@ void gather_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb,
                        size_t Ka_size, size_t Kdim, size_t maxKb, std::span<double> basis,
                        std::span<double> TR, std::span<double> Kblock2) {
 
-    const auto Ka_occ = lists.gas_alfa_1h1p_occupations()[class_Ka / lists.nirrep()];
+    const auto Ka_occ = lists.gas_alpha_1h1p_occupations()[class_Ka / lists.nirrep()];
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        const auto Ia_occ = lists.gas_alfa_occupations()[class_Ia / lists.nirrep()];
+        const auto Ia_occ = lists.gas_alpha_occupations()[class_Ia / lists.nirrep()];
         if ((Ia_occ != Ka_occ) or (lists.block_size(nI) == 0))
             continue;
 
@@ -285,7 +300,7 @@ void gather_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb,
         if (beta_vo_list.empty())
             continue;
 
-        size_t maxIa = lists.alfa_address()->strpcls(class_Ia);
+        size_t maxIa = lists.alpha_address()->strpcls(class_Ia);
 
         // transposes the basis vector into TR
         auto basis_tr = gather_block(basis, TR, Spin::Beta, lists, class_Ia, class_Ib);
@@ -305,9 +320,9 @@ void gather_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb,
 void scatter_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,
                         size_t Ka_size, size_t Kdim, size_t maxKb, std::span<const double> Kblock1,
                         std::span<double> TR, std::span<double> sigma) {
-    const auto Ka_occ = lists.gas_alfa_1h1p_occupations()[class_Ka / lists.nirrep()];
+    const auto Ka_occ = lists.gas_alpha_1h1p_occupations()[class_Ka / lists.nirrep()];
     for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        const auto Ia_occ = lists.gas_alfa_occupations()[class_Ia / lists.nirrep()];
+        const auto Ia_occ = lists.gas_alpha_occupations()[class_Ia / lists.nirrep()];
         if ((Ia_occ != Ka_occ) or (lists.block_size(nI) == 0))
             continue;
 
@@ -316,7 +331,7 @@ void scatter_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
         if (beta_vo_list.empty())
             continue;
 
-        const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
+        const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
 
         // zero out the TR temporary vector for the scatter operation
         zero_block(TR, Spin::Beta, lists, class_Ia, class_Ib);
@@ -345,8 +360,8 @@ void scatter_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_K
         if ((Ib_occ != Kb_occ) or (lists.block_size(nI) == 0))
             continue;
         // get all Ia/Ka pairs connected to the current class_Ka and class_Ia
-        const auto alfa_vo_list = lists.get_alfa_vo_list2(class_Ka, class_Ia);
-        if (alfa_vo_list.empty())
+        const auto alpha_vo_list = lists.get_alpha_vo_list2(class_Ka, class_Ia);
+        if (alpha_vo_list.empty())
             continue;
 
         size_t maxIb = lists.beta_address()->strpcls(class_Ib);
@@ -354,7 +369,7 @@ void scatter_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_K
 
         // scatter contributions from the Kblock into the sigma vector
         for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
-            const auto& vo_alist = alfa_vo_list[Ka + Ka_start];
+            const auto& vo_alist = alpha_vo_list[Ka + Ka_start];
             for (auto const& [sign_kl, kl, Ia] : vo_alist) {
                 size_t K_offset = kl * Kdim + Ka * maxKb;
                 size_t sigma_Ia_offset = sigma_offset + Ia * maxIb;

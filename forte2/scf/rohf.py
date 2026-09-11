@@ -33,6 +33,10 @@ class ROHF(SCFBase):
     _assign_orbital_symmetries = RHF._assign_orbital_symmetries
     _apply_level_shift = RHF._apply_level_shift
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
+
     def __call__(self, system):
         system.two_component = False
         self = super().__call__(system)
@@ -40,8 +44,9 @@ class ROHF(SCFBase):
         return self
 
     def _build_fock(self, H, fock_builder, S):
-        Ja, Jb = fock_builder.build_J(self.D)
-        K = fock_builder.build_K([self.C[0][:, : self.na], self.C[0][:, : self.nb]])
+        (Ja, Jb), K = fock_builder.build_JK(
+            [self.C[0][:, : self.na], self.C[0][:, : self.nb]]
+        )
         F = [H + Ja + Jb - k for k in K]
 
         F_canon = self._build_canonical_fock(F, S)

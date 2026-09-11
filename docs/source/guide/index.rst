@@ -6,3 +6,5 @@ User guide
     basics
     capabilities
     integrals
+    rdms
+    gradients

@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import ints
+from forte2.lib import ints
 from forte2.system import System
 from forte2.helpers import invsqrt_matrix, logger
 from forte2.symmetry import real_sph_to_j_adapted

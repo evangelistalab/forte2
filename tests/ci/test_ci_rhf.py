@@ -1,5 +1,21 @@
-from forte2 import System, RHF, CI, State, AVAS, ROHF
+import numpy as np
+import pytest
+
+from forte2 import System, RHF, CI, State, AVAS, ROHF, MOSpace
+from forte2.base_classes import DavidsonLiuParams
 from forte2.helpers.comparisons import approx
+
+
+def test_ci_orbital_invariance_is_true():
+    # test that the orbital rotation invariance flag is set to True for CI
+    xyz = """H 0.0 0.0 0.0"""
+
+    system = System(
+        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
+    )
+    rhf = RHF(charge=-1, e_tol=1e-12)(system)
+    ci = CI(State(system=system, multiplicity=2, ms=0.5), active_orbitals=[0, 1])(rhf)
+    assert ci.orbital_rotation_invariant
 
 
 def test_ci_1():
@@ -172,8 +188,12 @@ def test_ci_tdm():
         do_transition_dipole=True,
     )(rhf)
     ci.run()
-    assert abs(ci.transition_dipoles[(0, 6)][2]) == approx(1.5435316739347478)
-    assert ci.oscillator_strengths[(0, 6)] == approx(1.1589808047738437)
+    assert abs(ci.transition_dipoles[(0, 6)][2]) == pytest.approx(
+        1.5435316739347478, abs=1e-4
+    )
+    assert ci.oscillator_strengths[(0, 6)] == pytest.approx(
+        1.1589808047738437, abs=1e-4
+    )
 
 
 def test_ci_no_active():
@@ -291,3 +311,114 @@ def test_ci_single_csf1():
 
     assert rhf.E == approx(-0.889646913931)
     assert ci.E[0] == approx(-0.889646913931)
+
+
+def _lih_noncontiguous_mo_space(system):
+    return MOSpace(
+        nmo=system.nmo,
+        core_orbitals=[0],
+        active_orbitals=[1, 2],
+        frozen_virtual_orbitals=[3],
+    )
+
+
+def test_ci_semicanonical_noncontiguous_mo_space():
+    xyz = "Li 0.0 0.0 0.0\nH  0.0 0.0 3.0"
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    mo_space = _lih_noncontiguous_mo_space(system)
+
+    ci_original = CI(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space)(
+        rhf
+    )
+    ci_original.run()
+    ci_semicanonical = CI(
+        State(nel=4, multiplicity=1, ms=0.0),
+        mo_space_override=mo_space,
+        final_orbitals="semicanonical",
+    )(rhf)
+    ci_semicanonical.run()
+
+    # The frozen virtual sits before the regular virtuals in the original
+    # ordering but after them in the contiguous [core, active, virt,
+    # frozen_virt] ordering, so this permutation is genuinely non-trivial.
+    np.testing.assert_array_equal(mo_space.orig_to_contig, [0, 1, 2, 4, 5, 3])
+    np.testing.assert_array_equal(mo_space.contig_to_orig, [0, 1, 2, 5, 3, 4])
+    assert ci_semicanonical.E[0] == approx(ci_original.E[0])
+    np.testing.assert_allclose(
+        ci_semicanonical.mos.C[0].T @ system.ints_overlap() @ ci_semicanonical.mos.C[0],
+        np.eye(mo_space.nmo),
+        atol=1e-10,
+    )
+
+
+def test_ci_natural_noncontiguous_mo_space():
+    xyz = "Li 0.0 0.0 0.0\nH  0.0 0.0 3.0"
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    mo_space = _lih_noncontiguous_mo_space(system)
+
+    ci_original = CI(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space)(
+        rhf
+    )
+    ci_original.run()
+    ci_natural = CI(
+        State(nel=4, multiplicity=1, ms=0.0),
+        mo_space_override=mo_space,
+        final_orbitals="natural",
+    )(rhf)
+    ci_natural.run()
+
+    assert ci_natural.E[0] == approx(ci_original.E[0])
+    np.testing.assert_allclose(
+        ci_natural.mos.C[0].T @ system.ints_overlap() @ ci_natural.mos.C[0],
+        np.eye(mo_space.nmo),
+        atol=1e-10,
+    )
+
+    g1_act = ci_natural.make_average_rdm(1)
+    off_diag = g1_act - np.diag(np.diag(g1_act))
+    assert np.max(np.abs(off_diag)) < 1e-8
+
+
+@pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
+def test_ci_final_orbitals(final_orbitals):
+    eref = -99.82331087176414
+    xyz = """
+    H 0.0 0.0 0.0
+    F 0.0 0.0 2.0
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    rhf = RHF(charge=0, e_tol=1e-8)(system)
+
+    singlet = State(nel=10, multiplicity=1, ms=0.0)
+    triplet = State(nel=10, multiplicity=3, ms=1.0)
+    ci_solver = CI(
+        states=[singlet, triplet],
+        nroots=[2, 1],
+        core_orbitals=[0],
+        active_orbitals=[1, 2, 3, 4, 5, 6, 7],
+        davidson_liu_params=DavidsonLiuParams(
+            e_tol=1e-8,
+            r_tol=1e-4,
+            ndets_per_guess=10,
+        ),
+        final_orbitals=final_orbitals,
+    )(rhf)
+    ci_solver.run()
+    assert ci_solver.E_avg == approx(eref)

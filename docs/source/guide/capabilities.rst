@@ -12,6 +12,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   
   * Spin-free 1-electron exact two-component (sf-1eX2C) [2]_
   * Spin-orbit 1-electron exact two-component (so-1eX2C) [2]_
+  * Spin-free and spin-orbit SAP-X2C with model two-electron picture-change effects [9]_
   * Various empirical scaling schemes to approximate two-electron spin-orbit couplings ("Boettger factors") [3]_
 
 * Flavors of Hartree-Fock theory
@@ -58,3 +59,4 @@ References
 .. [6] Knizia, G. Intrinsic Atomic Orbitals: An Unbiased Bridge between Quantum Theory and Chemical Concepts. J. Chem. Theory Comput. 2013, 9 (11), 4834-4843. https://doi.org/10.1021/ct400687b.
 .. [7] Holmes, A. A.; Umrigar, C. J.; Sharma, S. Excited States Using Semistochastic Heat-Bath Configuration Interaction. J. Chem. Phys. 2017, 147 (16), 164111. https://doi.org/10.1063/1.4998614.
 .. [8] Li, C.; Evangelista, F. A. Multireference Driven Similarity Renormalization Group: A Second-Order Perturbative Analysis. J. Chem. Theory Comput. 2015, 11 (5), 2097-2108. https://doi.org/10.1021/acs.jctc.5b00134.
+.. [9] Surjuse, K. A.; Valeev, E. F. SAP-X2C: Optimally-Simple Two-Component Relativistic Hamiltonian with Size-Intensive Picture Change. J. Chem. Theory Comput. 2026, 22 (7), 3443-3452. https://doi.org/10.1021/acs.jctc.6c00032.

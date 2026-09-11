@@ -6,7 +6,7 @@ from forte2.system import BSE_AVAILABLE
 
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="BSE not available")
-def test_cadmium_imidazole_complex():
+def test_cadmium_imidazole_complex(tmp_path):
     eref = -5735.181493863483
     # Geometry from SI of 10.1063/1.2974099
     # See discussion therein and also in 10.1063/1.3304922
@@ -22,14 +22,17 @@ def test_cadmium_imidazole_complex():
     H       -3.909370623    0.000000000    -5.152366230
     H       -2.481531661    0.000000000    -9.778799182
     """
-    mol = System(
+    system = System(
         xyz=xyz,
         basis_set="3-21g",
         auxiliary_basis_set="def2-universal-jkfit",
         minao_basis_set=None,
         unit="bohr",
     )
-    scf = RHF(charge=2)(mol)
+    system.save(tmp_path / "test_cadmium_imidazole_complex")
+    system_load = System.load(tmp_path / "test_cadmium_imidazole_complex")
+
+    scf = RHF(charge=2)(system_load)
     scf.run()
     assert scf.E == approx(eref)
 

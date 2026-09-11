@@ -81,7 +81,7 @@ ci_solver = forte2.CISolver(
     states=[forte2.State(nel=14, multiplicity=1, ms=0.0),
             forte2.State(nel=14, multiplicity=3, ms=0.0)],
 )
-mcscf = forte2.MCSCF(ci_solver=ci_solver)(avas)
+mcscf = forte2.MCOptimizer(ci_solver=ci_solver)(avas)
 
 pt = forte2.DSRG_MRPT2(s=0.5)(mcscf)
 
@@ -127,6 +127,15 @@ Current capabilities include (non-exhaustive, see also the [Capabilities](https:
 For detailed method documentation and theory references, see:
 - [User Guide](http://forte2.readthedocs.io/en/latest/guide/index.html)
 - [API Reference](http://forte2.readthedocs.io/en/latest/modules.html)
+
+## Parallelism
+
+Forte2 automatically detects the number of threads to use for some parallel sections that are not already parallelized by e.g. BLAS.
+The effective count is printed at `import forte2`.
+
+The envioronment variable `FORTE_NUM_THREADS_OVERRIDE` will be used if set. 
+Otherwise, the smallest among the number of logical CPU counts, `OMP_NUM_THREADS`,`OMP_THREAD_LIMIT`, and `SLURM_CPUS_PER_TASK` will be used if set.
+Note that the logical CPU count includes e.g., hyperthreads.
 
 
 ## Contributing

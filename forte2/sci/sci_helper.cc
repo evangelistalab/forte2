@@ -9,24 +9,30 @@
 namespace forte2 {
 
 SelectedCIHelper::SelectedCIHelper(size_t norb, const std::vector<Determinant>& dets, np_matrix& c,
-                                   double E, np_matrix& H, np_tensor4& V, int log_level)
+                                   double E, np_matrix& H, np_tensor4& V, int log_level,
+                                   const std::string& screening_criterion,
+                                   const std::vector<size_t>& frozen_creation,
+                                   const std::vector<size_t>& frozen_annihilation)
     : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), dets_(dets), c_guess_(c),
       log_level_(log_level), slater_rules_(norb, E, H, V) {
     if (dets.empty()) {
         throw std::runtime_error("The list of determinants cannot be empty.");
     }
 
+    set_screening_criterion(screening_criterion);
+    set_frozen_creation(frozen_creation);
+    set_frozen_annihilation(frozen_annihilation);
     set_Hamiltonian(E, H, V);
     set_c(c);
     root_energies_.resize(nroots_, 0.0);
     ept2_var_.resize(nroots_, 0.0);
     ept2_pt_.resize(nroots_, 0.0);
 
-    na_ = dets_[0].count_a();
-    nb_ = dets_[0].count_b();
+    na_ = dets_[0].count_alpha();
+    nb_ = dets_[0].count_beta();
 
     for (const auto& det : dets_) {
-        if (det.count_a() != na_ || det.count_b() != nb_) {
+        if (det.count_alpha() != na_ || det.count_beta() != nb_) {
             throw std::runtime_error("All determinants must have the same number of electrons.");
         }
     }
@@ -35,54 +41,75 @@ SelectedCIHelper::SelectedCIHelper(size_t norb, const std::vector<Determinant>& 
     prepare_strings();
 }
 
-void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
-    E_ = E;
-
-    if (H.ndim() != 2) {
-        throw std::runtime_error("H must be a 2D matrix.");
+void SelectedCIHelper::set_Hamiltonian(std::optional<double> E, std::optional<np_matrix> H,
+                                       std::optional<np_tensor4> V) {
+    if (E) {
+        E_ = *E;
     }
-    if (H.shape(0) != norb_ || H.shape(1) != norb_) {
-        throw std::runtime_error("H shape does not match the number of orbitals.");
-    }
-    H_ = H;
 
-    // Initialize the one-electron integrals epsilon and h
-    epsilon_.resize(norb_);
-    h_.resize(norb_ * norb_);
-    auto h = H.view();
-    for (size_t p{0}; p < norb_; ++p) {
-        epsilon_[p] = h(p, p);
-        for (size_t q{0}; q < norb_; ++q) {
-            h_[p * norb_ + q] = h(p, q);
+    if (H) {
+        if (H->ndim() != 2) {
+            throw std::runtime_error("H must be a 2D matrix.");
+        }
+        if (H->shape(0) != norb_ || H->shape(1) != norb_) {
+            throw std::runtime_error("H shape does not match the number of orbitals.");
+        }
+        // Initialize the one-electron integrals epsilon and h
+        epsilon_.resize(norb_);
+        h_.resize(norb_ * norb_);
+        auto h = H->view();
+        for (size_t p{0}; p < norb_; ++p) {
+            epsilon_[p] = h(p, p);
+            for (size_t q{0}; q < norb_; ++q) {
+                h_[p * norb_ + q] = h(p, q);
+            }
         }
     }
 
-    // Initialize the two-electron integrals v_pr_qs and v_pr_qs_a
-    if (V.ndim() != 4) {
-        throw std::runtime_error("V must be a 4D tensor.");
-    }
-    if (V.shape(0) != norb_ || V.shape(1) != norb_ || V.shape(2) != norb_ || V.shape(3) != norb_) {
-        throw std::runtime_error("V shape does not match the number of orbitals.");
-    }
-    V_ = V;
+    if (V) {
+        if (V->ndim() != 4) {
+            throw std::runtime_error("V must be a 4D tensor.");
+        }
+        if (V->shape(0) != norb_ || V->shape(1) != norb_ || V->shape(2) != norb_ ||
+            V->shape(3) != norb_) {
+            throw std::runtime_error("V shape does not match the number of orbitals.");
+        }
+        v_.resize(norb_ * norb_ * norb_ * norb_); // V[p][q][r][s] = <pq|rs>
+        v_a_.resize(norb_ * norb_ * norb_ *
+                    norb_); // V_a[p][q][r][s] = <pq||rs> = <pq|rs> - <pq|sr>
 
-    v_.resize(norb_ * norb_ * norb_ * norb_);   // V[p][q][r][s] = <pq|rs>
-    v_a_.resize(norb_ * norb_ * norb_ * norb_); // V_a[p][q][r][s] = <pq||rs> = <pq|rs> - <pq|sr>
-
-    auto v = V.view();
-    // Loop over all pairs (p, r) and (q, s) to fill v_
-    for (size_t p{0}, pqrs{0}; p < norb_; ++p) {
-        for (size_t q{0}; q < norb_; ++q) {
-            for (size_t r{0}; r < norb_; ++r) {
-                for (size_t s{0}; s < norb_; ++s, ++pqrs) {
-                    v_[pqrs] = v(p, q, r, s);
-                    v_a_[pqrs] = v(p, q, r, s) - v(p, q, s, r);
+        auto v = V->view();
+        // Loop over all pairs (p, r) and (q, s) to fill v_
+        for (size_t p{0}, pqrs{0}; p < norb_; ++p) {
+            for (size_t q{0}; q < norb_; ++q) {
+                for (size_t r{0}; r < norb_; ++r) {
+                    for (size_t s{0}; s < norb_; ++s, ++pqrs) {
+                        v_[pqrs] = v(p, q, r, s);
+                        v_a_[pqrs] = v(p, q, r, s) - v(p, q, s, r);
+                    }
                 }
             }
         }
     }
 
-    update_hbci_ints();
+    // va_sorted_/vab_sorted_ mix epsilon_ (H-derived) and v_/v_a_ (V-derived), so they must be
+    // rebuilt whenever either H or V changes.
+    if (H || V) {
+        update_hbci_ints();
+    }
+
+    // slater_rules_ is a separate view of the same integrals (used by compute_det_energies())
+    // and is not touched by the code above.
+    if (E || H || V) {
+        slater_rules_.update_integrals(static_cast<int>(norb_), E, H, V);
+        // det_energies_ is an incremental cache: compute_det_energies() only fills entries past
+        // its current size, so every determinant already in the variational space would keep an
+        // energy computed under the previous Hamiltonian unless the cache is cleared and eagerly
+        // rebuilt here (eagerly, so this object is never left with a stale/empty cache regardless
+        // of what the caller does next).
+        det_energies_.clear();
+        compute_det_energies();
+    }
 }
 
 void SelectedCIHelper::set_frozen_creation(const std::vector<size_t>& frozen_creation) {
@@ -114,28 +141,6 @@ double evaluate_criterion(double delta, double v, ScreeningCriterion criterion) 
 
 void SelectedCIHelper::update_hbci_ints() {
     // Precompute sorted lists of two-electron integrals for each (p, q) pair
-    // (p,q) -> [|<pq|rs>^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
-    v_sorted_.resize(norb_ * norb_);
-    for (size_t p{0}; p < norb_; ++p) {
-        for (size_t q{0}; q < norb_; ++q) {
-            std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
-            v_list.reserve(norb_ * norb_);
-            for (size_t r{0}; r < norb_; ++r) {
-                for (size_t s{0}; s < norb_; ++s) {
-                    const double delta = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
-                    const double v = V(p, q, r, s);
-                    const double val = evaluate_criterion(delta, v, screening_criterion_);
-                    if (std::fabs(val) > integral_threshold)
-                        v_list.emplace_back(val, v, r, s);
-                }
-            }
-            // sort in descending order by absolute value of the integral
-            std::sort(v_list.rbegin(), v_list.rend());
-            v_sorted_[p * norb_ + q] = std::move(v_list);
-        }
-    }
-
-    // Precompute sorted lists of two-electron integrals for each (p, q) pair
     // (p,q) -> [|<pq||rs>^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
     va_sorted_.resize(norb_ * norb_);
     for (size_t p{0}; p < norb_; ++p) {
@@ -143,7 +148,8 @@ void SelectedCIHelper::update_hbci_ints() {
             std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t r{0}; r < norb_; ++r) {
-                // we screen out integrals where the annihilation orbital is frozen since they will never contribute
+                // we screen out integrals where the annihilation orbital is frozen since they will
+                // never contribute
                 if (!creation_allowed(r))
                     continue;
                 for (size_t s{0}; s < norb_; ++s) {
@@ -170,7 +176,8 @@ void SelectedCIHelper::update_hbci_ints() {
             std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t q{0}; q < norb_; ++q) {
-                // we screen out integrals where the annihilation orbital is frozen since they will never contribute
+                // we screen out integrals where the annihilation orbital is frozen since they will
+                // never contribute
                 if (!annihilation_allowed(q))
                     continue;
                 for (size_t s{0}; s < norb_; ++s) {

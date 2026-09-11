@@ -73,6 +73,36 @@ class OrbOptimizer:
         h0 = self._mat_to_vec(hess)
         return h0
 
+    def compute_orbital_lagrangian(self):
+        r"""
+        Return the symmetric CASSCF orbital Lagrangian matrix.
+
+        The orbital optimizer forms the matrix :math:`A_{pq}` whose
+        antisymmetric part is the orbital gradient,
+
+        .. math::
+            g_{pq} = 2(A_{pq} - A_{qp}).
+
+        At a fully optimized state-specific CASSCF solution, the nonredundant
+        antisymmetric part vanishes.  The symmetric part of :math:`A` is the
+        molecular-orbital energy-weighted density used in the Pulay overlap
+        derivative contribution,
+
+        .. math::
+            W^{S}_{\mu\nu}
+            =
+            C_{\mu p}
+            \frac{1}{2}(A_{pq}+A_{qp})
+            C_{\nu q}.
+
+        Returns
+        -------
+        np.ndarray
+            Symmetric orbital Lagrangian in the current MO basis.
+        """
+        self._compute_orbgrad()
+        return 0.5 * (self.A_pq + self.A_pq.T.conj())
+
     def _update_orbitals(self, R):
         dR = R - self.R
         if np.max(np.abs(dR)) < 1e-12:
@@ -107,34 +137,33 @@ class OrbOptimizer:
         energy += 0.5 * np.einsum("tvuw,tuvw->", self.get_active_space_ints(), self.g2)
         return energy
 
-    def _compute_Fcore(self):
-        # Compute the core Fock matrix [eq (3)], also return the core energy
-        Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
-        self.Fcore = np.einsum(
+    @staticmethod
+    def _transform_ao_operator(operator, C):
+        return np.einsum(
             "mp,mn,nq->pq",
-            self.Cgen.conj(),
-            self.hcore + 2 * Jcore[0] - Kcore[0],
-            self.Cgen,
+            C.conj(),
+            operator,
+            C,
             optimize=True,
         )
-        self.Ecore = np.einsum(
-            "pi,qi,pq->",
-            self.Ccore.conj(),
-            self.Ccore,
-            2 * self.hcore + 2 * Jcore[0] - Kcore[0],
+
+    def _compute_Fcore(self):
+        # Compute the core Fock matrix [eq (3)], also return the core energy
+        Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
+        self.Fcore = self._transform_ao_operator(Fcore_ao, self.Cgen)
+
+        core_factor = 0.5 if self.fock_builder.system.two_component else 1.0
+        self.Ecore = core_factor * np.trace(
+            self._transform_ao_operator(
+                self.hcore + Fcore_ao,
+                self.Ccore,
+            )
         )
 
     def _compute_Fact(self):
-        Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
-
         # [eq (13)]
-        self.Fact = np.einsum(
-            "mp,mn,nq->pq",
-            self.Cgen.conj(),
-            Jact - 0.5 * Kact,
-            self.Cgen,
-            optimize=True,
-        )
+        Fact_ao = self.fock_builder.build_active_fock(self.Cact, self.g1)
+        self.Fact = self._transform_ao_operator(Fact_ao, self.Cgen)
 
     def _compute_orbgrad(self):
         self._compute_Fact()
@@ -246,40 +275,18 @@ class RelOrbOptimizer(OrbOptimizer):
         # '2RDM' defined as in [eq (6)]
         self.g2 = g2.swapaxes(1, 2)
 
+    def compute_orbital_lagrangian(self):
+        """Return the Hermitian two-component CASSCF orbital Lagrangian."""
+        self._compute_orbgrad()
+        # RelOrbOptimizer stores its generalized Fock matrix with the
+        # Lagrangian indices transposed relative to the AO transformation.
+        return 0.5 * (self.Fock + self.Fock.T.conj()).T
+
     def _compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc
         energy += np.einsum("uv,uv->", self.Fcore[self.actv, self.actv], self.g1)
         energy += 0.5 * np.einsum("tvuw,tuvw->", self.get_active_space_ints(), self.g2)
         return energy
-
-    def _compute_Fcore(self):
-        # Compute the core Fock matrix [eq (3)], also return the core energy
-        Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
-        self.Fcore = np.einsum(
-            "mp,nq,mn->pq",
-            self.Cgen.conj(),
-            self.Cgen,
-            self.hcore + Jcore[0] - Kcore[0],
-            optimize=True,
-        )
-        self.Ecore = np.einsum(
-            "pi,qi,pq->",
-            self.Ccore.conj(),
-            self.Ccore,
-            self.hcore + 0.5 * (Jcore[0] - Kcore[0]),
-        )
-
-    def _compute_Fact(self):
-        Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
-
-        # [eq (13)]
-        self.Fact = np.einsum(
-            "mp,nq,mn->pq",
-            self.Cgen.conj(),
-            self.Cgen,
-            Jact - Kact,
-            optimize=True,
-        )
 
     def _compute_orbgrad(self):
         self._compute_Fact()

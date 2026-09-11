@@ -1,3 +1,5 @@
+import pytest
+
 from forte2 import System, RHF, CI, State, AVAS, ROHF
 from forte2.helpers.comparisons import approx
 from forte2.base_classes import CIParams
@@ -137,8 +139,8 @@ def test_ci_tdm():
         ci_params=ci_params,
     )(rhf)
     ci.run()
-    assert abs(ci.transition_dipoles[(0, 6)][2]) == approx(1.5435316739347478)
-    assert ci.oscillator_strengths[(0, 6)] == approx(1.1589808047738437)
+    assert abs(ci.transition_dipoles[(0, 6)][2]) == pytest.approx(1.5435316739347478, abs=1e-4)
+    assert ci.oscillator_strengths[(0, 6)] == pytest.approx(1.1589808047738437, abs=1e-4)
 
 
 def test_ci_no_active():

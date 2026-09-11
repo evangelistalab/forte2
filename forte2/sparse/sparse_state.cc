@@ -1,5 +1,5 @@
 #include "helpers/string_algorithms.h"
-#include "ci/determinant.hpp"
+#include "determinant/determinant.hpp"
 
 #include "sparse/sparse_state.h"
 

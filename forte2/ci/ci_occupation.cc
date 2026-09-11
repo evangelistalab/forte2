@@ -9,17 +9,17 @@
 
 namespace forte2 {
 
-void add_occupation_pair(const occupation_t& alfa_occ, const occupation_t& beta_occ,
-                         std::vector<occupation_t>& alfa_occupations,
+void add_occupation_pair(const occupation_t& alpha_occ, const occupation_t& beta_occ,
+                         std::vector<occupation_t>& alpha_occupations,
                          std::vector<occupation_t>& beta_occupations,
                          std::vector<std::pair<size_t, size_t>>& occupation_pairs) {
-    size_t alfa_index;
-    if (auto alfa_it = std::find(alfa_occupations.begin(), alfa_occupations.end(), alfa_occ);
-        alfa_it == alfa_occupations.end()) {
-        alfa_occupations.push_back(alfa_occ);
-        alfa_index = alfa_occupations.size() - 1;
+    size_t alpha_index;
+    if (auto alpha_it = std::find(alpha_occupations.begin(), alpha_occupations.end(), alpha_occ);
+        alpha_it == alpha_occupations.end()) {
+        alpha_occupations.push_back(alpha_occ);
+        alpha_index = alpha_occupations.size() - 1;
     } else {
-        alfa_index = std::distance(alfa_occupations.begin(), alfa_it);
+        alpha_index = std::distance(alpha_occupations.begin(), alpha_it);
     }
     size_t beta_index;
     if (auto beta_it = std::find(beta_occupations.begin(), beta_occupations.end(), beta_occ);
@@ -29,13 +29,13 @@ void add_occupation_pair(const occupation_t& alfa_occ, const occupation_t& beta_
     } else {
         beta_index = std::distance(beta_occupations.begin(), beta_it);
     }
-    occupation_pairs.push_back(std::make_pair(alfa_index, beta_index));
+    occupation_pairs.push_back(std::make_pair(alpha_index, beta_index));
 }
 
 void recursive_ormas_generation(int na, int nb, const occupation_t& min_occ,
                                 const occupation_t& max_occ, const occupation_t& space_size,
-                                size_t num_spaces, size_t space_count, occupation_t alfa_occ,
-                                occupation_t beta_occ, std::vector<occupation_t>& alfa_occupations,
+                                size_t num_spaces, size_t space_count, occupation_t alpha_occ,
+                                occupation_t beta_occ, std::vector<occupation_t>& alpha_occupations,
                                 std::vector<occupation_t>& beta_occupations,
                                 std::vector<std::pair<size_t, size_t>>& occupation_pairs) {
     // if we reach the last space
@@ -47,9 +47,9 @@ void recursive_ormas_generation(int na, int nb, const occupation_t& min_occ,
         if (occ_total <= max_occ[space_count] and occ_total >= min_occ[space_count] and
             occ_max <= space_size[space_count] and occ_min >= 0) {
             // add the last space to the occupation
-            alfa_occ[space_count] = na;
+            alpha_occ[space_count] = na;
             beta_occ[space_count] = nb;
-            add_occupation_pair(alfa_occ, beta_occ, alfa_occupations, beta_occupations,
+            add_occupation_pair(alpha_occ, beta_occ, alpha_occupations, beta_occupations,
                                 occupation_pairs);
         }
     } else {
@@ -73,11 +73,11 @@ void recursive_ormas_generation(int na, int nb, const occupation_t& min_occ,
                 // this next check might be useless
                 if (occ_total <= max_occ[space_count] and occ_total >= min_occ[space_count]) {
                     // add the current space to the occupation
-                    alfa_occ[space_count] = space_na;
+                    alpha_occ[space_count] = space_na;
                     beta_occ[space_count] = space_nb;
                     recursive_ormas_generation(na - space_na, nb - space_nb, min_occ, max_occ,
-                                               space_size, num_spaces, space_count + 1, alfa_occ,
-                                               beta_occ, alfa_occupations, beta_occupations,
+                                               space_size, num_spaces, space_count + 1, alpha_occ,
+                                               beta_occ, alpha_occupations, beta_occupations,
                                                occupation_pairs);
                 }
             }
@@ -90,14 +90,14 @@ std::tuple<size_t, std::vector<occupation_t>, std::vector<occupation_t>,
 generate_ormas_occupations(size_t na, size_t nb, const occupation_t& min_occ,
                            const occupation_t& max_occ, const occupation_t& space_size,
                            size_t num_spaces) {
-    occupation_t alfa_occ{};
+    occupation_t alpha_occ{};
     occupation_t beta_occ{};
-    std::vector<occupation_t> alfa_occupations;
+    std::vector<occupation_t> alpha_occupations;
     std::vector<occupation_t> beta_occupations;
     std::vector<std::pair<size_t, size_t>> occupation_pairs;
-    recursive_ormas_generation(na, nb, min_occ, max_occ, space_size, num_spaces, 0, alfa_occ,
-                               beta_occ, alfa_occupations, beta_occupations, occupation_pairs);
-    return std::make_tuple(num_spaces, alfa_occupations, beta_occupations, occupation_pairs);
+    recursive_ormas_generation(na, nb, min_occ, max_occ, space_size, num_spaces, 0, alpha_occ,
+                               beta_occ, alpha_occupations, beta_occupations, occupation_pairs);
+    return std::make_tuple(num_spaces, alpha_occupations, beta_occupations, occupation_pairs);
 }
 
 std::tuple<size_t, std::vector<occupation_t>, std::vector<occupation_t>,
@@ -145,7 +145,7 @@ std::tuple<std::vector<occupation_t>, std::vector<occupation_t>,
            std::vector<std::pair<size_t, size_t>>>
 generate_gas_occupations(int na, int nb, const occupation_t& min_occ, const occupation_t& max_occ,
                          const occupation_t& gas_size) {
-    std::vector<occupation_t> gas_alfa_occupations;
+    std::vector<occupation_t> gas_alpha_occupations;
     std::vector<occupation_t> gas_beta_occupations;
     std::vector<std::pair<size_t, size_t>> gas_occupations;
 
@@ -181,25 +181,25 @@ generate_gas_occupations(int na, int nb, const occupation_t& min_occ, const occu
                                             if (gas1_total <= max_occ[0] and
                                                 gas1_max <= gas_size[0] and gas1_min >= 0 and
                                                 gas1_total >= min_occ[0]) {
-                                                std::array<int, 6> alfa_occ = {gas1_na, gas2_na,
-                                                                               gas3_na, gas4_na,
-                                                                               gas5_na, gas6_na};
+                                                std::array<int, 6> alpha_occ = {gas1_na, gas2_na,
+                                                                                gas3_na, gas4_na,
+                                                                                gas5_na, gas6_na};
                                                 std::array<int, 6> beta_occ = {gas1_nb, gas2_nb,
                                                                                gas3_nb, gas4_nb,
                                                                                gas5_nb, gas6_nb};
-                                                // check if alfa_occ is contained in
-                                                // gas_alfa_occupations, if not, add it and
+                                                // check if alpha_occ is contained in
+                                                // gas_alpha_occupations, if not, add it and
                                                 // grab its index, otherwise grab its index
-                                                size_t alfa_index;
-                                                if (auto alfa_it = std::find(
-                                                        gas_alfa_occupations.begin(),
-                                                        gas_alfa_occupations.end(), alfa_occ);
-                                                    alfa_it == gas_alfa_occupations.end()) {
-                                                    gas_alfa_occupations.push_back(alfa_occ);
-                                                    alfa_index = gas_alfa_occupations.size() - 1;
+                                                size_t alpha_index;
+                                                if (auto alpha_it = std::find(
+                                                        gas_alpha_occupations.begin(),
+                                                        gas_alpha_occupations.end(), alpha_occ);
+                                                    alpha_it == gas_alpha_occupations.end()) {
+                                                    gas_alpha_occupations.push_back(alpha_occ);
+                                                    alpha_index = gas_alpha_occupations.size() - 1;
                                                 } else {
-                                                    alfa_index = std::distance(
-                                                        gas_alfa_occupations.begin(), alfa_it);
+                                                    alpha_index = std::distance(
+                                                        gas_alpha_occupations.begin(), alpha_it);
                                                 }
                                                 // check if beta_occ is contained in
                                                 // gas_beta_occupations, if not, add it and
@@ -216,7 +216,7 @@ generate_gas_occupations(int na, int nb, const occupation_t& min_occ, const occu
                                                         gas_beta_occupations.begin(), beta_it);
                                                 }
                                                 gas_occupations.push_back(
-                                                    std::make_pair(alfa_index, beta_index));
+                                                    std::make_pair(alpha_index, beta_index));
                                             }
                                         }
                                     }
@@ -228,14 +228,14 @@ generate_gas_occupations(int na, int nb, const occupation_t& min_occ, const occu
             }
         }
     }
-    return std::make_tuple(gas_alfa_occupations, gas_beta_occupations, gas_occupations);
+    return std::make_tuple(gas_alpha_occupations, gas_beta_occupations, gas_occupations);
 }
 
 std::tuple<size_t, std::vector<std::array<int, 6>>, std::vector<std::array<int, 6>>,
            std::vector<std::pair<size_t, size_t>>>
 get_gas_occupation(size_t na, size_t nb, const std::vector<int>& gas_min,
                    const std::vector<int>& gas_max, const std::vector<int>& gas_size) {
-    std::vector<std::array<int, 6>> gas_alfa_occupations;
+    std::vector<std::array<int, 6>> gas_alpha_occupations;
     std::vector<std::array<int, 6>> gas_beta_occupations;
     std::vector<std::pair<size_t, size_t>> gas_occupations;
 
@@ -307,25 +307,25 @@ get_gas_occupation(size_t na, size_t nb, const std::vector<int>& gas_min,
                                             if (gas1_total <= gas_max_el[0] and
                                                 gas1_max <= gas_size_el[0] and gas1_min >= 0 and
                                                 gas1_total >= gas_min_el[0]) {
-                                                std::array<int, 6> alfa_occ = {gas1_na, gas2_na,
-                                                                               gas3_na, gas4_na,
-                                                                               gas5_na, gas6_na};
+                                                std::array<int, 6> alpha_occ = {gas1_na, gas2_na,
+                                                                                gas3_na, gas4_na,
+                                                                                gas5_na, gas6_na};
                                                 std::array<int, 6> beta_occ = {gas1_nb, gas2_nb,
                                                                                gas3_nb, gas4_nb,
                                                                                gas5_nb, gas6_nb};
-                                                // check if alfa_occ is contained in
-                                                // gas_alfa_occupations, if not, add it and
+                                                // check if alpha_occ is contained in
+                                                // gas_alpha_occupations, if not, add it and
                                                 // grab its index, otherwise grab its index
-                                                size_t alfa_index;
-                                                if (auto alfa_it = std::find(
-                                                        gas_alfa_occupations.begin(),
-                                                        gas_alfa_occupations.end(), alfa_occ);
-                                                    alfa_it == gas_alfa_occupations.end()) {
-                                                    gas_alfa_occupations.push_back(alfa_occ);
-                                                    alfa_index = gas_alfa_occupations.size() - 1;
+                                                size_t alpha_index;
+                                                if (auto alpha_it = std::find(
+                                                        gas_alpha_occupations.begin(),
+                                                        gas_alpha_occupations.end(), alpha_occ);
+                                                    alpha_it == gas_alpha_occupations.end()) {
+                                                    gas_alpha_occupations.push_back(alpha_occ);
+                                                    alpha_index = gas_alpha_occupations.size() - 1;
                                                 } else {
-                                                    alfa_index = std::distance(
-                                                        gas_alfa_occupations.begin(), alfa_it);
+                                                    alpha_index = std::distance(
+                                                        gas_alpha_occupations.begin(), alpha_it);
                                                 }
                                                 // check if beta_occ is contained in
                                                 // gas_beta_occupations, if not, add it and
@@ -342,7 +342,7 @@ get_gas_occupation(size_t na, size_t nb, const std::vector<int>& gas_min,
                                                         gas_beta_occupations.begin(), beta_it);
                                                 }
                                                 gas_occupations.push_back(
-                                                    std::make_pair(alfa_index, beta_index));
+                                                    std::make_pair(alpha_index, beta_index));
                                             }
                                         }
                                     }
@@ -354,7 +354,7 @@ get_gas_occupation(size_t na, size_t nb, const std::vector<int>& gas_min,
             }
         }
     }
-    return std::make_tuple(num_gas_spaces, gas_alfa_occupations, gas_beta_occupations,
+    return std::make_tuple(num_gas_spaces, gas_alpha_occupations, gas_beta_occupations,
                            gas_occupations);
 }
 

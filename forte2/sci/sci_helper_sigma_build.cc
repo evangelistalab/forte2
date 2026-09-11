@@ -30,6 +30,12 @@ void SelectedCIHelper::prepare_strings() {
         sorted_dets[i] = dets_[i].spin_flip();
     }
     ba_list_ = SelectedCIStrings(norb_, sorted_dets);
+
+    // the largest alpha-string block, used to size the select_hbci_batch scratch buffers
+    max_block_size_ = 0;
+    for (const auto& block : ab_list_.second_string_to_det_index()) {
+        max_block_size_ = std::max(max_block_size_, block.size());
+    }
 }
 
 void SelectedCIHelper::Hamiltonian(np_vector basis, np_vector sigma) const {
@@ -90,7 +96,7 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
 void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& sublist = ab_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
             const auto& inv_sublist = ab_list_.one_hole_first_string_list_inv()[hole_idx];
@@ -110,7 +116,7 @@ void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) con
 void SelectedCIHelper::H1b(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ba_list_.first_string_size();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& sublist = ba_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
             const auto& inv_sublist = ba_list_.one_hole_first_string_list_inv()[hole_idx];
@@ -130,7 +136,7 @@ void SelectedCIHelper::H1b(std::span<double> basis, std::span<double> sigma) con
 void SelectedCIHelper::H2a(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& sublist = ab_list_.two_hole_string_list()[i];
         for (const auto& [p, q, hole_idx, sign_pq] : sublist) { // (p < q)
             const auto& inv_sublist = ab_list_.two_hole_string_list_inv()[hole_idx];
@@ -150,7 +156,7 @@ void SelectedCIHelper::H2a(std::span<double> basis, std::span<double> sigma) con
 void SelectedCIHelper::H2b(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ba_list_.first_string_size();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& sublist = ba_list_.two_hole_string_list()[i];
         for (const auto& [p, q, hole_idx, sign_pq] : sublist) { // (p < q)
             const auto& inv_sublist = ba_list_.two_hole_string_list_inv()[hole_idx];
@@ -171,7 +177,7 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
     const auto first_string_size = ab_list_.first_string_size();
     const auto& det_permutation = ab_list_.det_permutation();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& i_map = ab_list_.second_string_to_det_index()[i];
         const auto& sublist_a = ab_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist_a) {

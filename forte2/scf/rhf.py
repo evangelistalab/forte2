@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import numpy as np
+from numpy.typing import NDArray
 
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
@@ -15,6 +16,11 @@ class RHF(SCFBase):
     A class that runs restricted Hartree-Fock calculations.
     """
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
+        self.provides.add("gradient")
+
     def __call__(self, system):
         system.two_component = False
         self = super().__call__(system)
@@ -27,9 +33,8 @@ class RHF(SCFBase):
         self.na = self.nb = self.nel // 2
 
     def _build_fock(self, H, fock_builder, S):
-        J = fock_builder.build_J(self.D)[0]
-        K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
-        F = H + 2.0 * J - K
+        J, K = fock_builder.build_JK([self.C[0][:, : self.na]])
+        F = H + 2.0 * J[0] - K[0]
         return [F], [F]
 
     def _build_density_matrix(self):
@@ -66,15 +71,28 @@ class RHF(SCFBase):
     def _spin(self, S):
         return self.ms * (self.ms + 1)
 
+    def gradient(self) -> NDArray:
+        """
+        Compute the RHF analytic nuclear gradient with density fitting.
+
+        Returns
+        -------
+        NDArray
+            Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
+        """
+        from .rhf_grad import _compute_rhf_gradient
+
+        return _compute_rhf_gradient(self)
+
     def _diis_update(self, diis, F, AO_grad):
         return [diis.update(F[0], AO_grad)]
 
     def _apply_level_shift(self, F, S):
-        if self.level_shift is None or self.level_shift < 1e-4:
+        if self._current_level_shift is None or self._current_level_shift < 1e-4:
             return F
         D_vir = S - S @ self.D[0] @ S
 
-        return [F[0] + self.level_shift * D_vir]
+        return [F[0] + self._current_level_shift * D_vir]
 
     def _get_occupation(self):
         self.ndocc = self.na
@@ -101,7 +119,9 @@ class RHF(SCFBase):
             idx = ndocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _post_process(self):
