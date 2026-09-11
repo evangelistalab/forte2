@@ -272,7 +272,9 @@ class DSRGBase(Method):
                 break
 
             self.converged = self.test_relaxation_convergence(irelax)
-            if self.converged:
+            if self.converged or irelax == self.nrelax - 1:
+                # leaving on the last iteration too: the work below only
+                # prepares the next one, and there isn't one
                 break
 
             # Drop the previous set first: get_integrals() does not read self.ints,
@@ -284,11 +286,11 @@ class DSRGBase(Method):
             self.ints, self.cumulants = self.get_integrals()
             self.E_dsrg = self._solve_dsrg_shifted(form_hbar)
             self.E = self.E_dsrg
-        else:
-            if self.nrelax > 0:
-                logger.log_warning(
-                    f"DSRG reference relaxation did not converge in {self.nrelax} iterations."
-                )
+
+        if self.nrelax > 0 and not self.converged:
+            logger.log_warning(
+                f"DSRG reference relaxation did not converge in {self.nrelax} iterations."
+            )
         if self.nrelax > 0:
             logger.log_info1("=" * width)
         logger.log_info1("\nFinal DSRG energies (a.u.):")
@@ -309,9 +311,6 @@ class DSRGBase(Method):
     def test_relaxation_convergence(self, irelax):
         if irelax == 0:
             return False
-
-        if irelax == self.nrelax - 1:
-            return True
 
         delta_fixed_ref = abs(
             self.relax_energies[irelax, 0] - self.relax_energies[irelax - 1, 0]
