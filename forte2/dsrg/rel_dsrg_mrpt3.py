@@ -512,8 +512,13 @@ class RelDSRG_MRPT3(DSRGBase):
             blk: 2 * self.ints["F"][blk].conj()
             for blk in self.dsrg_helper.non_od_1_labels
         }
+        # The conjugate of a two-body block is already stored: the Hamiltonian
+        # is Hermitian, so <pq||rs>* = <rs||pq> and conj(V[pqrs]) is V[rspq]
+        # with its index pairs swapped -- a view, not a copy. The factor of two
+        # rides along in the kernels' `scale`, so the doubled conjugate of the
+        # whole non-off-diagonal set costs nothing.
         _temp_2b = {
-            blk: 2 * self.ints["V"][blk].conj()
+            blk: self.ints["V"][blk[2:] + blk[:2]].transpose(2, 3, 0, 1)
             for blk in self.dsrg_helper.non_od_2_labels
         }
 
@@ -521,22 +526,21 @@ class RelDSRG_MRPT3(DSRGBase):
             self.Htilde1A1_1b, _temp_1b, self.T1_1, self.cumulants
         )
         self.dsrg_helper.H2_T1_C1_non_od(
-            self.Htilde1A1_1b, _temp_2b, self.T1_1, self.cumulants
+            self.Htilde1A1_1b, _temp_2b, self.T1_1, self.cumulants, scale=2.0
         )
         self.dsrg_helper.H2_T2_C1_non_od(
-            self.Htilde1A1_1b, _temp_2b, self.T2_1, self.cumulants
+            self.Htilde1A1_1b, _temp_2b, self.T2_1, self.cumulants, scale=2.0
         )
         self.dsrg_helper.H1_T2_C2_non_od(
             self.Htilde1A1_2b, _temp_1b, self.T2_1, self.cumulants
         )
         self.dsrg_helper.H2_T1_C2_non_od(
-            self.Htilde1A1_2b, _temp_2b, self.T1_1, self.cumulants
+            self.Htilde1A1_2b, _temp_2b, self.T1_1, self.cumulants, scale=2.0
         )
         self.dsrg_helper.H2_T2_C2_non_od(
-            self.Htilde1A1_2b, _temp_2b, self.T2_1, self.cumulants
+            self.Htilde1A1_2b, _temp_2b, self.T2_1, self.cumulants, scale=2.0
         )
-        # last read of the doubled integrals; the streaming kernels below work
-        # from the three-index tensors and carry this stage's peak
+        # last read of the doubled one-body integrals
         del _temp_1b, _temp_2b
 
         self.dsrg_helper.H2_T2_C1_non_od_large(
