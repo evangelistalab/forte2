@@ -31,6 +31,32 @@ def test_make_final_orbitals_centralizes_validation_and_original_mode():
         make_final_orbitals("invalid", **kwargs)
 
 
+@pytest.mark.parametrize("mode", ["ibo", "ibo_atomic"])
+@pytest.mark.parametrize(
+    ("two_component", "dtype"),
+    [(True, float), (False, complex)],
+)
+def test_ibo_modes_reject_nonreal_or_relativistic_orbitals_before_localization(
+    monkeypatch, mode, two_component, dtype
+):
+    def unexpected_ibo(*args, **kwargs):
+        pytest.fail("IBO localization was reached before validating the input")
+
+    monkeypatch.setattr(final_orbitals_module, "IBO", unexpected_ibo)
+
+    system = SimpleNamespace(point_group="C1", two_component=two_component)
+    C = np.eye(2, dtype=dtype)
+    with pytest.raises(NotImplementedError, match="real, nonrelativistic orbitals"):
+        make_final_orbitals(
+            mode,
+            system=system,
+            mo_space=None,
+            irrep_indices=np.zeros(2, dtype=int),
+            C_contig=C,
+            g1_act=None,
+        )
+
+
 def test_ibo_water():
     xyz = """
     O
