@@ -1,32 +1,25 @@
 from dataclasses import dataclass, field
-from typing import ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
 
 
 from forte2.base_classes import (
-    ActiveSpaceSolver,
+    ActiveSpaceDriver,
     CIBase,
     RelCIBase,
     Method,
 )
-from forte2.orbitals import FinalOrbitals, validate_final_orbitals
+from forte2.orbitals import FinalOrbitals
 from forte2.helpers import logger, LBFGS
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
-from forte2.ci.ci_utils import (
-    pretty_print_ci_summary,
-    pretty_print_ci_nat_occ_numbers,
-    pretty_print_ci_dets,
-    pretty_print_ci_transition_props,
-)
 from forte2.symmetry import real_sph_to_j_adapted
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 @dataclass
-class MCOptimizerBase(Method):
+class MCOptimizerBase(ActiveSpaceDriver, Method):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -84,13 +77,6 @@ class MCOptimizerBase(Method):
     g_tol: float = 1e-7
     die_if_not_converged: bool = True
 
-    # Same sanity-check tolerance CIBase uses for its own final-orbital invariance
-    # check; not a dataclass field of MCOptimizerBase's own, so it stays in sync with
-    # ActiveSpaceSolver's single source of truth rather than duplicating the literal.
-    _final_orbital_energy_tol: ClassVar[float] = (
-        ActiveSpaceSolver._final_orbital_energy_tol
-    )
-
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
     max_rotation: float = 0.2
@@ -103,30 +89,15 @@ class MCOptimizerBase(Method):
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
 
-    def __post_init__(self):
-        if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
-            raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
-
-        validate_final_orbitals(self.final_orbitals)
-
-        self.requires = {"system", "mos"}
-        self.provides = {"system", "mos", "mo_space"}
-
     def __call__(self, method):
         self._register_parent_method(method)
-        # make sure we don't print the CI output at INFO1 level
+        # suppress CI microiteration printing
         current_verbosity = logger.get_verbosity_level()
-        # only log subproblem if the verbosity is higher than INFO1
-        if current_verbosity > 3:
-            self.ci_solver_verbosity = current_verbosity
+        if current_verbosity > logger.VERBOSITY_INFO1:
+            self.ci_solver.log_level = current_verbosity
         else:
-            self.ci_solver_verbosity = current_verbosity + 1
+            self.ci_solver.log_level = current_verbosity + 1
         return self
-
-    def reset(self):
-        """Invalidate this optimizer and its ci_solver before a new run()."""
-        self.ci_solver.reset()
-        return super().reset()
 
     def _startup(self):
         if not self.parent_method.executed:
@@ -359,35 +330,8 @@ class MCOptimizerBase(Method):
         self.executed = True
         return self
 
-    def _post_process(self):
-        pretty_print_ci_summary(self.ci_solver.sa_info, self.ci_solver.evals_per_solver)
-        self.ci_solver.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(
-            self.ci_solver.sa_info,
-            self.mo_space,
-            self.ci_solver.nat_occs,
-            getattr(self.ci_solver, "nat_occs_avg", None),
-        )
-        top_dets = self.ci_solver.get_top_determinants()
-        pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)
+    def _print_orbital_composition(self) -> None:
         self._print_ao_composition()
-        if self.do_transition_dipole:
-            self.ci_solver.compute_transition_properties(self.mos.C[0])
-            pretty_print_ci_transition_props(
-                self.ci_solver.sa_info,
-                self.ci_solver.transition_dipoles,
-                self.ci_solver.oscillator_strengths,
-                self.ci_solver.evals_per_solver,
-            )
-
-    def _rotate_final_orbitals(self) -> None:
-        # point ci_solver's mos to self.mos
-        self.ci_solver.mos = self.mos
-        self.ci_solver._rotate_final_orbitals(self.final_orbitals)
-
-        self.E_ci = np.array(self.ci_solver.E)
-        self.E_avg = self.ci_solver.E_avg
-        self.E = self.E_avg
 
     def _final_orbital_irrep_indices(self) -> NDArray:
         """Return the irrep indices of the final orbitals in contiguous ordering."""
@@ -484,27 +428,6 @@ class MCOptimizerBase(Method):
         self.E_avg_old = self.E_avg
         self.E_orb_old = self.E_orb
         return conv, conv_str
-
-    def make_rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-        *,
-        order: int,
-        spin_type: str,
-    ):
-        return self.ci_solver.make_rdm(
-            left_root, right_root, order=order, spin_type=spin_type
-        )
-
-    def make_cumulant(self, root: int, *, order: int, spin_type: str):
-        return self.ci_solver.make_cumulant(root, order=order, spin_type=spin_type)
-
-    def make_average_rdm(self, order: int):
-        return self.ci_solver.make_average_rdm(order)
-
-    def make_average_cumulant(self, order: int):
-        return self.ci_solver.make_average_cumulant(order)
 
 
 class MCOptimizer(MCOptimizerBase):

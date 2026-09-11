@@ -3,13 +3,21 @@ import sys
 
 from forte2.lib import cpp_helpers
 
+VERBOSITY_QUIET = 0
+VERBOSITY_WARNING = 1
+VERBOSITY_ESSENTIAL = 2
+VERBOSITY_INFO1 = 3
+VERBOSITY_INFO2 = 4
+VERBOSITY_DEBUG = 5
+
+
 LOGGING_LEVEL = {
-    0: logging.CRITICAL + 1,  # Quiet
-    1: logging.CRITICAL,  # Warning
-    2: logging.WARNING,  # Essential
-    3: logging.INFO,  # Info1
-    4: logging.INFO - 1,  # Info2
-    5: logging.DEBUG,
+    VERBOSITY_QUIET: logging.CRITICAL + 1,  # Quiet
+    VERBOSITY_WARNING: logging.CRITICAL,  # Warning
+    VERBOSITY_ESSENTIAL: logging.WARNING,  # Essential
+    VERBOSITY_INFO1: logging.INFO,  # Info1
+    VERBOSITY_INFO2: logging.INFO - 1,  # Info2
+    VERBOSITY_DEBUG: logging.DEBUG,
 }
 
 
@@ -65,6 +73,7 @@ def get_verbosity_level():
 
 
 def log(message, level=2):
+    level = max(level, VERBOSITY_WARNING)
     logging.log(LOGGING_LEVEL.get(level, logging.INFO), message)
 
 

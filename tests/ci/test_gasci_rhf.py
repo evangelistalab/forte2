@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System, RHF, CI, State
+from forte2 import CI, CISolver, RHF, State, System
 from forte2.helpers.comparisons import approx
 from forte2.system.build_basis import BSE_AVAILABLE
 from forte2.base_classes import CIParams, DavidsonLiuParams
@@ -16,14 +16,16 @@ def test_gasci_rhf_1():
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        active_orbitals=[[0], [1]],
-        states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[2]),
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        CISolver(
+            active_orbitals=[[0], [1]],
+            states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[2]),
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(-1.05643120731551)
-    assert ci.E[0] == approx(-1.096071975854)
+    assert ci.E_ci[0] == approx(-1.096071975854)
 
 
 def test_gasci_rhf_2():
@@ -36,16 +38,18 @@ def test_gasci_rhf_2():
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        active_orbitals=[[0], [1]],
-        states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[1, 0], gas_max=[2, 1]),
-        nroots=2,
+        CISolver(
+            active_orbitals=[[0], [1]],
+            states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[1, 0], gas_max=[2, 1]),
+            nroots=2,
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(-1.089283671174)
-    assert ci.E[0] == approx(-1.089283671174)
+    assert ci.E_ci[0] == approx(-1.089283671174)
     # TODO: Add assertion for second root when the one below is externally verified
-    # assert ci.E[1] == approx(-0.671622137375)
+    # assert ci.E_ci[1] == approx(-0.671622137375)
 
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="Basis set exchange is not available")
@@ -63,13 +67,15 @@ def test_gasci_rhf_3():
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        active_orbitals=[[0], [1]],
-        states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0, 0], gas_max=[2, 2]),
+        CISolver(
+            active_orbitals=[[0], [1]],
+            states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0, 0], gas_max=[2, 2]),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(-1.124751148359)
-    assert ci.E[0] == approx(-1.1457634621)
+    assert ci.E_ci[0] == approx(-1.1457634621)
 
 
 def test_gasci_rhf_4():
@@ -85,14 +91,18 @@ def test_gasci_rhf_4():
 
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
-        active_orbitals=[[0, 1, 2, 3, 4], [5, 6]],
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[10, 4]),
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        CISolver(
+            active_orbitals=[[0, 1, 2, 3, 4], [5, 6]],
+            states=State(
+                nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[10, 4]
+            ),
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(-76.02146209548764)
-    assert ci.E[0] == approx(-76.029447292783)
+    assert ci.E_ci[0] == approx(-76.029447292783)
 
 
 def test_gasci_rhf_5():
@@ -108,14 +118,16 @@ def test_gasci_rhf_5():
 
     rhf = RHF(charge=0, e_tol=1e-14, d_tol=1e-8)(system)
     ci = CI(
-        active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[1]),
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-14),
+        CISolver(
+            active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
+            states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[1]),
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-14),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(-76.02146209548764)
-    assert ci.E[0] == approx(-55.819535370117)
+    assert ci.E_ci[0] == approx(-55.819535370117)
 
 
 def test_gasci_rhf_6():
@@ -130,15 +142,17 @@ def test_gasci_rhf_6():
 
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
-        active_orbitals=(3, 4, 3),
-        states=State(
-            nel=10, multiplicity=1, ms=0.0, gas_min=[4, 0, 0], gas_max=[6, 8, 2]
-        ),
+        CISolver(
+            active_orbitals=(3, 4, 3),
+            states=State(
+                nel=10, multiplicity=1, ms=0.0, gas_min=[4, 0, 0], gas_max=[6, 8, 2]
+            ),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(-100.00984797870581)
-    assert ci.E[0] == approx(-100.088791333620)
+    assert ci.E_ci[0] == approx(-100.088791333620)
 
 
 def test_gasci_rhf_7():
@@ -154,16 +168,18 @@ def test_gasci_rhf_7():
 
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
-        active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
-        nroots=2,
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        CISolver(
+            active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
+            states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
+            nroots=2,
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(-76.02146209548764)
-    assert ci.E[0] == approx(-55.818614251158)
-    assert ci.E[1] == approx(-55.740542172622)
+    assert ci.E_ci[0] == approx(-55.818614251158)
+    assert ci.E_ci[1] == approx(-55.740542172622)
 
 
 def test_gasci_rhf_8():
@@ -179,16 +195,18 @@ def test_gasci_rhf_8():
 
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
-        active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
-        nroots=2,
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        CISolver(
+            active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
+            states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
+            nroots=2,
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(-75.68026686304654)
-    assert ci.E[0] == approx(-55.598443621487)
-    assert ci.E[1] == approx(-55.526088426266)
+    assert ci.E_ci[0] == approx(-55.598443621487)
+    assert ci.E_ci[1] == approx(-55.526088426266)
 
 
 def test_gasci_rhf_9():
@@ -208,15 +226,17 @@ def test_gasci_rhf_9():
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
     ci = CI(
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
-        core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4], [5, 6, 7]],
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        CISolver(
+            states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
+            core_orbitals=[0, 1],
+            active_orbitals=[[2, 3, 4], [5, 6, 7]],
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(erhf)
-    assert ci.E[0] == approx(eci)
+    assert ci.E_ci[0] == approx(eci)
 
 
 def test_gasci_rhf_10():
@@ -236,15 +256,17 @@ def test_gasci_rhf_10():
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-6)(system)
 
     ci = CI(
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
-        core_orbitals=[0],
-        active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10),
+        CISolver(
+            states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
+            core_orbitals=[0],
+            active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-10),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(erhf)
-    assert ci.E[0] == approx(eci)
+    assert ci.E_ci[0] == approx(eci)
 
 
 def test_gasci_rhf_11():
@@ -264,13 +286,15 @@ def test_gasci_rhf_11():
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-6)(system)
 
     ci = CI(
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
-        core_orbitals=[0],
-        active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10),
-        ci_params=CIParams(ci_algorithm="kh"),
+        CISolver(
+            states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
+            core_orbitals=[0],
+            active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-10),
+            ci_params=CIParams(ci_algorithm="kh"),
+        )
     )(rhf)
     ci.run()
 
     assert rhf.E == approx(erhf)
-    assert ci.E[0] == approx(eci)
+    assert ci.E_ci[0] == approx(eci)

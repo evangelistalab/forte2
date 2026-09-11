@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, State, CISolver, X2CParams
+from forte2 import CISolver, MCOptimizer, RHF, State, System, X2CParams
 from forte2.gradients import FDGradient
 from forte2.integrals import LIBCINT_AVAILABLE
 from tests.gradient_test_utils import xyz_string

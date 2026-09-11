@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, integrals, jkbuilder, X2CParams
+from forte2 import System, X2CParams, integrals, jkbuilder
 from forte2.lib.ints import Basis, Shell
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
 

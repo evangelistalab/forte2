@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import State, MOSpace
+from forte2 import MOSpace, State
 from forte2.jkbuilder import SpinorbitalIntegrals
 from forte2.ci.rel_ci import _RelCISingleStateSolver
 from forte2.helpers.comparisons import approx
