@@ -16,33 +16,6 @@ from .utils import (
 
 
 @dataclass
-class _SymmetricTiles(dict):
-    """Two-electron integral tiles holding one of each reversal pair.
-
-    The Hamiltonian is Hermitian, so V[pqrs] = V[rspq]. These integrals are
-    real, which makes the partner of a stored tile that tile transposed -- a
-    view, costing nothing to produce and nothing to hold. Only one member of
-    each pair is built; asking for the other returns the view.
-
-    Tiles whose two index pairs match ("hhhh", "vhvh", "hvhv") are their own
-    reverse and are always stored.
-    """
-
-    def __missing__(self, m):
-        rev = m[2:] + m[:2]
-        if not dict.__contains__(self, rev):
-            raise KeyError(m)
-        return dict.__getitem__(self, rev).transpose(2, 3, 0, 1)
-
-    def __contains__(self, m):
-        # Callers test membership to decide whether a block is stored at all or
-        # has to come from the three-index integrals, so a derivable tile has
-        # to answer yes. Tiles with three or more virtual indices are absent in
-        # both directions -- the dead set is closed under reversal -- so they
-        # still route to the streaming path.
-        return dict.__contains__(self, m) or dict.__contains__(self, m[2:] + m[:2])
-
-
 class DSRG_MRPT3(DSRGBase):
     """
     Spin-adapted driven similarity renormalization group
@@ -185,58 +158,43 @@ class DSRG_MRPT3(DSRGBase):
 
         return ints, cumulants
 
-    # Blocks of the two-electron integrals that no contraction reaches once the
-    # particle ladder is streamed. Together they are most of the array: at
-    # cc-pVTZ the four-virtual block alone is 55% of it. Verified by
-    # temp/big_block_terms.py; a contraction that reached one anyway would raise
-    # rather than silently read zeros.
-    _DEAD_V_BLOCKS = frozenset(
-        {
-            ("v", "v", "h", "v"),
-            ("v", "v", "v", "v"),
-            ("v", "v", "v", "h"),
-            ("v", "h", "v", "v"),
-            ("h", "v", "v", "v"),
-        }
-    )
-
-    @staticmethod
-    def _stored_of_pair(m):
-        """Order a reversal pair so the stored member leads with virtuals.
-
-        The running two-body operators are particle-particle-hole-hole shaped,
-        so of the two tiles a contraction could ask for, the one whose leading
-        pair is virtual is wanted far more often -- measured at 27 reads
-        against 2 for the largest pair. Storing that one keeps the frequent
-        reads contiguous and leaves the transposed view for the rare ones.
-        """
-        return (-"".join(m[:2]).count("v"), "".join(m))
-
     def _build_v_blocks(self, B):
         """Two-electron integrals, tiled by which of the four indices are virtual.
 
         The correlated space is the hole space followed by the virtual space, so
         tagging each index one or the other tiles the integrals exactly, into
         sixteen rectangles rather than the eighty-one elementary blocks a
-        core/active/virtual split would give. Each is built straight from the
-        three-index integrals, so the blocks that are never read cost nothing.
+        core/active/virtual split would give.
+
+        Two tiles are left out of the result. Any tile with three or more
+        virtual indices is reached only by terms whose particle ladder is
+        streamed from the three-index integrals, so it is never built -- at
+        cc-pVTZ the four-virtual tile alone would be 55% of the array. And
+        since the Hamiltonian is Hermitian, V[pqrs] = V[rspq]: a tile and the
+        tile whose index pairs are swapped hold the same real numbers, so the
+        second is stored as a transposed view of the first and costs nothing.
+
+        Of such a pair the built member is the one leading with virtual
+        indices. The running two-body operators are particle-particle-hole-hole
+        shaped, so that is the member the contractions read -- by 27 reads to 2
+        on the largest pair -- and it is the one worth keeping contiguous.
         """
         span = {"h": self.hole, "v": self.virt}
-        tiles = _SymmetricTiles()
-        for m in itertools.product("hv", repeat=4):
-            if m in self._DEAD_V_BLOCKS:
-                continue
-            # a tile and its reverse hold the same numbers transposed, so only
-            # one of the two is built; _SymmetricTiles derives the other
+        tiles = {}
+        for m in sorted(
+            (m for m in itertools.product("hv", repeat=4) if m.count("v") < 3),
+            key=lambda m: (-m[:2].count("v"), m),
+        ):
             rev = m[2:] + m[:2]
-            if min(m, rev, key=self._stored_of_pair) != m:
-                continue
-            tiles[m] = np.einsum(
-                "Bpr,Bqs->pqrs",
-                B[:, span[m[0]], span[m[2]]],
-                B[:, span[m[1]], span[m[3]]],
-                optimize=True,
-            )
+            if rev in tiles:
+                tiles[m] = tiles[rev].transpose(2, 3, 0, 1)
+            else:
+                tiles[m] = np.einsum(
+                    "Bpr,Bqs->pqrs",
+                    B[:, span[m[0]], span[m[2]]],
+                    B[:, span[m[1]], span[m[3]]],
+                    optimize=True,
+                )
         return tiles
 
     def _v_pphh(self, vb):

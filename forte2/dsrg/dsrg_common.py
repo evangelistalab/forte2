@@ -956,7 +956,7 @@ class _DSRGDenseHelper:
             return ("p", "h"), ("h", "p")
         return ("p", "p", "h", "h"), ("h", "h", "p", "p")
 
-    def _emit(self, out, coef, spec, operands, pair=False, only=None, streamed=False):
+    def _emit(self, out, coef, spec, operands, pair=False, only=None):
         """Accumulate one term into both off-diagonal directions of `out`.
 
         `only` restricts the term to one direction, for the case where the other
@@ -1028,7 +1028,6 @@ class _DSRGDenseHelper:
                                 split_kind,
                                 block,
                                 pair,
-                                streamed,
                             )
                         continue
                     self._contract(
@@ -1044,7 +1043,6 @@ class _DSRGDenseHelper:
                         split_kind,
                         block,
                         pair,
-                        streamed,
                     )
 
     def _contract(
@@ -1061,7 +1059,6 @@ class _DSRGDenseHelper:
         split_kind,
         block,
         pair,
-        streamed=False,
     ):
         args = []
         for i, (idx, (tensor, kind)) in enumerate(zip(ins, operands)):
@@ -1071,14 +1068,10 @@ class _DSRGDenseHelper:
                     sl = tuple(self._frames[d][eff[L]] for L, d in zip(idx, bdirs))
                 else:
                     if bkey not in tensor:
-                        if streamed:
-                            # this block is contracted from the three-index
-                            # integrals by the term's streamed companion
-                            return
-                        raise KeyError(
-                            f"contraction {spec} reaches integral block {bkey}, "
-                            "which is not stored"
-                        )
+                        # tiles with three or more virtual indices are never
+                        # stored; this term's streamed companion contracts them
+                        # from the three-index integrals
+                        return
                     sl = tuple(self._hv[d][eff[L]] for L, d in zip(idx, bdirs))
                 args.append(tensor[bkey][sl])
             else:
@@ -1120,14 +1113,12 @@ class _DSRGDenseHelper:
         G, E, L = (self.g1, "act"), (self.e1, "act"), (self.l2, "act")
 
         # particle contractions
-        self._emit(C1, alpha, "abrm,imab->ir", (H, S), streamed=B is not None)
+        self._emit(C1, alpha, "abrm,imab->ir", (H, S))
         if B is not None:
             self._stream_c1_particle(
                 C1[1], alpha, B["vv"], B["vc"], S2[:, self.hc, self.pv, self.pv]
             )
-        self._emit(
-            C1, 0.5 * alpha, "uv,ivab,abru->ir", (G, S, H), streamed=B is not None
-        )
+        self._emit(C1, 0.5 * alpha, "uv,ivab,abru->ir", (G, S, H))
         if B is not None:
             self._stream_c1_particle(
                 C1[1],
@@ -1239,9 +1230,7 @@ class _DSRGDenseHelper:
 
     def H2_T1_C2(self, C2, H2, T1, alpha=1.0, B=None):
         H, T = (H2, "corr"), (T1, "hp")
-        self._emit(
-            C2, alpha, "ia,arpq->irpq", (T, H), pair=True, streamed=B is not None
-        )
+        self._emit(C2, alpha, "ia,arpq->irpq", (T, H), pair=True)
         if B is not None:
             self._stream_c2_particle(C2[1], alpha, B["vv"], B["hv"], T1[:, self.pv])
         self._emit(C2, -alpha, "ia,rsiq->rsaq", (T, H), pair=True)
@@ -1265,7 +1254,6 @@ class _DSRGDenseHelper:
             "xy,ijxb,ybrs->ijrs",
             (G, T, H),
             pair=True,
-            streamed=B is not None,
         )
         if B is not None:
             self._stream_c2_ring(
