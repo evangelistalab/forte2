@@ -278,7 +278,7 @@ def test_sci_make_sf_1rdm():
     )(rhf)
     sci.run()
 
-    rdm1 = sci.sub_solvers[0].make_sf_1rdm(0)
+    rdm1 = sci.sub_solvers[0].make_rdm(0, order=1, spin_type="sf")
     assert rdm1.shape == (4, 4)
     assert np.trace(rdm1) == pytest.approx(4.0, abs=1e-8)
     assert sci.E[0] == approx(-2.180967812920)
@@ -512,7 +512,11 @@ def test_sci_transition_dipole_different_nroots_matches_ci():
     assert sci.oscillator_strengths.keys() == ci.oscillator_strengths.keys()
 
     for key in [(0, 1), (0, 2)]:
-        assert np.allclose(sci.make_sf_1rdm(*key), ci.make_sf_1rdm(*key), atol=1e-6)
+        assert np.allclose(
+            sci.make_rdm(*key, order=1, spin_type="sf"),
+            ci.make_rdm(*key, order=1, spin_type="sf"),
+            atol=1e-6,
+        )
 
     for key in ci.transition_dipoles:
         assert np.abs(sci.transition_dipoles[key]) == pytest.approx(
@@ -524,7 +528,7 @@ def test_sci_transition_dipole_different_nroots_matches_ci():
 
 
 def test_sci_make_rdms():
-    """Test 1- and 2-RDMs from SelectedCI."""
+    """Test 1-/2-RDMs and the 2-cumulant from SelectedCI."""
     rhf = _h4_rhf()
 
     sci = SelectedCI(
@@ -545,14 +549,28 @@ def test_sci_make_rdms():
     ci.run()
 
     # Test the 1-RDM
-    sf_1rdm = sci.make_average_1rdm()
-    sf_1rdm_ci = ci.make_average_1rdm()
+    sf_1rdm = sci.make_average_rdm(1)
+    sf_1rdm_ci = ci.make_average_rdm(1)
     assert np.allclose(sf_1rdm, sf_1rdm_ci, atol=1e-8)
 
     # Test the 2-RDM
-    sf_2rdm = sci.make_average_2rdm()
-    sf_2rdm_ci = ci.make_average_2rdm()
+    sf_2rdm = sci.make_average_rdm(2)
+    sf_2rdm_ci = ci.make_average_rdm(2)
     assert np.allclose(sf_2rdm, sf_2rdm_ci, atol=1e-8)
+
+    # Test the 2-cumulant, per-root and state-averaged
+    assert np.allclose(
+        sci.make_cumulant(0, order=2, spin_type="sf"),
+        ci.make_cumulant(0, order=2, spin_type="sf"),
+        atol=1e-8,
+    )
+    assert np.allclose(
+        sci.make_average_cumulant(2), ci.make_average_cumulant(2), atol=1e-8
+    )
+
+    # Selected CI has no 3-RDM, so it offers no 3-cumulant either
+    with pytest.raises(ValueError, match=r"order must be one of \(2,\)"):
+        sci.make_cumulant(0, order=3, spin_type="sf")
 
 
 def _lih_noncontiguous_mo_space(system):
@@ -629,7 +647,7 @@ def test_sci_natural_noncontiguous_mo_space():
 
     assert sci_natural.E[0] == approx(sci_original.E[0])
 
-    g1_act = sci_natural.make_average_1rdm()
+    g1_act = sci_natural.make_average_rdm(1)
     off_diag = g1_act - np.diag(np.diag(g1_act))
     assert np.max(np.abs(off_diag)) < 1e-6
 

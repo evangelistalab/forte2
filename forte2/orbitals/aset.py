@@ -325,7 +325,7 @@ class ASET(Method):
         # Semi-canonicalize the blocks
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
-        g1 = self.parent_method.ci_solver.make_average_1rdm()
+        g1 = self.parent_method.ci_solver.make_average_rdm(1)
         emb_space = EmbeddingMOSpace(
             nmo=self.nmo,
             frozen_core_orbitals=frozen_core_inds,
