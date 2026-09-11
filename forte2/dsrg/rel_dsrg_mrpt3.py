@@ -15,6 +15,28 @@ from .utils import (
 )
 
 
+class _HermitianBlocks(dict):
+    """Two-body integral blocks holding one of each conjugate pair.
+
+    The Hamiltonian is Hermitian, so <pq||rs>* = <rs||pq>: the block whose
+    spaces read in reverse holds the same numbers, conjugated, with the two
+    index pairs swapped. Storing one of the two and deriving the other on
+    access trades resident memory for a copy that lives only as long as the
+    contraction it feeds -- and that contraction would have copied the block
+    anyway to lay it out for BLAS. Blocks are read a handful of times per run,
+    so the derivation is not on any hot path.
+
+    Self-reverse blocks ("avav", "cccc", ...) have no partner and are always
+    stored.
+    """
+
+    def __missing__(self, blk):
+        rev = blk[2:] + blk[:2]
+        if not dict.__contains__(self, rev):
+            raise KeyError(blk)
+        return dict.__getitem__(self, rev).transpose(2, 3, 0, 1).conj()
+
+
 @dataclass
 class RelDSRG_MRPT3(DSRGBase):
     """
@@ -176,8 +198,12 @@ class RelDSRG_MRPT3(DSRGBase):
         # built block by block rather than into a zeroed tensor: every block is
         # overwritten below, so pre-allocating the whole set only doubles the
         # largest block and wastes a pass over all of it
-        ints["V"] = dict()
+        ints["V"] = _HermitianBlocks()
         for blk in self.dsrg_helper.all_2_labels:
+            # a block and its reverse are conjugate transposes of one another,
+            # so building either one covers both
+            if blk[2:] + blk[:2] in ints["V"]:
+                continue
             p, q, r, s = blk
             V_blk = np.einsum("Ppr,Pqs->pqrs", B_so[p + r], B_so[q + s], optimize=True)
             # The exchange term (ps|qr) is a transpose of the direct term whenever the
