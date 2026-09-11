@@ -340,7 +340,7 @@ class DSRG_MRPT3(DSRGBase):
         corr -= 0.5 * np.einsum("iwau,vw,uv->ia", s2, faa, g1, optimize=True)
         return corr
 
-    def _renormalize(self, F, V, add):
+    def _renormalize(self, F, V, S2, add):
         """Scale F and V by (1 + R) if `add`, by R otherwise.
 
         R is the DSRG source factor exp(-s * denominator^2). Only the
@@ -356,9 +356,7 @@ class DSRG_MRPT3(DSRGBase):
             V -= bare
 
         d = eps["p"][:, None] - eps["h"][None, :]
-        f = (F + self._t1_active_correction(self.S2).T) * np.exp(
-            -self.flow_param * d**2
-        )
+        f = (F + self._t1_active_correction(S2).T) * np.exp(-self.flow_param * d**2)
         if add:
             F += f
         else:
@@ -428,7 +426,7 @@ class DSRG_MRPT3(DSRGBase):
 
     def _compute_energy_pt2(self, form_hbar):
         """The second-order term, from the once-renormalized bare Hamiltonian."""
-        self._renormalize(self.F, self.V, add=True)
+        self._renormalize(self.F, self.V, self.S2, add=True)
         E = self._evaluate_C0(self.F, self.V, self.T1, self.T2, self.S2)
         if form_hbar:
             self._accumulate_hbar(self.F, self.V, self.T1, self.T2, self.S2, 0.5)
@@ -478,18 +476,19 @@ class DSRG_MRPT3(DSRGBase):
         E = self._evaluate_C0(X1, X2, T1_2nd, T2_2nd, S2_2nd)
         if form_hbar:
             self._accumulate_hbar(X1, X2, T1_2nd, T2_2nd, S2_2nd, 0.5)
-        return E
+        return E, S2_2nd
 
-    def _compute_energy_pt3_3(self, form_hbar):
+    def _compute_energy_pt3_3(self, form_hbar, S2_2nd):
         """1/2 [Hbar2nd, A1st]."""
-        self._renormalize(self.F, self.V, add=False)
+        # Hbar2nd is renormalized against the second-order amplitudes, but the
+        # commutator that follows is with A1st, so the two use different orders.
+        self._renormalize(self.F, self.V, S2_2nd, add=False)
 
-        # S2 must go back to first order: the previous stage left it at second
-        S2 = 2 * self.T2_1st - self.T2_1st.swapaxes(2, 3)
-
-        E = self._evaluate_C0(self.F, self.V, self.T1_1st, self.T2_1st, S2)
+        E = self._evaluate_C0(self.F, self.V, self.T1_1st, self.T2_1st, self.S2)
         if form_hbar:
-            self._accumulate_hbar(self.F, self.V, self.T1_1st, self.T2_1st, S2, 0.5)
+            self._accumulate_hbar(
+                self.F, self.V, self.T1_1st, self.T2_1st, self.S2, 0.5
+            )
         return E
 
     # ------------------------------------------------------------------
@@ -521,8 +520,8 @@ class DSRG_MRPT3(DSRGBase):
         # order matters: each stage consumes state the next one overwrites
         self.e_dsrg_mrpt3_1 = self._compute_energy_pt3_1(form_hbar)
         self.e_dsrg_mrpt2 = self._compute_energy_pt2(form_hbar)
-        self.e_dsrg_mrpt3_2 = self._compute_energy_pt3_2(form_hbar)
-        self.e_dsrg_mrpt3_3 = self._compute_energy_pt3_3(form_hbar)
+        self.e_dsrg_mrpt3_2, S2_2nd = self._compute_energy_pt3_2(form_hbar)
+        self.e_dsrg_mrpt3_3 = self._compute_energy_pt3_3(form_hbar, S2_2nd)
 
         return (
             self.ints["E"]
