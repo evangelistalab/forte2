@@ -6,7 +6,7 @@ import numpy as np
 from scipy.linalg import eigh
 import pytest
 
-from forte2 import System, RHF, X2CParams
+from forte2 import RHF, System, X2CParams
 from forte2.lib import ints
 from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.system import coords_to_atoms, coords_to_xyz

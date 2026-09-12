@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, MCOptimizer, RelCISolver, AVAS, X2CParams
+from forte2 import AVAS, CI, GHF, MCOptimizer, RelCISolver, System, X2CParams
+from forte2.base_classes import CIParams
 from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN

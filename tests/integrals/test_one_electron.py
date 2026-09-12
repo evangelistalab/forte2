@@ -45,9 +45,11 @@ def test_gaussian_charge_distribution_integrals_2():
     import json
     from importlib import resources
 
-    with resources.files("forte2.data").joinpath("otterbein_symmetry_db.json").open(
-        "r"
-    ) as f:
+    with (
+        resources.files("forte2.data")
+        .joinpath("otterbein_symmetry_db.json")
+        .open("r") as f
+    ):
         bfile = json.load(f)
 
     xyz = bfile["30"]["xyz"]
