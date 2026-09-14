@@ -47,8 +47,8 @@ reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`.
 
 Active-space methods come in pairs, and the distinction is load-bearing.
 
-A **solver** (`CISolver`, `RelCISolver`, `SelectedCISolver`, `RelSelectedCISolver`, all on
-`base_classes/ci_base.py::CIBase`) answers one question: solve in the *current* orbital basis with
+A **solver** (`CISolver`, `RelCISolver`, `SelectedCISolver`, `RelSelectedCISolver`, `DMRGSolver`,
+`RelDMRGSolver`, all on `base_classes/ci_base.py::CIBase`) answers one question: solve in the *current* orbital basis with
 the *current* integrals. Its `run()` is idempotent and safe to call in a loop, and it never touches
 the orbitals. 
  `base_classes/ci_base.py::CIBase` owns everything representation-agnostic — the `_startup`/`run`
@@ -155,6 +155,8 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 ### Subsystem map (beyond the obvious)
 - `ci` — full / spin-adapted / GAS CI.
 - `sci` — selected CI / heat-bath CI (`SelectedCISolver`), usable as an active-space solver in MCSCF.
+- `dmrg` — DMRG through block2 (`DMRGSolver`, `RelDMRGSolver`), likewise usable in MCSCF; optional
+  dependency, see "Build" below.
 - `determinant` / `sparse` — determinant & bit-string representations, Slater rules, `SparseOperator`/`SparseState`.
 - `mcopt` — MCSCF/CASSCF/GASSCF optimizer, exposed as `forte2.MCOptimizer` (not `MCSCF`).
 - `dsrg` — DSRG-MRPT2 and its relativistic variant.
@@ -185,6 +187,11 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
   - `Libint2`, `Eigen3`, BLAS/LAPACK are required by CMake
 - `USE_LIBCINT` is enabled by default through `pyproject.toml`; override if needed:
   - `pip install . --config-settings=cmake.define.USE_LIBCINT=OFF`
+- Optional DMRG support (`forte2.dmrg`) needs `block2` (`pip install block2==0.5.3`), not part of
+  `environment.yml`. block2 links OpenMP/MKL in a way that can crash with an "MKL FATAL ERROR"
+  the first time a DMRG solver runs, if MKL-linked numpy/scipy are also loaded (common for
+  `defaults`-channel conda installs). CI sets `KMP_DUPLICATE_LIB_OK=TRUE` to avoid this
+  (`.github/workflows/build.yml`); set it yourself for local block2 use if you hit that crash.
 
 ## Test Commands
 - Fast local run:
