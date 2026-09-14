@@ -411,7 +411,13 @@ def test_ci_natural_noncontiguous_mo_space():
 
 @pytest.mark.parametrize(
     "final_orbitals",
-    ["original", "semicanonical", "natural", "ibo", "ibo_atomic"],
+    [
+        "original",
+        "semicanonical",
+        "natural",
+        "ibo",
+        "ibo_atomic",
+    ],
 )
 def test_ci_final_orbitals(final_orbitals):
     eref = -99.82331087176414

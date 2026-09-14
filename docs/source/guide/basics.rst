@@ -76,20 +76,26 @@ In addition to ``"original"``, ``"semicanonical"``, and ``"natural"``, real
 nonrelativistic calculations can request ``final_orbitals="ibo"`` to localize
 only the active orbitals. ``final_orbitals="ibo_atomic"`` performs the same IBO
 localization and then aligns atom-local blocks with the corresponding
-canonical, axis-oriented IAOs. Each assigned orbital is labeled by its atomic
-MINAO target and the final columns are ordered by atom index followed by the
-native Forte2 MINAO basis-function index. For example, the native order of a
-complete nitrogen valence shell is (2s, 2py, 2pz, 2px). The assignments are
-available as ``IBOAligner.atomic_orbital_assignments`` when using the
-post-processing class directly; unassigned orbitals are marked by ``None`` and
-follow the assigned orbitals in their original relative order.
+canonical, axis-oriented IAOs. It uses a rotation-invariant atomic-population
+test and pivoted-QR target selection, and performs the maximal-overlap alignment
+whenever the projected target space is full-rank. Weak target populations are
+treated as confidence diagnostics instead of rejecting the entire atomic block.
+Each assigned orbital is labeled by its atomic MINAO target. All IBO modes order
+the final active orbitals by the diagonal elements of the generalized Fock
+matrix (ascending) within each GAS partition. For ``ibo_atomic``, a summary
+reports the assigned target, target population, and dominant IAO character of
+every final orbital. Orbitals that cannot be assigned to an atom-local canonical
+target are reported as unassigned but remain localized IBOs. Assignments in the
+aligner's native atom/MINAO order are available as
+``IBOAligner.atomic_orbital_assignments`` when using the post-processing class
+directly.
 
 A block can span different atomic shells: a full valence block, for example,
 is aligned jointly before this final ordering. This applies to all angular
 momenta; d functions use Forte2's real-spherical convention. The alignment
 uses the molecule's input coordinate frame.
 
-Both IBO modes semicanonicalize the inactive orbital subspaces and localize
+All IBO modes semicanonicalize the inactive orbital subspaces and localize
 separate GAS partitions independently. They are available only when the system
 runs in C1 symmetry; use ``System(..., symmetry=False)``.
 

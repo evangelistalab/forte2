@@ -8,7 +8,7 @@ from forte2.orbitals import make_final_orbitals
 import forte2.orbitals.final_orbitals as final_orbitals_module
 import forte2.orbitals.ibo_align as ibo_align_module
 from forte2.orbitals.iao import IBO
-from forte2.orbitals.ibo_align import IBOAligner
+from forte2.orbitals.ibo_align import AtomicOrbitalAssignment, IBOAligner
 from forte2.helpers.comparisons import approx
 from forte2.system.basis_utils import BasisInfo
 
@@ -248,7 +248,7 @@ def test_ibo_atomic_order_follows_atom_and_native_minao_index(monkeypatch):
     ]
 
 
-def test_ibo_alignment_rejects_a_weak_target_direction(monkeypatch):
+def test_ibo_atomic_aligns_a_weak_but_full_rank_target(monkeypatch):
     labels = [
         SimpleNamespace(abs_idx=0, iatom=0, n=1, l=0, m=0),
         SimpleNamespace(abs_idx=1, iatom=0, n=2, l=0, m=0),
@@ -267,9 +267,10 @@ def test_ibo_alignment_rejects_a_weak_target_direction(monkeypatch):
     )
     ibo_aligner.nocc = 2
 
-    # Both orbitals have at least 95% of their IAO norm on atom 0. The best two
-    # target IAOs have squared singular values 1.0 and 0.85, however. The old
-    # average-weight test saw 0.925 and accepted this incomplete target space.
+    # Both orbitals have at least 95% of their IAO norm on atom 0, so the
+    # complete block passes the rotation-invariant locality test. The best two
+    # target IAOs have squared singular values 1.0 and 0.85, but are full-rank;
+    # target purity is therefore diagnostic and does not reject the alignment.
     S_iao_ibo = np.array(
         [
             [1.0, 0.0],
@@ -288,10 +289,179 @@ def test_ibo_alignment_rejects_a_weak_target_direction(monkeypatch):
         S_rotated.copy(), rotation.copy()
     )
 
-    np.testing.assert_allclose(S_aligned, S_rotated, atol=1.0e-12)
-    np.testing.assert_allclose(U_aligned, rotation, atol=1.0e-12)
+    np.testing.assert_allclose(S_aligned, S_iao_ibo, atol=1.0e-12)
+    np.testing.assert_allclose(U_aligned, np.eye(2), atol=1.0e-12)
+    assert len(ibo_aligner._cartesian_alignment_groups) == 1
+    assert [
+        assignment.minao_basis_index
+        for assignment in ibo_aligner.atomic_orbital_assignments
+    ] == [0, 1]
+
+
+def test_ibo_atomic_aligns_atom_local_radial_mixtures(monkeypatch):
+    labels = [
+        SimpleNamespace(abs_idx=0, iatom=0, n=3, l=2, m=0),
+        SimpleNamespace(abs_idx=1, iatom=0, n=4, l=2, m=0),
+        SimpleNamespace(abs_idx=2, iatom=0, n=3, l=2, m=1),
+        SimpleNamespace(abs_idx=3, iatom=0, n=4, l=2, m=1),
+        SimpleNamespace(abs_idx=4, iatom=0, n=5, l=2, m=0),
+        SimpleNamespace(abs_idx=5, iatom=0, n=5, l=2, m=1),
+    ]
+    monkeypatch.setattr(
+        ibo_align_module,
+        "BasisInfo",
+        lambda system, basis: SimpleNamespace(basis_labels=labels),
+    )
+
+    ibo_aligner = object.__new__(IBOAligner)
+    ibo_aligner.system = SimpleNamespace(
+        minao_basis=SimpleNamespace(center_first_and_last=[(0, 6)])
+    )
+    ibo_aligner.nocc = 2
+
+    # The complete orbital block is exactly atom-local, but each angular
+    # direction is distributed over two radial IAOs. The original atomic
+    # alignment rejects this because the best individual target overlaps are
+    # well below 0.9. The two rows with the largest individual weights are
+    # also linearly dependent; pivoted QR must instead select independent
+    # angular directions. The atomic alignment treats their populations as
+    # confidence diagnostics rather than acceptance thresholds.
+    S_iao_ibo = np.array(
+        [
+            [np.sqrt(0.50), 0.0],
+            [np.sqrt(0.40), 0.0],
+            [0.0, np.sqrt(0.35)],
+            [0.0, np.sqrt(0.34)],
+            [np.sqrt(0.10), 0.0],
+            [0.0, np.sqrt(0.31)],
+        ]
+    )
+    S_aligned, U_aligned = ibo_aligner._align_cartesian_atomic_orbitals(
+        S_iao_ibo.copy(), np.eye(2)
+    )
+
+    np.testing.assert_allclose(S_aligned, S_iao_ibo, atol=1.0e-12)
+    np.testing.assert_allclose(U_aligned, np.eye(2), atol=1.0e-12)
+    assert len(ibo_aligner._cartesian_alignment_groups) == 1
+    assert [
+        assignment.minao_basis_index
+        for assignment in ibo_aligner.atomic_orbital_assignments
+    ] == [0, 2]
+    _, locality_eigenvalues, singular_values = (
+        ibo_aligner._cartesian_alignment_diagnostics[0]
+    )
+    np.testing.assert_allclose(locality_eigenvalues, np.ones(2), atol=1.0e-12)
+    np.testing.assert_allclose(singular_values**2, [0.50, 0.35], atol=1.0e-12)
+
+
+def test_ibo_atomic_rejects_a_noninvariant_atom_local_block(monkeypatch):
+    labels = [
+        SimpleNamespace(abs_idx=0, iatom=0, n=2, l=0, m=0),
+        SimpleNamespace(abs_idx=1, iatom=0, n=2, l=1, m=0),
+        SimpleNamespace(abs_idx=2, iatom=1, n=1, l=0, m=0),
+        SimpleNamespace(abs_idx=3, iatom=1, n=2, l=0, m=0),
+    ]
+    monkeypatch.setattr(
+        ibo_align_module,
+        "BasisInfo",
+        lambda system, basis: SimpleNamespace(basis_labels=labels),
+    )
+
+    ibo_aligner = object.__new__(IBOAligner)
+    ibo_aligner.system = SimpleNamespace(
+        minao_basis=SimpleNamespace(center_first_and_last=[(0, 2), (2, 4)])
+    )
+    ibo_aligner.nocc = 2
+
+    # Both current orbitals have 0.91 population on atom 0, but an allowed
+    # rotation exposes a direction with only 0.82 population. The invariant
+    # eigenvalue test must therefore reject the proposed atom-local block.
+    atom_metric = np.array([[0.91, 0.09], [0.09, 0.91]])
+    atom_overlap = np.linalg.cholesky(atom_metric).T
+    other_overlap = np.linalg.cholesky(
+        np.eye(2) - atom_metric + 1.0e-14 * np.eye(2)
+    ).T
+    S_iao_ibo = np.vstack((atom_overlap, other_overlap))
+    S_aligned, U_aligned = ibo_aligner._align_cartesian_atomic_orbitals(
+        S_iao_ibo.copy(), np.eye(2)
+    )
+
+    np.testing.assert_allclose(S_aligned, S_iao_ibo, atol=1.0e-12)
+    np.testing.assert_allclose(U_aligned, np.eye(2), atol=1.0e-12)
     assert ibo_aligner._cartesian_alignment_groups == []
     assert ibo_aligner.atomic_orbital_assignments == (None, None)
+
+
+def test_ibo_atomic_summary_reports_main_iao_and_unassigned_orbitals(monkeypatch):
+    labels = [
+        SimpleNamespace(
+            abs_idx=0,
+            iatom=0,
+            Z=6,
+            Zidx=1,
+            n=2,
+            l=0,
+            m=0,
+            label=lambda: "2s",
+        ),
+        SimpleNamespace(
+            abs_idx=1,
+            iatom=0,
+            Z=6,
+            Zidx=1,
+            n=2,
+            l=1,
+            m=2,
+            label=lambda: "2px",
+        ),
+    ]
+    monkeypatch.setattr(
+        ibo_align_module,
+        "BasisInfo",
+        lambda system, basis: SimpleNamespace(basis_labels=labels),
+    )
+    info_messages = []
+    warning_messages = []
+    monkeypatch.setattr(ibo_align_module.logger, "log_info1", info_messages.append)
+    monkeypatch.setattr(
+        ibo_align_module.logger, "log_warning", warning_messages.append
+    )
+
+    ibo_aligner = object.__new__(IBOAligner)
+    ibo_aligner.system = SimpleNamespace(minao_basis=object())
+    ibo_aligner.nocc = 2
+    ibo_aligner.C_iao = np.eye(2)
+    ibo_aligner.S1 = np.eye(2)
+    ibo_aligner.C_ibo = np.array(
+        [[np.sqrt(0.6), 0.0], [np.sqrt(0.4), 1.0]]
+    )
+    ibo_aligner.atomic_orbital_assignments = (
+        AtomicOrbitalAssignment(0, 0, 2, 0, 0, "2s"),
+        None,
+    )
+
+    ibo_aligner.log_atomic_alignment_summary(
+        block_number=1,
+        order=np.array([1, 0]),
+        mo_indices=np.array([3, 4]),
+        orbital_energies=np.array([-0.4, 0.2]),
+    )
+
+    summary = info_messages[0]
+    assert "IBO atomic-alignment summary for GAS block 1" in summary
+    assert "C1 2px" in summary
+    assert "C1 2s" in summary
+    assert "unassigned" in summary
+    assert "-0.40000000" in summary
+    assert "0.6000" in summary
+    assert warning_messages == [
+        "1 of 2 IBO(s) in GAS block 1 could not be assigned to an atom-local "
+        "canonical IAO target. They remain converged localized IBOs.",
+        "1 of 2 IBO(s) in GAS block 1 have best-match canonical IAO target "
+        "populations below 0.900.\nThe reported targets are maximal-overlap labels, "
+        "not pure atomic-orbital assignments.\nIBO localization itself succeeded "
+        "for every orbital; this warning concerns only atomic-label confidence.",
+    ]
 
 
 @pytest.mark.parametrize("mode", ["ibo", "ibo_atomic"])
@@ -349,8 +519,13 @@ def test_ibo_final_orbitals_semicanonicalizes_inactive_space(mode):
     assert not np.allclose(np.abs(active_overlap), np.eye(2), atol=1e-3)
 
 
-@pytest.mark.parametrize(("mode", "aligned"), [("ibo", False), ("ibo_atomic", True)])
+@pytest.mark.parametrize(
+    ("mode", "aligned"),
+    [("ibo", False), ("ibo_atomic", True)],
+)
 def test_ibo_final_orbitals_preserves_gas_blocks(monkeypatch, mode, aligned):
+    info_messages = []
+
     class _InactiveSemicanonicalizer:
         def __init__(self, *, do_active, **kwargs):
             assert not do_active
@@ -358,21 +533,31 @@ def test_ibo_final_orbitals_preserves_gas_blocks(monkeypatch, mode, aligned):
         def semi_canonicalize(self, g1, C_contig):
             self.C_semican = C_contig.copy()
             self.C_semican[:, [0, 9]] *= -1
+            self.fock_semican = np.diag(np.arange(C_contig.shape[1], dtype=float))
 
     class _ReversingIBO:
         def __init__(self, system, C, **kwargs):
             self.C_ibo = C[:, ::-1]
+            self.U_ibo = np.eye(C.shape[1])[:, ::-1]
 
     class _PassThroughAligner:
         def __init__(self, ibo):
             self.C_ibo = ibo.C_ibo.copy()
+            self.U_ibo = ibo.U_ibo.copy()
 
         def align_to_atomic_orbitals(self):
             self.C_ibo *= -1
+            self.U_ibo *= -1
             return self.C_ibo
+
+        def log_atomic_alignment_summary(self, **kwargs):
+            pass
 
     monkeypatch.setattr(final_orbitals_module, "IBO", _ReversingIBO)
     monkeypatch.setattr(final_orbitals_module, "IBOAligner", _PassThroughAligner)
+    monkeypatch.setattr(
+        final_orbitals_module.logger, "log_info1", info_messages.append
+    )
     monkeypatch.setattr(
         final_orbitals_module, "Semicanonicalizer", _InactiveSemicanonicalizer
     )
@@ -397,7 +582,12 @@ def test_ibo_final_orbitals_preserves_gas_blocks(monkeypatch, mode, aligned):
     expected = C.copy()
     expected[:, [0, 9]] *= -1
     for block in ([1, 2, 3, 4], [5, 6, 7, 8]):
-        expected[:, block] = expected[:, block[::-1]]
+        # IBO first reverses each block. The resulting Fock diagonal is also
+        # reversed, so ascending-energy ordering restores the original order.
         if aligned:
             expected[:, block] *= -1
     np.testing.assert_array_equal(C_final, expected)
+    assert info_messages == [
+        "IBO localization succeeded for all 4 orbital(s) in GAS block 1.",
+        "IBO localization succeeded for all 4 orbital(s) in GAS block 2.",
+    ]

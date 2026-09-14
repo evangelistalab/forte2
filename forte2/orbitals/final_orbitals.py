@@ -11,7 +11,13 @@ from .natural_orbitals import NaturalOrbitals
 from .orbital_blocks import OrbitalBlockBuilder
 from .semicanonicalizer import Semicanonicalizer
 
-FinalOrbitals = Literal["original", "semicanonical", "natural", "ibo", "ibo_atomic"]
+FinalOrbitals = Literal[
+    "original",
+    "semicanonical",
+    "natural",
+    "ibo",
+    "ibo_atomic",
+]
 
 VALID_FINAL_ORBITALS = get_args(FinalOrbitals)
 
@@ -33,12 +39,16 @@ def make_final_orbitals(
 
     - ``"semicanonical"``: The active space is semicanonicalized.
     - ``"natural"``: The active space is rotated to make the active 1-RDM diagonal.
-    - ``"ibo"``: The active orbitals are localized as intrinsic bond orbitals (IBOs).
+    - ``"ibo"``: The active orbitals are localized as intrinsic bond orbitals
+      (IBOs) and ordered by their generalized-Fock diagonal elements.
     - ``"ibo_atomic"``: The active orbitals are localized and aligned to the
-      global axis-oriented IAOs and ordered by atom and native MINAO
-      basis-function index. Localization and ordering are applied separately
-      within each GAS partition, and both modes are available only in C1
-      symmetry.
+      global axis-oriented IAOs. Atom-local blocks are validated with a
+      rotation-invariant population matrix and maximally aligned to full-rank
+      projected IAO targets. Weak target populations are reported instead of
+      causing the entire block to be rejected. The final orbitals are ordered
+      by their generalized-Fock diagonal elements. Localization and ordering
+      are applied separately within each GAS partition, and both IBO modes are
+      available only in C1 symmetry.
 
     Parameters
     ----------
@@ -105,16 +115,47 @@ def make_final_orbitals(
         # calculation, so localize each active partition independently. Since
         # do_active=False above, these columns are still the input active MOs.
         orbital_blocks = OrbitalBlockBuilder(mo_space)
-        for active_block in orbital_blocks.active_blocks(relative_index=False):
+        for block_number, active_block in enumerate(
+            orbital_blocks.active_blocks(relative_index=False), start=1
+        ):
             if active_block.size < 2 and mode == "ibo":
                 continue
             ibo = IBO(system, C_final[:, active_block])
+            logger.log_info1(
+                f"IBO localization succeeded for all {active_block.size} orbital(s) "
+                f"in GAS block {block_number}."
+            )
             if mode == "ibo_atomic":
                 ibo_aligner = IBOAligner(ibo)
                 ibo_aligner.align_to_atomic_orbitals()
-                C_final[:, active_block] = ibo_aligner.C_ibo
+                C_localized = ibo_aligner.C_ibo
+                U_localized = ibo_aligner.U_ibo
             else:
-                C_final[:, active_block] = ibo.C_ibo
+                C_localized = ibo.C_ibo
+                U_localized = ibo.U_ibo
+
+            # The active block was deliberately left unchanged by the
+            # semicanonicalizer. Transform its generalized Fock matrix with the
+            # complete IBO (and, where applicable, atomic-alignment) rotation,
+            # then put the localized orbitals in ascending-energy order. Keep
+            # each GAS separate so this permutation cannot change the GAS
+            # variational space.
+            fock_block = semi.fock_semican[np.ix_(active_block, active_block)]
+            fock_localized = U_localized.T.conj() @ fock_block @ U_localized
+            orbital_energies = np.diag(fock_localized).real
+            energy_order = np.argsort(orbital_energies, kind="stable")
+            C_final[:, active_block] = C_localized[:, energy_order]
+
+            if mode == "ibo_atomic":
+                # Report the final, energy-ordered orbitals. These indices are
+                # the user-facing MO slots after contiguous ordering is undone.
+                mo_indices = np.asarray(mo_space.orig_to_contig)[active_block] + 1
+                ibo_aligner.log_atomic_alignment_summary(
+                    block_number=block_number,
+                    order=energy_order,
+                    mo_indices=mo_indices,
+                    orbital_energies=orbital_energies[energy_order],
+                )
         return C_final
 
     if mode == "natural":

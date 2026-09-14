@@ -1039,7 +1039,13 @@ def test_sci_set_ints_then_run_updates_slater_rules():
 
 @pytest.mark.parametrize(
     "final_orbitals",
-    ["original", "semicanonical", "natural", "ibo", "ibo_atomic"],
+    [
+        "original",
+        "semicanonical",
+        "natural",
+        "ibo",
+        "ibo_atomic",
+    ],
 )
 def test_sci_final_orbitals(final_orbitals):
     rhf = _h4_rhf()
