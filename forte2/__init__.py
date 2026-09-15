@@ -5,12 +5,6 @@ from .helpers.echo_script import echo_invoking_script
 
 # print the invoking python script to stdout
 echo_invoking_script()
-import os
-import sys
-
-# guard for block2 MKL FATAL ERRORs
-if hasattr(sys, "setdlopenflags") and hasattr(os, "RTLD_GLOBAL"):
-    sys.setdlopenflags(sys.getdlopenflags() | os.RTLD_GLOBAL)
 
 try:
     from forte2.lib import cpp_helpers
