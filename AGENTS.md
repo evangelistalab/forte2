@@ -47,8 +47,8 @@ reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`.
 
 Active-space methods come in pairs, and the distinction is load-bearing.
 
-A **solver** (`CISolver`, `RelCISolver`, `SelectedCISolver`, `RelSelectedCISolver`, all on
-`base_classes/ci_base.py::CIBase`) answers one question: solve in the *current* orbital basis with
+A **solver** (`CISolver`, `RelCISolver`, `SelectedCISolver`, `RelSelectedCISolver`, `DMRGSolver`,
+`RelDMRGSolver`, all on `base_classes/ci_base.py::CIBase`) answers one question: solve in the *current* orbital basis with
 the *current* integrals. Its `run()` is idempotent and safe to call in a loop, and it never touches
 the orbitals. 
  `base_classes/ci_base.py::CIBase` owns everything representation-agnostic — the `_startup`/`run`
@@ -155,6 +155,8 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 ### Subsystem map (beyond the obvious)
 - `ci` — full / spin-adapted / GAS CI.
 - `sci` — selected CI / heat-bath CI (`SelectedCISolver`), usable as an active-space solver in MCSCF.
+- `dmrg` — DMRG through block2 (`DMRGSolver`, `RelDMRGSolver`), likewise usable in MCSCF; optional
+  dependency, see "Build" below.
 - `determinant` / `sparse` — determinant & bit-string representations, Slater rules, `SparseOperator`/`SparseState`.
 - `mcopt` — MCSCF/CASSCF/GASSCF optimizer, exposed as `forte2.MCOptimizer` (not `MCSCF`).
 - `dsrg` — DSRG-MRPT2 and its relativistic variant.
@@ -185,6 +187,17 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
   - `Libint2`, `Eigen3`, BLAS/LAPACK are required by CMake
 - `USE_LIBCINT` is enabled by default through `pyproject.toml`; override if needed:
   - `pip install . --config-settings=cmake.define.USE_LIBCINT=OFF`
+- DMRG support (`forte2.dmrg`) is off by default because block2 takes ~10-30 min to compile.
+  Enable it and forte2 fetches and builds block2 itself, vendoring it under `forte2/_block2`:
+  - `pip install . --config-settings=cmake.define.USE_BLOCK2=ON`
+  - `BLOCK2_GIT_TAG` pins the version, `BLOCK2_BUILD_JOBS` the parallelism (block2 needs
+    roughly 1 GB per job)
+  Do **not** `pip install block2` instead. That wheel vendors its own MKL and libgomp, which then
+  service forte2's own BLAS calls: on CPUs whose MKL kernel the wheel omits it dies with
+  "Intel MKL FATAL ERROR" inside forte2's SCF, and elsewhere it silently shifts forte2's numerics
+  enough to change which root a CI Davidson converges to. Building block2 here links it against
+  the same BLAS and OpenMP runtime as the rest of forte2, which is what makes the
+  `RTLD_GLOBAL`/`KMP_DUPLICATE_LIB_OK` workarounds unnecessary.
 
 ## Test Commands
 - Fast local run:
