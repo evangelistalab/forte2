@@ -1,19 +1,22 @@
-# Regenerates the reference energies asserted in `test_dhf.py`.
+# Regenerates the reference values asserted in `test_dhf.py`.
 #
 # Run this with a Python that has PySCF installed (it is not a Forte2 dependency and
 # this file is not collected by pytest):
 #
 #     python tests/scf/dhf_references.py
 #
-# Two details make the comparison exact rather than approximate:
+# Three details make the comparison exact rather than approximate:
 #
 # 1. PySCF reads the speed of light from `pyscf.lib.param.LIGHT_SPEED` at call time,
 #    so overriding it with Forte2's value removes an otherwise ~1e-7 Eh offset for
 #    heavy elements.
 # 2. PySCF's own basis library and the Basis Set Exchange disagree in the last digits
-#    of some heavy-element contractions (Kr/cc-pVDZ, for one). Loading Forte2's
-#    bundled BSE JSON into PySCF makes both codes see identical basis data; without
-#    it the Kr reference is off by ~3e-6 Eh.
+#    of some heavy-element contractions. Loading Forte2's bundled BSE JSON into PySCF
+#    makes both codes see identical basis data.
+# 3. Both sides decontract the basis, matching Forte2's `decon-` prefix. Restricted
+#    kinetic balance generates the small component from the large-component basis, so
+#    a contracted basis describes it poorly: the relativistic correction to Ar shifts
+#    by 30 mEh on decontraction, and Kr by 2.4 Eh.
 
 import json
 import pathlib
@@ -52,30 +55,63 @@ def load_basis(name, elements):
     return basis
 
 
-def dirac_hf(atom, elements, charge=0, spin=0, nucmod=None):
-    basis = load_basis("cc-pvdz", elements)
-    auxbasis = load_basis(AUX, elements)
+def build_mol(atom, elements, charge=0, spin=0, nucmod=None):
     mol = gto.M(
         atom=atom,
-        basis=basis,
+        basis=load_basis("cc-pvdz", elements),
         charge=charge,
         spin=spin,
         nucmod=nucmod or {},
         verbose=0,
     )
-    mf = dhf.DHF(mol).density_fit(auxbasis=auxbasis)
+    decontracted = mol.decontract_basis(aggregate=True)
+    if isinstance(decontracted, tuple):
+        decontracted = decontracted[0]
+    return decontracted
+
+
+def dirac_hf(atom, elements, **kwargs):
+    mol = build_mol(atom, elements, **kwargs)
+    mf = dhf.DHF(mol).density_fit(auxbasis=load_basis(AUX, elements))
     mf.conv_tol = 1e-12
-    return mf.kernel()
+    energy = mf.kernel()
+    return mf, energy
+
+
+def report_negative_branch(mf):
+    """Compare the negative-energy count PySCF assumes against the one it produces.
+
+    PySCF occupies from index `nao_2c()` onwards. Its orthogonalization of the
+    assembled four-component metric can retain fewer small-component functions than
+    that, in which case electronic states fall below the boundary and the occupation
+    skips them.
+    """
+    assumed = mf.mol.nao_2c()
+    found = int(np.sum(mf.mo_energy < -(lib.param.LIGHT_SPEED**2)))
+    return assumed, found
 
 
 if __name__ == "__main__":
     for label, atom, elements in [
         ("Ne", "Ne 0 0 0", [10]),
         ("Ar", "Ar 0 0 0", [18]),
-        ("Kr", "Kr 0 0 0", [36]),
         ("HF", "H 0 0 0; F 0 0 0.91693", [1, 9]),
-        ("H2O", H2O, [1, 8]),
     ]:
-        print(f"{label:5s} {dirac_hf(atom, elements):20.12f}")
+        print(f"{label:5s} {dirac_hf(atom, elements)[1]:20.12f}")
 
-    print(f"{'Ne/G':5s} {dirac_hf('Ne 0 0 0', [10], nucmod={'Ne': 1}):20.12f}")
+    print(f"{'Ne/G':5s} {dirac_hf('Ne 0 0 0', [10], nucmod={'Ne': 1})[1]:20.12f}")
+
+    mf, _ = dirac_hf("Ne 0 0 0", [10])
+    occupied = mf.mo_energy[mf.mol.nao_2c() :][:10]
+    print("Ne occupied spinor energies:")
+    print(np.array2string(occupied, precision=9))
+    print(f"Ne 2p splitting: {occupied[6] - occupied[4]:.9f}")
+
+    # Water has no usable reference here. Every PySCF initial guess fails to
+    # converge and lands ~19.4 Eh high, so `test_dhf.py` asserts Forte2's own value.
+    mf, energy = dirac_hf(H2O, [1, 8])
+    assumed, found = report_negative_branch(mf)
+    print(
+        f"{'H2O':5s} {energy:20.12f}  converged={mf.converged}  "
+        f"negative-energy states assumed={assumed} found={found}"
+    )

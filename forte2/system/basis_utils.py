@@ -141,6 +141,24 @@ def shell_label_to_lm(shell_label):
     return [(l, m)]
 
 
+def is_contracted(basis):
+    """
+    Report whether any shell of a basis contracts more than one primitive.
+
+    Parameters
+    ----------
+    basis : Basis
+        The basis to inspect.
+
+    Returns
+    -------
+    bool
+        True if at least one shell has more than one primitive, False for a fully
+        decontracted basis.
+    """
+    return any(basis[i].nprim > 1 for i in range(basis.nshells))
+
+
 @dataclass
 class BasisInfo:
     """

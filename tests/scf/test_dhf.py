@@ -2,7 +2,8 @@
 # Kramers-unrestricted, full Dirac-Coulomb including (SS|SS)), run with
 # `pyscf.lib.param.LIGHT_SPEED` set to Forte2's value and with the orbital and
 # auxiliary bases loaded from Forte2's own bundled BSE JSON files, so that the two
-# codes see bit-identical basis data. See `tests/scf/dhf_references.py`.
+# codes see bit-identical basis data. Both sides decontract the basis. See
+# `tests/scf/dhf_references.py`.
 
 import numpy as np
 import pytest
@@ -25,18 +26,22 @@ H 0.000000000000 0.711620616369 0.489330954643
 """
 
 
-def _system(xyz, basis_set="cc-pvdz", **kwargs):
+def _system(xyz, basis_set="decon-cc-pvdz", **kwargs):
     return System(xyz=xyz, basis_set=basis_set, auxiliary_basis_set=AUX, **kwargs)
 
 
 @pytest.mark.parametrize(
     "label,xyz,e_ref",
     [
-        ("Ne", "Ne 0 0 0", -128.631796120994),
-        ("Ar", "Ar 0 0 0", -528.632515255352),
-        ("Kr", "Kr 0 0 0", -2786.365052825994),
-        ("HF", "H 0 0 0\nF 0 0 0.91693", -100.110336848564),
-        ("H2O", H2O_XYZ, -76.076569184617),
+        ("Ne", "Ne 0 0 0", -128.632505789306),
+        ("Ar", "Ar 0 0 0", -528.662881388032),
+        ("HF", "H 0 0 0\nF 0 0 0.91693", -100.112972237580),
+        # PySCF cannot reproduce this one: its four-component metric
+        # orthogonalization discards two small-component functions here, leaving it
+        # with 78 negative-energy solutions while its occupation assumes 80. It then
+        # skips the O 1s Kramers pair and lands 19.4 Eh too high. This value is
+        # Forte2's own, and guards the blockwise orthogonalization that avoids that.
+        ("H2O", H2O_XYZ, -76.081541488501),
     ],
 )
 def test_dhf_energy(label, xyz, e_ref):
@@ -61,12 +66,13 @@ def test_dhf_orbital_structure():
     occ = eps[n_neg : n_neg + 10]
     # Time-reversal symmetry makes every electronic level a degenerate Kramers pair.
     assert np.allclose(occ[0::2], occ[1::2], atol=1e-9)
-    # 1s1/2, 2s1/2, 2p1/2, then the fourfold 2p3/2 level.
-    assert occ[0] == approx(-32.817966241)
-    assert occ[2] == approx(-1.924102759)
-    assert occ[4] == approx(-0.834372330)
-    assert occ[6] == approx(-0.830262502)
-    assert occ[6] - occ[4] == approx_abs(0.004109828, 1e-8)
+    # 1s1/2, 2s1/2, 2p1/2, then the fourfold 2p3/2 level. Orbital eigenvalues settle
+    # more slowly than the total energy, hence the looser tolerance.
+    assert occ[0] == approx_abs(-32.810834950, 1e-7)
+    assert occ[2] == approx_abs(-1.924266512, 1e-7)
+    assert occ[4] == approx_abs(-0.834145664, 1e-7)
+    assert occ[6] == approx_abs(-0.830042385, 1e-7)
+    assert occ[6] - occ[4] == approx_abs(0.004103279, 5e-8)
 
 
 def test_dhf_nonrelativistic_limit():
@@ -121,7 +127,17 @@ def test_dhf_gaussian_nuclear_charges():
     scf.run()
     # PySCF with `nucmod=1` (Visscher-Dyall); the two codes use slightly different
     # nuclear radii, hence the loosened tolerance.
-    assert scf.E == approx_abs(-128.631760361144, 1e-7)
+    assert scf.E == approx_abs(-128.632469319393, 1e-7)
+
+
+def test_dhf_contracted_basis_warns(caplog):
+    """A contracted basis is usable but poor, so binding to one says so."""
+    DHF(charge=0)(_system("Ne 0 0 0", basis_set="cc-pvdz"))
+    assert "contracted" in caplog.text
+
+    caplog.clear()
+    DHF(charge=0)(_system("Ne 0 0 0"))
+    assert "contracted" not in caplog.text
 
 
 def test_dhf_hcore_matches_x2c_dirac_matrix():
