@@ -900,6 +900,46 @@ def coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
         return cint_coulomb_3c_opVop(system, basis1, basis2, basis3)
 
 
+def coulomb_3c_spsp(system, basis1=None, basis2=None, basis3=None):
+    r"""
+    Compute three-center Coulomb integrals over a small-component charge distribution.
+
+    .. math::
+        (P|[(\boldsymbol{\sigma}\cdot\mathbf{p})\phi_\mu]
+        [(\boldsymbol{\sigma}\cdot\mathbf{p})\phi_\nu])
+
+    Unlike :func:`coulomb_3c_opVop`, the auxiliary index is left uncontracted, which
+    is what density-fitted four-component methods need. Requires Libcint: Libint2
+    only provides the contracted form.
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The auxiliary basis. If None, defaults to ``system.auxiliary_basis``.
+    basis2 : BasisSet, optional
+        The orbital basis. If None, defaults to ``system.basis``.
+    basis3 : BasisSet, optional
+        The second orbital basis, which Libcint requires to equal ``basis2``.
+
+    Returns
+    -------
+    list[ndarray]
+        Four ``(naux, nbf, nbf)`` tensors in scalar, x, y, z Pauli-component order,
+        matching the convention of :func:`opVop`.
+    """
+    _require_libcint()
+    atm, bas, env, shell_slice = _parse_basis_args_cint_3c2e(
+        system, basis1, basis2, basis3
+    )
+    # Libcint returns x, y, z, scalar components. Its cross-product components use
+    # the opposite orbital-center order from Forte2, so change their signs while
+    # reordering to the scalar, x, y, z one-electron opVop convention.
+    raw = ints.cint_int3c2e_spsp1_sph(shell_slice, atm, bas, env)
+    return [raw[3], -raw[0], -raw[1], -raw[2]]
+
+
 def coulomb_2c(system, basis1=None, basis2=None):
     r"""
     Compute the two-center two-electron Coulomb integral between two basis sets.
