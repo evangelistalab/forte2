@@ -1,0 +1,198 @@
+from dataclasses import dataclass
+
+import numpy as np
+
+from forte2.helpers import logger
+from forte2.integrals import LIBCINT_AVAILABLE
+from forte2.jkbuilder.dirac_jkbuilder import DiracFockBuilder
+from forte2.system import ModelSystem
+from forte2.system.basis_utils import BasisInfo
+from forte2.x2c.x2c import LIGHT_SPEED
+from .dirac import dirac_hcore, dirac_orthogonalizer, dirac_overlap, dirac_sap_hcore
+from .rhf import RHF
+from .scf_base import SCFBase
+
+
+@dataclass
+class DHF(SCFBase):
+    r"""
+    Dirac-Hartree-Fock (four-component) method.
+
+    The orbitals are four-component spinors over a restricted kinetically balanced
+    basis, with the small component scaled by :math:`2c`:
+
+    .. math::
+        |\psi_i\rangle = \begin{bmatrix}
+        \sum_{\mu\sigma} c^{L\sigma}_{\mu i} |\chi_\mu\rangle\otimes|\sigma\rangle\\
+        \frac{1}{2c}\sum_{\mu\sigma} c^{S\sigma}_{\mu i}
+        (\boldsymbol{\sigma}\cdot\mathbf{p})|\chi_\mu\rangle\otimes|\sigma\rangle
+        \end{bmatrix}
+
+    The two-electron operator is the full Dirac-Coulomb one, so all of
+    :math:`(LL|LL)`, :math:`(SS|LL)` and :math:`(SS|SS)` are included. The Gaunt and
+    Breit terms are not.
+
+    Diagonalizing the Fock matrix yields ``n_negative`` negative-energy solutions
+    before the electronic ones; the occupied orbitals are the ``nel`` lowest states
+    above that branch. No Kramers restriction is imposed, so an odd number of
+    electrons breaks time-reversal symmetry, as it does in GHF.
+
+    Parameters
+    ----------
+    c_light : float, optional
+        The speed of light in atomic units. Raising it recovers the
+        non-relativistic limit, which is mostly useful for testing.
+
+    Attributes
+    ----------
+    n_negative : int
+        The number of negative-energy solutions, equal to the dimension of the
+        orthonormalized small-component space.
+    n_positive : int
+        The number of electronic solutions.
+    """
+
+    c_light: float = LIGHT_SPEED
+
+    _diis_update = RHF._diis_update
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = True
+        self.four_component = True
+        if self.c_light <= 0.0:
+            raise ValueError("c_light must be positive.")
+
+    def __call__(self, system):
+        if not LIBCINT_AVAILABLE:
+            raise RuntimeError(
+                "Dirac-Hartree-Fock needs the small-component three-center integrals, "
+                "which are only available through libcint. Rebuild forte2 with "
+                "USE_LIBCINT=ON."
+            )
+        if isinstance(system, ModelSystem):
+            raise ValueError("Dirac-Hartree-Fock requires an all-electron basis set.")
+        if system.x2c_type is not None:
+            raise ValueError(
+                "X2C already folds the small component into a two-component "
+                "Hamiltonian, so combining it with Dirac-Hartree-Fock would count "
+                "the relativistic terms twice. Build the System without x2c."
+            )
+        self = super().__call__(system)
+        self.Xorth, self.n_positive, self.n_negative = dirac_orthogonalizer(
+            system, c_light=self.c_light
+        )
+        if self.nel > self.n_positive:
+            raise ValueError(
+                f"{self.nel} electrons do not fit in {self.n_positive} electronic "
+                "spinors."
+            )
+        self.fock_builder_4c = DiracFockBuilder(system, c_light=self.c_light)
+        return self
+
+    def _get_hcore(self):
+        return dirac_hcore(self.system, c_light=self.c_light)
+
+    def _get_overlap(self):
+        return dirac_overlap(self.system, c_light=self.c_light)
+
+    def _occupied_orbitals(self):
+        return self.C[0][:, self.n_negative : self.n_negative + self.nel]
+
+    def _initial_guess(self, H, guess_type="minao"):
+        match guess_type:
+            case "minao":
+                h = dirac_sap_hcore(self.system, c_light=self.c_light)
+            case "hcore":
+                h = H
+            case _:
+                raise RuntimeError(f"Unknown initial guess type: {guess_type}")
+        _, C = self._eigh(h)
+        return [C]
+
+    def _eigh(self, F):
+        Ftilde = self.Xorth.conj().T @ F @ self.Xorth
+        e, c = np.linalg.eigh(Ftilde)
+        return e, self.Xorth @ c
+
+    def _diagonalize_fock(self, F):
+        eps, C = self._eigh(F[0])
+        return [eps], [C]
+
+    def _build_density_matrix(self):
+        Cocc = self._occupied_orbitals()
+        return [Cocc @ Cocc.conj().T]
+
+    def _build_total_density_matrix(self):
+        return self._build_density_matrix()[0]
+
+    def _build_fock(self, H, fock_builder, S):
+        J, K = self.fock_builder_4c.build_JK(self.D[0])
+        F = H + J - K
+        return [F], [F]
+
+    def _energy(self, H, F):
+        return (0.5 * np.einsum("mn,nm->", self.D[0], H + F[0])).real
+
+    def _build_ao_grad(self, S, F):
+        sdf = S @ self.D[0] @ F[0]
+        AO_grad = sdf.conj().T - sdf
+        return self.Xorth.conj().T @ AO_grad @ self.Xorth
+
+    def _apply_level_shift(self, F, S):
+        if self._current_level_shift is None or self._current_level_shift < 1e-4:
+            return F
+        # Shift only the electronic virtuals: the negative-energy branch must stay
+        # below the occupied states.
+        Cvir = self.C[0][:, self.n_negative + self.nel :]
+        D_vir = S @ (Cvir @ Cvir.conj().T) @ S
+        return [F[0] + self._current_level_shift * D_vir]
+
+    def _spin(self, S):
+        # Spin is not a good quantum number in a four-component treatment.
+        return 0.0
+
+    def _get_occupation(self):
+        self.nocc = self.nel
+        self.nuocc = self.n_positive - self.nel
+
+    def _assign_orbital_symmetries(self):
+        # Point-group classification of four-component spinors is not implemented.
+        nmo = self.C[0].shape[1]
+        self.irrep_labels = [["A"] * nmo]
+        self.irrep_indices = [[0] * nmo]
+
+    def _print_orbital_energies(self):
+        orb_per_row = 5
+        logger.log_info1("----------------------------")
+        logger.log_info1("Electronic Spinor Energies [Eh]")
+        logger.log_info1("----------------------------")
+        logger.log_info1(f"{self.n_negative} negative-energy solutions are not listed.")
+        for header, indices in (
+            ("Occupied:", range(self.nel)),
+            ("\nVirtual:", range(self.nel, self.n_positive)),
+        ):
+            logger.log_info1(header)
+            string = ""
+            for count, i in enumerate(indices):
+                if count % orb_per_row == 0:
+                    string += "\n"
+                idx = self.n_negative + i
+                string += f"{i:<4d} {self.eps[0][idx]:<12.6f} "
+            logger.log_info1(string)
+
+    def _print_ao_composition(self):
+        # The large component carries essentially all of an electronic spinor's norm,
+        # so the composition is reported over that block alone.
+        basis_info = BasisInfo(self.system, self.system.basis)
+        C_large = self.C[0][: 2 * self.nbf, self.n_negative :]
+        logger.log_info1("\nLarge-Component AO Composition of MOs (HOMO-5 to HOMO):")
+        basis_info.print_ao_composition(
+            C_large, list(range(max(self.nel - 6, 0), self.nel)), spinorbital=True
+        )
+        logger.log_info1("\nLarge-Component AO Composition of MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            C_large,
+            list(range(self.nel, min(self.nel + 6, self.n_positive))),
+            spinorbital=True,
+        )

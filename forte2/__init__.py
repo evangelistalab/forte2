@@ -19,7 +19,7 @@ from .integrals import integrals
 from .base_classes import X2CParams
 from .system import System, ModelSystem, HubbardModel
 from .state import State, RelState, MOSpace
-from .scf import RHF, ROHF, UHF, CUHF, GHF
+from .scf import RHF, ROHF, UHF, CUHF, GHF, DHF
 from .ci import CI, CISolver, RelCISolver
 from .sci import SelectedCISolver, RelSelectedCISolver
 from .x2c import x2c

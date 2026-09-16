@@ -14,6 +14,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Spin-orbit 1-electron exact two-component (so-1eX2C) [2]_
   * Spin-free and spin-orbit SAP-X2C with model two-electron picture-change effects [9]_
   * Various empirical scaling schemes to approximate two-electron spin-orbit couplings ("Boettger factors") [3]_
+  * Four-component Dirac-Coulomb Hamiltonian in a restricted kinetically balanced basis
 
 * Flavors of Hartree-Fock theory
   
@@ -22,6 +23,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Unrestricted Hartree-Fock (UHF)
   * Constrained unrestricted Hartree-Fock (CUHF)
   * Generalized Hartree-Fock (GHF)
+  * Four-component Dirac-Hartree-Fock (DHF)
 
 * A flexible configuration interaction (CI) module
   

@@ -152,7 +152,7 @@ class SCFBase(Method):
             self.basis_info = BasisInfo(self.system, self.system.basis)
 
         logger.log_info1(f"Number of electrons: {self.nel}")
-        if self._scf_type() != "GHF":  # not good quantum numbers for GHF
+        if self._scf_type() not in ("GHF", "DHF"):  # not good quantum numbers
             logger.log_info1(f"Number of alpha electrons: {self.na}")
             logger.log_info1(f"Number of beta electrons: {self.nb}")
             logger.log_info1(f"Ms: {self.ms}")
