@@ -272,7 +272,10 @@ def pretty_print_ci_nat_occ_numbers(
 
 
 def pretty_print_ci_dets(
-    sa_info: StateAverageInfo, mo_space: MOSpace, top_dets: list[list[list[tuple]]]
+    sa_info: StateAverageInfo,
+    mo_space: MOSpace,
+    top_dets: list[list[list[tuple]]],
+    two_component: bool = False,
 ):
     """
     Pretty print the top determinants for each root of the CI states.
@@ -286,6 +289,8 @@ def pretty_print_ci_dets(
     top_dets : list[list[list[tuple]]]
         A list of lists containing the top determinants and their coefficients for each root.
         This should be obtained from CISolver.get_top_determinants.
+    two_component : bool, optional, default=False
+        Whether the determinants are spinor occupations, printed as ``|1100>``.
     """
     width_per_det = 1 + max(12, mo_space.nactv + 2)  # '|2222000>'
     ndets_per_root = len(top_dets[0])
@@ -305,7 +310,10 @@ def pretty_print_ci_dets(
         dets = [det for det, _ in top_dets[i]]
         coeffs = [coeff for _, coeff in top_dets[i]]
         logstr = f"Root {i:<5}" + "".join(
-            [f"{d.str(norb):<{width_per_det}}" for d in dets]
+            [
+                f"{d.spinor_str(norb) if two_component else d.str(norb):<{width_per_det}}"
+                for d in dets
+            ]
         )
         logstr += (
             "\n"

@@ -16,7 +16,7 @@ namespace forte2 {
 // For an external determinant J connected to a variational determinant I by the excitation
 // generated below, the first-order (PT2 / Epstein-Nesbet) numerator is
 //     V_J = <J|H|Psi> = sum_I <J|H|I> c_I .
-// `singles_coupling_a(i, a, I)` and `Va(i, j, a, b)` evaluate the *I-side* matrix element
+// `singles_coupling(i, a, I)` and `Va(i, j, a, b)` evaluate the *I-side* matrix element
 // <I|H|J> (up to the excitation sign), so the bra-side element is its complex conjugate:
 //     <J|H|I> = sign * conj(integral)          (sign is real, +/-1).
 // (conj(Va(i,j,a,j)) = Va(a,j,i,j) and the differing self-terms vanish by antisymmetry, so the
@@ -39,8 +39,8 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
     std::vector<RelDetMap> map(nroots_);
     DetSet promoted;
 
-    std::vector<size_t> aocc(na_, 0);
-    std::vector<size_t> avir(norb_ - na_, 0);
+    std::vector<size_t> occ(nel_, 0);
+    std::vector<size_t> vir(norb_ - nel_, 0);
 
     for (size_t idx{0}, idx_max{dets_.size()}; idx < idx_max; ++idx) {
         const auto& det = dets_[idx];
@@ -50,28 +50,30 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
             max_abs_c = std::max(max_abs_c, std::abs(c_det[r]));
         }
 
-        size_t noa;
-        det.collect_alpha_occupied(aocc, noa);
-        collect_virtual_orbitals(aocc, avir, norb_);
-        size_t nva = norb_ - noa;
+        const SpinorString str(det);
+        size_t nocc;
+        det.find_set_bits(occ, nocc);
+        collect_virtual_orbitals(occ, vir, norb_);
+        size_t nvir = norb_ - nocc;
 
-        std::span<size_t> aocc_span(aocc.data(), noa);
-        std::span<size_t> avir_span(avir.data(), nva);
+        std::span<size_t> occ_span(occ.data(), nocc);
+        std::span<size_t> vir_span(vir.data(), nvir);
 
-        // single alpha excitations
-        for (const auto& i : aocc_span) {
+        // single excitations
+        for (const auto& i : occ_span) {
             if (!annihilation_allowed(i))
                 continue;
-            for (const auto& a : avir_span) {
+            for (const auto& a : vir_span) {
                 if (!creation_allowed(a))
                     continue;
-                const std::complex<double> integral = singles_coupling_a(i, a, det);
+                const std::complex<double> integral = singles_coupling(i, a, det);
                 const double criterion = std::abs(integral * max_abs_c);
 
                 if (criterion <= pt2_threshold)
                     continue;
 
-                const auto [new_det, sign] = create_single_a_excitation(det, i, a);
+                const auto [new_str, sign] = create_single_excitation_unchecked(str, i, a);
+                const Determinant new_det(new_str);
                 const std::complex<double> coupling = sign * std::conj(integral);
 
                 if (criterion > var_threshold) {
@@ -83,17 +85,17 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
             }
         }
 
-        // double alpha-alpha excitations
-        for (const auto& i : aocc_span) {
+        // double excitations
+        for (const auto& i : occ_span) {
             if (!annihilation_allowed(i))
                 continue;
-            for (const auto& j : aocc_span) {
+            for (const auto& j : occ_span) {
                 if (i >= j || !annihilation_allowed(j))
                     continue;
-                for (const auto& a : avir_span) {
+                for (const auto& a : vir_span) {
                     if (!creation_allowed(a))
                         continue;
-                    for (const auto& b : avir_span) {
+                    for (const auto& b : vir_span) {
                         if (a >= b || !creation_allowed(b))
                             continue;
 
@@ -102,7 +104,9 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
                         if (criterion <= pt2_threshold)
                             continue;
 
-                        const auto [new_det, sign] = create_double_aa_excitation(det, i, j, a, b);
+                        const auto [new_str, sign] =
+                            create_double_excitation_unchecked(str, i, j, a, b);
+                        const Determinant new_det(new_str);
                         const std::complex<double> coupling = sign * std::conj(integral);
 
                         if (criterion > var_threshold) {
@@ -296,12 +300,10 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
     promoted.clear();
 
     // size the caller's buffers on first use; later batches reuse them untouched
-    s.aocc.resize(na_);
-    s.avir.resize(norb_ - na_);
-    auto& aocc = s.aocc;
-    auto& avir = s.avir;
-
-    const auto a_string_size = ab_list_.first_string_size();
+    s.occ.resize(nel_);
+    s.vir.resize(norb_ - nel_);
+    auto& occ = s.occ;
+    auto& vir = s.vir;
 
     // The single place that decides whether a connection survives and what happens to it. Both
     // channels go through it, so neither can drift from the other, and it applies the same test
@@ -338,23 +340,14 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
         }
     };
 
-    // norb_mask is used to compute the allowed virtual creation indices
-    String norb_mask = String::zero();
+    SpinorString norb_mask = SpinorString::zero();
     norb_mask.fill_up_to(norb_);
 
-    Determinant new_det;
-    // Loop over all unique alpha strings. With nb == 0 each alpha string maps to exactly one
-    // determinant (the beta string is the single empty spectator), so the per-alpha-string
-    // coefficient "block" of the general helper collapses to one coefficient vector and the
-    // block-max collapses to that determinant's max |c|.
-    for (size_t i{0}; i < a_string_size; ++i) {
-        const String& a_str = ab_list_.sorted_first_string(i);
-        const auto& [b_str_idx, det_index] =
-            *ab_list_.second_string_to_det_index()[i].begin(); // single entry
-
-        // fix the (empty) beta spectator string for this determinant; only the alpha string is
-        // mutated by the excitations below
-        new_det.set_beta_string(ab_list_.sorted_second_string(b_str_idx));
+    const auto& perm = ab_list_.det_permutation();
+    // each determinant is its own first string, so string i is determinant perm[i]
+    for (size_t i{0}, nstrings{ab_list_.first_string_size()}; i < nstrings; ++i) {
+        const SpinorString& str = ab_list_.sorted_first_string(i);
+        const size_t det_index = perm[i];
 
         // CI coefficients of this determinant for all roots, viewed directly in c_ (no gather)
         std::span<const std::complex<double>> c_det(c_.data() + det_index * nroots_, nroots_);
@@ -367,38 +360,31 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
         if (abs_c_max_det == 0.0)
             continue;
 
-        // find the occupied and virtual orbitals for the current alpha string
-        auto a_str_annihilation_masked = a_str & ~frozen_annihilation_mask_;
-        // noa is the number of occupied alpha orbitals that we are allowed to annihilate from
-        size_t noa, nva;
-        a_str_annihilation_masked.find_set_bits(aocc, noa);
-        auto a_str_creation_masked = (~a_str & norb_mask) & ~frozen_creation_mask_;
-        // nva is the number of virtual alpha orbitals that we are allowed to create into
-        a_str_creation_masked.find_set_bits(avir, nva);
+        // occupied spinors that may be annihilated and virtual spinors that may be created
+        size_t nocc, nvir;
+        (str & ~frozen_annihilation_mask_).find_set_bits(occ, nocc);
+        ((~str & norb_mask) & ~frozen_creation_mask_).find_set_bits(vir, nvir);
 
-        // spans are more convenient for range-based for loops below
-        std::span<size_t> aocc_span(aocc.data(), noa);
-        std::span<size_t> avir_span(avir.data(), nva);
+        std::span<size_t> occ_span(occ.data(), nocc);
+        std::span<size_t> vir_span(vir.data(), nvir);
 
-        // single alpha excitations
-        for (const auto& i : aocc_span) {
-            for (const auto& a : avir_span) {
-                // *_unchecked avoids checking if i and a are already occupied/unoccupied
-                auto [new_a_str, sign] = create_single_excitation_unchecked(a_str, i, a);
-                // determine if this determinant belongs to the current batch
-                if (batch_of(new_a_str, num_batches) != batch_id) {
+        // single excitations
+        for (const auto& i : occ_span) {
+            for (const auto& a : vir_span) {
+                const auto [new_str, sign] = create_single_excitation_unchecked(str, i, a);
+                if (batch_of(new_str, num_batches) != batch_id) {
                     continue;
                 }
-                new_det.set_alpha_string(new_a_str);
-                const std::complex<double> integral = singles_coupling_a(i, a, new_det);
+                const Determinant new_det(new_str);
+                const std::complex<double> integral = singles_coupling(i, a, new_det);
                 accumulate(new_det, c_det, sign * std::conj(integral),
                            std::abs(integral * abs_c_max_det));
             }
         }
 
-        // double alpha-alpha excitations
-        for (const auto& i : aocc_span) {
-            for (const auto& j : aocc_span) {
+        // double excitations
+        for (const auto& i : occ_span) {
+            for (const auto& j : occ_span) {
                 if (i >= j)
                     continue;
                 const auto& v_list = va_sorted_[i * norb_ + j];
@@ -408,20 +394,20 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
                     if (std::fabs(key * abs_c_max_det) <= pt2_threshold)
                         break;
 
-                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b))
+                    if (str.get_bit(a) or str.get_bit(b))
                         continue;
 
-                    auto [new_a_str, sign] = create_double_excitation_unchecked(a_str, i, j, a, b);
+                    const auto [new_str, sign] =
+                        create_double_excitation_unchecked(str, i, j, a, b);
 
-                    if (batch_of(new_a_str, num_batches) != batch_id) {
+                    if (batch_of(new_str, num_batches) != batch_id) {
                         continue;
                     }
 
                     const double criterion = std::abs(integral * abs_c_max_det);
                     if (criterion <= pt2_threshold)
                         continue;
-                    new_det.set_alpha_string(new_a_str);
-                    accumulate(new_det, c_det, sign * std::conj(integral), criterion);
+                    accumulate(Determinant(new_str), c_det, sign * std::conj(integral), criterion);
                 }
             }
         }

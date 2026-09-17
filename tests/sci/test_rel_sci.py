@@ -1,13 +1,19 @@
+import itertools
+from math import comb
+
 import numpy as np
 import pytest
 
 from forte2 import (
     CI,
+    CISolver,
     GHF,
     MCOptimizer,
     MOSpace,
+    RHF,
     RelCISolver,
     SpinorUpcaster,
+    State,
     System,
     X2CParams,
 )
@@ -15,8 +21,10 @@ from forte2 import CI
 from forte2.sci import RelSelectedCISolver
 from forte2.helpers.comparisons import approx
 from forte2.base_classes.params import SelectedCIParams
-from forte2.lib.det import Determinant
+from forte2.lib import sparse_ops
+from forte2.lib.det import Determinant, RelSlaterRules
 from forte2.lib.ci_helpers import RelSelectedCIHelper
+from forte2.lib.sparse_ops import SparseState
 
 from rdm_debug_utils import make_so_1rdm_debug, make_so_2rdm_debug
 
@@ -444,3 +452,76 @@ def test_rel_sci_pt2_split_is_independent_of_var_threshold():
     for var_threshold in (1e-3, 1e-4, 1e-5, 1e-7, 0.0):
         var, pt = probe(var_threshold)
         assert var + pt == approx(ref_pt)
+
+
+def test_rel_sci_beyond_64_spinors():
+    """Relativistic selected CI over 70 spinors, which span both words of a Determinant.
+
+    With a spin-free Hamiltonian and every orbital active, the 2c energy of HeH+ equals the
+    one-component FCI energy. The Hamiltonian is also compared element by element against
+    RelSlaterRules and a SparseOperator on three-electron determinants that straddle spinor 64.
+    """
+
+    def make_system():
+        return System(
+            xyz="He 0.0 0.0 0.0\nH 0.0 0.0 1.5",
+            basis_set={"He": "cc-pvqz", "H": "cc-pvdz"},
+            auxiliary_basis_set="def2-universal-jkfit",
+            unit="bohr",
+        )
+
+    system = make_system()
+    nmo = system.nbf
+    nspinor = 2 * nmo
+    assert nspinor > Determinant.maxnorb
+
+    ci = CI(CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=nmo))(
+        RHF(charge=1, e_tol=1e-12)(system)
+    )
+    ci.run()
+
+    sci = CI(
+        RelSelectedCISolver(
+            nel=2,
+            active_orbitals=nspinor,
+            sci_params=SelectedCIParams(var_threshold=0.0, pt2_threshold=0.0),
+        )
+    )(GHF(charge=1, e_tol=1e-12)(make_system()))
+    sci.run()
+
+    solver = sci.ci_solver.sub_solvers[0]
+    assert len(solver.dets) == comb(nspinor, 2)
+    assert sci.E_ci[0] == approx(ci.E_ci[0])
+
+    ints = solver.ints
+    E = ints.E.real
+    dets = []
+    for occupied in itertools.combinations([0, 1, 2, 31, 63, 64, 65, 67, 69], 3):
+        d = Determinant.zero()
+        for i in occupied:
+            d.set_spinor(i, True)
+        dets.append(d)
+    ndet = len(dets)
+
+    helper = RelSelectedCIHelper(
+        nspinor, dets, np.eye(ndet, 1, dtype=complex), E, ints.H, ints.V, 0
+    )
+    H_sigma = np.zeros((ndet, ndet), dtype=complex)
+    for j in range(ndet):
+        basis = np.zeros(ndet, dtype=complex)
+        basis[j] = 1.0
+        sigma = np.zeros(ndet, dtype=complex)
+        helper.Hamiltonian(basis, sigma)
+        H_sigma[:, j] = sigma
+
+    rules = RelSlaterRules(nspinor, E, ints.H, ints.V)
+    H_rules = np.array([[rules.slater_rules(bra, ket) for ket in dets] for bra in dets])
+
+    ham = sparse_ops.sparse_operator_hamiltonian(E, ints.H, ints.V, 1e-14)
+    H_sparse = np.zeros((ndet, ndet), dtype=complex)
+    for j, ket in enumerate(dets):
+        H_ket = sparse_ops.apply_op(ham, SparseState({ket: 1.0}), screen_thresh=1e-14)
+        H_sparse[:, j] = [H_ket[bra] for bra in dets]
+
+    assert np.allclose(H_sigma, H_rules, atol=1e-10)
+    assert np.allclose(H_sparse, H_rules, atol=1e-10)

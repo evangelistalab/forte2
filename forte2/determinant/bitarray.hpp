@@ -573,12 +573,21 @@ template <size_t N> class BitArray {
     /// @param n the orbital index
     /// @return the fermionic sign
     double slater_sign(size_t n) const {
-        // Optimized version for 64 bits (skips counting the bits in the previous words)
-        if (n < bits_per_word) {
-            return ui64_sign(words_[0], n);
+        if constexpr (N == 128) {
+            // branchless, so the cost does not depend on which word holds bit n
+            const unsigned __int128 below =
+                ((static_cast<unsigned __int128>(words_[1]) << 64) | words_[0]) &
+                ((static_cast<unsigned __int128>(1) << n) - 1);
+            return parity_to_sign(std::popcount(static_cast<word_t>(below)) +
+                                  std::popcount(static_cast<word_t>(below >> 64)));
+        } else {
+            // Optimized version for 64 bits (skips counting the bits in the previous words)
+            if (n < bits_per_word) {
+                return ui64_sign(words_[0], n);
+            }
+            // parity for the word containing bit n x the parity of the previous words
+            return parity_to_sign(count(0, whichword(n))) * ui64_sign(getword(n), whichbit(n));
         }
-        // parity for the word containing bit n x the parity of the previous words
-        return parity_to_sign(count(0, whichword(n))) * ui64_sign(getword(n), whichbit(n));
     }
 
     /// @brief Return the fermionic sign corresponding to orbital n in reverse order
@@ -654,6 +663,29 @@ template <size_t N> class BitArray {
             double sign = ui64_sign_reverse(words_[word_m], whichbit(m)) *
                           ui64_sign(words_[word_n], whichbit(n));
             return (count % 2 == 0) ? sign : -sign;
+        }
+    }
+
+    /// @brief Return the fermionic sign of a^+_a a^+_b a_j a_i applied to this BitArray.
+    /// @param i the first occupied bit index
+    /// @param j the second occupied bit index
+    /// @param a the first unoccupied bit index
+    /// @param b the second unoccupied bit index
+    /// @return the fermionic sign, assuming i, j, a, and b are distinct
+    double slater_sign(size_t i, size_t j, size_t a, size_t b) const {
+        if ((((i < a) && (j < a) && (i < b) && (j < b)) == true) ||
+            (((i < a) || (j < a) || (i < b) || (j < b)) == false)) {
+            if ((i < j) ^ (a < b)) {
+                return (-1.0 * slater_sign(i, j) * slater_sign(a, b));
+            } else {
+                return (slater_sign(i, j) * slater_sign(a, b));
+            }
+        } else {
+            if ((i < j) ^ (a < b)) {
+                return (-1.0 * slater_sign(i, b) * slater_sign(j, a));
+            } else {
+                return (slater_sign(i, a) * slater_sign(j, b));
+            }
         }
     }
 
