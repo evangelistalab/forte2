@@ -152,3 +152,43 @@ def test_dhf_casscf_nonrelativistic_limit():
     assert deviations[10] < 0.0
     assert deviations[30] < 0.0
     assert deviations[10] / deviations[30] == approx_abs(9.0, 0.01)
+
+
+def test_dhf_casscf_positronic_rotation_is_negligible_for_valence():
+    """Optimizing electronic-positronic rotations leaves a valence CAS alone.
+
+    Under the no-pair approximation the energy is a minimum with respect to
+    rotations among electronic orbitals but a maximum with respect to rotations
+    into the positronic branch, so releasing the latter can only raise the
+    energy. Hoyer et al., J. Chem. Phys. 158, 044101 (2023), Table II, find the
+    two schemes identical to every digit they quote for valence active spaces of
+    Be through Ra; the effect is confined to deep-core correlation.
+    """
+    reference = _run("B")
+    assert reference.converged
+
+    scf = DHF(charge=1)(_system("B"))
+    scf.run()
+    relaxed = MCOptimizer(
+        RelCISolver(nel=5, core_orbitals=2, active_orbitals=8, nroots=6),
+        optimize_positronic=True,
+    )(scf)
+    relaxed.run()
+
+    assert relaxed.converged
+    assert relaxed.g_ep_rms < relaxed.g_tol
+    # Freezing the maximization leaves the energy spuriously low, so releasing it
+    # cannot lower the energy.
+    assert relaxed.E.real >= reference.E.real - 1e-12
+    assert relaxed.E.real == approx_abs(reference.E.real, 1e-9)
+
+
+def test_dhf_casscf_positronic_rotation_needs_four_components():
+    """Two-component references have no positronic branch to rotate into."""
+    scf = GHF(charge=0)(_system("Be"))
+    scf.run()
+    mc = MCOptimizer(RelCISolver(nel=4, active_orbitals=10), optimize_positronic=True)(
+        scf
+    )
+    with pytest.raises(ValueError, match="four-component"):
+        mc.run()

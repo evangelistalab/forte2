@@ -15,7 +15,7 @@ from forte2.helpers import logger, LBFGS
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.symmetry import real_sph_to_j_adapted
-from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
+from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer, RotationSubspace
 
 
 @dataclass
@@ -40,6 +40,14 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
         If True, raises an error if the optimization does not converge.
     freeze_inter_gas_rots : bool, optional, default=False
         Whether to freeze inter-GAS orbital rotations when multiple GASes are defined.
+    optimize_positronic : bool, optional, default=False
+        For a four-component reference, whether to also optimize rotations between
+        electronic and positronic spinors. The energy is a *maximum* along those
+        directions, so they are handled by alternating a maximization with the
+        electronic minimization, following Bates and Shiozaki, J. Chem. Phys. 142,
+        064112 (2015). Leaving this False gives the CASSCF+ scheme of Hoyer et al.,
+        J. Chem. Phys. 158, 044101 (2023), which is converged for valence active
+        spaces but overestimates deep-core correlation by roughly 10%.
     micro_maxiter : int, optional, default=6
         Maximum number of microiterations for L-BFGS.
     max_rotation : float, optional, default=0.2
@@ -78,6 +86,7 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
     die_if_not_converged: bool = True
 
     ### L-BFGS solver (microiteration) parameters
+    optimize_positronic: bool = False
     micro_maxiter: int = 6
     max_rotation: float = 0.2
 
@@ -125,6 +134,26 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
         # virtual slice does not include frozen orbitals!
         self.virt = self.mo_space.uocc
 
+        # Positronic spinors are never occupied under the no-pair approximation, so
+        # they are an optimizer concern only: they stay out of MOSpace, the CI space
+        # and the RDMs. Appending them after the electronic virtuals keeps the
+        # unoccupied block contiguous, which is what lets the existing gradient and
+        # diagonal Hessian expressions cover them unchanged.
+        self.npos = 0
+        if self.optimize_positronic:
+            if not getattr(self.ham, "four_component", False):
+                raise ValueError(
+                    "optimize_positronic requires a four-component reference."
+                )
+            if self.mo_space.nfrozen_virtual > 0:
+                raise NotImplementedError(
+                    "Electronic-positronic rotations with frozen virtual orbitals "
+                    "are not implemented."
+                )
+            self.npos = self.parent_method.n_negative
+            self._C = np.hstack((self._C, self.parent_method.C[0][:, : self.npos]))
+            self.virt = slice(self.virt.start, self.virt.stop + self.npos)
+
         # check if all active_frozen_orbitals indices are in the active space
         if self.active_frozen_orbitals is not None:
             assert (
@@ -140,6 +169,7 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
                 )
 
         self.nrr = self._get_nonredundant_rotations()
+        self.nrr_ep = self._get_positronic_rotations()
 
     def run(self):
         """
@@ -173,6 +203,29 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
             compute_active_hessian=self.mo_space.ngas > 1
             and not self.freeze_inter_gas_rots,
         )
+
+        # Under the no-pair approximation the energy is a minimum with respect to
+        # electronic rotations but a maximum with respect to electronic-positronic
+        # ones. Drive them as two objectives over disjoint blocks so that neither
+        # L-BFGS history can leak a wrong-signed direction into the other block.
+        self.ep_subspace = None
+        self.g_ep_rms = 0.0
+        if self.npos and self.nrr_ep.any():
+            self.orb_opt.rotation_mask = self.nrr | self.nrr_ep
+            self.ee_subspace = RotationSubspace(self.orb_opt, self.nrr)
+            self.ep_subspace = RotationSubspace(
+                self.orb_opt, self.nrr_ep, maximize=True
+            )
+            self.lbfgs_ep = LBFGS(
+                epsilon=self.g_tol,
+                max_dir=self.max_rotation,
+                step_length_method="max_correction",
+                maxiter=self.micro_maxiter,
+                dtype=self.dtype,
+            )
+            logger.log_info1(
+                f"# of electronic-positronic rotations: {self.nrr_ep.sum()}"
+            )
 
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
@@ -239,7 +292,16 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
             conv = False
             while self.iter < self.maxiter:
                 # 1. Optimize orbitals at fixed CI expansion
-                self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
+                if self.ep_subspace is None:
+                    self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
+                else:
+                    self.E_orb = self.lbfgs_solver.minimize(
+                        self.ee_subspace, self.ee_subspace.R
+                    )
+                    self.lbfgs_ep.minimize(self.ep_subspace, self.ep_subspace.R)
+                    g_ep = self.lbfgs_ep.g
+                    self.g_ep_rms = np.sqrt(np.mean((g_ep.conj() * g_ep).real))
+                    self.E_orb = self.orb_opt.reference_energy()
                 self._C = self.orb_opt.C.copy()
                 # 2. Convergence checks
                 _dg = self.lbfgs_solver.g - self.g_old
@@ -418,8 +480,22 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
 
         return nrr
 
+    def _get_positronic_rotations(self):
+        """Mask for rotations between occupied electronic and positronic spinors.
+
+        Positronic spinors pair only with the occupied blocks: a rotation between
+        two unoccupied spaces leaves the energy unchanged and is redundant.
+        """
+        nrr = np.zeros_like(self.nrr)
+        if not self.npos:
+            return nrr
+        pos = slice(self.mo_space.nmo, self.mo_space.nmo + self.npos)
+        nrr[pos, self.mo_space.docc] = True
+        nrr[pos, self.actv] = True
+        return nrr
+
     def _check_convergence(self):
-        is_grad_conv = self.g_rms < self.g_tol
+        is_grad_conv = self.g_rms < self.g_tol and self.g_ep_rms < self.g_tol
 
         self.max_ci_de = np.max(np.abs(self.E_ci - self.E_ci_old))
         is_ci_eigval_conv = self.max_ci_de < self.e_tol

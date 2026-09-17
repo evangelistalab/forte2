@@ -27,6 +27,10 @@ class OrbOptimizer:
         self.fock_builder = fock_builder
         self.hcore = hcore
         self.nrr = nrr
+        # Mask applied when screening the gradient and Hessian. It is the union of
+        # every rotation block, which differs from `nrr` only when a second block
+        # (electronic-positronic) is driven alongside the electronic one.
+        self.rotation_mask = nrr
         self.nrot = self.nrr.sum()
         self.e_nuc = e_nuc
         self.compute_active_hessian = compute_active_hessian
@@ -102,6 +106,31 @@ class OrbOptimizer:
         """
         self._compute_orbgrad()
         return 0.5 * (self.A_pq + self.A_pq.T.conj())
+
+    def reference_energy(self):
+        """Return the energy at the current orbitals."""
+        return self._compute_reference_energy()
+
+    def rotate(self, mask, dx):
+        """Apply an incremental rotation confined to one block of the mask.
+
+        `evaluate` tracks a cumulative rotation vector against a single mask.
+        This takes the increment directly instead, so several disjoint blocks can
+        drive the same optimizer without sharing a parameterization.
+        """
+        if dx.size == 0 or np.max(np.abs(dx)) < 1e-12:
+            return
+        nmo = self.C.shape[1]
+        X = np.zeros((nmo, nmo), dtype=self.C.dtype)
+        X[mask] = dx
+        X -= X.conj().T
+        self.U = self.U @ sp.linalg.expm(X)
+        self.C = self.C0 @ self.U
+        self.Cgen = self.C
+        self.Ccore = self.C[:, self.core]
+        self.Cact = self.C[:, self.actv]
+        self._compute_Fcore()
+        self.get_eri_gaaa()
 
     def _update_orbitals(self, R):
         dR = R - self.R
@@ -191,7 +220,7 @@ class OrbOptimizer:
 
         # compute g_rk (mo, core + active) block of gradient, [eq (9)]
         orbgrad = 2 * (self.A_pq - self.A_pq.T.conj())
-        orbgrad *= self.nrr
+        orbgrad *= self.rotation_mask
 
         return orbgrad
 
@@ -240,7 +269,7 @@ class OrbOptimizer:
             orbhess[self.actv, self.actv] -= 2.0 * (
                 diag_grad[self.actv, None] + diag_grad[None, self.actv]
             )
-        orbhess *= self.nrr
+        orbhess *= self.rotation_mask
 
         return orbhess
 
@@ -317,7 +346,7 @@ class RelOrbOptimizer(OrbOptimizer):
         self.Fock[np.abs(self.Fock) < 1e-12] = 0.0
 
         orbgrad = -2 * (self.Fock - self.Fock.T.conj()).conj()
-        orbgrad *= self.nrr
+        orbgrad *= self.rotation_mask
 
         return orbgrad
 
@@ -367,6 +396,56 @@ class RelOrbOptimizer(OrbOptimizer):
             orbhess[self.actv, self.actv] -= 2.0 * (
                 diag_grad[self.actv, None] + diag_grad[None, self.actv]
             )
-        orbhess = orbhess * self.nrr
+        orbhess = orbhess * self.rotation_mask
 
         return orbhess
+
+
+class RotationSubspace:
+    r"""
+    One block of an orbital rotation space, presented as an L-BFGS objective.
+
+    Pass ``maximize=True`` for the electronic-positronic block of a
+    four-component optimization. The Dirac-CASSCF energy is a minimum with
+    respect to rotations among electronic orbitals but a *maximum* with respect
+    to rotations between electronic and positronic ones, because the Hessian
+    there carries the :math:`-2c^2` energy denominator. Negating the objective
+    lets an ordinary minimizer carry out that maximization, which keeps L-BFGS
+    inside the positive-curvature regime that both its diagonal preconditioner
+    and its curvature guard assume.
+
+    Driving the two blocks as separate objectives also means they never share an
+    L-BFGS history, so a search direction cannot pick up a wrong-signed component
+    from the other block. This follows Bates and Shiozaki, J. Chem. Phys. 142,
+    064112 (2015), who alternate the two optimizations for the same reason.
+
+    Parameters
+    ----------
+    optimizer : OrbOptimizer
+        The optimizer supplying the energy, gradient and diagonal Hessian.
+    mask : NDArray
+        Boolean mask selecting this block out of the full rotation matrix.
+    maximize : bool, optional, default=False
+        Whether to maximize rather than minimize over this block.
+    """
+
+    def __init__(self, optimizer, mask, maximize=False):
+        self.optimizer = optimizer
+        self.mask = mask
+        self.sign = -1.0 if maximize else 1.0
+        self.nrot = int(mask.sum())
+        # `R` is handed to the optimizer, which mutates it in place, so the
+        # rotation already applied has to be tracked separately.
+        self.R = np.zeros(self.nrot, dtype=optimizer.C.dtype)
+        self._applied = np.zeros(self.nrot, dtype=optimizer.C.dtype)
+
+    def evaluate(self, x):
+        self.optimizer.rotate(self.mask, x - self._applied)
+        self._applied[:] = x
+        return self.sign * self.optimizer.reference_energy()
+
+    def gradient(self, x):
+        return self.sign * self.optimizer._compute_orbgrad()[self.mask]
+
+    def hess_diag(self, x):
+        return self.sign * self.optimizer._compute_orbhess()[self.mask]
