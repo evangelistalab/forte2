@@ -62,6 +62,11 @@ void CIStrings::startup() {
             norb_ += space_size;
         }
     }
+    if (norb_ > String::size()) {
+        throw std::invalid_argument("CIStrings: " + std::to_string(norb_) +
+                                    " orbitals exceed the string capacity of " +
+                                    std::to_string(String::size()) + ".");
+    }
 
     // Generate the allowed GAS occupation patterns for alpha and beta string
     debug([&]() {

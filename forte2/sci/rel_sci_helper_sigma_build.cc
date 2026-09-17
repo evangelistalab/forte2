@@ -20,11 +20,8 @@ void RelSelectedCIHelper::compute_det_energies() {
 }
 
 void RelSelectedCIHelper::prepare_strings() {
-    // Only the alpha-beta string list is needed: with nb == 0 the beta string is always empty, so
-    // there are no beta / beta-alpha excitation classes and the spin-flipped list of the real
-    // helper would be redundant.
     std::vector<Determinant> sorted_dets = dets_;
-    ab_list_ = SelectedCIStrings(norb_, sorted_dets);
+    ab_list_ = RelSelectedCIStrings(norb_, sorted_dets);
 }
 
 void RelSelectedCIHelper::Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const {
@@ -33,11 +30,9 @@ void RelSelectedCIHelper::Hamiltonian(np_vector_complex basis, np_vector_complex
     auto b_span = vector::as_span<std::complex<double>>(basis);
     auto s_span = vector::as_span<std::complex<double>>(sigma);
 
-    // With an empty beta string only the diagonal, single-alpha and double-alpha-alpha blocks
-    // contribute (H1b / H2b / H2ab all vanish).
     H0(b_span, s_span);
-    H1a(b_span, s_span);
-    H2a(b_span, s_span);
+    H1(b_span, s_span);
+    H2(b_span, s_span);
 }
 
 void RelSelectedCIHelper::H0(std::span<std::complex<double>> basis,
@@ -48,19 +43,12 @@ void RelSelectedCIHelper::H0(std::span<std::complex<double>> basis,
     }
 }
 
-// == The nb == 0 scatter (why there is no find_matching_dets) ==
-//
-// With an empty beta string every determinant is uniquely identified by its alpha string, so the
-// sorted first-string index i corresponds to exactly one determinant, det_permutation()[i], and
-// there is a single (empty) beta string. The general helper's find_matching_dets -- a size-1
-// hash-map lookup plus range / second-string indirection per matrix element -- therefore collapses
-// to a direct scatter:
-//     sigma[perm[i]] += int_sign * basis[perm[j]].
-// No conjugation is applied: Hermiticity is produced by the caller visiting both index orderings
-// ((p,q) and (q,p)), which contribute h(p,q) and h(q,p) = conj(h(p,q)) on separate iterations.
+// Each determinant is its own first string, so string i is determinant perm[i] and H1/H2 scatter
+// directly into sigma[perm[i]]. No conjugation is needed: the (p,q) and (q,p) orderings are both
+// visited.
 
-void RelSelectedCIHelper::H1a(std::span<std::complex<double>> basis,
-                              std::span<std::complex<double>> sigma) const {
+void RelSelectedCIHelper::H1(std::span<std::complex<double>> basis,
+                             std::span<std::complex<double>> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
     const auto& perm = ab_list_.det_permutation();
 
@@ -84,8 +72,8 @@ void RelSelectedCIHelper::H1a(std::span<std::complex<double>> basis,
     });
 }
 
-void RelSelectedCIHelper::H2a(std::span<std::complex<double>> basis,
-                              std::span<std::complex<double>> sigma) const {
+void RelSelectedCIHelper::H2(std::span<std::complex<double>> basis,
+                             std::span<std::complex<double>> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
     const auto& perm = ab_list_.det_permutation();
 

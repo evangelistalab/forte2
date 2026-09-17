@@ -10,7 +10,21 @@
 
 namespace forte2 {
 
-SelectedCIStrings::SelectedCIStrings(size_t norb, std::vector<Determinant>& dets) : norb_(norb) {
+namespace {
+template <typename StringT> std::pair<StringT, StringT> split_determinant(const Determinant& d);
+
+template <> std::pair<String, String> split_determinant(const Determinant& d) {
+    return {d.a_string(), d.b_string()};
+}
+
+template <> std::pair<SpinorString, SpinorString> split_determinant(const Determinant& d) {
+    return {SpinorString(d), SpinorString::zero()};
+}
+} // namespace
+
+template <typename StringT>
+SelectedCIStringsImpl<StringT>::SelectedCIStringsImpl(size_t norb, std::vector<Determinant>& dets)
+    : norb_(norb) {
     if (dets.empty()) {
         throw std::runtime_error("The list of determinants cannot be empty.");
     }
@@ -26,15 +40,15 @@ SelectedCIStrings::SelectedCIStrings(size_t norb, std::vector<Determinant>& dets
     build_two_hole_strings();
 }
 
-void SelectedCIStrings::initialize_sorted_strings(std::vector<Determinant>& dets) {
+template <typename StringT>
+void SelectedCIStringsImpl<StringT>::initialize_sorted_strings(std::vector<Determinant>& dets) {
     det_permutation_ = sort_permutation(dets, Determinant::reverse_less_than);
     apply_permutation_in_place(dets, det_permutation_);
 
     ndets_ = dets.size();
 
-    String first_string{dets[0].a_string()};
-    String second_string{dets[0].b_string()};
-    String old_first_string{first_string};
+    auto [first_string, second_string] = split_determinant<StringT>(dets[0]);
+    StringT old_first_string{first_string};
 
     size_t i = 0;
     first_string_range_.push_back({i, i + 1});
@@ -45,8 +59,7 @@ void SelectedCIStrings::initialize_sorted_strings(std::vector<Determinant>& dets
     sorted_dets_second_string_.push_back(second_string_index_[second_string]);
 
     for (size_t j{1}; j < ndets_; j++) {
-        first_string = dets[j].a_string();
-        second_string = dets[j].b_string();
+        std::tie(first_string, second_string) = split_determinant<StringT>(dets[j]);
         // check if the second string is new, and if so, add it and assign it an index
         if (second_string_index_.find(second_string) == second_string_index_.end()) {
             second_string_index_[second_string] = second_string_index_.size();
@@ -68,7 +81,8 @@ void SelectedCIStrings::initialize_sorted_strings(std::vector<Determinant>& dets
     first_string_range_[i].second = ndets_;
 }
 
-void SelectedCIStrings::build_second_string_to_det_index() {
+template <typename StringT>
+void SelectedCIStringsImpl<StringT>::build_second_string_to_det_index() {
     second_string_to_det_index_.reserve(first_string_range_.size());
     for (const auto [start, end] : first_string_range_) {
         ankerl::unordered_dense::map<size_t, size_t, std::hash<size_t>> map;
@@ -88,11 +102,12 @@ void SelectedCIStrings::build_second_string_to_det_index() {
     }
 }
 
-void SelectedCIStrings::build_one_hole_strings_and_lists(
-    const std::vector<String>& sorted_strings, std::vector<String>& one_hole_strings,
+template <typename StringT>
+void SelectedCIStringsImpl<StringT>::build_one_hole_strings_and_lists(
+    const std::vector<StringT>& sorted_strings, std::vector<StringT>& one_hole_strings,
     std::vector<std::vector<std::tuple<size_t, size_t, double>>>& list,
     std::vector<std::vector<std::tuple<size_t, size_t, double>>>& inverse_list,
-    ankerl::unordered_dense::map<String, size_t, String::Hash>& index_map) {
+    ankerl::unordered_dense::map<StringT, size_t, typename StringT::Hash>& index_map) {
     list.reserve(sorted_strings.size());
     std::vector<size_t> occ(norb_, 0); // at most norb occupied orbitals
     for (size_t i = 0, imax{sorted_strings.size()}; i < imax; ++i) {
@@ -107,7 +122,7 @@ void SelectedCIStrings::build_one_hole_strings_and_lists(
         // for each occupied orbital, create the one-hole string and store it
         for (size_t p = 0; p < n; ++p) {
             const size_t orb = occ[p];
-            String one_hole{str};
+            StringT one_hole{str};
             one_hole.set_bit(orb, false);
             // insert one-hole string into map if not already present
             auto [it, inserted] = index_map.try_emplace(one_hole, index_map.size());
@@ -128,7 +143,7 @@ void SelectedCIStrings::build_one_hole_strings_and_lists(
     }
 }
 
-void SelectedCIStrings::build_two_hole_strings() {
+template <typename StringT> void SelectedCIStringsImpl<StringT>::build_two_hole_strings() {
     two_hole_string_list_.reserve(sorted_first_string_.size());
     std::vector<size_t> occ(norb_, 0); // at most norb occupied orbitals
     for (size_t i = 0, imax{sorted_first_string_.size()}; i < imax; ++i) {
@@ -145,7 +160,7 @@ void SelectedCIStrings::build_two_hole_strings() {
             const size_t orb_p = occ[p];
             for (size_t q = p + 1; q < n; ++q) {
                 const size_t orb_q = occ[q];
-                String two_hole{first_str};
+                StringT two_hole{first_str};
                 double sign = 1.0;
                 two_hole.set_bit(orb_p, false);
                 sign *= two_hole.slater_sign(orb_p);
@@ -171,5 +186,8 @@ void SelectedCIStrings::build_two_hole_strings() {
         }
     }
 }
+
+template class SelectedCIStringsImpl<String>;
+template class SelectedCIStringsImpl<SpinorString>;
 
 } // namespace forte2
