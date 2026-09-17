@@ -123,7 +123,11 @@ class OrbOptimizer:
         return eM
 
     def _vec_to_mat(self, x):
-        R = np.zeros_like(self.C)
+        # The generator lives in the MO basis, which is smaller than the AO basis
+        # whenever the metric is truncated, and half the size for four-component
+        # spinors.
+        nmo = self.C.shape[1]
+        R = np.zeros((nmo, nmo), dtype=self.C.dtype)
         R[self.nrr] = x
         R += -R.T.conj()
         return R
