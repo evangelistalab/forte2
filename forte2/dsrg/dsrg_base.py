@@ -117,7 +117,7 @@ class DSRGBase(Method):
         self.V_orig = self.ci_solver.sub_solvers[0].ints.V.copy()
 
         self.semicanonicalizer = Semicanonicalizer(
-            system=self.system,
+            system=self.ham,
             mo_space=self.mo_space,
             irrep_indices=np.array(self.mos.irrep_indices[0])[
                 self.mo_space.orig_to_contig

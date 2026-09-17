@@ -151,8 +151,8 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
             The instance of the optimizer with the results stored in its attributes.
         """
         self._startup()
-        self.Hcore = self.system.ints_hcore()  # hcore in AO basis
-        fock_builder = self.system.fock_builder
+        self.Hcore = self.ham.ints_hcore()  # hcore in AO basis
+        fock_builder = self.ham.fock_builder
 
         # Intialize the two central objects for the two-step orbital-CI optimization:
         # orbital optimizer and CI optimizer
@@ -162,7 +162,7 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
         #       (this is typically done iteratively with micro-iterations using L-BFGS)
         #     2. minimize energy wrt CI expansion at current orbitals
         #       (this is just the diagonalization of the active-space CI Hamiltonian)
-        _OrbOptimizer = RelOrbOptimizer if self.system.two_component else OrbOptimizer
+        _OrbOptimizer = RelOrbOptimizer if self.ham.two_component else OrbOptimizer
         self.orb_opt = _OrbOptimizer(
             self._C,
             (self.core, self.actv, self.virt),
@@ -344,7 +344,19 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
         if isinstance(self.system, ModelSystem):
             return
         basis_info = BasisInfo(self.system, self.system.basis)
-        if getattr(self.system, "two_component", False):
+        if getattr(self.ham, "four_component", False):
+            # Electronic spinors carry essentially all of their norm in the large
+            # component, so the composition is reported over that block alone.
+            nbf = self.system.nbf
+            logger.log_info1("\nLarge-Component AO Composition of core MOs:")
+            basis_info.print_ao_composition(
+                self.mos.C[0][: 2 * nbf], self.mo_space.docc_indices, spinorbital=True
+            )
+            logger.log_info1("\nLarge-Component AO Composition of active MOs:")
+            basis_info.print_ao_composition(
+                self.mos.C[0][: 2 * nbf], self.mo_space.active_indices, spinorbital=True
+            )
+        elif getattr(self.system, "two_component", False):
             if getattr(self.system, "x2c_type", None) == "so":
                 if not hasattr(self, "Usph2j"):
                     ua, ub = real_sph_to_j_adapted(self.system.basis)

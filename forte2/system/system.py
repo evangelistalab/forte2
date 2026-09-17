@@ -436,6 +436,11 @@ class System:
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
 
+    @property
+    def ao_dim(self):
+        """Row dimension of an AO-basis coefficient matrix."""
+        return self.nbf * 2 if self.two_component else self.nbf
+
     def ints_overlap(self):
         """
         Return the overlap integrals for the system.
@@ -565,6 +570,11 @@ class ModelSystem:
         self.df_ortho_rtol = None
         self.fock_builder = FockBuilder(self)
         self.fock_builder_corr = self.fock_builder
+
+    @property
+    def ao_dim(self):
+        """Row dimension of an AO-basis coefficient matrix."""
+        return self.nbf * 2 if self.two_component else self.nbf
 
     def ints_overlap(self):
         return self.overlap

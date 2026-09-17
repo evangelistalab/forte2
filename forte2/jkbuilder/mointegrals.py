@@ -20,7 +20,10 @@ class RestrictedMOIntegrals:
     Parameters
     ----------
     system : System
-        The system for which to compute the integrals.
+        The system for which to compute the integrals. Any object exposing the
+        Hamiltonian interface (``nuclear_repulsion``, ``ints_hcore``,
+        ``fock_builder``, ``ao_dim``) is accepted, which is how four-component
+        methods reuse this class.
     C : NDArray
         The coefficient matrix for the molecular orbitals.
     orbitals : list[int]
@@ -94,8 +97,11 @@ class SpinorbitalIntegrals:
     Parameters
     ----------
     system : System
-        The system for which to compute the integrals.
-    C : NDArray, shape (2*nbf, *)
+        The system for which to compute the integrals. Any object exposing the
+        Hamiltonian interface (``nuclear_repulsion``, ``ints_hcore``,
+        ``fock_builder``, ``ao_dim``) is accepted, which is how four-component
+        methods reuse this class.
+    C : NDArray, shape (system.ao_dim, *)
         The coefficient matrix for the spinorbitals.
     spinorbitals : list[int] | range
         Subspace of the spinorbitals for which to compute the integrals.
@@ -123,7 +129,7 @@ class SpinorbitalIntegrals:
     def __post_init__(self):
         assert self.system.two_component, "System must be two-component."
         assert (
-            self.C.shape[0] == self.system.nbf * 2
+            self.C.shape[0] == self.system.ao_dim
         ), "C must be in the spinorbital basis."
         self.norb = len(self.spinorbitals)
         jkbuilder = self.system.fock_builder

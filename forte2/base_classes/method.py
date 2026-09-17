@@ -16,6 +16,10 @@ class Method(ABC):
     )
     # set of attributes that this method provides to downstream methods
     provides: set[str] = field(default_factory=set, init=False)
+    # Source of AO-basis Hamiltonian data: one-electron integrals, the Fock
+    # builder and the nuclear repulsion. This is the System for one- and
+    # two-component methods; four-component methods substitute their own.
+    ham: object | None = field(default=None, init=False)
     # Flags that all methods need to have
     two_component: bool | None = field(default=None, init=False)
     # Whether run() has been called and returned successfully
@@ -78,4 +82,5 @@ class Method(ABC):
             )
         self.parent_method = parent_method
         self.two_component = parent_method.two_component
+        self.ham = parent_method.ham
         self.called = True

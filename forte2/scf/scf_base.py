@@ -83,6 +83,7 @@ class SCFBase(Method):
             system, (System, ModelSystem)
         ), "System must be an instance of forte2.System"
         self.system = system
+        self.ham = system
         self.method = self._scf_type().upper()
         self.nel = self.system.Zsum - self.charge
         assert self.nel >= 0, "Number of electrons must be non-negative."
@@ -244,11 +245,18 @@ class SCFBase(Method):
 
         self._post_process()
         self.mos = MO(
-            self.C, self.two_component, self.irrep_labels, self.irrep_indices
+            self._mo_coefficients(),
+            self.two_component,
+            self.irrep_labels,
+            self.irrep_indices,
         )
 
         self.executed = True
         return self
+
+    def _mo_coefficients(self):
+        """Return the orbitals handed downstream, which need not be all of them."""
+        return self.C
 
     def _get_hcore(self):
         return self.system.ints_hcore()

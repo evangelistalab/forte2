@@ -156,7 +156,7 @@ class OrbOptimizer:
         Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
         self.Fcore = self._transform_ao_operator(Fcore_ao, self.Cgen)
 
-        core_factor = 0.5 if self.fock_builder.system.two_component else 1.0
+        core_factor = self.fock_builder.core_energy_factor
         self.Ecore = core_factor * np.trace(
             self._transform_ao_operator(
                 self.hcore + Fcore_ao,

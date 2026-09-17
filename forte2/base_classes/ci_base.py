@@ -231,7 +231,7 @@ class CIBase(ActiveSpaceSolver):
     def make_active_space_ints(self):
         """Build the active-space integrals for the current ``self.mos``."""
         return self._integrals_cls(
-            self.system,
+            self.ham,
             self.mos.C[0],
             self.active_indices,
             self.core_indices,
@@ -541,7 +541,7 @@ class RelCIBase(RelActiveSpaceSolver, CIBase):
 
     def _startup(self):
         super()._startup()
-        if not self.system.two_component:
+        if not self.ham.two_component:
             raise ValueError(
                 "RelCISolver requires a two-component system. Please use a parent method that can provide a two-component wavefunction."
             )

@@ -79,6 +79,11 @@ class FockBuilder:
             )
         return np.ascontiguousarray(self.B_Pmn.transpose((2, 0, 1)))
 
+    @property
+    def core_energy_factor(self):
+        """Prefactor relating Tr[(h + F) D] to the core energy."""
+        return 0.5 if self.system.two_component else 1.0
+
     def _check_df_metric(self):
         if isinstance(self.system, forte2.ModelSystem) or self.system.cholesky_tei:
             raise NotImplementedError(
@@ -802,6 +807,11 @@ class FockBuilderOTF:
             f"[FockBuilderOTF]: Memory budget: {self.jk_mem_thres_mb:.2f} MB, total allocated buffer size: {alloc_size_mb_P + nbuf_vt*alloc_size_mb_Q:.2f} MB"
         )
         self.cmplx = _cmplx
+
+    @property
+    def core_energy_factor(self):
+        """Prefactor relating Tr[(h + F) D] to the core energy."""
+        return 0.5 if self.system.two_component else 1.0
 
     def _require_complex(self):
         if not self.system.two_component:

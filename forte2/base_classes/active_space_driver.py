@@ -100,7 +100,7 @@ class ActiveSpaceDriver:
         C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
         C_final = make_final_orbitals(
             self.final_orbitals,
-            system=self.system,
+            system=self.ham,
             mo_space=self.mo_space,
             irrep_indices=irrep_indices,
             C_contig=C_contig,
