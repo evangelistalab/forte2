@@ -298,3 +298,23 @@ def test_gasci_rhf_11():
 
     assert rhf.E == approx(erhf)
     assert ci.E_ci[0] == approx(eci)
+
+
+@pytest.mark.parametrize("alg", ["kh", "hz", "exact"])
+def test_gasci_rhf_empty_gas_h2(alg):
+    system = System(
+        xyz="H 0.0 0.0 0.0\nH 0.0 0.0 1.4",
+        basis_set="aug-cc-pvtz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    scf = RHF(charge=0)(system)
+    scf.run()
+    ci_solver = CISolver(
+        State(nel=2, multiplicity=1, ms=0.0, gas_min=[0, 0], gas_max=[2, 0]),
+        active_orbitals=[[0, 1, 2], [3, 4]],
+        ci_params=CIParams(ci_algorithm=alg),
+    )
+    ci = CI(ci_solver)(scf)
+    ci.run()
+    assert ci.E_ci[0] == approx(-1.1330715346)
