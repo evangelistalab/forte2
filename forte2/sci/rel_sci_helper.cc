@@ -18,6 +18,16 @@ RelSelectedCIHelper::RelSelectedCIHelper(size_t norb, const std::vector<Determin
     if (dets.empty()) {
         throw std::runtime_error("The list of determinants cannot be empty.");
     }
+    nel_ = dets_[0].count_all();
+    for (const auto& det : dets_) {
+        if (det.count_all() != nel_) {
+            throw std::runtime_error("All determinants must have the same number of electrons.");
+        }
+        if (nel_ > 0 && det.find_last_one() >= norb_) {
+            throw std::runtime_error("Determinant " + det.str(norb_) +
+                                     " occupies a spinor outside the active space.");
+        }
+    }
 
     set_screening_criterion(screening_criterion);
     set_frozen_creation(frozen_creation);
@@ -27,20 +37,6 @@ RelSelectedCIHelper::RelSelectedCIHelper(size_t norb, const std::vector<Determin
     root_energies_.resize(nroots_, 0.0);
     ept2_var_.resize(nroots_, 0.0);
     ept2_pt_.resize(nroots_, 0.0);
-
-    na_ = dets_[0].count_alpha();
-    nb_ = dets_[0].count_beta();
-
-    if (nb_ != 0) {
-        throw std::runtime_error(
-            "RelSelectedCIHelper requires all electrons in the alpha string (nb == 0).");
-    }
-
-    for (const auto& det : dets_) {
-        if (det.count_alpha() != na_ || det.count_beta() != nb_) {
-            throw std::runtime_error("All determinants must have the same number of electrons.");
-        }
-    }
 
     compute_det_energies();
     prepare_strings();
@@ -75,7 +71,6 @@ void RelSelectedCIHelper::set_Hamiltonian(std::optional<double> E,
     }
 
     if (V) {
-        // Initialize the two-electron integrals v_ = <pq|rs> and v_a_ = <pq||rs>.
         if (V->ndim() != 4) {
             throw std::runtime_error("V must be a 4D tensor.");
         }
@@ -84,7 +79,6 @@ void RelSelectedCIHelper::set_Hamiltonian(std::optional<double> E,
             throw std::runtime_error("V shape does not match the number of orbitals.");
         }
 
-        v_.resize(norb_ * norb_ * norb_ * norb_);
         v_a_.resize(norb_ * norb_ * norb_ * norb_);
 
         auto v = V->view();
@@ -92,7 +86,6 @@ void RelSelectedCIHelper::set_Hamiltonian(std::optional<double> E,
             for (size_t q{0}; q < norb_; ++q) {
                 for (size_t r{0}; r < norb_; ++r) {
                     for (size_t s{0}; s < norb_; ++s, ++pqrs) {
-                        v_[pqrs] = v(p, q, r, s);
                         v_a_[pqrs] = v(p, q, r, s) - v(p, q, s, r);
                     }
                 }
@@ -137,18 +130,16 @@ void RelSelectedCIHelper::set_frozen_annihilation(const std::vector<size_t>& fro
 }
 
 void RelSelectedCIHelper::update_hbci_ints() {
-    // Precompute, for each occupied pair (p, q), a list of (criterion_key, <pq||rs>, r, s) sorted
-    // in descending order by the (real) key. Only the double alpha-alpha excitation class uses
-    // these lists (the beta / alpha-beta lists of the real helper are not needed when nb == 0).
+    // Precompute, for each occupied pair (p, q), a list of (criterion_key, <pq||rs>, r, s)
+    // sorted in descending order by the (real) key.
     va_sorted_.resize(norb_ * norb_);
     for (size_t p{0}; p < norb_; ++p) {
-        for (size_t q{0}; q < norb_; ++q) {
+        for (size_t q{p + 1}; q < norb_; ++q) {
             std::vector<std::tuple<double, std::complex<double>, u_int32_t, u_int32_t>> v_list;
-            v_list.reserve(norb_ * norb_);
             for (size_t r{0}; r < norb_; ++r) {
                 if (!creation_allowed(r))
                     continue;
-                for (size_t s{0}; s < norb_; ++s) {
+                for (size_t s{r + 1}; s < norb_; ++s) {
                     if (!creation_allowed(s))
                         continue;
                     const std::complex<double> v = Va(p, q, r, s);
@@ -163,6 +154,7 @@ void RelSelectedCIHelper::update_hbci_ints() {
             std::sort(v_list.rbegin(), v_list.rend(), [](const auto& lhs, const auto& rhs) {
                 return std::get<0>(lhs) < std::get<0>(rhs);
             });
+            v_list.shrink_to_fit();
             va_sorted_[p * norb_ + q] = std::move(v_list);
         }
     }
@@ -246,14 +238,11 @@ double RelSelectedCIHelper::compute_delta_ept2(double delta, double abs_v) const
     throw std::runtime_error("Unknown energy correction method");
 }
 
-std::complex<double> RelSelectedCIHelper::singles_coupling_a(size_t i, size_t a,
-                                                             const Determinant& d) const {
-    // <J|H|new_det> for the single excitation i -> a, matching RelSlaterRules::slater_rules for a
-    // single connection: h(i,a) + sum_{j occ} <ij||aj>. The beta loop of the non-relativistic
-    // SlaterRules::singles_coupling_a is empty here (nb == 0). The j == a term contributes
-    // <ia||aa> = 0 by antisymmetry, so no exclusion of j is needed.
+std::complex<double> RelSelectedCIHelper::singles_coupling(size_t i, size_t a,
+                                                           const Determinant& d) const {
+    // the j == i and j == a terms vanish by antisymmetry
     std::complex<double> coupling = h(i, a);
-    d.for_each_a_occ([&](size_t j) { coupling += Va(i, j, a, j); });
+    d.for_each_set_bit([&](size_t j) { coupling += Va(i, j, a, j); });
     return coupling;
 }
 

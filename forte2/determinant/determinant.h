@@ -12,6 +12,8 @@ size_t constexpr Norb = 64;
 size_t constexpr Norb2 = 2 * Norb;
 
 using String = StringImpl<Norb>;
+/// Two-component occupation string: spinor p is bit p of a Determinant.
+using SpinorString = StringImpl<Norb2>;
 using Determinant = DeterminantImpl<Norb2>;
 using Configuration = ConfigurationImpl<Norb2>;
 

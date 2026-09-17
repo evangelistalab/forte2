@@ -39,6 +39,14 @@ void export_det_api(nb::module_& m) {
 }
 
 namespace {
+void check_spinor_bounds(size_t n) {
+    if (n >= Determinant::size()) {
+        throw std::out_of_range("Spinor index " + std::to_string(n) +
+                                " is out of range for Determinant with capacity " +
+                                std::to_string(Determinant::size()) + ".");
+    }
+}
+
 void export_determinant_api(nb::module_& sub_m) {
     nb::class_<Determinant>(sub_m, "Determinant")
         .def(nb::init<const Determinant&>())
@@ -73,6 +81,9 @@ void export_determinant_api(nb::module_& sub_m) {
         .def_prop_ro_static(
             "maxnorb", [](nb::object /* self */) { return Determinant::norb(); },
             "The maximum number of orbitals supported by the Determinant class")
+        .def_prop_ro_static(
+            "maxnspinor", [](nb::object /* self */) { return Determinant::size(); },
+            "The maximum number of spinors supported by the Determinant class")
         .def(
             "__eq__", [](const Determinant& a, const Determinant& b) { return a == b; },
             "Check if two determinants are equal")
@@ -118,6 +129,29 @@ void export_determinant_api(nb::module_& sub_m) {
         .def(
             "count", [](Determinant& d) { return d.count_alpha() + d.count_beta(); },
             "Count the total number of electrons")
+        .def(
+            "set_spinor",
+            [](Determinant& d, size_t n, bool value) {
+                check_spinor_bounds(n);
+                d.set_bit(n, value);
+            },
+            "n"_a, "value"_a, "Set the occupation of spinor n (bit n of the determinant)")
+        .def(
+            "spinor",
+            [](const Determinant& d, size_t n) {
+                check_spinor_bounds(n);
+                return d.get_bit(n);
+            },
+            "n"_a, "Is spinor n occupied?")
+        .def(
+            "spinor_str",
+            [](const Determinant& d, size_t n) {
+                if (n > 0) {
+                    check_spinor_bounds(n - 1);
+                }
+                return d.str(n);
+            },
+            "n"_a = Determinant::size(), "Get the spinor occupation string of the first n spinors")
         .def(
             "create_alpha",
             [](Determinant& d, size_t n) {
