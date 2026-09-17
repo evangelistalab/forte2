@@ -1,6 +1,8 @@
+import pytest
+
 from forte2 import CI, CISolver, ROHF, State, System
 from forte2.helpers.comparisons import approx
-from forte2.base_classes import DavidsonLiuParams
+from forte2.base_classes import CIParams, DavidsonLiuParams
 
 
 def test_gasci_rohf_1():
@@ -85,3 +87,25 @@ def test_gasci_rohf_3():
 
     assert rhf.E == approx(-75.78642207312076)
     assert ci.E_ci[0] == approx(-56.130750582569)
+
+
+@pytest.mark.parametrize("alg", ["kh", "hz", "exact"])
+def test_gasci_rohf_empty_gas_h2p(alg):
+    """One electron (empty beta string) with an unoccupied GAS space; CI must equal ROHF."""
+    system = System(
+        xyz="H 0.0 0.0 0.0\nH 0.0 0.0 1.4",
+        basis_set="aug-cc-pvtz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    scf = ROHF(charge=1, ms=0.5, e_tol=1e-12, d_tol=1e-8)(system)
+    scf.run()
+    ci_solver = CISolver(
+        State(nel=1, multiplicity=2, ms=0.5, gas_min=[0, 0], gas_max=[2, 0]),
+        active_orbitals=[[0, 1, 2], [3, 4]],
+        ci_params=CIParams(ci_algorithm=alg),
+    )
+    ci = CI(ci_solver)(scf)
+    ci.run()
+    assert scf.E == approx(-0.569455040574)
+    assert ci.E_ci[0] == approx(-0.569455040574)
