@@ -30,12 +30,14 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Spin-adapted CI (CSF basis) for non-relativistic Hamiltonians
   * Support for generalized active spaces (GAS) / occupation-restricted multiple active spaces (ORMAS)
   * Two-component CI for relativistic Hamiltonians
+  * Four-component CI over the positive-energy spinors of a Dirac-Hartree-Fock reference
   * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
   
 * Multi-configuration self-consistent field (MCSCF) methods
   
   * Support for CAS-SCF and GAS-SCF/ORMAS-SCF, with state-averaging
   * Two-component CAS/GAS/ORMAS-SCF
+  * Four-component CAS/GAS/ORMAS-SCF under the no-pair approximation
   * Atomic valence active space (AVAS) active space selection (support for both one- and two-component Hartree-Fock) [4]_
 
 * Multi-reference driven similarity renormalization group (MR-DSRG) methods

@@ -78,6 +78,33 @@ def dirac_hf(atom, elements, **kwargs):
     return mf, energy
 
 
+def dhf_ci_from_forte2_integrals(path, norb, nelec, nroots=1):
+    """Re-solve a Forte2 active-space CI with PySCF's four-component FCI.
+
+    Export the active-space integrals from Forte2 first, for example::
+
+        ints = mc.ci_solver.sub_solvers[0].ints
+        np.savez("carbon.npz", E=ints.E, H=ints.H, V=ints.V)
+
+    Forte2 stores the two-electron integrals in physicist ordering,
+    ``V[p, q, r, s] = <pq|rs>``, while `fci_dhf_slow` expects chemist ordering.
+    """
+    from pyscf.fci import fci_dhf_slow
+
+    data = np.load(path)
+    eri = np.ascontiguousarray(data["V"].transpose(0, 2, 1, 3))
+    energies, _ = fci_dhf_slow.kernel(
+        data["H"],
+        eri,
+        norb,
+        nelec,
+        ecore=complex(data["E"]).real,
+        nroots=nroots,
+        verbose=0,
+    )
+    return np.asarray(energies).real
+
+
 def report_negative_branch(mf):
     """Compare the negative-energy count PySCF assumes against the one it produces.
 
@@ -106,6 +133,10 @@ if __name__ == "__main__":
     print("Ne occupied spinor energies:")
     print(np.array2string(occupied, precision=9))
     print(f"Ne 2p splitting: {occupied[6] - occupied[4]:.9f}")
+
+    # The carbon CASSCF roots in `tests/ci/test_dhf_ci.py` were reproduced with
+    # `dhf_ci_from_forte2_integrals("carbon.npz", 8, 4, nroots=9)`, which agreed to
+    # every printed digit.
 
     # Water has no usable reference here. Every PySCF initial guess fails to
     # converge and lands ~19.4 Eh high, so `test_dhf.py` asserts Forte2's own value.

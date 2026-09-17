@@ -4,11 +4,15 @@ import numpy as np
 
 from forte2.helpers import logger
 from forte2.integrals import LIBCINT_AVAILABLE
-from forte2.jkbuilder.dirac_jkbuilder import DiracFockBuilder
 from forte2.system import ModelSystem
 from forte2.system.basis_utils import BasisInfo, is_contracted
 from forte2.x2c.x2c import LIGHT_SPEED
-from .dirac import dirac_hcore, dirac_orthogonalizer, dirac_overlap, dirac_sap_hcore
+from .dirac import (
+    DiracHamiltonian,
+    dirac_orthogonalizer,
+    dirac_overlap,
+    dirac_sap_hcore,
+)
 from .rhf import RHF
 from .scf_base import SCFBase
 
@@ -86,6 +90,12 @@ class DHF(SCFBase):
                 "Hamiltonian, so combining it with Dirac-Hartree-Fock would count "
                 "the relativistic terms twice. Build the System without x2c."
             )
+        if getattr(system, "symmetry", False):
+            raise ValueError(
+                "Point-group classification of four-component spinors is not "
+                "implemented, so Dirac-Hartree-Fock cannot use molecular symmetry. "
+                "Build the System with symmetry=False."
+            )
         if is_contracted(system.basis):
             logger.log_warning(
                 "The basis set is contracted, which also constrains the small "
@@ -101,11 +111,11 @@ class DHF(SCFBase):
                 f"{self.nel} electrons do not fit in {self.n_positive} electronic "
                 "spinors."
             )
-        self.fock_builder_4c = DiracFockBuilder(system, c_light=self.c_light)
+        self.ham = DiracHamiltonian(system, c_light=self.c_light)
         return self
 
     def _get_hcore(self):
-        return dirac_hcore(self.system, c_light=self.c_light)
+        return self.ham.ints_hcore()
 
     def _get_overlap(self):
         return dirac_overlap(self.system, c_light=self.c_light)
@@ -141,8 +151,8 @@ class DHF(SCFBase):
         return self._build_density_matrix()[0]
 
     def _build_fock(self, H, fock_builder, S):
-        J, K = self.fock_builder_4c.build_JK(self.D[0])
-        F = H + J - K
+        J, K = self.ham.fock_builder.build_JK([self._occupied_orbitals()])
+        F = H + J[0] - K[0]
         return [F], [F]
 
     def _energy(self, H, F):
@@ -169,12 +179,19 @@ class DHF(SCFBase):
     def _get_occupation(self):
         self.nocc = self.nel
         self.nuocc = self.n_positive - self.nel
+        # `eps` spans the whole four-component spectrum; this is the part that
+        # lines up with `mos`.
+        self.eps_electronic = self.eps[0][self.n_negative :]
+
+    def _mo_coefficients(self):
+        # Downstream methods work in the no-pair space, so only the electronic
+        # spinors travel with `mos`. The negative-energy branch stays on `C`.
+        return [self.C[0][:, self.n_negative :]]
 
     def _assign_orbital_symmetries(self):
         # Point-group classification of four-component spinors is not implemented.
-        nmo = self.C[0].shape[1]
-        self.irrep_labels = [["A"] * nmo]
-        self.irrep_indices = [[0] * nmo]
+        self.irrep_labels = [["A"] * self.n_positive]
+        self.irrep_indices = [[0] * self.n_positive]
 
     def _print_orbital_energies(self):
         orb_per_row = 5

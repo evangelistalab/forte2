@@ -126,7 +126,7 @@ class DiracFockBuilder:
         out[:, nbf:, nbf:] = self.B_Pmn[lo:hi]
         return out
 
-    def _density_fitted_charges(self, Dll, Dss):
+    def _density_fitted_charges(self, Dll, Dss, hermi=True):
         r"""Return :math:`\rho_P`, the fitted total charge density.
 
         Both components are contracted without assembling any two-component tensor:
@@ -150,7 +150,8 @@ class DiracFockBuilder:
         ds = [Daa + Dbb, 1j * (Dab + Dba), Dba - Dab, 1j * (Daa - Dbb)]
         for w, d in zip(self.W_Pmn, ds):
             rho += np.einsum("Pmn,nm->P", w, d, optimize=True)
-        return rho.real
+        # A Hermitian density traced against a Hermitian B gives a real charge.
+        return rho.real if hermi else rho
 
     def _coulomb_from_charges(self, rho):
         """Contract the fitted charge density back into the two J blocks."""
@@ -164,7 +165,135 @@ class DiracFockBuilder:
         Jl_2c[nbf:, nbf:] = Jl
         return Jl_2c, Js
 
-    def build_JK(self, D):
+    @property
+    def core_energy_factor(self):
+        """Prefactor relating Tr[(h + F) D] to the core energy for spinors."""
+        return 0.5
+
+    def hcore(self):
+        """Return the four-component core Hamiltonian in the AO basis."""
+        from forte2.scf.dirac import dirac_hcore
+
+        return dirac_hcore(self.system, c_light=self.c_light)
+
+    def build_JK(self, C):
+        r"""
+        Compute the Coulomb and exchange matrices for a set of occupied spinors.
+
+        Parameters
+        ----------
+        C : list[NDArray]
+            A single-element list holding the occupied coefficients, shape
+            ``(4 nbf, nocc)``, matching the signature of
+            :meth:`~forte2.jkbuilder.FockBuilder.build_JK`.
+
+        Returns
+        -------
+        tuple(list[NDArray], list[NDArray])
+            Single-element lists holding the Coulomb (J) and exchange (K) matrices.
+        """
+        assert (
+            len(C) == 1
+        ), "C must be a list with one element for four-component systems."
+        J, K = self.build_JK_from_density(C[0] @ C[0].conj().T)
+        return [J], [K]
+
+    def build_JK_generalized(self, C, g1):
+        r"""
+        Compute Coulomb and exchange matrices for a correlated one-particle density.
+
+        Parameters
+        ----------
+        C : NDArray
+            Coefficients spanning the density, shape ``(4 nbf, n)``.
+        g1 : NDArray
+            The one-particle density matrix in that basis, shape ``(n, n)``.
+
+        Returns
+        -------
+        tuple(NDArray, NDArray)
+            The Coulomb (J) and exchange (K) matrices.
+        """
+        return self.build_JK_from_density(C @ g1 @ C.conj().T)
+
+    def build_core_fock(self, C_core, hcore=None):
+        """Build the core contribution to a generalized Fock matrix."""
+        if hcore is None:
+            hcore = self.hcore()
+        J, K = self.build_JK_from_density(C_core @ C_core.conj().T)
+        return hcore + J - K
+
+    def build_active_fock(self, C_act, g1):
+        """Build the active-density contribution to a generalized Fock matrix."""
+        J, K = self.build_JK_generalized(C_act, g1)
+        return J - K
+
+    def build_generalized_fock(self, C_core, C_act, g1, hcore=None):
+        """Build a multireference generalized Fock matrix in the AO basis."""
+        return self.build_core_fock(C_core, hcore=hcore) + self.build_active_fock(
+            C_act, g1
+        )
+
+    def B_tensor_gen_block_spinor(self, C1, C2):
+        r"""
+        Transform the three-center tensor into a block of four-component spinors.
+
+        Summing the large- and small-component channels collapses the two integral
+        classes into a single ``(naux, n1, n2)`` tensor, the same shape a
+        two-component transform produces. That is what lets the downstream
+        active-space and MCSCF machinery be reused unchanged.
+
+        Parameters
+        ----------
+        C1, C2 : NDArray
+            Coefficient matrices with ``4 nbf`` rows for the bra and ket indices.
+
+        Returns
+        -------
+        NDArray
+            The B tensor with shape ``(naux, C1.shape[1], C2.shape[1])``.
+        """
+        nbf = self.nbf
+        n2c = 2 * nbf
+        B = np.zeros((self.naux, C1.shape[1], C2.shape[1]), dtype=complex)
+        # The large-component tensor is block diagonal in spin, so both spin blocks
+        # contract against the same one-component tensor.
+        for sl in (slice(0, nbf), slice(nbf, n2c)):
+            B += np.einsum(
+                "Pmn,mi,nj->Pij",
+                self.B_Pmn,
+                C1[sl, :].conj(),
+                C2[sl, :],
+                optimize=True,
+            )
+        C1s = np.ascontiguousarray(C1[n2c:, :].conj())
+        C2s = np.ascontiguousarray(C2[n2c:, :])
+        block = self._aux_block_size()
+        for lo in range(0, self.naux, block):
+            hi = min(lo + block, self.naux)
+            B[lo:hi] += np.einsum(
+                "Pmn,mi,nj->Pij",
+                self._assemble_small(lo, hi),
+                C1s,
+                C2s,
+                optimize=True,
+            )
+        return B
+
+    def two_electron_integrals_gen_block_spinor(self, C1, C2, C3, C4):
+        r"""Two-electron integrals :math:`\langle pq|rs\rangle` over spinor blocks."""
+        return np.einsum(
+            "Ppr,Pqs->pqrs",
+            self.B_tensor_gen_block_spinor(C1, C3),
+            self.B_tensor_gen_block_spinor(C2, C4),
+            optimize=True,
+        )
+
+    def two_electron_integrals_block_spinor(self, C):
+        r"""Two-electron integrals over a single set of four-component spinors."""
+        return self.two_electron_integrals_gen_block_spinor(*(C,) * 4)
+
+    def build_JK_from_density(self, D, hermi=True):
         r"""
         Compute the four-component Coulomb and exchange matrices.
 
@@ -172,6 +301,9 @@ class DiracFockBuilder:
         ----------
         D : NDArray
             The four-component density matrix, shape ``(4 nbf, 4 nbf)``.
+        hermi : bool, optional, default=True
+            Whether ``D`` is Hermitian, which lets the lower off-diagonal block of
+            K be taken from the upper one.
 
         Returns
         -------
@@ -181,12 +313,13 @@ class DiracFockBuilder:
         n2c = 2 * self.nbf
         Dll = D[:n2c, :n2c]
         Dls = D[:n2c, n2c:]
+        Dsl = D[n2c:, :n2c]
         Dss = D[n2c:, n2c:]
 
         J = np.zeros_like(D)
         K = np.zeros_like(D)
 
-        rho = self._density_fitted_charges(Dll, Dss)
+        rho = self._density_fitted_charges(Dll, Dss, hermi=hermi)
         J[:n2c, :n2c], J[n2c:, n2c:] = self._coulomb_from_charges(rho)
 
         block = self._aux_block_size()
@@ -197,6 +330,10 @@ class DiracFockBuilder:
             K[:n2c, :n2c] += np.einsum("Pms,sr,Prn->mn", BL, Dll, BL, optimize=True)
             K[:n2c, n2c:] += np.einsum("Pms,sr,Prn->mn", BL, Dls, BS, optimize=True)
             K[n2c:, n2c:] += np.einsum("Pms,sr,Prn->mn", BS, Dss, BS, optimize=True)
-        # A Hermitian density makes K Hermitian, so the lower block mirrors the upper.
-        K[n2c:, :n2c] = K[:n2c, n2c:].conj().T
+            if not hermi:
+                K[n2c:, :n2c] += np.einsum("Pms,sr,Prn->mn", BS, Dsl, BL, optimize=True)
+        if hermi:
+            # A Hermitian density makes K Hermitian, so the lower block mirrors the
+            # upper one.
+            K[n2c:, :n2c] = K[:n2c, n2c:].conj().T
         return J, K

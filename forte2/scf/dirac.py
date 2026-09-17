@@ -2,6 +2,7 @@ import numpy as np
 
 from forte2 import integrals
 from forte2.helpers import block_diag_2x2, canonical_orth, i_sigma_dot, logger
+from forte2.jkbuilder.dirac_jkbuilder import DiracFockBuilder
 from forte2.system.build_basis import build_sap_potential_basis
 from forte2.x2c.x2c import LIGHT_SPEED
 
@@ -181,3 +182,59 @@ def dirac_orthogonalizer(system, basis=None, c_light=LIGHT_SPEED, rtol=None):
             f"{info_s['n_discarded']} small-component functions."
         )
     return X, n_large, n_small
+
+
+class DiracHamiltonian:
+    """
+    AO-basis Hamiltonian data for four-component methods.
+
+    This stands in for :class:`~forte2.System` wherever a method asks for
+    one-electron integrals, a Fock builder or the nuclear repulsion. Keeping it
+    separate from the System leaves ``System.two_component`` and the
+    one/two-component Fock builder untouched, so a four-component calculation can
+    share a System with other methods.
+
+    Parameters
+    ----------
+    system : System
+        The molecular system.
+    c_light : float, optional
+        The speed of light in atomic units.
+    """
+
+    def __init__(self, system, c_light=LIGHT_SPEED):
+        self.system = system
+        self.c_light = c_light
+        self.fock_builder = DiracFockBuilder(system, c_light=c_light)
+        self.two_component = True
+        self.four_component = True
+        self._hcore = None
+
+    @property
+    def nbf(self):
+        return self.system.nbf
+
+    @property
+    def nmo(self):
+        return self.system.nmo
+
+    @property
+    def ao_dim(self):
+        """Row dimension of a four-component AO coefficient matrix."""
+        return 4 * self.system.nbf
+
+    @property
+    def nuclear_repulsion(self):
+        return self.system.nuclear_repulsion
+
+    @property
+    def point_group(self):
+        return self.system.point_group
+
+    def ints_hcore(self):
+        if self._hcore is None:
+            self._hcore = dirac_hcore(self.system, c_light=self.c_light)
+        return self._hcore
+
+    def ints_overlap(self):
+        return dirac_overlap(self.system, c_light=self.c_light)

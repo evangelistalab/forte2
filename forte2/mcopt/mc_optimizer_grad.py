@@ -956,6 +956,10 @@ def _validate_converged_casscf_gradient(mc) -> None:
             "Nonrelativistic CASSCF/GASSCF gradients with complex orbitals are not "
             "implemented."
         )
+    if getattr(mc.ham, "four_component", False):
+        raise NotImplementedError(
+            "Four-component CASSCF/GASSCF nuclear gradients are not implemented."
+        )
     if is_relativistic and mc.mos.C[0].shape[0] != 2 * mc.system.nbf:
         raise ValueError(
             "Relativistic CASSCF/GASSCF gradients require spinor AO coefficients "
