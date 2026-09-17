@@ -128,7 +128,9 @@ def dirac_sap_hcore(system, basis=None, c_light=LIGHT_SPEED):
     return h
 
 
-def dirac_orthogonalizer(system, basis=None, c_light=LIGHT_SPEED, rtol=None):
+def dirac_orthogonalizer(
+    system, basis=None, c_light=LIGHT_SPEED, rtol=None, kinetic_rtol=1e-12
+):
     r"""
     Canonically orthogonalize the large and small metric blocks separately.
 
@@ -148,8 +150,18 @@ def dirac_orthogonalizer(system, basis=None, c_light=LIGHT_SPEED, rtol=None):
     c_light : float, optional
         The speed of light in atomic units.
     rtol : float, optional
-        Relative threshold for discarding metric eigenvalues. If None, defaults to
-        ``system.overlap_ortho_rtol``.
+        Relative threshold for discarding large-component metric eigenvalues. If
+        None, defaults to ``system.overlap_ortho_rtol``.
+    kinetic_rtol : float, optional
+        Relative threshold for the small-component metric. This is deliberately
+        tighter than ``rtol``: the two thresholds answer different questions. The
+        overlap threshold is a chemistry choice, discarding near-redundant diffuse
+        combinations to stabilize the SCF. The kinetic metric instead spans the
+        basis exponent range, so an uncontracted heavy-element basis gives it a
+        condition number of 1e10 or more with no redundancy at all. Reusing the
+        overlap threshold there discards small-component functions that are
+        perfectly well determined, so this threshold asks only whether a direction
+        is numerically present.
 
     Returns
     -------
@@ -165,7 +177,7 @@ def dirac_orthogonalizer(system, basis=None, c_light=LIGHT_SPEED, rtol=None):
         rtol = system.overlap_ortho_rtol
     XL, _, info_l = canonical_orth(integrals.overlap(system, basis), rtol)
     XS, _, info_s = canonical_orth(
-        (0.5 / c_light**2) * integrals.kinetic(system, basis), rtol
+        (0.5 / c_light**2) * integrals.kinetic(system, basis), kinetic_rtol
     )
     XL = block_diag_2x2(XL)
     XS = block_diag_2x2(XS)
@@ -180,6 +192,15 @@ def dirac_orthogonalizer(system, basis=None, c_light=LIGHT_SPEED, rtol=None):
         logger.log_info1(
             f"Discarded {info_l['n_discarded']} large-component and "
             f"{info_s['n_discarded']} small-component functions."
+        )
+    if n_large != n_small:
+        # Restricted kinetic balance puts the two spaces in one-to-one
+        # correspondence, so unequal dimensions mean one metric was truncated
+        # differently from the other.
+        logger.log_warning(
+            f"The electronic ({n_large}) and negative-energy ({n_small}) spaces "
+            "have different dimensions, so one of the two metrics was truncated "
+            "more aggressively than the other. Check overlap_ortho_rtol."
         )
     return X, n_large, n_small
 
