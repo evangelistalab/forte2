@@ -76,7 +76,7 @@ def test_complex_sigma_build_against_sparse_ops(symmetric_H):
     builder.Hamiltonian(basis, sigma_fused)
 
     sparse_ham = sop.sparse_operator_hamiltonian(E, H, V)
-    dets = lists.make_determinants()
+    dets = [d.to_determinant() for d in lists.make_spinor_determinants()]
     sparse_state = sop.SparseState({det: coeff for det, coeff in zip(dets, basis)})
     sparse_sigma = sop.apply_op(sparse_ham, sparse_state)
     sigma_coeffs = [sparse_sigma[det] for det in dets]

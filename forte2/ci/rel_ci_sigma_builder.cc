@@ -221,7 +221,7 @@ void scatter_block(std::span<std::complex<double>> source, std::span<std::comple
     }
 }
 
-np_vector_complex RelCISigmaBuilder::form_Hdiag(const std::vector<Determinant>& dets) const {
+np_vector_complex RelCISigmaBuilder::form_Hdiag(const std::vector<SpinorDeterminant>& dets) const {
     auto Hdiag = make_zeros<nb::numpy, std::complex<double>, 1>({dets.size()});
     auto Hdiag_view = Hdiag.view();
     // Compute the diagonal elements of the Hamiltonian in the determinantal basis
@@ -231,8 +231,8 @@ np_vector_complex RelCISigmaBuilder::form_Hdiag(const std::vector<Determinant>& 
     return Hdiag;
 }
 
-std::complex<double> RelCISigmaBuilder::slater_rules(const std::vector<Determinant>& dets, size_t I,
-                                                     size_t J) const {
+std::complex<double> RelCISigmaBuilder::slater_rules(const std::vector<SpinorDeterminant>& dets,
+                                                     size_t I, size_t J) const {
     double matrix_element = 0.0;
     if (I == J) {
         return rel_slater_rules_.energy(dets[I]);

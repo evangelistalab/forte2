@@ -568,6 +568,10 @@ class _SelectedCISingleStateSolver:
 
     def _check_guess_dets(self, guess_dets):
         for d in guess_dets:
+            if not isinstance(d, Determinant):
+                raise TypeError(
+                    f"Guess determinants must be Determinant, got {type(d).__name__}."
+                )
             na = d.count_alpha()
             nb = d.count_beta()
             if na + self.ncore != self.state.na:
