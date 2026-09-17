@@ -81,6 +81,77 @@ class DeterminantVector:
     def remove(self, arg: forte2.lib.det.Determinant, /) -> None:
         """Remove first occurrence of `arg`."""
 
+class SpinorDeterminantVector:
+    @overload
+    def __init__(self) -> None:
+        """Default constructor"""
+
+    @overload
+    def __init__(self, arg: SpinorDeterminantVector) -> None:
+        """Copy constructor"""
+
+    @overload
+    def __init__(self, arg: Iterable[forte2.lib.det.SpinorDeterminant], /) -> None:
+        """Construct from an iterable object"""
+
+    def __len__(self) -> int: ...
+
+    def __bool__(self) -> bool:
+        """Check whether the vector is nonempty"""
+
+    def __repr__(self) -> str: ...
+
+    def __iter__(self) -> Iterator[forte2.lib.det.SpinorDeterminant]: ...
+
+    @overload
+    def __getitem__(self, arg: int, /) -> forte2.lib.det.SpinorDeterminant: ...
+
+    @overload
+    def __getitem__(self, arg: slice, /) -> SpinorDeterminantVector: ...
+
+    def clear(self) -> None:
+        """Remove all items from list."""
+
+    def append(self, arg: forte2.lib.det.SpinorDeterminant, /) -> None:
+        """Append `arg` to the end of the list."""
+
+    def insert(self, arg0: int, arg1: forte2.lib.det.SpinorDeterminant, /) -> None:
+        """Insert object `arg1` before index `arg0`."""
+
+    def pop(self, index: int = -1) -> forte2.lib.det.SpinorDeterminant:
+        """Remove and return item at `index` (default last)."""
+
+    def extend(self, arg: SpinorDeterminantVector, /) -> None:
+        """Extend `self` by appending elements from `arg`."""
+
+    @overload
+    def __setitem__(self, arg0: int, arg1: forte2.lib.det.SpinorDeterminant, /) -> None: ...
+
+    @overload
+    def __setitem__(self, arg0: slice, arg1: SpinorDeterminantVector, /) -> None: ...
+
+    @overload
+    def __delitem__(self, arg: int, /) -> None: ...
+
+    @overload
+    def __delitem__(self, arg: slice, /) -> None: ...
+
+    def __eq__(self, arg: object, /) -> bool: ...
+
+    def __ne__(self, arg: object, /) -> bool: ...
+
+    @overload
+    def __contains__(self, arg: forte2.lib.det.SpinorDeterminant, /) -> bool: ...
+
+    @overload
+    def __contains__(self, arg: object, /) -> bool: ...
+
+    def count(self, arg: forte2.lib.det.SpinorDeterminant, /) -> int:
+        """Return number of occurrences of `arg`."""
+
+    def remove(self, arg: forte2.lib.det.SpinorDeterminant, /) -> None:
+        """Remove first occurrence of `arg`."""
+
 class CIStrings:
     def __init__(self, na: int, nb: int, symmetry: int, orbital_symmetry: Sequence[Sequence[int]], gas_min: Sequence[int], gas_max: Sequence[int]) -> None:
         """
@@ -128,6 +199,11 @@ class CIStrings:
     def determinant_index(self, d: forte2.lib.det.Determinant) -> int: ...
 
     def make_determinants(self) -> DeterminantVector: ...
+
+    def make_spinor_determinants(self) -> SpinorDeterminantVector:
+        """
+        The determinants with alpha orbital p read as spinor p (requires nb == 0)
+        """
 
 class CISigmaBuilder:
     def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3, algorithm: str = 'kh') -> None:
@@ -249,9 +325,9 @@ class RelCISigmaBuilder:
     def set_memory(self, memory: int) -> None:
         """Set the memory limit for the builder (in MB)"""
 
-    def form_Hdiag(self, dets: DeterminantVector) -> Annotated[NDArray[numpy.complex128], dict(shape=(None,))]: ...
+    def form_Hdiag(self, dets: SpinorDeterminantVector) -> Annotated[NDArray[numpy.complex128], dict(shape=(None,))]: ...
 
-    def slater_rules(self, dets: DeterminantVector, I: int, J: int) -> complex: ...
+    def slater_rules(self, dets: SpinorDeterminantVector, I: int, J: int) -> complex: ...
 
     def Hamiltonian(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None: ...
 
@@ -407,7 +483,7 @@ class SelectedCIHelper:
         """Return the total selection time"""
 
 class RelSelectedCIHelper:
-    def __init__(self, norb: int, dets: DeterminantVector, c: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, screening_criterion: str = 'hbci', frozen_creation: Sequence[int] = [], frozen_annihilation: Sequence[int] = []) -> None:
+    def __init__(self, nspinor: int, dets: SpinorDeterminantVector, c: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, screening_criterion: str = 'hbci', frozen_creation: Sequence[int] = [], frozen_annihilation: Sequence[int] = []) -> None:
         """
         Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, energy, complex Hamiltonian, and complex integrals
         """
@@ -471,13 +547,13 @@ class RelSelectedCIHelper:
         Compute the complex spin-orbital 2-RDM (or transition 2-RDM) between two roots
         """
 
-    def dets(self) -> DeterminantVector:
+    def dets(self) -> SpinorDeterminantVector:
         """Return the determinants in the variational space"""
 
     def ndets(self) -> int:
         """Return the number of determinants in the variational space"""
 
-    def slater_rules(self, dets: DeterminantVector, I: int, J: int) -> complex:
+    def slater_rules(self, dets: SpinorDeterminantVector, I: int, J: int) -> complex:
         """Compute the Hamiltonian matrix element <I|H|J>"""
 
     def energies(self) -> list[float]:

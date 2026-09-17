@@ -43,11 +43,11 @@ void export_rdms_api(nb::module_& m) {
               "Compute the alpha-beta-beta-beta 4-RDM between two SparseStates");
     sub_m.def("compute_bbbb_4rdm", &compute_bbbb_4rdm, "state_left"_a, "state_right"_a, "norb"_a,
               "Compute the beta-beta-beta-beta 4-RDM between two SparseStates");
-    sub_m.def("compute_1rdm_2c", &compute_1rdm_2c, "state_left"_a, "state_right"_a, "norb"_a,
+    sub_m.def("compute_1rdm_2c", &compute_1rdm_2c, "state_left"_a, "state_right"_a, "nspinor"_a,
               "Compute the two-component 1-RDM between two SparseStates (conjugates the bra)");
-    sub_m.def("compute_2rdm_2c", &compute_2rdm_2c, "state_left"_a, "state_right"_a, "norb"_a,
+    sub_m.def("compute_2rdm_2c", &compute_2rdm_2c, "state_left"_a, "state_right"_a, "nspinor"_a,
               "Compute the two-component 2-RDM between two SparseStates (conjugates the bra)");
-    sub_m.def("compute_3rdm_2c", &compute_3rdm_2c, "state_left"_a, "state_right"_a, "norb"_a,
+    sub_m.def("compute_3rdm_2c", &compute_3rdm_2c, "state_left"_a, "state_right"_a, "nspinor"_a,
               "Compute the two-component 3-RDM between two SparseStates (conjugates the bra)");
 }
 
