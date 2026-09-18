@@ -281,21 +281,19 @@ def test_triplet_h2o_uhf_mp2():
 
 
 def test_triplet_h2o_uhf_mp2_rdms():
-    euhf = -75.810772399321
-    emp2 = -76.0662395867740
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
     H            0.000000000000    -0.711620616369     0.489330954643
     H            0.000000000000     0.711620616369     0.489330954643
     """
-    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+    # Keep the dense rank-four AO tensors small; the cc-pVQZ energy regression
+    # is covered separately in test_triplet_h2o_uhf_mp2.
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     scf = UHF(charge=0, ms=1)(system)
     mp2 = UMP2(store_t2=True)(scf)
     mp2.run()
 
-    assert scf.E == approx(euhf)
-    assert mp2.E_total == approx(emp2)
     assert not np.allclose(mp2.Ca, mp2.Cb, atol=1e-10)
     assert_uhf_rdm_invariants(mp2, scf.na, scf.nb, system.ints_overlap())
 
