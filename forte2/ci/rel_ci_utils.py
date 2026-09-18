@@ -4,7 +4,7 @@ from forte2.state import StateAverageInfo
 from forte2.helpers import logger
 
 
-def spin_matrices(system, C, skip_picture_change=False):
+def spin_matrices(system, C, skip_picture_change=None):
     r"""
     Build the spin operator matrices in the spinor basis spanned by `C`.
 
@@ -27,9 +27,10 @@ def spin_matrices(system, C, skip_picture_change=False):
         The two-component system, which supplies the AO overlap.
     C : NDArray
         The spinor coefficients, shape (2*nbf, nspinor).
-    skip_picture_change : bool, optional, default=False
+    skip_picture_change : bool | None, optional, default=None
         If True, skip the picture change correction of the spin operator, only relevant
-        for X2C calculations.
+        for X2C calculations. If None, follow ``skip_picture_change`` on the system's
+        X2C parameters.
 
     Returns
     -------
@@ -65,6 +66,9 @@ def spin_matrices(system, C, skip_picture_change=False):
     ovlp_inv = X @ X.conj().T
     S2_1e = S_z @ ovlp_inv @ S_z + S_z + S_minus @ ovlp_inv @ S_plus
 
+    if skip_picture_change is None:
+        skip_picture_change = system.skip_picture_change
+
     if system.x2c_type in ["sf", "so"] and not skip_picture_change:
         s_x, s_y, s_z = system.x2c_helper.spin_operator()
         S_z = s_z
@@ -80,7 +84,7 @@ def _split_blocks(A, ncore):
     return A[co, co], A[co, ac], A[ac, co], A[ac, ac]
 
 
-def compute_spin2(system, C, g1, g2, skip_picture_change=False):
+def compute_spin2(system, C, g1, g2, skip_picture_change=None):
     r"""
     Compute <S^2>, <S_x/y/z> of a two-component CI state
 
@@ -97,9 +101,10 @@ def compute_spin2(system, C, g1, g2, skip_picture_change=False):
     g2 : NDArray
         The complex active-space two-particle RDM,
         :math:`\gamma_{pqrs} = \langle a^\dagger_p a^\dagger_q a_s a_r \rangle`.
-    skip_picture_change : bool, optional, default=False
+    skip_picture_change : bool | None, optional, default=None
         If True, skip the picture change correction of the spin operator, only relevant
-        for X2C calculations.
+        for X2C calculations. If None, follow ``skip_picture_change`` on the system's
+        X2C parameters.
 
     Returns
     -------
