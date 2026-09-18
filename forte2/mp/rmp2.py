@@ -8,11 +8,11 @@ from forte2.scf import RHF
 
 @dataclass
 class RMP2(MP2Base):
-    """
-    Density-Fitted Møller-Plesset perturbation theory (DF-MP2) method with RHF canonical orbitals.
+    """Density-fitted MP2 for an RHF reference.
 
-    Request optional quantities with the fluent helpers inherited from
-    :class:`MP2Base`, for example ``RMP2().compute_1rdm().compute_2rdm()``.
+    Bind the method to an RHF object, call :meth:`run`, and then request
+    optional density matrices with :meth:`make_1rdm`, :meth:`make_2rdm`, or
+    :meth:`make_cumulants`.
 
     Returns
     -------

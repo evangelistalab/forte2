@@ -20,10 +20,10 @@ class MP2Base(Method, ABC):
     parent_method : RHF, ROHF, or UHF
         Reference wavefunction object providing orbitals, orbital energies,
         occupation numbers, and Fock builder.
-    C : ndarray
-        Molecular orbital coefficient matrix in AO basis.
-    eps : ndarray
-        Orbital energies in the working (possibly semicanonical) basis.
+    C : list[ndarray]
+        Molecular orbital coefficient matrices in the AO basis. Restricted
+        references contain one matrix; unrestricted references contain one
+        matrix per spin.
     nocc : int
         Number of correlated occupied orbitals.
     nvir : int
@@ -36,6 +36,8 @@ class MP2Base(Method, ABC):
         MP2 correlation energy.
     E_total : float
         Total energy (E_reference + E_corr).
+    E : float
+        Alias for ``E_total`` used by the standard :class:`Method` interface.
     executed : bool
         Whether the MP2 calculation has been executed.
 
@@ -60,7 +62,9 @@ class MP2Base(Method, ABC):
     def __post_init__(self):
         self.requires = {"system", "mos", "eps"}
         self.requires_attrs.update({"two_component": False})
-        self.provides = {"system", "mos", "eps"}
+        # MP2 does not currently expose orbital energies in the standard
+        # spin-blocked representation expected by downstream Method objects.
+        self.provides = {"system", "mos"}
 
     @abstractmethod
     def __call__(self, parent_method): ...
@@ -75,7 +79,7 @@ class MP2Base(Method, ABC):
     def make_2cumulant(self, gamma1=None, gamma2=None): ...
 
     @abstractmethod
-    def make_cumulants(self, gamma1=None, gamma2=None): ...
+    def make_cumulants(self): ...
 
     @abstractmethod
     def energy_given_rdms(self, Ecore, H, V, gamma1, gamma2): ...
@@ -91,6 +95,7 @@ class MP2Base(Method, ABC):
         self.t2, self.t2_as, self.E_corr = self._build_t2_all(self.B_iaQ)
 
         self.E_total = self.parent_method.E + self.E_corr
+        self.E = self.E_total
 
         self.executed = True
         self._log_completion(time.monotonic() - t0, self._t2_norm(), mem0)

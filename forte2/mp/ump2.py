@@ -9,11 +9,12 @@ from forte2.scf import UHF
 
 @dataclass
 class UMP2(MP2Base):
-    """
-    Density-Fitted Møller-Plesset perturbation theory (DF-MP2) method with UHF canonical orbitals.
+    """Density-fitted MP2 for a UHF reference.
 
-    Request optional quantities with the fluent helpers inherited from
-    :class:`MP2Base`, for example ``UMP2().compute_1rdm().compute_2rdm()``.
+    Bind the method to a UHF object, call :meth:`run`, and then request
+    spin-resolved density matrices with :meth:`make_1rdm_sd` and
+    :meth:`make_2rdm_sd`. Spin-summed densities are formed after transforming
+    each spin block to the AO basis.
 
     Returns
     -------
@@ -23,7 +24,7 @@ class UMP2(MP2Base):
 
     def __call__(self, parent_method):
         if not isinstance(parent_method, UHF):
-            raise TypeError("UMP2 requires an UHF reference.")
+            raise TypeError("UMP2 requires a UHF reference.")
         self._register_parent_method(parent_method)
         return self
 
@@ -70,6 +71,7 @@ class UMP2(MP2Base):
         (self.t2_a, self.t2_b, self.t2_ab, self.E_corr) = self._build_t2_all(self.B_iaQ)
 
         self.E_total = self.parent_method.E + self.E_corr
+        self.E = self.E_total
 
         self.executed = True
         self._log_completion(time.monotonic() - t0, self._t2_norm(), mem0)
@@ -258,6 +260,26 @@ class UMP2(MP2Base):
         gamma1_sf = 0.5 * (gamma1_sf + gamma1_sf.T)
         return gamma1_sf
 
+    @staticmethod
+    def _transform_1rdm_mo_to_ao(gamma1, C):
+        """Transform a one-particle density matrix from MO to AO basis."""
+        return np.einsum("pi,ij,qj->pq", C, gamma1, C.conj(), optimize=True)
+
+    @staticmethod
+    def _transform_2rdm_mo_to_ao(gamma2, C_left, C_right=None):
+        """Transform a same-spin or mixed-spin 2-RDM from MO to AO basis."""
+        if C_right is None:
+            C_right = C_left
+        return np.einsum(
+            "ijkl,pi,qj,rk,sl->pqrs",
+            gamma2,
+            C_left.conj(),
+            C_left,
+            C_right.conj(),
+            C_right,
+            optimize=True,
+        )
+
     def _make_mp2_2rdm(self, gamma1_a, gamma1_b, t2=None):
         if t2 is None:
             t2 = self._get_t2_for_rdms()
@@ -326,7 +348,12 @@ class UMP2(MP2Base):
         return dm2_aa, dm2_ab, dm2_bb
 
     def _make_mp2_sf_2rdm(self, gamma2_aa, gamma2_ab, gamma2_bb):
-        gamma2_sf = gamma2_aa + gamma2_bb + gamma2_ab + gamma2_ab.transpose(1, 0, 3, 2)
+        gamma2_sf = (
+            gamma2_aa
+            + gamma2_bb
+            + gamma2_ab
+            + gamma2_ab.transpose(2, 3, 0, 1)
+        )
 
         # # =========================
         # # Enforce symmetries
@@ -344,9 +371,7 @@ class UMP2(MP2Base):
     def energy_given_rdms(
         self, Ecore, H, V, gamma1_a, gamma1_b, gamma2_aa, gamma2_bb, gamma2_ab
     ):
-        """
-        Computes the MP2 energy from comtracting rdms
-        """
+        """Compute the MP2 energy by contracting the RDMs."""
         e1 = np.einsum("pq,qp->", H, gamma1_a + gamma1_b, optimize=True)
 
         e2 = 0.5 * np.einsum("pqrs,prqs", V, gamma2_aa + gamma2_bb, optimize=True)
@@ -354,22 +379,25 @@ class UMP2(MP2Base):
 
         return Ecore + e1 + e2
 
-    def make_1rdm_sd(self):
-        return self._make_mp2_1rdm_intermediates()
+    def make_1rdm_sd(self, ao_repr=False):
+        """Return alpha and beta 1-RDMs in the MO or AO basis."""
+        gamma1_a, gamma1_b = self._make_mp2_1rdm_intermediates()
+        if ao_repr:
+            gamma1_a = self._transform_1rdm_mo_to_ao(gamma1_a, self.Ca)
+            gamma1_b = self._transform_1rdm_mo_to_ao(gamma1_b, self.Cb)
+        return gamma1_a, gamma1_b
 
     def make_1rdm_sf(self):
-        gamma1_a, gamma1_b = self._make_mp2_1rdm_intermediates()
+        """Return the spin-summed 1-RDM in the AO basis."""
+        gamma1_a, gamma1_b = self.make_1rdm_sd(ao_repr=True)
         return self._make_mp2_sf_1rdm(gamma1_a, gamma1_b)
 
-    def make_2rdm_sd(self, gamma1=None):
-        t2 = self._get_t2_for_rdms()
-        if gamma1 is None:
-            gamma1_a, gamma1_b = self._make_mp2_1rdm_intermediates(t2)
-        else:
-            gamma1_a, gamma1_b = gamma1
-        return self._make_mp2_2rdm(gamma1_a, gamma1_b, t2)
+    def make_2rdm_sd(self, gamma1=None, ao_repr=False):
+        """Return aa, ab, and bb 2-RDM blocks in the MO or AO basis.
 
-    def make_2rdm_sf(self, gamma1=None):
+        When supplied, ``gamma1`` must contain the alpha and beta MO-basis
+        1-RDMs used to construct the MO-basis 2-RDM before transformation.
+        """
         t2 = self._get_t2_for_rdms()
         if gamma1 is None:
             gamma1_a, gamma1_b = self._make_mp2_1rdm_intermediates(t2)
@@ -378,12 +406,26 @@ class UMP2(MP2Base):
         gamma2_aa, gamma2_ab, gamma2_bb = self._make_mp2_2rdm(
             gamma1_a, gamma1_b, t2
         )
+        if ao_repr:
+            gamma2_aa = self._transform_2rdm_mo_to_ao(gamma2_aa, self.Ca)
+            gamma2_ab = self._transform_2rdm_mo_to_ao(
+                gamma2_ab, self.Ca, self.Cb
+            )
+            gamma2_bb = self._transform_2rdm_mo_to_ao(gamma2_bb, self.Cb)
+        return gamma2_aa, gamma2_ab, gamma2_bb
+
+    def make_2rdm_sf(self, gamma1=None):
+        """Return the spin-summed 2-RDM in the AO basis."""
+        gamma2_aa, gamma2_ab, gamma2_bb = self.make_2rdm_sd(
+            gamma1, ao_repr=True
+        )
         return self._make_mp2_sf_2rdm(gamma2_aa, gamma2_ab, gamma2_bb)
 
-    make_1rdm = make_1rdm_sf
-    make_2rdm = make_2rdm_sf
+    make_1rdm = make_1rdm_sd
+    make_2rdm = make_2rdm_sd
 
     def make_2cumulant(self, gamma1_sf=None, gamma2_sf=None):
+        """Return the spin-summed two-particle cumulant in the AO basis."""
         if gamma1_sf is None:
             gamma1_sf = self.make_1rdm_sf()
         if gamma2_sf is None:
@@ -391,17 +433,23 @@ class UMP2(MP2Base):
         return self._make_mp2_sf_2cumulants(gamma1_sf, gamma2_sf)
 
     def make_cumulants(self):
+        """Return spin-summed one- and two-particle AO-basis tensors."""
         t2 = self._get_t2_for_rdms()
         gamma1_a, gamma1_b = self._make_mp2_1rdm_intermediates(t2)
         gamma2_aa, gamma2_ab, gamma2_bb = self._make_mp2_2rdm(
             gamma1_a, gamma1_b, t2
         )
+        gamma1_a = self._transform_1rdm_mo_to_ao(gamma1_a, self.Ca)
+        gamma1_b = self._transform_1rdm_mo_to_ao(gamma1_b, self.Cb)
+        gamma2_aa = self._transform_2rdm_mo_to_ao(gamma2_aa, self.Ca)
+        gamma2_ab = self._transform_2rdm_mo_to_ao(gamma2_ab, self.Ca, self.Cb)
+        gamma2_bb = self._transform_2rdm_mo_to_ao(gamma2_bb, self.Cb)
         gamma1_sf = self._make_mp2_sf_1rdm(gamma1_a, gamma1_b)
         gamma2_sf = self._make_mp2_sf_2rdm(gamma2_aa, gamma2_ab, gamma2_bb)
         lambda2_sf = self._make_mp2_sf_2cumulants(gamma1_sf, gamma2_sf)
         return gamma1_sf, gamma2_sf, lambda2_sf
 
-    def make_2cumulant_sd(self, gamma1=None, gamma2=None):
+    def make_2cumulant_sd(self, gamma1=None, gamma2=None, ao_repr=False):
         """
         Spin-resolved MP2 2-cumulants.
 
@@ -440,5 +488,12 @@ class UMP2(MP2Base):
         # =========================
         term_ab = np.einsum("pq,rs->pqrs", gamma1_a, gamma1_b)
         lambda2_ab = gamma2_ab - term_ab
+
+        if ao_repr:
+            lambda2_aa = self._transform_2rdm_mo_to_ao(lambda2_aa, self.Ca)
+            lambda2_ab = self._transform_2rdm_mo_to_ao(
+                lambda2_ab, self.Ca, self.Cb
+            )
+            lambda2_bb = self._transform_2rdm_mo_to_ao(lambda2_bb, self.Cb)
 
         return lambda2_aa, lambda2_ab, lambda2_bb

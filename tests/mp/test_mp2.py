@@ -9,19 +9,29 @@ from forte2.helpers.comparisons import approx
 from forte2.mp import RMP2, ROMP2, UMP2
 
 
-def assert_uhf_rdm_invariants(mp2, na, nb):
+def assert_uhf_rdm_invariants(mp2, na, nb, overlap):
     gamma1_a, gamma1_b = mp2.make_1rdm_sd()
+    gamma1_ao_a, gamma1_ao_b = mp2.make_1rdm_sd(ao_repr=True)
     gamma1_sf = mp2.make_1rdm_sf()
+    gamma2_aa, gamma2_ab, gamma2_bb = mp2.make_2rdm_sd(
+        (gamma1_a, gamma1_b), ao_repr=True
+    )
     gamma2_sf = mp2.make_2rdm_sf((gamma1_a, gamma1_b))
 
     assert np.trace(gamma1_a) == approx(na)
     assert np.trace(gamma1_b) == approx(nb)
-    assert np.trace(gamma1_sf) == approx(na + nb)
+    assert np.einsum("pq,qp->", gamma1_ao_a, overlap) == approx(na)
+    assert np.einsum("pq,qp->", gamma1_ao_b, overlap) == approx(nb)
+    assert np.allclose(gamma1_sf, gamma1_ao_a + gamma1_ao_b, atol=1e-12)
 
     assert np.max(np.abs(gamma1_a - gamma1_a.T)) == approx(0.0)
     assert np.max(np.abs(gamma1_b - gamma1_b.T)) == approx(0.0)
     assert np.max(np.abs(gamma1_sf - gamma1_sf.T)) == approx(0.0)
 
+    gamma2_sf_from_sd = (
+        gamma2_aa + gamma2_bb + gamma2_ab + gamma2_ab.transpose(2, 3, 0, 1)
+    )
+    assert np.allclose(gamma2_sf, gamma2_sf_from_sd, atol=1e-10)
     assert np.max(np.abs(gamma2_sf - gamma2_sf.transpose(1, 0, 3, 2))) == approx(0.0)
     assert np.max(np.abs(gamma2_sf - gamma2_sf.transpose(2, 3, 0, 1))) == approx(0.0)
 
@@ -32,6 +42,11 @@ def assert_t2_not_stored(mp2):
     assert getattr(mp2, "t2_a", None) is None
     assert getattr(mp2, "t2_b", None) is None
     assert getattr(mp2, "t2_ab", None) is None
+
+
+def assert_mp2_method_contract(mp2):
+    assert mp2.E == approx(mp2.E_total)
+    assert mp2.provides == {"system", "mos"}
 
 
 def test_mp2():
@@ -110,6 +125,7 @@ def test_rhf_mp2():
     assert scf.E == approx(erhf)
     assert mp2.E_total == approx(emp2)
     assert mp2_rdm_E == approx(emp2)
+    assert_mp2_method_contract(mp2)
 
 
 def test_rhf_mp2_1rdm_does_not_store_t2():
@@ -213,9 +229,9 @@ def test_sd_sf_cumulants():
     mp2.run()
 
     lambda2_sf = mp2._make_mp2_sf_2cumulants(mp2.make_1rdm_sf(), mp2.make_2rdm_sf())
-    lambda2_aa, lambda2_ab, lambda2_bb = mp2.make_2cumulant_sd()
+    lambda2_aa, lambda2_ab, lambda2_bb = mp2.make_2cumulant_sd(ao_repr=True)
     lambda2_sf_from_sd = (
-        lambda2_aa + lambda2_bb + lambda2_ab + lambda2_ab.transpose(1, 0, 3, 2)
+        lambda2_aa + lambda2_bb + lambda2_ab + lambda2_ab.transpose(2, 3, 0, 1)
     )
 
     assert scf.E == approx(euhf)
@@ -242,6 +258,7 @@ def test_triplet_h2o_rohf_mp2():
     assert mp2.E_total == approx(emp2)
     assert mp2.parent_method is scf
     assert isinstance(mp2._working_reference, UHF)
+    assert_mp2_method_contract(mp2)
 
 
 def test_triplet_h2o_uhf_mp2():
@@ -260,6 +277,7 @@ def test_triplet_h2o_uhf_mp2():
 
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
+    assert_mp2_method_contract(mp2)
 
 
 def test_triplet_h2o_uhf_mp2_rdms():
@@ -278,7 +296,24 @@ def test_triplet_h2o_uhf_mp2_rdms():
 
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
-    assert_uhf_rdm_invariants(mp2, scf.na, scf.nb)
+    assert not np.allclose(mp2.Ca, mp2.Cb, atol=1e-10)
+    assert_uhf_rdm_invariants(mp2, scf.na, scf.nb, system.ints_overlap())
+
+    gamma1 = mp2.make_1rdm_sd(ao_repr=True)
+    gamma2 = mp2.make_2rdm_sd(ao_repr=True)
+    H_ao = system.ints_hcore()
+    V_ao = system.fock_builder.two_electron_integrals_block(np.eye(system.nbf))
+    rdm_energy = mp2.energy_given_rdms(
+        system.nuclear_repulsion,
+        H_ao,
+        V_ao,
+        gamma1[0],
+        gamma1[1],
+        gamma2[0],
+        gamma2[2],
+        gamma2[1],
+    )
+    assert rdm_energy == approx(mp2.E_total)
 
 
 def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
