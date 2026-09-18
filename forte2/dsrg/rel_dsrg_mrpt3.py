@@ -99,10 +99,10 @@ class RelDSRG_MRPT3(DSRGBase):
 
     Notes
     -----
-    GAS references are supported. Unlike the spin-adapted solvers, the Fock
-    coupling between GASes is left out of the zeroth-order Hamiltonian, so the
-    two families agree only when that coupling vanishes (see
-    `DSRGBase._fock_actv_0th`).
+    GAS references are supported. The Fock coupling between GASes is left out of
+    the zeroth-order Hamiltonian, unlike `DSRG_MRPT3`, which keeps it: the two
+    agree for a CAS reference (tests/dsrg/test_rel_pt3_vs_nonrel.py) and differ
+    by ~1e-4 Eh for a GAS one at a 0.04 Eh coupling.
     """
 
     def _release_integrals(self):
@@ -399,6 +399,9 @@ class RelDSRG_MRPT3(DSRGBase):
         self.dsrg_helper.H1_T1_C1_non_od(
             self.H0A1_1b, self.ints["F0"], self.T1_1, self.cumulants
         )
+        self.dsrg_helper.H1_T2_C1_non_od(
+            self.H0A1_1b, self.ints["F0"], self.T2_1, self.cumulants
+        )
         hermitize_and_antisymmetrize_two_body(self.H0A1_2b)
         hermitize_one_body(self.H0A1_1b)
 
@@ -555,6 +558,9 @@ class RelDSRG_MRPT3(DSRGBase):
         self.dsrg_helper.H1_T1_C1_non_od(
             self.Htilde1A1_1b, _temp_1b, self.T1_1, self.cumulants
         )
+        self.dsrg_helper.H1_T2_C1_non_od(
+            self.Htilde1A1_1b, _temp_1b, self.T2_1, self.cumulants
+        )
         self.dsrg_helper.H2_T1_C1_non_od(
             self.Htilde1A1_1b, _temp_2b, self.T1_1, self.cumulants, scale=2.0
         )
@@ -622,6 +628,9 @@ class RelDSRG_MRPT3(DSRGBase):
         )
         self.dsrg_helper.H1_T1_C1_non_od(
             H0A2_1b, self.ints["F0"], self.T1_2, self.cumulants
+        )
+        self.dsrg_helper.H1_T2_C1_non_od(
+            H0A2_1b, self.ints["F0"], self.T2_2, self.cumulants
         )
         hermitize_and_antisymmetrize_two_body(H0A2_2b)
         hermitize_one_body(H0A2_1b)

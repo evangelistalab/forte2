@@ -226,8 +226,10 @@ def test_mrpt3_ch_snso_kramers():
     """
     escf = -38.286254865078
     emcscf = -38.320115307064
-    edsrg = -38.433774865372
-    erelaxed = -38.434549231635
+    # The two DSRG energies moved by 4.3e-7 when H1_T2_C1_non_od was added to
+    # _RelDSRGHelper; the Kramers and spin-orbit assertions below did not.
+    edsrg = -38.433775292986
+    erelaxed = -38.434549655544
     soc_wn = 27.424588
 
     xyz = """

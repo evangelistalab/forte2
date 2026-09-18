@@ -445,6 +445,21 @@ class _RelDSRGHelper:
         C1["ca"] += scale * +1.000 * einsum('uw,iw->iu', F['aa'], T1['ca'])
     
     @staticmethod
+    def H1_T2_C1_non_od(C1, F, T2, cumulants, scale=1.0):
+        # 6 lines
+
+        g1 = cumulants['gamma1']
+        e1 = cumulants['eta1']
+        l2 = cumulants['lambda2']
+
+        C1["cv"] += scale * -1.000 * einsum('uv,iwxa,xv,uw->ia', F['aa'], T2['caav'], e1, g1)
+        C1["cv"] += scale * +1.000 * einsum('uv,iwxa,uw,xv->ia', F['aa'], T2['caav'], e1, g1)
+        C1["ca"] += scale * +1.000 * einsum('uv,iwxy,yv,uw->ix', F['aa'], T2['caaa'], e1, g1)
+        C1["ca"] += scale * -1.000 * einsum('uv,iwxy,uw,yv->ix', F['aa'], T2['caaa'], e1, g1)
+        C1["av"] += scale * +1.000 * einsum('uv,wxya,ux,yv->wa', F['aa'], T2['aaav'], e1, g1)
+        C1["av"] += scale * -1.000 * einsum('uv,wxya,yv,ux->wa', F['aa'], T2['aaav'], e1, g1)
+    
+    @staticmethod
     def H2_T1_C1_non_od(C1, V, T1, cumulants, scale=1.0):
         # 9 lines
 
