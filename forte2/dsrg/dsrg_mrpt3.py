@@ -333,7 +333,7 @@ class DSRG_MRPT3(DSRGBase):
 
     def _t1_active_correction(self, S2):
         """The generalized-Fock off-diagonal correction shared by T1 and F-tilde."""
-        faa = self.F0th[self.actv, self.actv]
+        faa = self._fock_actv_0th
         g1 = self.cumulants["gamma1"]
         s2 = S2[:, self.ha, :, self.pa]
         corr = 0.5 * np.einsum("ivaw,wu,uv->ia", s2, faa, g1, optimize=True)
@@ -503,10 +503,7 @@ class DSRG_MRPT3(DSRGBase):
             self.hbar1 = np.zeros((self.nact,) * 2)
             self.hbar2 = np.zeros((self.nact,) * 4)
 
-        c, a, v = self.core, self.actv, self.virt
-        self.F0th = np.zeros_like(self.fock)
-        for sl in (c, a, v):
-            self.F0th[sl, sl] = self.fock[sl, sl]
+        self.F0th = self._build_fock_0th()
         self.F1st = self.fock - self.F0th
 
         # V_bare stays dense: unlike the running operators it is contracted

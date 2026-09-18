@@ -11,6 +11,9 @@ from forte2.ci.ci_utils import pretty_print_ci_summary
 from .dsrg_common import _DSRGHelper
 from .rel_dsrg_common import _RelDSRGHelper
 
+# Largest off-diagonal Fock element tolerated within an orbital block.
+_SEMICANONICAL_TOL = 1e-8
+
 
 @dataclass
 class DSRGBase(Method):
@@ -178,6 +181,84 @@ class DSRGBase(Method):
 
         self.fock_builder = self.system.fock_builder
         self.ints, self.cumulants = self.get_integrals()
+        self._log_semicanonical_check()
+
+    @property
+    def _fock_actv_0th(self) -> NDArray:
+        """Active-active block of the DSRG zeroth-order Hamiltonian.
+
+        Diagonal for a single active space. With several GASes the coupling
+        between them survives semicanonicalization and is kept here, i.e. treated
+        as zeroth order, matching forte's spin-adapted MR-DSRG. Sole seam for that
+        choice; see tests/dsrg/test_gas_dsrg_mrpt2.py.
+        """
+        return self.fock[self.actv, self.actv]
+
+    def _build_fock_0th(self) -> NDArray:
+        """The block-diagonal generalized Fock matrix, i.e. the DSRG H^(0)."""
+        fock_0th = np.zeros_like(self.fock)
+        fock_0th[self.core, self.core] = self.fock[self.core, self.core]
+        fock_0th[self.actv, self.actv] = self._fock_actv_0th
+        fock_0th[self.virt, self.virt] = self.fock[self.virt, self.virt]
+        return fock_0th
+
+    def _log_semicanonical_check(self):
+        """Log per-block off-diagonal Fock norms and the coupling between GASes.
+
+        The denominators use only the Fock diagonal, so an off-diagonal element
+        inside a block is an error; coupling between GASes is expected.
+        """
+        gas = self.mo_space.gas_corr
+        blocks = [("CORE", self.core)]
+        if len(gas) == 1:
+            blocks.append(("ACTIVE", gas[0]))
+        else:
+            blocks.extend((f"GAS{i + 1}", sl) for i, sl in enumerate(gas))
+        blocks.append(("VIRTUAL", self.virt))
+
+        width = 46
+        logger.log_info1("\n" + "=" * width)
+        logger.log_info1("DSRG Semicanonical Orbital Check".center(width))
+        logger.log_info1("=" * width)
+        logger.log_info1(f"{'Block':<10}{'#':>5}{'Max':>15}{'Mean':>16}")
+        logger.log_info1("-" * width)
+        worst = 0.0
+        for name, sl in blocks:
+            block = self.fock[sl, sl]
+            nblock = block.shape[0]
+            offdiag = np.abs(block - np.diag(np.diag(block)))
+            fmax = offdiag.max() if nblock > 1 else 0.0
+            fmean = offdiag.sum() / (nblock * (nblock - 1)) if nblock > 1 else 0.0
+            worst = max(worst, fmax)
+            logger.log_info1(f"{name:<10}{nblock:>5d}{fmax:>15.10f}{fmean:>16.10f}")
+        logger.log_info1("=" * width)
+
+        if worst > _SEMICANONICAL_TOL:
+            logger.log_warning(
+                f"  Fock matrix not diagonal within an orbital block (max "
+                f"{worst:.3e}); DSRG denominators use only its diagonal."
+            )
+
+        if len(gas) < 2:
+            return
+
+        # gas_corr slices index the correlated space, as self.fock does.
+        coupling = max(
+            np.abs(self.fock[a, b]).max()
+            for i, a in enumerate(gas)
+            for b in gas[i + 1 :]
+        )
+        logger.log_info1(
+            f"  Largest coupling between GASes: {coupling:.10f}\n"
+            "  GAS-to-GAS excitations are excluded from the DSRG amplitudes."
+        )
+
+        if self.two_component:
+            logger.log_warning(
+                "  Two-component DSRG omits the GAS-GAS Fock coupling from T1 and "
+                "F-tilde, which the spin-adapted solvers keep: expect ~1e-4 Eh "
+                "disagreement between them."
+            )
 
     def _release_integrals(self):
         """

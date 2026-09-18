@@ -43,6 +43,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Two-component relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
   * Two-component relativistic DSRG-MRPT3 with reference relaxation and state-averaging [11]_
   * Frozen natural orbital (FNO) truncation of the virtual space for the two-component methods [10]_
+  * GAS/ORMAS references for non-relativistic DSRG-MRPT2, excluding GAS-to-GAS internal excitations [12]_
 
 * Various orbital manipulation routines
   
@@ -65,3 +66,4 @@ References
 .. [9] Surjuse, K. A.; Valeev, E. F. SAP-X2C: Optimally-Simple Two-Component Relativistic Hamiltonian with Size-Intensive Picture Change. J. Chem. Theory Comput. 2026, 22 (7), 3443-3452. https://doi.org/10.1021/acs.jctc.6c00032.
 .. [10] Li, C.; Mao, S.; Huang, R.; Evangelista, F. A. Frozen Natural Orbitals for the State-Averaged Driven Similarity Renormalization Group. J. Chem. Theory Comput. 2024, 20, 4170-4181.
 .. [11] Li, C.; Evangelista, F. A. Driven Similarity Renormalization Group: Third-Order Multireference Perturbation Theory. J. Chem. Phys. 2017, 146 (12), 124132. https://doi.org/10.1063/1.4979016.
+.. [12] Huang, M.; Li, C.; Evangelista, F. A. Theoretical Calculation of Core-Excited States along Dissociative Pathways beyond Second-Order Perturbation Theory. J. Chem. Theory Comput. 2022, 18 (1), 219-233. https://doi.org/10.1021/acs.jctc.1c00884.

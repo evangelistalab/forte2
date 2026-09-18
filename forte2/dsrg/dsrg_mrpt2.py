@@ -61,6 +61,16 @@ class DSRG_MRPT2(DSRGBase):
               J. Chem. Phys. 2016, 144, 204111.
     .. [4] C. Li and F. A. Evangelista, "Driven similarity renormalization group for excited states: A state-averaged perturbation theory",
            J. Chem. Phys. 2018, 148, 124106.
+    .. [5] M. Huang, C. Li, and F. A. Evangelista, "Theoretical calculation of core-excited states along dissociative pathways beyond second-order perturbation theory",
+           J. Chem. Theory Comput. 2022, 18, 219-233.
+
+    Notes
+    -----
+    GAS references are supported [5]_. GAS-to-GAS internal excitations are
+    excluded from the amplitudes, and the Fock coupling between GASes is treated
+    as zeroth order (see `DSRGBase._fock_actv_0th`). Converge the reference
+    tightly, `g_tol` around 1e-10: the energy is not invariant to rotations
+    between GASes, which are the softest directions in a GAS-SCF.
     """
 
     def __post_init__(self):
@@ -251,7 +261,7 @@ class DSRG_MRPT2(DSRGBase):
         t2["S2"]["caaa"] = 2 * t2["T2"]["caaa"] - t2["T2"]["caaa"].swapaxes(2, 3)
 
         t1 = self.fock[self.hole, self.part].copy()
-        faa = self.fock[self.actv, self.actv]
+        faa = self._fock_actv_0th
         t1[self.hc, self.pa] += 0.5 * np.einsum(
             "ivaw,wu,uv->ia",
             t2["S2"]["caaa"],
@@ -306,7 +316,7 @@ class DSRG_MRPT2(DSRGBase):
         return t1, t2
 
     def _renormalize_F(self):
-        faa = self.fock[self.actv, self.actv]
+        faa = self._fock_actv_0th
         F_tilde = self.fock[self.part, self.hole].copy()
         F_tilde[self.pa, self.hc] += 0.5 * np.einsum(
             "ivaw,wu,uv->ai",
