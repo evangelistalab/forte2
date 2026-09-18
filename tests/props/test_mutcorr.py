@@ -7,11 +7,56 @@ from forte2.props import (
     MutualCorrelationAnalysis,
     RMP2MPQOnTheFly,
     UMP2MPQOnTheFly,
+    suggest_mutual_correlation_active_spaces,
     rmp2_mpq_onthefly_no,
     ump2_mpq_onthefly_no,
 )
 from forte2.helpers.comparisons import approx
 from forte2.base_classes import DavidsonLiuParams
+
+
+def test_significant_score_selection_completes_degenerate_groups():
+    """Threshold significant scores without splitting degenerate NOs."""
+    matrix = np.zeros((5, 5))
+    matrix[0, 1] = matrix[1, 0] = 0.10
+    matrix[1, 2] = matrix[2, 1] = 0.01
+    matrix[3, 4] = matrix[4, 3] = 5.0e-4
+    occupations = np.array([1.8, 0.2, 1.0, 1.8 + 5.0e-11, 0.0])
+
+    result = suggest_mutual_correlation_active_spaces(
+        matrix,
+        occupations,
+        absolute_threshold=1.0e-3,
+        mandatory_indices=[4],
+    )
+
+    assert result["significant_edges"] == (
+        (0, 1, 0.10),
+        (1, 2, 0.01),
+    )
+    assert result["significant_scores"] == approx(
+        np.array([0.10, 0.11, 0.01, 0.0, 0.0])
+    )
+    assert result["suggestions"][0.15]["score_selected_indices"] == (0, 1)
+    assert result["suggestions"][0.15]["degeneracy_completed_indices"] == (3,)
+    assert result["suggestions"][0.15]["active_indices"] == (0, 1, 3, 4)
+    assert result["suggestions"][0.05]["active_indices"] == (0, 1, 2, 3, 4)
+    assert result["suggestions"][0.0]["active_indices"] == (0, 1, 2, 3, 4)
+
+
+def test_significant_score_selection_with_no_edges_keeps_only_mandatory_group():
+    """A zero matrix must not make an eta=0 threshold select all orbitals."""
+    result = suggest_mutual_correlation_active_spaces(
+        np.zeros((3, 3)),
+        np.array([1.0, 1.0 + 5.0e-11, 0.0]),
+        mandatory_indices=[0],
+    )
+
+    assert result["maximum_significant_score"] == 0.0
+    for suggestion in result["suggestions"].values():
+        assert suggestion["score_selected_indices"] == ()
+        assert suggestion["degeneracy_completed_indices"] == (1,)
+        assert suggestion["active_indices"] == (0, 1)
 
 
 def test_mutual_correlation_h2_singlet():
@@ -181,6 +226,51 @@ def test_rmp2_mpq_first_order_and_avas():
         i, j, mp2.nocc + a, mp2.nocc + b
     ) == approx(mp2.t2[i, j, a, b] - mp2.t2[i, j, b, a])
 
+    selected = (i, j, mp2.nocc + a, mp2.nocc + b)
+    quadratic_mpq = RMP2MPQOnTheFly(
+        mp2,
+        U=np.eye(mp2.nocc + mp2.nvir),
+        include_quadratic=True,
+        orbital_indices=selected,
+    )
+    t2_as = mp2.t2 - mp2.t2.transpose(0, 1, 3, 2)
+    expected_oooo = 0.5 * np.einsum(
+        "ab,ab->", t2_as[i, j].conj(), t2_as[i, j], optimize=True
+    )
+    expected_vvvv = 0.5 * np.einsum(
+        "ij,ij->",
+        t2_as[:, :, a, b].conj(),
+        t2_as[:, :, a, b],
+        optimize=True,
+    )
+    expected_ovov = -np.einsum(
+        "mc,mc->",
+        mp2.t2[i, :, :, b].conj(),
+        mp2.t2[i, :, :, a],
+        optimize=True,
+    )
+    expected_vovo = -np.einsum(
+        "mc,mc->",
+        mp2.t2[:, i, b, :].conj(),
+        mp2.t2[:, i, a, :],
+        optimize=True,
+    )
+    assert quadratic_mpq.lambda2_aa_quadratic_elem(i, j, i, j) == approx(
+        expected_oooo
+    )
+    assert quadratic_mpq.lambda2_aa_quadratic_elem(
+        mp2.nocc + a,
+        mp2.nocc + b,
+        mp2.nocc + a,
+        mp2.nocc + b,
+    ) == approx(expected_vvvv)
+    assert quadratic_mpq.lambda2_ab_quadratic_elem(i, mp2.nocc + a, i, mp2.nocc + b) == approx(
+        expected_ovov
+    )
+    assert quadratic_mpq.lambda2_ab_quadratic_elem(mp2.nocc + a, i, mp2.nocc + b, i) == approx(
+        expected_vovo
+    )
+
     avas = AVAS(
         subspace=["O(2p)"], selection_method="total", num_active=3
     )(rhf)
@@ -252,7 +342,7 @@ def test_ump2_mpq_first_order_and_optional_quadratic_terms():
 
 
 def test_ump2_exact_selected_common_no_transform():
-    """Compare selected-space streaming against a dense rank-four rotation."""
+    """Compare exact selected-space blocks against dense rank-four rotations."""
 
     xyz = """
     O  0.000000000000  0.000000000000 -0.061664597388
@@ -285,6 +375,7 @@ def test_ump2_exact_selected_common_no_transform():
         Ub=Ub,
         orbital_indices=selected,
         common_no_transform="exact_selected",
+        include_quadratic=True,
     )
     analyzer.make_measures()
 
@@ -306,6 +397,42 @@ def test_ump2_exact_selected_common_no_transform():
         mp2.t2_ab, mp2.naocc, mp2.nbocc
     )
 
+    lambda_aa_quadratic_mo = np.zeros((mp2.nmo,) * 4)
+    lambda_aa_quadratic_mo[
+        : mp2.naocc, : mp2.naocc, : mp2.naocc, : mp2.naocc
+    ] = 0.5 * np.einsum(
+        "ijab,klab->ijkl", mp2.t2_a.conj(), mp2.t2_a, optimize=True
+    )
+    lambda_aa_quadratic_mo[
+        mp2.naocc :, mp2.naocc :, mp2.naocc :, mp2.naocc :
+    ] = 0.5 * np.einsum(
+        "ijab,ijcd->abcd", mp2.t2_a.conj(), mp2.t2_a, optimize=True
+    )
+
+    lambda_bb_quadratic_mo = np.zeros((mp2.nmo,) * 4)
+    lambda_bb_quadratic_mo[
+        : mp2.nbocc, : mp2.nbocc, : mp2.nbocc, : mp2.nbocc
+    ] = 0.5 * np.einsum(
+        "ijab,klab->ijkl", mp2.t2_b.conj(), mp2.t2_b, optimize=True
+    )
+    lambda_bb_quadratic_mo[
+        mp2.nbocc :, mp2.nbocc :, mp2.nbocc :, mp2.nbocc :
+    ] = 0.5 * np.einsum(
+        "ijab,ijcd->abcd", mp2.t2_b.conj(), mp2.t2_b, optimize=True
+    )
+
+    lambda_ab_quadratic_mo = np.zeros((mp2.nmo,) * 4)
+    lambda_ab_quadratic_mo[
+        : mp2.naocc, mp2.nbocc :, : mp2.naocc, mp2.nbocc :
+    ] = -np.einsum(
+        "imcb,jmca->iajb", mp2.t2_ab.conj(), mp2.t2_ab, optimize=True
+    )
+    lambda_ab_quadratic_mo[
+        mp2.naocc :, : mp2.nbocc, mp2.naocc :, : mp2.nbocc
+    ] = -np.einsum(
+        "mibc,mjac->aibj", mp2.t2_ab.conj(), mp2.t2_ab, optimize=True
+    )
+
     Ua_selected = Ua[:, selected]
     Ub_selected = Ub[:, selected]
 
@@ -323,10 +450,28 @@ def test_ump2_exact_selected_common_no_transform():
     expected_aa = transform(lambda_aa_mo, Ua_selected, Ua_selected)
     expected_bb = transform(lambda_bb_mo, Ub_selected, Ub_selected)
     expected_ab = transform(lambda_ab_mo, Ua_selected, Ub_selected)
+    expected_aa_quadratic = transform(
+        lambda_aa_quadratic_mo, Ua_selected, Ua_selected
+    )
+    expected_bb_quadratic = transform(
+        lambda_bb_quadratic_mo, Ub_selected, Ub_selected
+    )
+    expected_ab_quadratic = transform(
+        lambda_ab_quadratic_mo, Ua_selected, Ub_selected
+    )
 
     assert analyzer.lambda2_aa_selected == approx(expected_aa)
     assert analyzer.lambda2_bb_selected == approx(expected_bb)
     assert analyzer.lambda2_ab_selected == approx(expected_ab)
+    assert analyzer.lambda2_aa_quadratic_selected == approx(
+        expected_aa_quadratic
+    )
+    assert analyzer.lambda2_bb_quadratic_selected == approx(
+        expected_bb_quadratic
+    )
+    assert analyzer.lambda2_ab_quadratic_selected == approx(
+        expected_ab_quadratic
+    )
     assert analyzer.lambda2_selected_indices == selected
     assert analyzer.lambda2_aa_selected.shape == (3, 3, 3, 3)
     assert analyzer.exact_selected_tensor_memory_mb < 0.01
@@ -334,16 +479,6 @@ def test_ump2_exact_selected_common_no_transform():
     assert np.count_nonzero(analyzer.M1[unselected]) == 0
     assert np.count_nonzero(analyzer.M2[unselected, :]) == 0
     assert np.count_nonzero(analyzer.M2[:, unselected]) == 0
-
-    with pytest.raises(ValueError, match="supports only the first-order"):
-        UMP2MPQOnTheFly(
-            mp2,
-            Ua=Ua,
-            Ub=Ub,
-            orbital_indices=selected,
-            common_no_transform="exact_selected",
-            include_quadratic=True,
-        )
 
     with pytest.raises(MemoryError, match="estimated"):
         UMP2MPQOnTheFly(

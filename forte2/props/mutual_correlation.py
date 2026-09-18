@@ -406,6 +406,133 @@ class RMP2MPQOnTheFly:
         self._cache_pair = {}
         self._cache_pair_as = {}
         self._cache_fixed = {}
+        self._quadratic_selected_ready = False
+        self._quadratic_oooo_selected = None
+        self._quadratic_vvvv_selected = None
+        self._quadratic_ab_ovov_selected = None
+        self._quadratic_ab_vovo_selected = None
+        self._quadratic_selected_position = {
+            p: position for position, p in enumerate(self.rdm_info_indices)
+        }
+
+    def _ensure_selected_quadratic_cumulants(self):
+        """Build the retained quadratic blocks only in the requested space.
+
+        The restricted natural-orbital rotation preserves the occupied and
+        virtual subspaces.  Consequently, the exact transformation of the
+        retained canonical source blocks remains block sparse.  Amplitude
+        factors are projected before their Gram products are formed, avoiding
+        both a full canonical rank-four cumulant and a full rotated-amplitude
+        cache.
+        """
+        if self._quadratic_selected_ready:
+            return
+
+        selected_occ = [p for p in self.rdm_info_indices if self._o(p)]
+        selected_vir = [p for p in self.rdm_info_indices if self._v(p)]
+        selected_vir_local = [p - self.nocc for p in selected_vir]
+        Uo = self.Uo[:, selected_occ]
+        Uv = self.Uv[:, selected_vir_local]
+        ko = len(selected_occ)
+        kv = len(selected_vir)
+        dtype = np.result_type(self.U, self.mp2.B_iaQ)
+
+        self._quadratic_selected_occ = tuple(selected_occ)
+        self._quadratic_selected_vir = tuple(selected_vir)
+        self._quadratic_occ_position = {
+            p: position for position, p in enumerate(selected_occ)
+        }
+        self._quadratic_vir_position = {
+            p: position for position, p in enumerate(selected_vir)
+        }
+
+        if ko:
+            hh_factors = np.zeros((ko, ko, self.nvir, self.nvir), dtype=dtype)
+            for j in range(self.nocc):
+                fixed_j = self._t2_fixed_j_canonical(j)
+                fixed_j_as = fixed_j - fixed_j.transpose(0, 2, 1)
+                partial = np.einsum(
+                    "iP,iab->Pab", Uo, fixed_j_as, optimize=True
+                )
+                hh_factors += np.einsum(
+                    "Q,Pab->PQab", Uo[j], partial, optimize=True
+                )
+            self._quadratic_oooo_selected = 0.5 * np.einsum(
+                "PQab,RSab->PQRS",
+                hh_factors.conj(),
+                hh_factors,
+                optimize=True,
+            )
+            del hh_factors
+        else:
+            self._quadratic_oooo_selected = np.zeros((0, 0, 0, 0), dtype=dtype)
+
+        if kv:
+            pp_factors = np.zeros((kv, kv, self.nocc, self.nocc), dtype=dtype)
+            for j in range(self.nocc):
+                fixed_j = self._t2_fixed_j_canonical(j)
+                fixed_j_as = fixed_j - fixed_j.transpose(0, 2, 1)
+                pp_factors[:, :, :, j] = np.einsum(
+                    "aP,bQ,iab->PQi", Uv, Uv, fixed_j_as, optimize=True
+                )
+            self._quadratic_vvvv_selected = 0.5 * np.einsum(
+                "PQij,RSij->PQRS",
+                pp_factors.conj(),
+                pp_factors,
+                optimize=True,
+            )
+            del pp_factors
+        else:
+            self._quadratic_vvvv_selected = np.zeros((0, 0, 0, 0), dtype=dtype)
+
+        if ko and kv:
+            ov_factors = np.zeros(
+                (ko, kv, self.nocc, self.nvir), dtype=dtype
+            )
+            for m in range(self.nocc):
+                fixed_m = self._t2_fixed_j_canonical(m)
+                ov_factors[:, :, m, :] = np.einsum(
+                    "iP,icb,bS->PSc",
+                    Uo,
+                    fixed_m,
+                    Uv.conj(),
+                    optimize=True,
+                )
+            self._quadratic_ab_ovov_selected = -np.einsum(
+                "PSmc,RQmc->PQRS",
+                ov_factors.conj(),
+                ov_factors,
+                optimize=True,
+            )
+            del ov_factors
+
+            vo_factors = np.zeros(
+                (ko, kv, self.nocc, self.nvir), dtype=dtype
+            )
+            for i in range(self.nocc):
+                fixed_i = self._t2_fixed_j_canonical(i)
+                vo_factors += np.einsum(
+                    "Q,mbc,bR->QRmc",
+                    Uo[i],
+                    fixed_i,
+                    Uv.conj(),
+                    optimize=True,
+                )
+            self._quadratic_ab_vovo_selected = -np.einsum(
+                "QRmc,SPmc->PQRS",
+                vo_factors.conj(),
+                vo_factors,
+                optimize=True,
+            )
+        else:
+            self._quadratic_ab_ovov_selected = np.zeros(
+                (ko, kv, ko, kv), dtype=dtype
+            )
+            self._quadratic_ab_vovo_selected = np.zeros(
+                (kv, ko, kv, ko), dtype=dtype
+            )
+
+        self._quadratic_selected_ready = True
 
     def _o(self, p):
         return self.occ_mask[p]
@@ -552,15 +679,27 @@ class RMP2MPQOnTheFly:
 
     def lambda2_aa_quadratic_elem(self, p, q, r, s):
         """Return the same-spin cumulant contribution quadratic in ``t2``."""
+        self._ensure_selected_quadratic_cumulants()
         if p == q or r == s:
             return 0.0
 
         if self._o(p) and self._o(q) and self._o(r) and self._o(s):
-            return self._gamma_oooo_elem(p, q, r, s)
+            positions = tuple(
+                self._quadratic_occ_position.get(index)
+                for index in (p, q, r, s)
+            )
+            if any(position is None for position in positions):
+                return 0.0
+            return self._quadratic_oooo_selected[positions]
 
         if self._v(p) and self._v(q) and self._v(r) and self._v(s):
-            a, b, c, d = p - self.nocc, q - self.nocc, r - self.nocc, s - self.nocc
-            return self._gamma_vvvv_elem(a, b, c, d)
+            positions = tuple(
+                self._quadratic_vir_position.get(index)
+                for index in (p, q, r, s)
+            )
+            if any(position is None for position in positions):
+                return 0.0
+            return self._quadratic_vvvv_selected[positions]
 
         return 0.0
 
@@ -593,15 +732,28 @@ class RMP2MPQOnTheFly:
 
     def lambda2_ab_quadratic_elem(self, p, q, r, s):
         """Return the opposite-spin cumulant contribution quadratic in ``t2``."""
+        self._ensure_selected_quadratic_cumulants()
         if self._o(p) and self._v(q) and self._o(r) and self._v(s):
-            i, a = p, q - self.nocc
-            j, b = r, s - self.nocc
-            return self._gamma_ovov_elem(i, a, j, b)
+            positions = (
+                self._quadratic_occ_position.get(p),
+                self._quadratic_vir_position.get(q),
+                self._quadratic_occ_position.get(r),
+                self._quadratic_vir_position.get(s),
+            )
+            if any(position is None for position in positions):
+                return 0.0
+            return self._quadratic_ab_ovov_selected[positions]
 
         if self._v(p) and self._o(q) and self._v(r) and self._o(s):
-            j, b = q, p - self.nocc
-            i, a = s, r - self.nocc
-            return self._gamma_ovov_elem(i, a, j, b)
+            positions = (
+                self._quadratic_vir_position.get(p),
+                self._quadratic_occ_position.get(q),
+                self._quadratic_vir_position.get(r),
+                self._quadratic_occ_position.get(s),
+            )
+            if any(position is None for position in positions):
+                return 0.0
+            return self._quadratic_ab_vovo_selected[positions]
 
         return 0.0
 
@@ -706,15 +858,17 @@ class UMP2MPQOnTheFly:
 
     The production definition retains the first-order ``oovv`` and ``vvoo``
     MP2 cumulant blocks for alpha-alpha, beta-beta, and alpha-beta amplitudes.
-    Optional quadratic same-spin ``oooo``/``vvvv`` and opposite-spin
-    particle-hole contractions are retained only as an opt-in diagnostic and
-    are not part of the paper's definition.
+    Optional selected quadratic same-spin ``oooo``/``vvvv`` and
+    opposite-spin particle-hole contractions are retained only as an opt-in
+    diagnostic and are not part of the paper's production definition.
 
     ``common_no_transform="block_projected"`` applies only the occupied-
     occupied and virtual-virtual blocks of ``Ua`` and ``Ub``.  The opt-in
     ``"exact_selected"`` mode instead applies the full transformations and
-    stores only the dense rank-four first-order cumulant tensors within the
-    requested orbital subset.
+    stores only dense rank-four cumulant tensors within the requested orbital
+    subset.  In the optional quadratic diagnostic, the retained canonical
+    source blocks are transformed exactly through amplitude-factor
+    intermediates; no complete molecular-orbital rank-four tensor is formed.
     The public spin densities ``gamma1_a``/``gamma1_b`` and the spin-free
     ``Gamma1``/``Γ1`` are stored in the target NO basis; canonical-MO inputs
     are retained as ``gamma1_mo_a`` and ``gamma1_mo_b``.
@@ -748,9 +902,8 @@ class UMP2MPQOnTheFly:
     common_no_mixing_tolerance : float, optional
         Threshold above which occupied-virtual mixing produces a warning.
     common_no_transform : {"block_projected", "exact_selected"}, optional
-        Common-NO transformation used for the first-order cumulant.  The
-        default preserves the legacy block-projected result.  Exact selected-
-        space transformation is incompatible with ``include_quadratic=True``.
+        Common-NO transformation used for the retained cumulant blocks.  The
+        default preserves the legacy block-projected result.
     max_exact_tensor_memory_mb : float, optional
         Maximum estimated peak storage for exact selected-space rank-four
         tensors.  The exact mode raises instead of silently falling back when
@@ -800,12 +953,6 @@ class UMP2MPQOnTheFly:
             raise ValueError("max_exact_tensor_memory_mb must be positive.")
         if self.max_exact_orbitals <= 0:
             raise ValueError("max_exact_orbitals must be positive.")
-        if self.common_no_transform == "exact_selected" and self.include_quadratic:
-            raise ValueError(
-                "common_no_transform='exact_selected' currently supports only "
-                "the first-order MP2 cumulant; set include_quadratic=False."
-            )
-
         if getattr(mp2, "B_iaQ", None) is None:
             raise ValueError("mp2.B_iaQ is missing. Run mp2.run() first.")
 
@@ -895,6 +1042,9 @@ class UMP2MPQOnTheFly:
         self.lambda2_aa_selected = None
         self.lambda2_bb_selected = None
         self.lambda2_ab_selected = None
+        self.lambda2_aa_quadratic_selected = None
+        self.lambda2_bb_quadratic_selected = None
+        self.lambda2_ab_quadratic_selected = None
         self._selected_index_position = {
             p: position for position, p in enumerate(self.rdm_info_indices)
         }
@@ -911,10 +1061,32 @@ class UMP2MPQOnTheFly:
                 f"{self.max_exact_orbitals}. Reduce the selected RDM space."
             )
         tensor_bytes = k**4 * np.dtype(tensor_dtype).itemsize
-        self.exact_selected_tensor_memory_mb = 3.0 * tensor_bytes / 1024**2
-        # Three persistent spin tensors plus one rank-four work tensor and a
-        # rank-three transformed fixed-occupied slab.
-        peak_bytes = 4 * tensor_bytes + k**3 * np.dtype(tensor_dtype).itemsize
+        persistent_tensor_count = 6 if self.include_quadratic else 3
+        self.exact_selected_tensor_memory_mb = (
+            persistent_tensor_count * tensor_bytes / 1024**2
+        )
+        # The first-order path has three persistent spin tensors plus one
+        # rank-four work tensor and a rank-three transformed fixed-occupied
+        # slab.  The selected-quadratic path additionally stores three target
+        # tensors and, one spin block at a time, its largest amplitude-factor
+        # intermediate.  This estimate intentionally excludes arrays already
+        # owned by the MP2 object (for example density-fitting factors).
+        if self.include_quadratic:
+            factor_elements = k**2 * max(
+                self.navir**2,
+                self.naocc**2,
+                self.nbvir**2,
+                self.nbocc**2,
+                self.nbocc * self.navir,
+                self.naocc * self.nbvir,
+            )
+            peak_bytes = 6 * tensor_bytes + factor_elements * np.dtype(
+                tensor_dtype
+            ).itemsize
+        else:
+            peak_bytes = 4 * tensor_bytes + k**3 * np.dtype(
+                tensor_dtype
+            ).itemsize
         self.exact_selected_peak_memory_mb = peak_bytes / 1024**2
         if (
             self.common_no_transform == "exact_selected"
@@ -998,6 +1170,103 @@ class UMP2MPQOnTheFly:
             )
         return transformed
 
+    def _transform_same_spin_quadratic_selected(
+        self,
+        fixed_slab_builder,
+        nocc,
+        nvir,
+        Uo,
+        Uv,
+    ):
+        """Transform retained same-spin ``oooo`` and ``vvvv`` blocks.
+
+        For amplitudes ``t_ij^ab``, the two retained source blocks are Gram
+        products over virtual and occupied pairs, respectively.  Projecting
+        the amplitudes first reduces both exact target-space transformations
+        to Gram products without constructing canonical ``o**4`` or
+        ``v**4`` tensors.
+        """
+        k = len(self.rdm_info_indices)
+        dtype = np.result_type(Uo, Uv, *self.mp2.B_iaQ)
+        transformed = np.zeros((k, k, k, k), dtype=dtype)
+
+        # A[P,Q,a,b] = sum_ij Uo[i,P] Uo[j,Q] t[i,j,a,b]
+        hh_factors = np.zeros((k, k, nvir, nvir), dtype=dtype)
+        for j in range(nocc):
+            fixed_j = fixed_slab_builder(j)
+            partial = np.einsum("iP,iab->Pab", Uo, fixed_j, optimize=True)
+            hh_factors += np.einsum(
+                "Q,Pab->PQab", Uo[j], partial, optimize=True
+            )
+        transformed += 0.5 * np.einsum(
+            "PQab,RSab->PQRS",
+            hh_factors.conj(),
+            hh_factors,
+            optimize=True,
+        )
+        del hh_factors
+
+        # B[P,Q,i,j] = sum_ab Uv[a,P] Uv[b,Q] t[i,j,a,b]
+        pp_factors = np.zeros((k, k, nocc, nocc), dtype=dtype)
+        for j in range(nocc):
+            fixed_j = fixed_slab_builder(j)
+            pp_factors[:, :, :, j] = np.einsum(
+                "aP,bQ,iab->PQi", Uv, Uv, fixed_j, optimize=True
+            )
+        transformed += 0.5 * np.einsum(
+            "PQij,RSij->PQRS",
+            pp_factors.conj(),
+            pp_factors,
+            optimize=True,
+        )
+        return transformed
+
+    def _transform_ab_quadratic_selected(self, Uoa, Uob, Uva, Uvb):
+        """Transform both retained alpha-beta particle-hole orientations."""
+        k = len(self.rdm_info_indices)
+        dtype = np.result_type(Uoa, Uob, Uva, Uvb, *self.mp2.B_iaQ)
+        transformed = np.zeros((k, k, k, k), dtype=dtype)
+
+        # X[P,S,m,c] = sum_{i,b} Uoa[i,P] Uvb[b,S]^* t[i,m,c,b]
+        # gives lambda[P,Q,R,S] = -X[P,S]^* X[R,Q].
+        ov_factors = np.zeros((k, k, self.nbocc, self.navir), dtype=dtype)
+        for m in range(self.nbocc):
+            fixed_m = self._t2_ab_fixed_beta_j_canonical(m)
+            ov_factors[:, :, m, :] = np.einsum(
+                "iP,icb,bS->PSc",
+                Uoa,
+                fixed_m,
+                Uvb.conj(),
+                optimize=True,
+            )
+        transformed -= np.einsum(
+            "PSmc,RQmc->PQRS",
+            ov_factors.conj(),
+            ov_factors,
+            optimize=True,
+        )
+        del ov_factors
+
+        # Y[Q,R,m,c] = sum_{i,b} Uob[i,Q] Uva[b,R]^* t[m,i,b,c]
+        # gives the alpha-virtual/beta-occupied orientation.
+        vo_factors = np.zeros((k, k, self.naocc, self.nbvir), dtype=dtype)
+        for i in range(self.nbocc):
+            fixed_i = self._t2_ab_fixed_beta_j_canonical(i)
+            vo_factors += np.einsum(
+                "Q,mbc,bR->QRmc",
+                Uob[i],
+                fixed_i,
+                Uva.conj(),
+                optimize=True,
+            )
+        transformed -= np.einsum(
+            "QRmc,SPmc->PQRS",
+            vo_factors.conj(),
+            vo_factors,
+            optimize=True,
+        )
+        return transformed
+
     def _ensure_exact_selected_cumulants(self):
         if self.common_no_transform != "exact_selected":
             return
@@ -1046,9 +1315,32 @@ class UMP2MPQOnTheFly:
             ab_oovv + ab_oovv.conj().transpose(2, 3, 0, 1)
         )
 
+        if self.include_quadratic:
+            self.lambda2_aa_quadratic_selected = (
+                self._transform_same_spin_quadratic_selected(
+                    self._t2_aa_fixed_j_canonical,
+                    self.naocc,
+                    self.navir,
+                    Uoa,
+                    Uva,
+                )
+            )
+            self.lambda2_bb_quadratic_selected = (
+                self._transform_same_spin_quadratic_selected(
+                    self._t2_bb_fixed_j_canonical,
+                    self.nbocc,
+                    self.nbvir,
+                    Uob,
+                    Uvb,
+                )
+            )
+            self.lambda2_ab_quadratic_selected = (
+                self._transform_ab_quadratic_selected(Uoa, Uob, Uva, Uvb)
+            )
+
         logger.log_info1(
             "Applied the exact common-NO transformation to the selected "
-            f"first-order UMP2 cumulant ({len(selected)} orbitals; "
+            f"UMP2 cumulant blocks ({len(selected)} orbitals; "
             f"{self.exact_selected_tensor_memory_mb:.1f} MiB persistent "
             "rank-four storage)."
         )
@@ -1320,6 +1612,11 @@ class UMP2MPQOnTheFly:
 
     def lambda2_aa_quadratic_elem(self, p, q, r, s):
         """Return the optional alpha-alpha contribution quadratic in ``t2``."""
+        if self.common_no_transform == "exact_selected":
+            return self._exact_selected_elem(
+                "lambda2_aa_quadratic_selected", p, q, r, s
+            )
+
         if p == q or r == s:
             return 0.0
 
@@ -1370,6 +1667,11 @@ class UMP2MPQOnTheFly:
 
     def lambda2_bb_quadratic_elem(self, p, q, r, s):
         """Return the optional beta-beta contribution quadratic in ``t2``."""
+        if self.common_no_transform == "exact_selected":
+            return self._exact_selected_elem(
+                "lambda2_bb_quadratic_selected", p, q, r, s
+            )
+
         if p == q or r == s:
             return 0.0
 
@@ -1417,6 +1719,11 @@ class UMP2MPQOnTheFly:
 
     def lambda2_ab_quadratic_elem(self, p, q, r, s):
         """Return the optional alpha-beta contribution quadratic in ``t2``."""
+        if self.common_no_transform == "exact_selected":
+            return self._exact_selected_elem(
+                "lambda2_ab_quadratic_selected", p, q, r, s
+            )
+
         if self._oa(p) and self._vb(q) and self._oa(r) and self._vb(s):
             return self._gamma_ovov_ab_elem(
                 p, self._b_vir(q), r, self._b_vir(s)

@@ -6,6 +6,169 @@ from forte2.helpers.matrix_functions import block_diag_2x2
 from .mutual_correlation import RMP2MPQOnTheFly, UMP2MPQOnTheFly
 
 
+DEFAULT_MUTUAL_CORRELATION_SCORE_THRESHOLDS = (0.15, 0.05, 0.0)
+
+
+def suggest_mutual_correlation_active_spaces(
+    matrix,
+    occupations,
+    *,
+    candidate_indices=None,
+    relative_thresholds=DEFAULT_MUTUAL_CORRELATION_SCORE_THRESHOLDS,
+    absolute_threshold=7.5e-4,
+    mandatory_indices=(),
+    degeneracy_rtol=1.0e-8,
+    degeneracy_atol=1.0e-10,
+):
+    """Suggest active orbitals from significant mutual-correlation scores.
+
+    The significant score of orbital ``p`` is the sum of ``M[p, q]`` over
+    candidate-orbital edges greater than ``absolute_threshold``.  For each
+    positive relative threshold ``eta``, orbitals with scores at least
+    ``eta * max(score)`` are selected.  A zero threshold retains only
+    endpoints of significant edges, rather than every candidate orbital.
+
+    Any mandatory orbitals are added before completing numerical degeneracy
+    groups defined by the supplied natural occupations.  Degeneracy completion
+    is transitive, so a narrowly split multiplet is never cut into pieces.
+
+    Returns
+    -------
+    dict
+        The significant edges and scores, their maximum, and one selection
+        record per requested relative threshold.
+    """
+    matrix = np.asarray(matrix)
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError("The mutual-correlation matrix must be square.")
+    if np.iscomplexobj(matrix):
+        if not np.allclose(matrix.imag, 0.0, rtol=0.0, atol=1.0e-12):
+            raise ValueError("The mutual-correlation matrix must be real.")
+        matrix = matrix.real
+    matrix = np.asarray(matrix, dtype=float)
+    nmo = matrix.shape[0]
+
+    if candidate_indices is None:
+        candidates = tuple(range(nmo))
+    else:
+        candidates = tuple(int(index) for index in candidate_indices)
+    if not candidates:
+        raise ValueError("At least one candidate orbital is required.")
+    if len(candidates) != len(set(candidates)):
+        raise ValueError("Candidate orbital indices must be unique.")
+    if min(candidates) < 0 or max(candidates) >= nmo:
+        raise IndexError(f"Candidate orbital indices must lie in [0, {nmo}).")
+    candidate_array = np.asarray(candidates, dtype=int)
+    candidate_block = matrix[np.ix_(candidate_array, candidate_array)]
+    if not np.all(np.isfinite(candidate_block)):
+        raise ValueError("The mutual-correlation matrix contains non-finite values.")
+    if not np.allclose(candidate_block, candidate_block.T, rtol=1.0e-8, atol=1.0e-12):
+        raise ValueError("The mutual-correlation matrix must be symmetric.")
+    if np.min(candidate_block) < -1.0e-12:
+        raise ValueError("The mutual-correlation matrix must be nonnegative.")
+
+    absolute_threshold = float(absolute_threshold)
+    if absolute_threshold < 0.0:
+        raise ValueError("absolute_threshold must be nonnegative.")
+
+    occupations = np.asarray(occupations, dtype=float)
+    if occupations.ndim != 1 or occupations.size < nmo:
+        raise ValueError("Natural occupations must cover every matrix orbital.")
+    if not np.all(np.isfinite(occupations[candidate_array])):
+        raise ValueError("Candidate natural occupations must be finite.")
+    if degeneracy_rtol < 0.0 or degeneracy_atol < 0.0:
+        raise ValueError("Degeneracy tolerances must be nonnegative.")
+
+    mandatory = {int(index) for index in mandatory_indices}
+    if not mandatory.issubset(candidates):
+        raise ValueError("Mandatory orbitals must belong to the candidate space.")
+
+    thresholds = tuple(float(value) for value in relative_thresholds)
+    if not thresholds:
+        raise ValueError("At least one relative threshold is required.")
+    if len(thresholds) != len(set(thresholds)):
+        raise ValueError("Relative thresholds must be unique.")
+    if any(value < 0.0 or value > 1.0 for value in thresholds):
+        raise ValueError("Relative thresholds must lie in [0, 1].")
+
+    significant_scores = np.zeros(nmo)
+    significant_edges = []
+    for position, p in enumerate(candidates):
+        for q in candidates[position + 1 :]:
+            value = max(0.5 * (matrix[p, q] + matrix[q, p]), 0.0)
+            if value > absolute_threshold:
+                significant_edges.append((p, q, float(value)))
+                significant_scores[p] += value
+                significant_scores[q] += value
+    significant_edges.sort(key=lambda edge: (-edge[2], edge[0], edge[1]))
+    maximum_score = float(np.max(significant_scores[candidate_array]))
+
+    def complete_degenerate_groups(selected):
+        completed = set(selected)
+        additions = set()
+        changed = True
+        while changed:
+            changed = False
+            for p in tuple(completed):
+                for q in candidates:
+                    if q in completed:
+                        continue
+                    if np.isclose(
+                        occupations[p],
+                        occupations[q],
+                        rtol=degeneracy_rtol,
+                        atol=degeneracy_atol,
+                    ):
+                        completed.add(q)
+                        additions.add(q)
+                        changed = True
+        return tuple(sorted(completed)), tuple(sorted(additions))
+
+    suggestions = {}
+    for threshold in thresholds:
+        score_cutoff = threshold * maximum_score
+        if maximum_score == 0.0:
+            score_selected = set()
+        elif threshold == 0.0:
+            score_selected = {
+                index for index in candidates if significant_scores[index] > 0.0
+            }
+        else:
+            score_selected = {
+                index
+                for index in candidates
+                if significant_scores[index] > score_cutoff
+                or np.isclose(
+                    significant_scores[index],
+                    score_cutoff,
+                    rtol=1.0e-8,
+                    atol=1.0e-12,
+                )
+            }
+        active_indices, degeneracy_additions = complete_degenerate_groups(
+            score_selected | mandatory
+        )
+        suggestions[threshold] = {
+            "relative_threshold": threshold,
+            "score_cutoff": score_cutoff,
+            "score_selected_indices": tuple(sorted(score_selected)),
+            "mandatory_indices": tuple(sorted(mandatory)),
+            "degeneracy_completed_indices": degeneracy_additions,
+            "active_indices": active_indices,
+        }
+
+    return {
+        "candidate_indices": candidates,
+        "absolute_threshold": absolute_threshold,
+        "significant_edges": tuple(significant_edges),
+        "significant_scores": significant_scores,
+        "maximum_significant_score": maximum_score,
+        "degeneracy_rtol": float(degeneracy_rtol),
+        "degeneracy_atol": float(degeneracy_atol),
+        "suggestions": suggestions,
+    }
+
+
 def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
     """
     Calculate a one-electron property using AO-basis quantities.
@@ -440,8 +603,10 @@ def ump2_mpq_onthefly_no(
         low-cost block-projected common-NO transformation.
     common_no_transform : {"block_projected", "exact_selected"}, optional
         Use the legacy occupied/virtual block projection or apply the full
-        alpha and beta MO-to-common-NO transformations to dense first-order
-        cumulant tensors restricted to the selected orbital space.
+        alpha and beta MO-to-common-NO transformations to the retained
+        cumulant blocks restricted to the selected orbital space.  When the
+        optional selected-quadratic diagnostic is requested, its retained
+        source blocks are transformed by the same exact selected-space route.
     max_exact_tensor_memory_mb : float, optional
         Explicit peak-memory budget for ``common_no_transform="exact_selected"``.
         Exceeding it raises instead of silently using block projection.
