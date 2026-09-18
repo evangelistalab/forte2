@@ -7,7 +7,7 @@ from forte2.helpers.matrix_functions import block_diag_2x2
 
 
 def get_1e_property(
-    system, g1, property_name, origin=None, unit="debye", skip_picture_change=False
+    system, g1, property_name, origin=None, unit="debye", skip_picture_change=None
 ):
     """
     Calculate a one-electron property using AO-basis quantities.
@@ -26,8 +26,9 @@ def get_1e_property(
     unit: str, optional, default="debye"
         The unit for the property value, either "debye" or "au". Default is "debye".
         Only used for multipole moments. For quadrupole moments, "debye" stands for debye * angstrom, etc.
-    skip_picture_change : bool, optional, default=False
+    skip_picture_change : bool | None, optional, default=None
         If True, skip picture change corrections, only relevant for X2C calculations.
+        If None, follow ``skip_picture_change`` on the system's X2C parameters.
 
     Returns
     -------
@@ -43,6 +44,9 @@ def get_1e_property(
         assert (
             g1.shape[0] == system.nbf
         ), f"g1 shape {g1.shape[0]} does not match the number of basis functions, {system.nbf} in the system."
+
+    if skip_picture_change is None:
+        skip_picture_change = system.skip_picture_change
 
     if system.x2c_type in ["sf", "so"] and not skip_picture_change:
         do_picture_change = True

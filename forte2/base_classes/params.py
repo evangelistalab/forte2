@@ -78,11 +78,15 @@ class X2CParams(ParamsBase):
             - "dc": Dirac-Coulomb scaling.
             - "dcb": Dirac-Coulomb-Breit scaling.
             - "row-dependent": Row-dependent scaling.
+    skip_picture_change : bool, optional, default=False
+        If True, evaluate one-electron property operators without the picture change
+        correction. Individual property calls can override this.
     """
 
     x2c_type: Literal[None, "sf", "so"] = None
     x2c_model: Literal[None, "1e", "sap"] = "1e"
     snso_type: Literal[None, "boettger", "dc", "dcb", "row-dependent"] = None
+    skip_picture_change: bool = False
 
     def __post_init__(self):
         super().__post_init__()
