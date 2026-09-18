@@ -4,14 +4,22 @@ from forte2.state import StateAverageInfo
 from forte2.helpers import logger
 
 
-def spin_matrices(system, C):
+def spin_matrices(system, C, skip_picture_change=False):
     r"""
     Build the spin operator matrices in the spinor basis spanned by `C`.
 
     The matrices are assembled in the two-component AO basis and then transformed to the
     MO basis. That order lets the one-electron part of :math:`\hat{S}^2` resolve the
-    identity over the complete AO space instead of over the spinors carried in `C`, so it
-    stays correct once the operators are no longer proportional to the overlap.
+    identity over the complete AO space instead of over the spinors carried in `C`.
+
+    Under X2C the returned :math:`\hat{s}_z`, :math:`\hat{s}_+`, and :math:`\hat{s}_-`
+    carry the picture change correction, but `S2_1e` does not. `S2_1e` is the
+    same-electron part of :math:`\hat{S}^2`, where :math:`\hat{s}^2 = 3/4` is an even
+    operator, so its correction is 3/4 times that of the identity, which the
+    renormalization matrix makes equal to the overlap. The untransformed matrices already
+    reproduce that exactly. Building `S2_1e` from picture-changed factors would instead
+    spoil it, because the upper-left block of a product of transformed operators is not
+    the transform of their product.
 
     Parameters
     ----------
@@ -19,6 +27,9 @@ def spin_matrices(system, C):
         The two-component system, which supplies the AO overlap.
     C : NDArray
         The spinor coefficients, shape (2*nbf, nspinor).
+    skip_picture_change : bool, optional, default=False
+        If True, skip the picture change correction of the spin operator, only relevant
+        for X2C calculations.
 
     Returns
     -------
@@ -54,6 +65,12 @@ def spin_matrices(system, C):
     ovlp_inv = X @ X.conj().T
     S2_1e = S_z @ ovlp_inv @ S_z + S_z + S_minus @ ovlp_inv @ S_plus
 
+    if system.x2c_type in ["sf", "so"] and not skip_picture_change:
+        s_x, s_y, s_z = system.x2c_helper.spin_operator()
+        S_z = s_z
+        S_plus = s_x + 1j * s_y
+        S_minus = S_plus.conj().T
+
     return tuple(C.conj().T @ A @ C for A in (S_z, S_plus, S_minus, S2_1e))
 
 
@@ -63,7 +80,7 @@ def _split_blocks(A, ncore):
     return A[co, co], A[co, ac], A[ac, co], A[ac, ac]
 
 
-def compute_spin2(system, C, g1, g2):
+def compute_spin2(system, C, g1, g2, skip_picture_change=False):
     r"""
     Compute <S^2>, <S_x/y/z> of a two-component CI state
 
@@ -80,6 +97,9 @@ def compute_spin2(system, C, g1, g2):
     g2 : NDArray
         The complex active-space two-particle RDM,
         :math:`\gamma_{pqrs} = \langle a^\dagger_p a^\dagger_q a_s a_r \rangle`.
+    skip_picture_change : bool, optional, default=False
+        If True, skip the picture change correction of the spin operator, only relevant
+        for X2C calculations.
 
     Returns
     -------
@@ -90,7 +110,7 @@ def compute_spin2(system, C, g1, g2):
         :math:`\hat{S}_z`.
     """
     ncore = C.shape[1] - g1.shape[0]
-    S_z, S_plus, S_minus, S2_1e = spin_matrices(system, C)
+    S_z, S_plus, S_minus, S2_1e = spin_matrices(system, C, skip_picture_change)
     S2_1e_cc, _, _, S2_1e_aa = _split_blocks(S2_1e, ncore)
 
     # <S^2>_1e = [S2_1e]_pq g1[p,q] = Tr(S2_1e,core) + sum_uv [S2_1e,act]_uv g1[u,v]

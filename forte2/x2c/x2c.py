@@ -6,6 +6,7 @@ from forte2.helpers import (
     logger,
     block_diag_2x2,
     i_sigma_dot,
+    sigma_dot,
     canonical_orth,
     invsqrt_matrix,
     print_metric_info,
@@ -60,6 +61,7 @@ class X2CHelper:
         logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
         self.xbasis = decontract_basis(system.basis)
+        self._spin_operator = None
 
         self.proj = scipy.linalg.solve(
             integrals.overlap(self.system, self.xbasis),
@@ -140,6 +142,9 @@ class X2CHelper:
         # build the transformation matrix R
         self.R = self._get_transformation_matrix(S, T)
 
+        # the picture-change correction of any property is tied to this X and R
+        self._spin_operator = None
+
         # build the Foldy-Wouthuysen Hamiltonian
         h_fw = self._build_foldy_wouthuysen_hamiltonian(T, V, W)
 
@@ -210,6 +215,62 @@ class X2CHelper:
         # project back to the contracted basis
         proj = self._get_projection_matrix()
         return [proj.conj().T @ mu_pc_i @ proj for mu_pc_i in mu_pc]
+
+    def spin_operator(self):
+        r"""
+        Compute the spin operator matrices with picture change correction.
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected :math:`\hat{s}_x`, :math:`\hat{s}_y`, and
+            :math:`\hat{s}_z` matrices in the two-component contracted basis, each of
+            shape (2 * nbf, 2 * nbf).
+
+        Notes
+        -----
+        :math:`\hat{s}_k = \sigma_k / 2` is an even operator, with large-large block
+        :math:`\sigma_k S / 2` and small-small block
+        :math:`(\sigma\cdot\hat{p}) \sigma_k (\sigma\cdot\hat{p}) / (8 c^2)`.
+
+        For ``x2c_type == "sf"`` the decoupling matrices are spin-free, so the spin
+        structure factors out of the transformation and each of the nine spatial blocks
+        is picture-changed on its own before being recombined.
+        """
+        if self._spin_operator is not None:
+            return self._spin_operator
+
+        nbf = len(self.xbasis)
+        ovlp = integrals.overlap(self.system, self.xbasis)
+        # (sigma.p) sigma_k (sigma.p) as [k][sigma_j]; the four I2 blocks vanish
+        ss = integrals.cint_spsigmasp(self.system, self.xbasis).reshape(3, 4, nbf, nbf)
+        # 1/2 from s_k = sigma_k / 2, 1/(4 c^2) from the small-component metric
+        fac = 0.5 * 0.25 / LIGHT_SPEED**2
+        zero = np.zeros_like(ovlp)
+
+        if self.x2c_type == "so":
+            ints_LL, ints_SS = [], []
+            for k in range(3):
+                comp = [zero] * 3
+                comp[k] = 0.5 * ovlp
+                ints_LL.append(sigma_dot(*comp))
+                ints_SS.append(fac * sigma_dot(*ss[k, :3]))
+            s_pc = self.picture_change_even_operator(ints_LL, ints_SS)
+            proj = self._get_projection_matrix()
+            self._spin_operator = [proj.conj().T @ s @ proj for s in s_pc]
+        else:
+            ints_LL, ints_SS = [], []
+            for k in range(3):
+                for j in range(3):
+                    ints_LL.append(0.5 * ovlp if j == k else zero)
+                    ints_SS.append(fac * ss[k, j])
+            s_pc = self.picture_change_even_operator(ints_LL, ints_SS)
+            s_pc = [self.proj.conj().T @ s @ self.proj for s in s_pc]
+            self._spin_operator = [
+                sigma_dot(*s_pc[3 * k : 3 * k + 3]) for k in range(3)
+            ]
+
+        return self._spin_operator
 
     def picture_change_even_operator(self, ints_LL, ints_SS):
         """

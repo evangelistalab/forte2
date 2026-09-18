@@ -199,4 +199,4 @@ def test_rel_casscf_spin2():
     )
     mc = MCOptimizer(ci_solver)(scf)
     mc.run()
-    assert mc.spin2 == pytest.approx([0.750011, 0.750011, 0.750005, 0.750005], abs=1e-4)
+    assert mc.spin2 == pytest.approx([0.753865, 0.753865, 0.753859, 0.753859], abs=1e-4)

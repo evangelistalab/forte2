@@ -1451,6 +1451,49 @@ def cint_sprsp(system, basis1=None, basis2=None, origin=None):
     return _f2c(res)
 
 
+def cint_spsigmasp(system, basis1=None, basis2=None):
+    r"""
+    Compute the small-component spin integral between two basis sets using the Libcint library.
+
+    .. math::
+        \Sigma^{12}_{\mu\nu,k} = \int (\sigma\cdot\hat{p}) \chi^{1}_\mu(\mathbf{r}) \sigma_k (\sigma\cdot\hat{p}) \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    where :math:`k` represents the x, y, or z component.
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+
+    Returns
+    -------
+    spsigmasp : ndarray
+        The small-component spin integrals, negated so that the returned blocks are the
+        coefficients of :math:`\sigma_x, \sigma_y, \sigma_z` in the expansion above. Order
+        of components:
+        [ sigma_{x, sigma_x}, sigma_{x, sigma_y}, sigma_{x, sigma_z}, sigma_{x, I2},
+          sigma_{y, sigma_x}, sigma_{y, sigma_y}, sigma_{y, sigma_z}, sigma_{y, I2},
+          sigma_{z, sigma_x}, sigma_{z, sigma_y}, sigma_{z, sigma_z}, sigma_{z, I2} ]
+
+    Notes
+    -----
+    The operator identity
+    :math:`(\sigma\cdot\hat{p}) \sigma_k (\sigma\cdot\hat{p}) = \sigma_j (2 \hat{p}_k \hat{p}_j - \delta_{jk} \hat{p}^2)`
+    makes every block symmetric and the four ``I2`` blocks vanish identically, so unlike
+    :func:`opVop` the spin components combine without a factor of ``i``.
+    """
+    _require_libcint()
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    res = ints.cint_int1e_spsigmasp_sph(shell_slice, atm, bas, env)
+    # C-layout, first index is the integral component (slowest changing).
+    # Libcint returns the negative of the sigma_j coefficients.
+    return -_f2c(res)
+
+
 def cint_coulomb_2c(system, basis1=None, basis2=None):
     r"""
     Compute the two-center two-electron Coulomb integral between two basis sets using the Libcint library.

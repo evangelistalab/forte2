@@ -376,6 +376,30 @@ def i_sigma_dot(scalar, x, y, z):
     return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])
 
 
+def sigma_dot(x, y, z):
+    """
+    Construct the matrix (sigma_x, sigma_y, sigma_z) dot (x, y, z).
+
+    Unlike :func:`i_sigma_dot`, no factor of ``i`` is applied, so the result is Hermitian
+    when the components are Hermitian.
+
+    Parameters
+    ----------
+    x : NDArray
+        The x component.
+    y : NDArray
+        The y component.
+    z : NDArray
+        The z component.
+
+    Returns
+    -------
+    NDArray
+        The resulting matrix, with double the dimensions of the input arrays.
+    """
+    return np.block([[z, x - y * 1j], [x + y * 1j, -z]])
+
+
 def _compute_Am1y_eigh(evecs, evals, y):
     """
     Compute x = A^{-1} y from a (possibly truncated) eigendecomposition of A
