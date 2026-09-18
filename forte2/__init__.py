@@ -1,4 +1,4 @@
-__version__ = "2026.6.4"
+__version__ = "2026.9.1"
 __author__ = "Forte2 Developers"
 
 from .helpers.echo_script import echo_invoking_script
@@ -20,8 +20,8 @@ from .base_classes import X2CParams
 from .system import System, ModelSystem, HubbardModel
 from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
-from .ci import CI, RelCI, CISolver, RelCISolver
-from .sci import SelectedCI, SelectedCISolver, RelSelectedCI, RelSelectedCISolver
+from .ci import CI, CISolver, RelCISolver
+from .sci import SelectedCISolver, RelSelectedCISolver
 from .x2c import x2c
 from .orbitals import (
     AVAS,
@@ -33,6 +33,7 @@ from .orbitals import (
 )
 from .mcopt import MCOptimizer
 from .optimize import GeometryOptimizer
+from .gradients import FDGradient
 from .props import get_1e_property, mulliken_population
 from .helpers import logger, set_verbosity_level, comparisons
 from .dsrg import DSRG_MRPT2, RelDSRG_MRPT2

@@ -2,13 +2,52 @@ import pytest
 import numpy as np
 from pathlib import Path
 
-from forte2 import System, RHF, MCOptimizer, ASET, CI, State, CISolver
-from forte2.dsrg import DSRG_MRPT2
+from forte2 import (
+    ASET,
+    CI,
+    CISolver,
+    GHF,
+    MCOptimizer,
+    RelCISolver,
+    RHF,
+    SpinorUpcaster,
+    State,
+    System,
+    X2CParams,
+)
+from forte2.dsrg import DSRG_MRPT2, RelDSRG_MRPT2
+from forte2.data.atom_data import EH_TO_WN
 from forte2.helpers.comparisons import approx, approx_abs
+from forte2.orbitals import mo_overlap
 from forte2.state import EmbeddingMOSpace
 
 # Directory containing *this* file
 THIS_DIR = Path(__file__).resolve().parent
+
+
+def test_aset_full_system():
+    xyz = "Li 0 0 0; Li 0 0 1"
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="def2-universal-jkfit",
+    )
+    hf = RHF(charge=0)(system)
+    ci_solver = CISolver(
+        State(nel=6, multiplicity=1, ms=0.0),
+        core_orbitals=2,
+        active_orbitals=2,
+    )
+    mc = MCOptimizer(ci_solver)(hf)
+    aset = ASET(
+        fragment=["Li1-2"],
+        cutoff_method="threshold",
+        cutoff=0.1,
+    )(mc)
+    ci = CI(ci_solver)(aset)
+    ci.run()
+    # full system CASSCF energy
+    assert ci.E_ci[0] == approx(-14.6066230834)
 
 
 def test_aset_1_forte_v1_embedding_1():
@@ -57,7 +96,7 @@ def test_aset_1_forte_v1_embedding_1():
         cutoff=0.1,
     )(mc)
     ci = CI(
-        State(system=system, multiplicity=1, ms=0.0),
+        CISolver(State(system=system, multiplicity=1, ms=0.0)),
         final_orbitals="semicanonical",
     )(aset)
     dsrg = DSRG_MRPT2(flow_param=0.5)(ci)
@@ -119,7 +158,7 @@ def test_aset_4_forte_v1_embedding_4():
         num_A_vir=1,
     )(mc)
     ci = CI(
-        State(system=system, multiplicity=1, ms=0.0),
+        CISolver(State(system=system, multiplicity=1, ms=0.0)),
         final_orbitals="semicanonical",
     )(aset)
     dsrg = DSRG_MRPT2(flow_param=0.5)(ci)
@@ -144,8 +183,7 @@ def compare_orbital_coefficients(system, aset, filename):
     Note: this can only handle nondegenerate orbitals.
     """
     C_test = np.load(THIS_DIR / f"reference_aset_orbitals/{filename}")
-    S = system.ints_overlap()
-    overlap = np.abs(aset.mos.C[0].T @ S @ C_test)
+    overlap = np.abs(mo_overlap(aset.mos.C[0], system, C_test))
     assert np.allclose(overlap, np.eye(overlap.shape[0]), atol=1e-8, rtol=0.0)
 
 
@@ -186,7 +224,7 @@ def test_aset_1():
         cutoff_method="threshold",
         cutoff=0.99,
     )(mc)
-    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
+    ci = CI(CISolver(State(system=system, multiplicity=1, ms=0.0)))(aset)
     ci.run()
 
     compare_orbital_coefficients(system, aset, "test_aset_1_orbitals.npy")
@@ -223,7 +261,7 @@ def test_aset_2():
         cutoff_method="threshold",
         cutoff=0.99,
     )(mc)
-    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
+    ci = CI(CISolver(State(system=system, multiplicity=1, ms=0.0)))(aset)
     ci.run()
 
     compare_orbital_coefficients(system, aset, "test_aset_2_orbitals.npy")
@@ -267,7 +305,7 @@ def test_aset_4():
         num_A_vir=1,
     )(mc)
     aset.run()
-    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
+    ci = CI(CISolver(State(system=system, multiplicity=1, ms=0.0)))(aset)
     ci.run()
 
     compare_orbital_coefficients(system, aset, "test_aset_4_orbitals.npy")
@@ -306,7 +344,7 @@ def test_aset_5():
     )
     mc = MCOptimizer(ci_solver)(rhf)
     aset = ASET(fragment=["C1-2", "H1-3"], cutoff_method="threshold")(mc)
-    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
+    ci = CI(CISolver(State(system=system, multiplicity=1, ms=0.0)))(aset)
     ci.run()
 
     compare_orbital_coefficients(system, aset, "test_aset_5_orbitals.npy")
@@ -354,7 +392,7 @@ def test_aset_gas():
     assert aset.mo_space.ngas == mc.mo_space.ngas
     assert aset.mo_space.active_orbitals == mc.mo_space.active_orbitals
 
-    ci = CI(state)(aset)
+    ci = CI(CISolver(state))(aset)
     ci.run()
     assert ci.mo_space.ngas == 2
 
@@ -410,12 +448,12 @@ def test_aset_gas_semicanonical_noncontiguous_mo_space():
         [1, 2, 0, 3, 4, 5, 6],
     )
 
-    ci = CI(state, final_orbitals="semicanonical")(aset)
+    ci = CI(CISolver(state), final_orbitals="semicanonical")(aset)
     ci.run()
 
     assert ci.E == approx(mc.E)
     np.testing.assert_allclose(
-        ci.mos.C[0].conj().T @ system.ints_overlap() @ ci.mos.C[0],
+        mo_overlap(ci.mos.C[0], system, ci.mos.C[0]),
         np.eye(system.nmo),
         atol=1e-10,
     )
@@ -507,28 +545,28 @@ def test_aset_gas_semicanonical_noninteracting_fragments():
 
     assert mc.E == approx(hf_mc.E + he_rhf.E)
 
-    ci = CI(state, final_orbitals="semicanonical")(aset)
+    ci = CI(CISolver(state), final_orbitals="semicanonical")(aset)
     ci.run()
 
     assert ci.E == approx(mc.E)
     np.testing.assert_allclose(
-        ci.mos.C[0].conj().T @ system.ints_overlap() @ ci.mos.C[0],
+        mo_overlap(ci.mos.C[0], system, ci.mos.C[0]),
         np.eye(system.nmo),
         atol=1e-10,
     )
 
 
-def spans_same_space(S, C1, C2):
+def spans_same_space(system, C1, C2):
     """
     Check whether the column sets C1 and C2 span the same space.
 
-    Both column sets are assumed orthonormal with respect to the metric S, as
-    MO coefficients always are. The singular values of C1^T S C2 are then the
-    cosines of the principal angles between the two subspaces, and they are all
-    equal to one if and only if the spans coincide.
+    Both column sets are assumed orthonormal with respect to `system`'s AO
+    overlap, as MO coefficients always are. The singular values of C1^H S C2
+    are then the cosines of the principal angles between the two subspaces,
+    and they are all equal to one if and only if the spans coincide.
     """
     assert C1.shape == C2.shape
-    sv = np.linalg.svd(C1.conj().T @ S @ C2, compute_uv=False)
+    sv = np.linalg.svd(mo_overlap(C1, system, C2), compute_uv=False)
     return np.allclose(sv, 1.0, atol=1e-8, rtol=0.0)
 
 
@@ -607,15 +645,14 @@ def test_aset_noncontiguous_frozen_core_orbital_ordering():
     assert not np.array_equal(orig_to_contig, np.arange(system.nmo))
     assert not np.array_equal(orig_to_contig, contig_to_orig)
 
-    S = system.ints_overlap()
     C = aset.mos.C[0]
-    np.testing.assert_allclose(C.conj().T @ S @ C, np.eye(system.nmo), atol=1e-10)
+    np.testing.assert_allclose(mo_overlap(C, system, C), np.eye(system.nmo), atol=1e-10)
 
     # The orbitals the user pinned by index must still span the same space as
     # in the parent MCSCF, i.e. they must not have been permuted away.
     for indices in (frozen_core, mc.mo_space.active_indices):
         assert len(indices) > 0
-        assert spans_same_space(S, mc.mos.C[0][:, indices], C[:, indices])
+        assert spans_same_space(system, mc.mos.C[0][:, indices], C[:, indices])
 
     # Every orbital assigned to fragment A must be more localized on the
     # fragment than any orbital assigned to environment B.
@@ -623,3 +660,137 @@ def test_aset_noncontiguous_frozen_core_orbital_ordering():
     for index_A, index_B in ((index_A_occ, index_B_occ), (index_A_vir, index_B_vir)):
         assert len(index_A) > 0 and len(index_B) > 0
         assert diag_P[index_A].min() > diag_P[index_B].max()
+
+
+def test_aset_two_component_matches_nonrelativistic():
+    eci = -206.084138520360
+
+    xyz = """
+    N       -1.1226987119      2.0137160725     -0.0992218410
+    N       -0.1519067161      1.2402226172     -0.0345618482
+    H        0.7253474870      1.7181546089     -0.2678695726
+    F       -2.2714806355      1.3880717623      0.2062454513
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+    )
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
+        State(nel=24, multiplicity=1, ms=0.0),
+        core_orbitals=10,
+        active_orbitals=4,
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
+    conv = SpinorUpcaster(apply_random_phase=True, rng=1234)(mc)
+    relmc = MCOptimizer(RelCISolver(nel=24))(conv)
+    aset_2c = ASET(
+        fragment=["N", "H"],
+        frozen_core_orbitals=6,
+        cutoff_method="threshold",
+        cutoff=0.99,
+    )(relmc)
+    relci = CI(RelCISolver(nel=24))(aset_2c)
+    relci.run()
+
+    assert np.real(relci.E) == approx(eci)
+    assert np.real(relmc.E) == approx(mc.E)
+
+
+@pytest.mark.slow
+def test_aset_two_component_relativistic():
+    emcscf = -438.040123238662
+    esplit_mcscf = 347.15629
+    edsrg_full = -438.314646639763
+    esplit_dsrg_full = 337.03105
+    edsrg_aset = -438.140777365368
+    esplit_dsrg_aset = 342.38198
+
+    xyz = """
+    S   0.0000000000   0.0000000000   1.0272000000
+    C   0.0000000000   0.0000000000  -0.7566000000
+    H   0.0000000000   1.0244000000  -1.1017000000
+    H   0.8871000000  -0.5122000000  -1.1017000000
+    H  -0.8871000000  -0.5122000000  -1.1017000000
+    """
+
+    def doublet_splitting(eigvals):
+        """Separation of the two Kramers doublets of the 2E ground state."""
+        e = np.sort(np.real(np.asarray(eigvals)))
+        return (np.mean(e[2:4]) - np.mean(e[:2])) * EH_TO_WN
+
+    def full_pt2():
+        system = System(
+            xyz=xyz,
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="cc-pvtz-jkfit",
+            x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
+        )
+        scf = GHF(charge=0)(system)
+        ci_solver = RelCISolver(nel=25, nroots=6, core_orbitals=20, active_orbitals=6)
+        mc = MCOptimizer(ci_solver)(scf)
+        mc.run()
+        # read the CASSCF values before the DSRG relaxation re-solves the CI
+        e_mcscf = np.real(mc.E)
+        split_mcscf = doublet_splitting(mc.ci_solver.evals_flat)
+        pt = RelDSRG_MRPT2(flow_param=0.5, relax_reference="once")(mc)
+        pt.run()
+        return e_mcscf, split_mcscf, np.real(pt.E), doublet_splitting(pt.relax_eigvals)
+
+    def full_aset_pt2():
+        system = System(
+            xyz=xyz,
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="cc-pvtz-jkfit",
+            x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
+        )
+        scf = GHF(charge=0)(system)
+        ci_solver = RelCISolver(nel=25, nroots=6, core_orbitals=20, active_orbitals=6)
+        mc = MCOptimizer(ci_solver)(scf)
+        aset = ASET(
+            fragment=["S", "C", "H"],
+            cutoff_method="threshold",
+            cutoff=0.01,
+        )(mc)
+        ci = CI(RelCISolver(nel=25, nroots=6))(aset)
+        pt = RelDSRG_MRPT2(flow_param=0.5, relax_reference="once")(ci)
+        pt.run()
+        return np.real(pt.E), doublet_splitting(pt.relax_eigvals)
+
+    def s_only_aset_pt2():
+        system = System(
+            xyz=xyz,
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="cc-pvtz-jkfit",
+            x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
+        )
+        scf = GHF(charge=0)(system)
+        ci_solver = RelCISolver(nel=25, nroots=6, core_orbitals=20, active_orbitals=6)
+        mc = MCOptimizer(ci_solver)(scf)
+        aset = ASET(
+            fragment=["S"],
+            cutoff_method="threshold",
+            cutoff=0.5,
+        )(mc)
+        ci = CI(RelCISolver(nel=25, nroots=6))(aset)
+        pt = RelDSRG_MRPT2(flow_param=0.5, relax_reference="once")(ci)
+        pt.run()
+        return np.real(pt.E), doublet_splitting(pt.relax_eigvals)
+
+    e_mcscf, split_mcscf, e_full, split_full = full_pt2()
+    assert e_mcscf == approx(emcscf)
+    assert split_mcscf == approx_abs(esplit_mcscf, 1e-2)
+    assert e_full == approx(edsrg_full)
+    assert split_full == approx_abs(esplit_dsrg_full, 1e-2)
+
+    # aset with the entire molecule as the fragment, must reproduce
+    # full result
+    e_all, split_all = full_aset_pt2()
+    assert e_all == approx(edsrg_full)
+    assert split_all == approx_abs(esplit_dsrg_full, 1e-2)
+
+    e_aset, split_aset = s_only_aset_pt2()
+    assert e_aset == approx(edsrg_aset)
+    assert split_aset == approx_abs(esplit_dsrg_aset, 1e-2)

@@ -8,6 +8,120 @@ from forte2.helpers import logger
 from forte2.data import EH_TO_EV
 
 
+def check_capability_declared(solver, **capabilities):
+    """
+    Check that a solver declared the capabilities a request needs.
+
+    The capability class variables default to None on the base classes, so a subclass that
+    forgets to declare one is reported here by name instead of surfacing as a confusing
+    AttributeError or a TypeError from the membership test that follows.
+
+    Parameters
+    ----------
+    solver
+        The solver whose declaration is being checked.
+    **capabilities
+        The declared tuples, keyed by capability name. A value of None means the subclass
+        never declared it; an empty tuple is a valid declaration meaning "not supported".
+
+    Raises
+    ------
+    NotImplementedError
+        If any declaration is missing.
+    """
+    missing = [name for name, value in capabilities.items() if value is None]
+    if missing:
+        raise NotImplementedError(
+            f"{type(solver).__name__} does not declare {', '.join(sorted(missing))}. "
+            "Every concrete solver must set its capability class variables "
+            "(an empty tuple means 'not supported')."
+        )
+
+
+# Spin-type spellings accepted by the RDM and cumulant accessors, mapped to the canonical
+# two-letter form used everywhere else.
+SPIN_TYPE_ALIASES = {
+    "spin_dependent": "sd",
+    "spin-dependent": "sd",
+    "spin_free": "sf",
+    "spin-free": "sf",
+    "spin_orbital": "so",
+    "spin-orbital": "so",
+    "spinorbital": "so",
+}
+
+
+def normalize_spin_type(spin_type):
+    """
+    Resolve a spin-type spelling to its canonical two-letter form.
+
+    Parameters
+    ----------
+    spin_type : str
+        The requested representation: `"sd"`, `"sf"`, or `"so"`, or one of the longer
+        spellings in `SPIN_TYPE_ALIASES` (for example `"spin-free"` or `"spinorbital"`).
+
+    Returns
+    -------
+    str
+        The canonical spin type. An unrecognized value passes through unchanged, so the
+        caller reports it against the spin types it actually supports.
+    """
+    return SPIN_TYPE_ALIASES.get(spin_type, spin_type)
+
+
+def validate_single_state_rdm(
+    solver, left_root, right_root, order, allowed_orders, spin_type, allowed_spin_types
+):
+    """
+    Validate a `make_rdm`/`make_cumulant` request against a single-state solver's root count
+    and its allowed (order, spin_type) combinations.
+
+    Parameters
+    ----------
+    solver
+        The single-state solver handling the request.
+    left_root : int
+        The root index for the bra state.
+    right_root : int | None
+        The root index for the ket state, or None (meaning the same as `left_root`).
+    order : int
+        The requested RDM/cumulant order.
+    allowed_orders : tuple[int, ...]
+        The orders this solver supports.
+    spin_type : str
+        The requested representation ("sd", "sf", or "so", or an alias thereof).
+    allowed_spin_types : tuple[str, ...]
+        The representations this solver supports.
+
+    Returns
+    -------
+    str
+        The canonical spin type, for the caller to use in place of the requested one.
+
+    Raises
+    ------
+    ValueError
+        If `order`/`spin_type` aren't in the allowed sets, or if either root is out of
+        `[0, nroot)`.
+    """
+    check_capability_declared(
+        solver, orders=allowed_orders, spin_types=allowed_spin_types
+    )
+    if order not in allowed_orders:
+        raise ValueError(f"order must be one of {allowed_orders}, got {order}.")
+    spin_type = normalize_spin_type(spin_type.lower())
+    if spin_type not in allowed_spin_types:
+        raise ValueError(
+            f"spin_type must be one of {allowed_spin_types}, got '{spin_type}'."
+        )
+    nroot = solver.nroot
+    for name, root in (("left_root", left_root), ("right_root", right_root)):
+        if root is not None and not (0 <= root < nroot):
+            raise ValueError(f"{name} must be between 0 and {nroot - 1}, got {root}.")
+    return spin_type
+
+
 def pretty_print_gas_info(ci_strings: CIStrings):
     num_spaces = ci_strings.ngas_spaces
     gas_sizes = ci_strings.gas_size
@@ -355,6 +469,41 @@ def make_3cumulant_so(gamma1, gamma2, gamma3):
     return l3
 
 
+def make_cumulant_from_rdms(solver, root, *, order, spin_type):
+    """
+    Assemble a cumulant of the given order from a solver's own RDMs.
+
+    Works with any object exposing ``make_rdm(root, order=, spin_type=)``, which covers
+    both the per-state worker solvers and the state-averaged ones.
+
+    Parameters
+    ----------
+    solver
+        The solver supplying the RDMs.
+    root : int
+        The root index.
+    order : int
+        The cumulant order (2 or 3).
+    spin_type : str
+        "sf" (spin-free) or "so" (spin-orbital).
+
+    Returns
+    -------
+    NDArray
+        The cumulant.
+    """
+    rdm1 = solver.make_rdm(root, order=1, spin_type=spin_type)
+    rdm2 = solver.make_rdm(root, order=2, spin_type=spin_type)
+    if order == 2:
+        return (make_2cumulant_so if spin_type == "so" else make_2cumulant_sf)(
+            rdm1, rdm2
+        )
+    rdm3 = solver.make_rdm(root, order=3, spin_type=spin_type)
+    return (make_3cumulant_so if spin_type == "so" else make_3cumulant_sf)(
+        rdm1, rdm2, rdm3
+    )
+
+
 def make_2cumulant_sf(gamma1, gamma2):
     """
     Compute the spin-free 2-cumulant from the 1- and 2- spin-free RDMs.
@@ -388,7 +537,7 @@ def make_3cumulant_sf(gamma1, gamma2, gamma3):
 
     This can be useful for computing averaged cumulants, since one cannot simply average
     the 3-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
-    See text around eq. 7 om J. Chem. Phys. 148, 124106 (2018) for more details.
+    See text around eq. 7 of J. Chem. Phys. 148, 124106 (2018) for more details.
 
     Parameters
     ----------

@@ -79,6 +79,68 @@ class FockBuilder:
             )
         return np.ascontiguousarray(self.B_Pmn.transpose((2, 0, 1)))
 
+    def _check_df_metric(self):
+        if isinstance(self.system, forte2.ModelSystem) or self.system.cholesky_tei:
+            raise NotImplementedError(
+                "Metric-inverted three-center integrals require density fitting."
+            )
+
+    def build_metric_inverted_density_contraction(self, D):
+        r"""Return the metric-inverted three-center tensor contracted with a
+        one-particle density, without forming the full three-center tensor.
+
+        .. math::
+
+            \rho^P=\sum_{\mu\nu}D_{\mu\nu}Z^P_{\mu\nu}
+            =\sum_Q X_{QP}\Big(\sum_{\mu\nu}D_{\mu\nu}B^Q_{\mu\nu}\Big).
+
+        Parameters
+        ----------
+        D : NDArray
+            A one-particle density with shape ``(nbf, nbf)``.
+
+        Returns
+        -------
+        NDArray
+            The vector ``rho`` with shape ``(naux,)``.
+        """
+        self._check_df_metric()
+        bP = np.einsum("Pmn,nm->P", self.B_Pmn, D, optimize=True)
+        return self.Mm12.T @ bP
+
+    def build_metric_inverted_mo_block(self, *pairs):
+        r"""Return the metric-inverted three-center tensor transformed into
+        one or more MO blocks, without forming the full three-center tensor.
+
+        .. math::
+
+            Z^P_{ij}=\sum_Q X_{QP}\sum_k\Big(\sum_{\mu\nu}
+            C^{\mathrm{bra},k}_{\mu i}B^Q_{\mu\nu}C^{\mathrm{ket},k}_{\nu j}\Big).
+
+        Every pair contributes to the same output block, so the raw
+        (pre-inversion) contractions are summed before the metric is
+        applied once.
+
+        Parameters
+        ----------
+        *pairs : tuple[NDArray, NDArray]
+            One or more ``(Cbra, Cket)`` coefficient matrix pairs, each with
+            shapes ``(nbf, ni)`` and ``(nbf, nj)``. All pairs must produce
+            the same ``(ni, nj)`` output shape. Callers are responsible for
+            conjugating ``Cbra`` where required.
+
+        Returns
+        -------
+        NDArray
+            The tensor ``Z`` with shape ``(naux, ni, nj)``.
+        """
+        self._check_df_metric()
+        raw = np.einsum("Pmn,mi,nj->Pij", self.B_Pmn, *pairs[0], optimize=True)
+        for Cbra, Cket in pairs[1:]:
+            raw += np.einsum("Pmn,mi,nj->Pij", self.B_Pmn, Cbra, Cket, optimize=True)
+        Z = np.einsum("QP,Qij->Pij", self.Mm12, raw, optimize=True)
+        return Z
+
     def _build_B_model_system(self):
         nbf = self.system.nbf
         eri = self.system.eri.reshape((nbf**2,) * 2)
@@ -148,6 +210,8 @@ class FockBuilder:
                 )
             # M^{-1/2} = L^{-T} L^{-1}, so L^{-1} can be considered as M^{-1/2}
             X = sp.linalg.solve_triangular(L, np.eye(naux), lower=True)
+
+        self.Mm12 = X
 
         # Compute the integrals (P|mn) with P in the auxiliary basis and m, n in the system basis
         Pmn = integrals.coulomb_3c(self.system, auxiliary_basis)
@@ -780,6 +844,81 @@ class FockBuilderOTF:
             return _compute_Am1y_eigh(self.sevecs, self.sevals, y)
         else:
             return _compute_Am1y_cholesky(self.L, y)
+
+    def build_metric_inverted_density_contraction(self, D):
+        r"""Return the metric-inverted three-center tensor contracted with a
+        one-particle density, without forming the full three-center tensor.
+
+        .. math::
+
+            \rho^P=\sum_{\mu\nu}D_{\mu\nu}Z^P_{\mu\nu}
+            =\sum_Q(M^{-1})_{PQ}\Big(\sum_{\mu\nu}D_{\mu\nu}(Q|\mu\nu)\Big).
+
+        Raw three-center integrals are regenerated in auxiliary-shell
+        batches and contracted immediately, consistent with the on-the-fly
+        builder's memory model.
+
+        Parameters
+        ----------
+        D : NDArray
+            A one-particle density with shape ``(nbf, nbf)``.
+
+        Returns
+        -------
+        NDArray
+            The vector ``rho`` with shape ``(naux,)``.
+        """
+        bP = np.zeros(self.naux, dtype=D.dtype)
+        pshell0 = 0
+        while pshell0 < self.nshaux:
+            pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+            _buf = self._fill_Pmn_buffer(pshell0, pshell1)
+            np.einsum("Pmn,nm->P", _buf, D, optimize=True, out=bP[pb0:pb1])
+            pshell0 = pshell1
+        return self._apply_Mm1(bP)
+
+    def build_metric_inverted_mo_block(self, *pairs):
+        r"""Return the metric-inverted three-center tensor transformed into
+        one or more MO blocks, without forming the full three-center tensor.
+
+        .. math::
+
+            Z^P_{ij}=\sum_Q(M^{-1})_{PQ}\sum_k\Big(\sum_{\mu\nu}
+            C^{\mathrm{bra},k}_{\mu i}(Q|\mu\nu)C^{\mathrm{ket},k}_{\nu j}\Big).
+
+        Raw three-center integrals are regenerated in auxiliary-shell
+        batches and contracted immediately, consistent with the on-the-fly
+        builder's memory model. Every pair contributes to the same output
+        block, so the raw (pre-inversion) contractions are summed before the
+        metric is applied once.
+
+        Parameters
+        ----------
+        *pairs : tuple[NDArray, NDArray]
+            One or more ``(Cbra, Cket)`` coefficient matrix pairs, each with
+            shapes ``(nbf, ni)`` and ``(nbf, nj)``. All pairs must produce
+            the same ``(ni, nj)`` output shape. Callers are responsible for
+            conjugating ``Cbra`` where required.
+
+        Returns
+        -------
+        NDArray
+            The tensor ``Z`` with shape ``(naux, ni, nj)``.
+        """
+        ni, nj = pairs[0][0].shape[1], pairs[0][1].shape[1]
+        dtype = np.result_type(*(np.result_type(Cbra, Cket) for Cbra, Cket in pairs))
+        raw = np.zeros((self.naux, ni, nj), dtype=dtype)
+        pshell0 = 0
+        while pshell0 < self.nshaux:
+            pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+            _buf = self._fill_Pmn_buffer(pshell0, pshell1)
+            for Cbra, Cket in pairs:
+                raw[pb0:pb1] += np.einsum(
+                    "Pmn,mi,nj->Pij", _buf, Cbra, Cket, optimize=True
+                )
+            pshell0 = pshell1
+        Z = self._apply_Mm1(raw.reshape(self.naux, -1))
+        return Z.reshape(raw.shape)
 
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0

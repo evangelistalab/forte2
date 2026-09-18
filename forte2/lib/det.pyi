@@ -158,6 +158,9 @@ class SlaterRules:
         Initialize a SlaterRules object with the number of orbitals, scalar energy, one-electron integrals, and two-electron integrals in physicist's notation.
         """
 
+    def update_integrals(self, norb: int, scalar_energy: float | None = None, one_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None))] | None = None, two_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))] | None = None) -> None:
+        """Update the integrals used in evaluating Slater rules."""
+
     def energy(self, arg: Determinant, /) -> float: ...
 
     def energies(self, dets: Sequence[Determinant]) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
@@ -170,6 +173,9 @@ class RelSlaterRules:
         """
         Initialize a RelSlaterRules object with the number of spinor(orbitals), scalar energy, one-electron integrals, and two-electron integrals in physicist's notation.
         """
+
+    def update_integrals(self, nspinor: int, scalar_energy: float | None = None, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))] | None = None, two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))] | None = None) -> None:
+        """Update the integrals used in evaluating Slater rules."""
 
     def energy(self, arg: Determinant, /) -> float: ...
 

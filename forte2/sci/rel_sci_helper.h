@@ -4,6 +4,7 @@
 #include <functional>
 #include <vector>
 #include <cmath>
+#include <optional>
 #include <span>
 
 #include "helpers/ndarray.h"
@@ -33,7 +34,7 @@ using RelDetRootMap = ankerl::unordered_dense::map<Determinant, size_t, Determin
 /// integrals. Because every active electron occupies the "alpha" string with an empty
 /// beta string (`nb == 0`), only the single-alpha and double-alpha-alpha excitation
 /// classes ever contribute, so the beta / alpha-beta / spin machinery of the real helper
-/// is absent here. The reduced density matrices (`compute_a_1rdm` / `compute_aa_2rdm`)
+/// is absent here. The reduced density matrices (`compute_so_1rdm` / `compute_so_2rdm`)
 /// likewise only need the alpha string; they conjugate the bra so the diagonal RDMs are
 /// Hermitian and the two-root case yields the transition RDM.
 class RelSelectedCIHelper {
@@ -62,8 +63,28 @@ class RelSelectedCIHelper {
     /// @brief Return the determinants in the variational space
     const std::vector<Determinant>& variational_dets() const { return dets_; }
 
+    /// @brief Compute the Hamiltonian matrix element between two determinants.
+    /// @param dets The list of determinants
+    /// @param I The index of the first determinant
+    /// @param J The index of the second determinant
+    /// @return The Hamiltonian matrix element <I|H|J>
+    std::complex<double> slater_rules(const std::vector<Determinant>& dets, size_t I,
+                                      size_t J) const {
+        if (I == J) {
+            return slater_rules_.energy(dets[I]);
+        }
+        return slater_rules_.slater_rules(dets[I], dets[J]);
+    }
+
     /// @brief Set the Hamiltonian integrals
-    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V);
+    /// @param E New Hamiltonian scalar energy, or nullopt to keep the current value
+    /// @param H New one-electron integrals, or nullopt to keep the current value
+    /// @param V New two-electron integrals in physicist notation, or nullopt to keep the
+    ///        current value
+    /// @note This method also updates slater_rules and det_energies.
+    void set_Hamiltonian(std::optional<double> E = std::nullopt,
+                         std::optional<np_matrix_complex> H = std::nullopt,
+                         std::optional<np_tensor4_complex> V = std::nullopt);
 
     /// @brief Set the CI coefficients (shape: (n_dets, n_roots))
     void set_c(np_matrix_complex& c);
@@ -122,21 +143,21 @@ class RelSelectedCIHelper {
     /// @brief Apply the Hamiltonian to a given basis and sigma vectors (complex)
     void Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const;
 
-    /// @brief Compute the (complex) alpha 1-RDM between two roots of the stored CI vectors.
+    /// @brief Compute the (complex) spin-orbital 1-RDM between two roots of the stored CI vectors.
     /// @param left_root The root supplying the (conjugated) bra coefficients
     /// @param right_root The root supplying the ket coefficients
     /// @return gamma1[p][q] = <left_root| a^+_p a_q |right_root> as a complex (norb, norb) matrix.
     ///         With left_root == right_root this is the ordinary 1-RDM; with left_root !=
     ///         right_root it is the transition 1-RDM. Only the alpha string contributes (nb == 0).
-    np_matrix_complex compute_a_1rdm(size_t left_root, size_t right_root) const;
+    np_matrix_complex compute_so_1rdm(size_t left_root, size_t right_root) const;
 
-    /// @brief Compute the (complex) alpha-alpha 2-RDM between two roots of the stored CI vectors.
+    /// @brief Compute the (complex) spin-orbital 2-RDM between two roots of the stored CI vectors.
     /// @param left_root The root supplying the (conjugated) bra coefficients
     /// @param right_root The root supplying the ket coefficients
     /// @return gamma2[p][q][r][s] = <left_root| a^+_p a^+_q a_s a_r |right_root> as a complex
     ///         (norb, norb, norb, norb) tensor (full, antisymmetric in p<->q and r<->s). The
-    ///         diagonal / transition distinction is the same as for compute_a_1rdm.
-    np_tensor4_complex compute_aa_2rdm(size_t left_root, size_t right_root) const;
+    ///         diagonal / transition distinction is the same as for compute_so_1rdm.
+    np_tensor4_complex compute_so_2rdm(size_t left_root, size_t right_root) const;
 
   private:
     // == Class Private Methods ==
@@ -165,12 +186,35 @@ class RelSelectedCIHelper {
     void H1a(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
     void H2a(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
 
-    /// @brief Select new variational and PT2 determinants using a batch approach
-    void select_hbci_batch(RelDetRootMap& V_map, RelDetRootMap& PT_map,
-                           std::vector<std::complex<double>>& V_coeffs,
-                           std::vector<std::complex<double>>& PT_coeffs, double var_threshold,
-                           double pt2_threshold, size_t num_batches, size_t batch_id,
-                           const DetSet& existing_dets);
+    /// @brief Reusable working buffers for select_hbci_batch
+    struct RelSelectHbciScratch {
+        /// @brief Maps each external determinant to the starting index of its coefficient block
+        RelDetRootMap map;
+        /// @brief The coupling <det|H|Psi_r> of each external determinant to each root, summed
+        /// over every parent that reaches it, as coeffs[idx + r]
+        std::vector<std::complex<double>> coeffs;
+        /// @brief One flag per external determinant, indexed as promoted[idx / nroots], set when
+        /// at least one of its connections exceeds var_threshold and it therefore will join the
+        /// variational space in the next iteration
+        std::vector<uint8_t> promoted;
+        /// @brief Scratch occupation vectors for occupied/virtual spinors
+        std::vector<size_t> aocc, avir;
+    };
+
+    /// @brief Enumerate the determinants of one batch that are connected to the variational space
+    /// and accumulate their couplings
+    /// @param s Working buffers owned by the calling thread, cleared on entry
+    /// @param var_threshold Connections above this promote their determinant into the variational
+    /// space. Must not be negative.
+    /// @param pt2_threshold Connections whose criterion does not exceed this are discarded. Must
+    /// not be negative.
+    /// @param num_batches The total number of batches
+    /// @param batch_id The batch index to process
+    /// @param existing_dets The set of determinants already in the variational space to skip
+    /// @note Batch membership is decided by the external determinant alone, so every parent
+    /// that reaches a given determinant is guaranteed to be visited in the same batch
+    void select_hbci_batch(RelSelectHbciScratch& s, double var_threshold, double pt2_threshold,
+                           size_t num_batches, size_t batch_id, const DetSet& existing_dets);
 
     // == Class Private Variables ==
 

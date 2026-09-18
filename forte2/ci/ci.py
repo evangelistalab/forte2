@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -13,17 +13,15 @@ from forte2.lib.ci_helpers import (
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
-from forte2.base_classes import CIBase
+from forte2.base_classes import ActiveSpaceDriver, CIBase, Method
 from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals
-from forte2.orbitals import FinalOrbitals, validate_final_orbitals
+from forte2.orbitals import FinalOrbitals
 from .ci_utils import (
     pretty_print_gas_info,
-    pretty_print_ci_summary,
-    pretty_print_ci_nat_occ_numbers,
-    pretty_print_ci_dets,
-    pretty_print_ci_transition_props,
+    validate_single_state_rdm,
+    make_cumulant_from_rdms,
 )
 
 
@@ -32,7 +30,7 @@ class _CISingleStateSolver:
     """
     A general configuration interaction (CI) solver class for a single `State`.
     Although possible, is not recommended to instantiate this class directly.
-    Consider using the `CI` class instead.
+    Consider using the `CISolver` class instead.
 
     Parameters
     ----------
@@ -51,7 +49,7 @@ class _CISingleStateSolver:
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
-        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+        The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
 
@@ -74,8 +72,8 @@ class _CISingleStateSolver:
     ci_params: CIParams = field(default_factory=CIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
     die_if_not_converged: bool = False
+    log_level: int = logger.VERBOSITY_DEBUG
 
     ### Non-init attributes
     rebuild_guess: bool = field(default=True, init=False)
@@ -108,12 +106,17 @@ class _CISingleStateSolver:
 
     def _make_sigma_builder_obj(self):
         """Construct the C++ sigma builder for the current integrals."""
+        algorithm = self.ci_params.ci_algorithm.lower()
+        if algorithm not in ("kh", "hz", "knowles-handy", "harrison-zarrabian"):
+            # e.g. "exact": the iterative sigma-build algorithm is unused on that path
+            algorithm = "kh"
         return self._sigma_builder_cls(
             self.ci_strings,
             self.ints.E,
             self.ints.H,
             self.ints.V,
             self.log_level,
+            algorithm,
         )
 
     def _make_ci_strings(self):
@@ -182,14 +185,18 @@ class _CISingleStateSolver:
 
         self._setup_basis()
 
+    def _update_sigma_builder_ints(self):
+        """Push the current active-space integrals into the existing sigma builder."""
+        self.ci_sigma_builder.set_Hamiltonian(self.ints.E, self.ints.H, self.ints.V)
+
     def run(self):
         if not self.executed:
             self._ci_solver_startup()
-
-        # Create the sigma builder from the CI strings and integrals. This object
-        # handles some temporary memory deallocated at destruction and is used to
-        # compute the Hamiltonian matrix elements in the determinant basis.
-        self.ci_sigma_builder = self._make_sigma_builder_obj()
+            # Create the sigma builder from the CI strings and integrals.
+            self.ci_sigma_builder = self._make_sigma_builder_obj()
+        else:
+            # Update the integrals (reusing the same sigma builder)
+            self._update_sigma_builder_ints()
         self.ci_sigma_builder.set_memory(self.ci_params.ci_builder_memory)
         if self.ci_params.ci_algorithm.lower() == "exact":
             self._do_exact_diagonalization()
@@ -206,11 +213,6 @@ class _CISingleStateSolver:
         self.executed = True
 
         return self
-
-    def _select_algorithm(self):
-        """Configure the sigma builder's algorithm and return its name."""
-        self.ci_sigma_builder.set_algorithm(self.ci_params.ci_algorithm.lower())
-        return self.ci_sigma_builder.get_algorithm()
 
     def _form_hdiag(self):
         """Diagonal of the Hamiltonian in the variational (CSF) basis."""
@@ -248,7 +250,7 @@ class _CISingleStateSolver:
         Harrison-Zarrabian or Knowles-Handy sigma builder algorithm.
         """
         logger.log(
-            f"Using CI algorithm: {self._select_algorithm()}",
+            f"Using CI algorithm: {self.ci_sigma_builder.get_algorithm()}",
             self.log_level,
         )
 
@@ -295,9 +297,8 @@ class _CISingleStateSolver:
             if self.die_if_not_converged:
                 raise RuntimeError("Davidson-Liu solver did not converge.")
             else:
-                logger.log(
-                    f"\nDavidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations.\n",
-                    self.log_level,
+                logger.log_warning(
+                    f"Davidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations."
                 )
 
         self._log_sigma_build_times()
@@ -326,13 +327,13 @@ class _CISingleStateSolver:
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
         for root in range(self.nroot):
             root_rdms = {}
-            root_rdms["rdm1"] = self.make_sf_1rdm(root)
-            rdm2_aa, rdm2_ab, rdm2_bb = self.make_sd_2rdm(root)
+            root_rdms["rdm1"] = self.make_rdm(root, order=1, spin_type="sf")
+            rdm2_aa, rdm2_ab, rdm2_bb = self.make_rdm(root, order=2, spin_type="sd")
             root_rdms["rdm2_aa"] = rdm2_aa
             root_rdms["rdm2_ab"] = rdm2_ab
             root_rdms["rdm2_bb"] = rdm2_bb
 
-            rdm2_aa_full, _, rdm2_bb_full = self.make_sd_2rdm(root)
+            rdm2_aa_full, _, rdm2_bb_full = self.make_rdm(root, order=2, spin_type="sd")
             # Convert to full-dimension RDMs
             root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(
                 rdm2_aa_full
@@ -341,7 +342,7 @@ class _CISingleStateSolver:
                 rdm2_bb_full
             )
 
-            root_rdms["rdm2_sf"] = self.make_sf_2rdm(root)
+            root_rdms["rdm2_sf"] = self.make_rdm(root, order=2, spin_type="sf")
 
             # Compute the energy from the RDMs
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
@@ -473,11 +474,21 @@ class _CISingleStateSolver:
         """CI vector for ``root`` in the determinant basis."""
         return self.csf_C_to_det_C(self.evecs[:, root])
 
-    def make_1rdm(self, left_root: int, right_root: int | None = None):
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2, 3)
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sd", "sf")
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2, 3)
+    _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("sf",)
+
+    def make_rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: Literal[1, 2, 3],
+        spin_type: Literal["sd", "sf"],
+    ):
         """
-        Make the one-particle RDM for two CI roots.
-        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
-        Spin(or)-orbital for two-component CI.
+        Make the RDM of the given order and representation for two CI roots.
 
         Parameters
         ----------
@@ -485,291 +496,99 @@ class _CISingleStateSolver:
             the CI root for the bra state.
         right_root : int | None, optional (default=left_root)
             the CI root for the ket state.
+        order : int
+            The RDM order (1, 2, or 3).
+        spin_type : str
+            "sd" (spin-dependent) or "sf" (spin-free). The aliases "spin_dependent",
+            "spin-dependent", "spin_free", and "spin-free" are also accepted.
 
         Returns
         -------
-        NDArray
-            One-particle RDM.
+        NDArray or tuple[NDArray, ...]
+            spin_type=sd -> (a, b) at order 1, (aa, ab, bb) at order 2, and
+            (aaa, aab, abb, bbb) at order 3; spin_type=sf -> a single full tensor.
         """
-        return self.make_sf_1rdm(left_root, right_root)
-
-    def make_2rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the two-particle RDM for two CI roots.
-        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
-        Spin(or)-orbital for two-component CI.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Two-particle RDM.
-        """
-        return self.make_sf_2rdm(left_root, right_root)
-
-    def make_2cumulant(self, left_root: int, right_root: int | None = None):
-        """
-        Make the two-particle cumulant for two CI roots.
-        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
-        Spin(or)-orbital for two-component CI.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Two-particle cumulant.
-        """
-        return self.make_sf_2cumulant(left_root, right_root)
-
-    def make_3rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the three-particle RDM for two CI roots.
-        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
-        Spin(or)-orbital for two-component CI.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Three-particle RDM.
-        """
-        return self.make_sf_3rdm(left_root, right_root)
-
-    def make_3cumulant(self, left_root: int, right_root: int | None = None):
-        """
-        Make the three-particle cumulant for two CI roots.
-        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
-        Spin(or)-orbital for two-component CI.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Three-particle cumulant.
-        """
-        return self.make_sf_3cumulant(left_root, right_root)
-
-    def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
-        r"""
-        Make the spin-dependent one-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        tuple[NDArray, NDArray]:
-            Spin-dependent one-particle RDMs (a, b).
-        """
+        spin_type = validate_single_state_rdm(
+            self,
+            left_root,
+            right_root,
+            order,
+            self._rdm_orders,
+            spin_type,
+            self._rdm_spin_types,
+        )
         left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        a = self.ci_sigma_builder.a_1rdm(left_ci_vec_det, right_ci_vec_det)
-        b = self.ci_sigma_builder.b_1rdm(left_ci_vec_det, right_ci_vec_det)
-        return a, b
+        right_ci_vec_det = (
+            left_ci_vec_det
+            if right_root is None
+            else self.csf_C_to_det_C(self.evecs[:, right_root])
+        )
+        sb = self.ci_sigma_builder
+        if spin_type == "sd":
+            if order == 1:
+                return (
+                    sb.a_1rdm(left_ci_vec_det, right_ci_vec_det),
+                    sb.b_1rdm(left_ci_vec_det, right_ci_vec_det),
+                )
+            if order == 2:
+                return (
+                    sb.aa_2rdm(left_ci_vec_det, right_ci_vec_det),
+                    sb.ab_2rdm(left_ci_vec_det, right_ci_vec_det),
+                    sb.bb_2rdm(left_ci_vec_det, right_ci_vec_det),
+                )
+            return (
+                sb.aaa_3rdm(left_ci_vec_det, right_ci_vec_det),
+                sb.aab_3rdm(left_ci_vec_det, right_ci_vec_det),
+                sb.abb_3rdm(left_ci_vec_det, right_ci_vec_det),
+                sb.bbb_3rdm(left_ci_vec_det, right_ci_vec_det),
+            )
+        # spin_type == "sf"
+        if order == 1:
+            return sb.sf_1rdm(left_ci_vec_det, right_ci_vec_det)
+        if order == 2:
+            return sb.sf_2rdm(left_ci_vec_det, right_ci_vec_det)
+        return sb.sf_3rdm(left_ci_vec_det, right_ci_vec_det)
 
-    def make_sd_2rdm(self, left_root: int, right_root: int | None = None):
+    def make_cumulant(
+        self,
+        root: int,
+        *,
+        order: Literal[2, 3],
+        spin_type: Literal["sf", "so"],
+    ):
         """
-        Make the spin-dependent two-particle RDMs (aa, ab, bb) for two CI roots.
+        Make the cumulant of the given order for one CI root.
 
         Parameters
         ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        tuple[NDArray, NDArray, NDArray]:
-            Spin-dependent two-particle RDMs (aa, ab, bb).
-        """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        aa = self.ci_sigma_builder.aa_2rdm(left_ci_vec_det, right_ci_vec_det)
-        ab = self.ci_sigma_builder.ab_2rdm(left_ci_vec_det, right_ci_vec_det)
-        bb = self.ci_sigma_builder.bb_2rdm(left_ci_vec_det, right_ci_vec_det)
-        return aa, ab, bb
-
-    def make_sd_3rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-dependent three-particle RDMs (aaa, aab, abb, bbb) for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        tuple[NDArray, NDArray, NDArray, NDArray]:
-            Spin-dependent three-particle RDMs (aaa, aab, abb, bbb).
-        """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-
-        aaa = self.ci_sigma_builder.aaa_3rdm(left_ci_vec_det, right_ci_vec_det)
-        aab = self.ci_sigma_builder.aab_3rdm(left_ci_vec_det, right_ci_vec_det)
-        abb = self.ci_sigma_builder.abb_3rdm(left_ci_vec_det, right_ci_vec_det)
-        bbb = self.ci_sigma_builder.bbb_3rdm(left_ci_vec_det, right_ci_vec_det)
-        return aaa, aab, abb, bbb
-
-    def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free one-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
+        root : int
+            the CI root.
+        order : int
+            The cumulant order (2 or 3).
+        spin_type : str
+            "sf" (spin-free) or "so" (spin-orbital), depending on the backend. The
+            aliases "spin_free", "spin-free", "spin_orbital", "spin-orbital", and
+            "spinorbital" are also accepted.
 
         Returns
         -------
         NDArray
-            Spin-free one-particle RDM.
+            The cumulant.
         """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_1rdm(left_ci_vec_det, right_ci_vec_det)
-
-    def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free two-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Spin-free two-particle RDM.
-        """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_2rdm(left_ci_vec_det, right_ci_vec_det)
-
-    def make_sf_3rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free three-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Spin-free three-particle RDM.
-        """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_3rdm(left_ci_vec_det, right_ci_vec_det)
-
-    def make_sf_2cumulant(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free cumulant of the two-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Spin-free cumulant of the two-particle RDM.
-        """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_2cumulant(left_ci_vec_det, right_ci_vec_det)
-
-    def make_sf_3cumulant(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free cumulant of the three-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Spin-free cumulant of the three-particle RDM.
-        """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_3cumulant(left_ci_vec_det, right_ci_vec_det)
+        spin_type = validate_single_state_rdm(
+            self,
+            root,
+            None,
+            order,
+            self._cumulant_orders,
+            spin_type,
+            self._cumulant_spin_types,
+        )
+        return make_cumulant_from_rdms(self, root, order=order, spin_type=spin_type)
 
     def compute_natural_occupation_numbers(self):
         """
-        Compute the natural occupation numbers from the spin-free 1-RDMs.
+        Compute the natural occupation numbers from the 1-RDMs.
 
         Returns
         -------
@@ -778,9 +597,12 @@ class _CISingleStateSolver:
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
+        spin_type = "so" if self.two_component else "sf"
         no = np.zeros((self.norb, self.nroot))
         for i in range(self.nroot):
-            no[:, i] = np.linalg.eigvalsh(self.make_1rdm(i))[::-1]
+            no[:, i] = np.linalg.eigvalsh(
+                self.make_rdm(i, order=1, spin_type=spin_type)
+            )[::-1]
 
         return no
 
@@ -800,30 +622,6 @@ class _CISingleStateSolver:
         self.ints.E = scalar
         self.ints.H = oei
         self.ints.V = tei
-
-    def set_maxiter(self, maxiter):
-        """
-        Set the maximum number of iterations for the CI solver.
-
-        Parameters
-        ----------
-        maxiter : int
-            The maximum number of iterations to set.
-        """
-        self.maxiter = maxiter
-        if self.eigensolver is not None:
-            self.eigensolver.maxiter = maxiter
-
-    def get_maxiter(self):
-        """
-        Get the maximum number of iterations for the CI solver.
-
-        Returns
-        -------
-        int
-            The maximum number of iterations.
-        """
-        return self.maxiter
 
     def get_top_determinants(self, n=5):
         """
@@ -875,7 +673,7 @@ class CISolver(CIBase):
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
-        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+        The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
 
     Attributes
     ----------
@@ -894,166 +692,113 @@ class CISolver(CIBase):
     ci_params: CIParams = field(default_factory=CIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
-    # If used as a solver, log at warning level
-    log_level: int = field(default=logger.get_verbosity_level() + 1)
 
     # Active-space integral class
     _integrals_cls: ClassVar[type] = RestrictedMOIntegrals
     # Single state solver class
     _ss_solver_cls: ClassVar[type] = _CISingleStateSolver
 
-    def make_sd_1rdm(
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2, 3)
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sd", "sf")
+    _rdm_cross_state_orders: ClassVar[tuple[int, ...]] = (1,)
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2, 3)
+    _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("sf",)
+
+    def make_rdm(
         self,
         left_root: int,
         right_root: int | None = None,
-    ) -> tuple[NDArray, NDArray]:
+        *,
+        order: Literal[1, 2, 3],
+        spin_type: Literal["sd", "sf"],
+    ):
         """
-        Make the spin-dependent 1-RDMs
+        Make the RDM of the given order and representation for two absolute CI roots.
+        Cross-state (transition) requests are only supported at order=1.
+
+        Parameters
+        ----------
+        left_root : int
+            the absolute CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the absolute CI root for the ket state.
+        order : int
+            The RDM order (1, 2, or 3).
+        spin_type : str
+            "sd" (spin-dependent) or "sf" (spin-free). The aliases "spin_dependent",
+            "spin-dependent", "spin_free", and "spin-free" are also accepted.
+
+        Returns
+        -------
+        NDArray or tuple[NDArray, ...]
+            spin_type=sd -> (a, b) at order 1, (aa, ab, bb) at order 2, and
+            (aaa, aab, abb, bbb) at order 3; spin_type=sf -> a single full tensor.
         """
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
+        left_state, right_state, left_root_in_state, right_root_in_state, spin_type = (
+            self._validate_rdm_inputs(
+                left_root,
+                right_root,
+                order,
+                self._rdm_orders,
+                spin_type,
+                self._rdm_spin_types,
+                self._rdm_cross_state_orders,
+            )
         )
         if left_state == right_state:
-            return self.sub_solvers[left_state].make_sd_1rdm(
-                left_root_in_state, right_root_in_state
+            return self.sub_solvers[left_state].make_rdm(
+                left_root_in_state,
+                right_root_in_state,
+                order=order,
+                spin_type=spin_type,
             )
-        else:
-            left_solver = self.sub_solvers[left_state]
-            right_solver = self.sub_solvers[right_state]
-            left_sb = left_solver.ci_sigma_builder
-            right_sb = right_solver.ci_sigma_builder
-
-            C_left = left_solver.csf_C_to_det_C(
-                left_solver.evecs[:, left_root_in_state]
-            )
-            C_right = right_solver.csf_C_to_det_C(
-                right_solver.evecs[:, right_root_in_state]
-            )
-
-            a_1trdm = left_sb.a_1trdm(right_sb, C_left, C_right)
-            b_1trdm = left_sb.b_1trdm(right_sb, C_left, C_right)
-            return a_1trdm, b_1trdm
-
-    def make_sd_2rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> tuple[NDArray, NDArray, NDArray]:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
+        # Cross-state: the validator above only lets this fall through when order == 1.
+        left_solver = self.sub_solvers[left_state]
+        right_solver = self.sub_solvers[right_state]
+        left_sb = left_solver.ci_sigma_builder
+        right_sb = right_solver.ci_sigma_builder
+        C_left = left_solver.csf_C_to_det_C(left_solver.evecs[:, left_root_in_state])
+        C_right = right_solver.csf_C_to_det_C(
+            right_solver.evecs[:, right_root_in_state]
         )
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state 2-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+        if spin_type == "sd":
+            return (
+                left_sb.a_1trdm(right_sb, C_left, C_right),
+                left_sb.b_1trdm(right_sb, C_left, C_right),
             )
-        return self.sub_solvers[left_state].make_sd_2rdm(
-            left_root_in_state, right_root_in_state
-        )
-
-    def make_sd_3rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state 3-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-        return self.sub_solvers[left_state].make_sd_3rdm(
-            left_root_in_state, right_root_in_state
-        )
-
-    def make_sf_1rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> NDArray:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_sf_1rdm(
-                left_root_in_state, right_root_in_state
-            )
-        else:
-            left_solver = self.sub_solvers[left_state]
-            right_solver = self.sub_solvers[right_state]
-            left_sb = left_solver.ci_sigma_builder
-            right_sb = right_solver.ci_sigma_builder
-            C_left = left_solver.csf_C_to_det_C(
-                left_solver.evecs[:, left_root_in_state]
-            )
-            C_right = right_solver.csf_C_to_det_C(
-                right_solver.evecs[:, right_root_in_state]
-            )
-            return left_sb.sf_1trdm(right_sb, C_left, C_right)
-
-    def make_sf_2rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> NDArray:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_sf_2rdm(
-                left_root_in_state, right_root_in_state
-            )
-        else:
-            raise ValueError(
-                f"Cross-state 2-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-
-    make_1rdm = make_sf_1rdm
-    make_2rdm = make_sf_2rdm
+        return left_sb.sf_1trdm(right_sb, C_left, C_right)
 
 
 @dataclass
-class CI(CISolver):
+class CI(ActiveSpaceDriver, Method):
     """
-    CI solver specialized for a single CI calculation. (i.e., not used in a loop).
-    See `CISolver` for all parameters and attributes.
+    Driver for a single CI calculation, i.e. one not run in a loop.
+    This class is agnostic to the solver.
+
+    Parameters
+    ----------
+    ci_solver : CIBase | RelCIBase
+        The solver to drive, e.g. ``CISolver``, ``RelCISolver``,
+        ``SelectedCISolver`` or ``RelSelectedCISolver``.
+    final_orbitals : str, optional, default="original"
+        Orbitals to leave behind: "original", "semicanonical", or "natural".
+    do_transition_dipole : bool, optional, default=False
+        Whether to compute transition dipoles and oscillator strengths.
+    die_if_not_converged : bool, optional, default=True
+        Whether a solver that fails to converge raises instead of warning. Set on
+        the driver rather than the solver: a one-shot calculation has no later
+        iteration to recover from.
+
+    Attributes
+    ----------
+    E : float
+        The state-averaged energy.
+    E_ci : NDArray
+        A copy of the per-root energies.
     """
 
-    die_if_not_converged: bool = True
+    ci_solver: CIBase
+
     final_orbitals: FinalOrbitals = "original"
     do_transition_dipole: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
-
-    def __post_init__(self):
-        super().__post_init__()
-        validate_final_orbitals(self.final_orbitals)
-
-    def run(self):
-        self._solve()
-        self._rotate_final_orbitals()
-        self._post_process()
-        return self
-
-    def _post_process(self):
-        pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
-        self.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(
-            self.sa_info,
-            self.mo_space,
-            self.nat_occs,
-            getattr(self, "nat_occs_avg", None),
-        )
-        top_dets = self.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-
-        if self.do_transition_dipole:
-            self.compute_transition_properties()
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.transition_dipoles,
-                self.oscillator_strengths,
-                self.evals_per_solver,
-            )
+    die_if_not_converged: bool = True

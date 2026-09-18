@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <optional>
 #include <vector>
 #include "helpers/ndarray.h"
 
@@ -27,6 +28,23 @@ class SlaterRules {
                 np_tensor4 two_electron_integrals);
 
     // ==> Class Interface <==
+
+    /// @brief (Re)initialize the integrals used by this object, e.g. to reuse it across CI
+    /// iterations without reconstructing it. Any of scalar_energy/one_electron_integrals/
+    /// two_electron_integrals left as nullopt keeps its current value.
+    /// @param norb Number of orbitals.
+    /// @param scalar_energy New scalar energy, or nullopt to keep the current value.
+    /// @param one_electron_integrals New one-electron integrals (restricted) h[p,q] = <p|h|q>,
+    ///        or nullopt to keep the current value.
+    /// @param two_electron_integrals New two-electron integrals (restricted) in the form
+    ///        V[p,q,r,s] = <pq|rs>, or nullopt to keep the current value.
+    /// @note If norb differs from the number of orbitals this object currently holds, both
+    /// one_electron_integrals and two_electron_integrals must be given together: every derived
+    /// array depends on norb and neither integral is cached in a form that survives a norb
+    /// change on its own.
+    void update_integrals(int norb, std::optional<double> scalar_energy = std::nullopt,
+                          std::optional<np_matrix> one_electron_integrals = std::nullopt,
+                          std::optional<np_tensor4> two_electron_integrals = std::nullopt);
 
     /// @brief Compute the energy of a determinant
     /// @param det The determinant for which to compute the energy.
@@ -93,13 +111,13 @@ class SlaterRules {
     }
 
     /// @brief Number of orbitals
-    const std::size_t norb_;
+    std::size_t norb_ = 0;
     /// @brief Precomputed values to speed up access to two-electron integrals
-    const std::size_t norb2_;
+    std::size_t norb2_ = 0;
     /// @brief Precomputed values to speed up access to two-electron integrals
-    const std::size_t norb3_;
+    std::size_t norb3_ = 0;
     /// @brief Scalar energy term
-    const double scalar_energy_;
+    double scalar_energy_ = 0.0;
     /// @brief One-electron integrals h[p * norb_ + q] = <p|h|q>
     std::vector<double> h_;
     /// @brief Coulomb integrals J[p * norb_ + q] = <pq|pq>

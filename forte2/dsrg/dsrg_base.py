@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 import numpy as np
+from numpy.typing import NDArray
 
-from forte2.base_classes import Method, CIBase, RelCIBase
-from forte2.mcopt.mc_optimizer import MCOptimizerBase
+from forte2.base_classes import ActiveSpaceDriver, Method
 from forte2.helpers import logger
 from forte2.orbitals import Semicanonicalizer
 from forte2.ci.ci_utils import pretty_print_ci_summary
@@ -27,18 +27,21 @@ class DSRGBase(Method):
 
     # Non-init attributes
     converged: bool = field(init=False, default=False)
+    _hbar0: float | None = field(init=False, default=None)
+    _hbar1_canon: NDArray | None = field(init=False, default=None)
+    _hbar2_canon: NDArray | None = field(init=False, default=None)
 
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
-        assert isinstance(
-            self.parent_method, (CIBase, RelCIBase, MCOptimizerBase)
-        ), "Parent method must be an instance of CIBase, RelCIBase, or MCOptimizerBase."
+        assert isinstance(self.parent_method, ActiveSpaceDriver), (
+            "Parent method must be a driver that owns an active-space solver "
+            f"(CI or MCOptimizer), got {type(self.parent_method).__name__}."
+        )
         return self
 
     def __post_init__(self):
         self.requires = {"system", "mos", "mo_space"}
         self.provides = {"system", "mos", "mo_space"}
-        self.requires_attrs.update({"final_orbitals": "semicanonical"})
 
         # parse reference relaxation options
         if isinstance(self.relax_reference, bool):
@@ -63,11 +66,12 @@ class DSRGBase(Method):
                 "Reference relaxation options not recognized, no relaxation will be performed."
             )
             self.nrelax = 0
+
+    def _startup(self):
         # [Edsrg(fixed_reference), Edsrg(relaxed_reference), Eref]
         self.relax_energies = np.zeros((self.nrelax + 1, 3))
         self.relax_eigvals_history = []
 
-    def _startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
 
@@ -107,10 +111,7 @@ class DSRGBase(Method):
         perm = self.mo_space.orig_to_contig
         self._C = self.mos.C[0][:, perm].copy()
 
-        # parent_method is either a bare CIBase/RelCIBase (its own ci_solver) or an
-        # MCOptimizerBase (which wraps one) - both expose .ci_solver uniformly.
         self.ci_solver = self.parent_method.ci_solver
-
         self.E_core_orig = self.ci_solver.sub_solvers[0].ints.E
         self.H_orig = self.ci_solver.sub_solvers[0].ints.H.copy()
         self.V_orig = self.ci_solver.sub_solvers[0].ints.V.copy()
@@ -128,7 +129,6 @@ class DSRGBase(Method):
 
         self.fock_builder = self.system.fock_builder
         self.ints, self.cumulants = self.get_integrals()
-        self.hbar = dict()
 
     def run(self):
         self._startup()
@@ -234,3 +234,25 @@ class DSRGBase(Method):
 
     @abstractmethod
     def get_integrals(self): ...
+
+    @property
+    def hbar0(self):
+        if self._hbar0 is None:
+            raise RuntimeError("hbar0 is only available after reference relaxation!")
+        return self._hbar0
+
+    @property
+    def hbar1_canon(self):
+        if self._hbar1_canon is None:
+            raise RuntimeError(
+                "hbar1_canon is only available after reference relaxation!"
+            )
+        return self._hbar1_canon
+
+    @property
+    def hbar2_canon(self):
+        if self._hbar2_canon is None:
+            raise RuntimeError(
+                "hbar2_canon is only available after reference relaxation!"
+            )
+        return self._hbar2_canon

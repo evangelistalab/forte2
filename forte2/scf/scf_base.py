@@ -94,6 +94,12 @@ class SCFBase(Method):
 
         self.C = None
         self.Xorth = self.system.get_Xorth()
+        self._validate_level_shift()
+        self.called = True
+        return self
+
+    def _validate_level_shift(self):
+        """Validate (and, for UHF, normalize) the configured level_shift."""
         if self.level_shift is not None:
             if isinstance(self.level_shift, (int, float)) and self.level_shift < 0.0:
                 raise ValueError("level_shift must be non-negative.")
@@ -103,8 +109,6 @@ class SCFBase(Method):
                 self.level_shift = (self.level_shift, self.level_shift)
             if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
-        self.called = True
-        return self
 
     def _eigh(self, F):
         Ftilde = self.Xorth.T @ F @ self.Xorth
@@ -123,6 +127,8 @@ class SCFBase(Method):
             self : SCFBase
                 The SCF object.
         """
+        self._validate_level_shift()
+        self._current_level_shift = self.level_shift
         start = time.monotonic()
 
         diis = DIIS(
@@ -195,7 +201,7 @@ class SCFBase(Method):
             # check convergence parameters
             deltaE = self.E - Eold
             if np.abs(deltaE) < self.level_shift_thresh:
-                self.level_shift = None
+                self._current_level_shift = None
             deltaD = sum([np.linalg.norm(d - dold) for d, dold in zip(self.D, Dold)])
             self.S2 = self._spin(S)
 

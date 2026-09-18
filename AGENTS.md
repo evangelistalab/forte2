@@ -43,20 +43,50 @@ contract between links in the chain as three attributes set in `__post_init__`:
 at construction rather than mid-run. MO coefficients travel as an `MO` value object (`base_classes/mo.py`),
 reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`.
 
-`base_classes/active_space_solver.py` and `ci_base.py` are the bases for CI-type solvers.
-`CIBase` owns everything representation-agnostic: the `_startup`/`run` skeletons, sub-solver fan-out,
-state-averaged RDMs and cumulants, transition properties, and the `final_orbitals` rotation. Concrete
-solvers supply two class-level hooks — `_integrals_cls` (`RestrictedMOIntegrals` vs
-`SpinorbitalIntegrals`) and `_ss_solver_cls` (the per-state single-state solver).
+#### Solvers and drivers
+
+Active-space methods come in pairs, and the distinction is load-bearing.
+
+A **solver** (`CISolver`, `RelCISolver`, `SelectedCISolver`, `RelSelectedCISolver`, all on
+`base_classes/ci_base.py::CIBase`) answers one question: solve in the *current* orbital basis with
+the *current* integrals. Its `run()` is idempotent and safe to call in a loop, and it never touches
+the orbitals. 
+ `base_classes/ci_base.py::CIBase` owns everything representation-agnostic — the `_startup`/`run`
+ skeletons, sub-solver fan-out, state-averaged RDMs and cumulants, and transition properties.
+ Concrete solvers supply two class-level hooks:
+`_integrals_cls` (`RestrictedMOIntegrals` vs `SpinorbitalIntegrals`) and `_ss_solver_cls` (the
+per-state single-state solver).
+
+A **driver** (`CI` and `MCOptimizer`, both on
+`base_classes/active_space_driver.py::ActiveSpaceDriver`) is handed a solver and finishes a
+calculation with it: solve, rotate to the requested final orbitals once, report. Its `run()` is the
+chain entry point and is not loop-safe. The solver is the first argument --
+`CI(CISolver(State(...), active_orbitals=[...]), final_orbitals="semicanonical")` -- so the
+active-space options live on the solver, and the driver carries only what belongs to finishing a
+one-shot calculation: `final_orbitals`, `do_transition_dipole` and `die_if_not_converged`, the last
+two of which it pushes onto the solver at bind time alongside `log_level`.
+
+`CI` is **solver agnostic**: one driver class takes any `CIBase`/`RelCIBase`, so there is no
+`RelCI`/`SelectedCI`/`RelSelectedCI`. Anything a particular method needs to print differently is a
+hook on the *solver*, since that is what knows its own quantities: `_print_energy_summary` (selected
+CI prints variational and PT2-corrected tables, keyed off the `_energy_summary_label` class
+attribute) and `_transition_property_energies`.
+
+Keeping these apart is what lets a downstream method re-invoke `parent.ci_solver.run()` in a loop —
+MCSCF macro-iterations, DSRG reference relaxation — without re-running the finishing logic. A
+downstream method takes a *driver* as its parent (DSRG asserts this) and reaches the solver through
+`.ci_solver`. **A driver is not a solver**: it forwards the four RDM accessors (`make_rdm`,
+`make_cumulant`, `make_average_rdm`, `make_average_cumulant`) and copies the energies (`E`, `E_ci`,
+`E_avg`) plus `mo_space`, `mos` and `dtype`. Everything else the solver exposes is reached through
+`.ci_solver`, so reach for that rather than adding a forwarder.
 
 Two chain-specific behaviors to watch:
 - **MCSCF re-binds its `ci_solver`.** `MCOptimizer(ci_solver)(parent)` re-invokes the solver against
   `parent` in `_startup`, then alternates orbital optimization (L-BFGS) with `ci_solver.run()`.
-- **DSRG requires semicanonical orbitals.** `DSRGBase` declares
-  `requires_attrs.update({"final_orbitals": "semicanonical"})` and consumes the active-space integral triple
-  `E` (frozen-core energy), `H` (one-electron), `V` (antisymmetrized two-electron) plus cumulants from
-  the upstream solver. Use `forte2/orbitals/semicanonicalizer.py` if a reference isn't already
-  semicanonical.
+- **DSRG consumes a reference, not a basis.** `DSRGBase` takes the active-space integral triple
+  `E` (frozen-core energy), `H` (one-electron), `V` (antisymmetrized two-electron) plus cumulants
+  from `parent.ci_solver`, and semicanonicalizes internally in `get_integrals()`, so it imposes no
+  `final_orbitals` requirement on its parent.
 
 Relativistic (two-component) variants are subclasses that set `dtype = complex` and
 `two_component = True` (e.g. `RelActiveSpaceSolver`, `RelCISolver`); non-rel uses `float`.
@@ -65,9 +95,35 @@ methods by hand. **Base order matters**: `dataclasses` collects fields in revers
 `CIBase` still carries an undefaulted `states` from `ActiveSpaceSolver`, so listing `CIBase` first
 would clobber the `states = None` default that `nel`-based construction relies on.
 
-The `final_orbitals` option (`"original"` / `"semicanonical"` / `"natural"`) is shared by the four CI
-solvers and `MCOptimizer` via `forte2/orbitals/final_orbitals.py` — a free function plus a validator,
-not a mixin, since the field's default legitimately differs per class.
+The `final_orbitals` option (`"original"` / `"semicanonical"` / `"natural"`) is a driver option,
+declared per driver because the default legitimately differs (`"original"` for the CI drivers,
+`"semicanonical"` for `MCOptimizer`) and validated through `forte2/orbitals/final_orbitals.py`.
+
+### Rebuilding a chain at a new geometry
+`forte2/base_classes/rebuild.py` reconstructs or rebinds an entire method chain against a displaced
+`System`, and is what `GeometryOptimizer` and `FDGradient` (`forte2/gradients/fd_gradient.py`) are
+built on:
+- `rebuild_method_chain(method, new_system)` walks root-to-leaf and calls `type(stage)(**kwargs)` per
+  stage, with `kwargs` read straight from `dataclasses.fields()`. That means **every init field must
+  survive being fed back into the constructor unchanged** — a field that a method overwrites with a
+  derived value in `__post_init__`/`_startup` (e.g. an `MOSpace` built from `active_orbitals`) breaks
+  this silently. The fix is to give the derived value its own `init=False` field rather than mutating
+  the input field, as `ActiveSpaceSolver` does: the raw constructor arg is `mo_space_override`, and the
+  resolved space consumed downstream is the separate, non-init `mo_space`.
+- `rebind_method_chain(method, new_system)` reuses the same objects instead: `stage.reset()` then
+  re-`__call__` per stage. The base `Method.reset()` only flips `executed`/`converged`; any state a
+  method mutates *in place* across repeated `run()` calls (a list `.append()`ed to then swapped for an
+  array, a cache dict, ...) has to be rebuilt in that method's own `_startup()`, or a second `run()` on
+  the same object corrupts silently or crashes outright — see `DSRGBase._startup()` resetting
+  `relax_eigvals_history` for exactly this reason.
+- `project_scf_guess(source_method, method)` and `forte2/orbitals/orbital_overlap.py`
+  (`mo_overlap`/`project_orbitals`/`project_occupied_orbitals`) project occupied orbitals from a
+  converged method onto a rebuilt chain's SCF root as an initial guess, including across two-component
+  (GHF) chains. When checking whether source and target agree on representation, compare
+  `source_method.mos.spinorbital` (frozen when its `MO` was built) against the target's own
+  `two_component` attribute — never `System.two_component` directly: `RHF`/`UHF`/`GHF.__call__` all
+  mutate that flag in place on the (possibly shared) `System` object, so it can read stale for a method
+  that finished running earlier against the same `System`.
 
 ### C++ / Python boundary
 - `forte2.lib` is the compiled nanobind module. C++ sources live **inline inside the package**
@@ -97,14 +153,16 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 3-center B tensor), and `forte2/jkbuilder/mointegrals.py` (MO-space `E`/`H`/`V` for CI/DSRG).
 
 ### Subsystem map (beyond the obvious)
-- `ci` — full / spin-adapted / GAS CI (`CISolver`→`CI`, `RelCISolver`→`RelCI`).
+- `ci` — full / spin-adapted / GAS CI.
 - `sci` — selected CI / heat-bath CI (`SelectedCISolver`), usable as an active-space solver in MCSCF.
 - `determinant` / `sparse` — determinant & bit-string representations, Slater rules, `SparseOperator`/`SparseState`.
 - `mcopt` — MCSCF/CASSCF/GASSCF optimizer, exposed as `forte2.MCOptimizer` (not `MCSCF`).
 - `dsrg` — DSRG-MRPT2 and its relativistic variant.
 - `x2c` — exact two-component relativistic transform (`sf` scalar, `so` spin-orbit); gated by `System.x2c_type`.
 - `orbitals` — AVAS, ASET embedding, IAO/IBO, semicanonicalizer, cube generation, `SpinorUpcaster`.
-- `props`, `gradients`, `optimize` — 1e-properties/populations, DF-based analytic gradients, `GeometryOptimizer`.
+- `props`, `gradients`, `optimize` — 1e-properties/populations; DF-based analytic gradients plus
+  `FDGradient`, which differentiates *any* rebuildable method's energy by finite differences (see
+  "Rebuilding a chain at a new geometry" above); `GeometryOptimizer` drives either.
 - `state`, `symmetry` — `State`/`RelState`/`MOSpace`/state-averaging; point-group MO symmetry detection.
 
 ## Environment And Build

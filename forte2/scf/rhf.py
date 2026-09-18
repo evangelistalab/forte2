@@ -88,11 +88,11 @@ class RHF(SCFBase):
         return [diis.update(F[0], AO_grad)]
 
     def _apply_level_shift(self, F, S):
-        if self.level_shift is None or self.level_shift < 1e-4:
+        if self._current_level_shift is None or self._current_level_shift < 1e-4:
             return F
         D_vir = S - S @ self.D[0] @ S
 
-        return [F[0] + self.level_shift * D_vir]
+        return [F[0] + self._current_level_shift * D_vir]
 
     def _get_occupation(self):
         self.ndocc = self.na

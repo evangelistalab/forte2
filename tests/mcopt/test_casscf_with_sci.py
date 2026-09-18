@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from forte2 import System, State, MCOptimizer
+from forte2 import MCOptimizer, State, System
 from forte2.scf import RHF
 from forte2.sci import SelectedCISolver
 from forte2.helpers.comparisons import approx

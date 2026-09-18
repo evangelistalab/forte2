@@ -5,6 +5,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/complex.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 
 #include "ci/ci_strings.h"
@@ -87,11 +88,9 @@ void export_ci_strings_api(nb::module_& sub_m) {
 
 void export_ci_sigma_builder_api(nb::module_& sub_m) {
     nb::class_<CISigmaBuilder>(sub_m, "CISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int>(), "lists"_a, "E"_a,
-             "H"_a, "V"_a, "log_level"_a = 3,
+        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int, const std::string&>(),
+             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "algorithm"_a = "kh",
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
-        .def("set_algorithm", &CISigmaBuilder::set_algorithm, "algorithm"_a,
-             "Set the sigma build algorithm (options = kh, hz)")
         .def("get_algorithm", &CISigmaBuilder::get_algorithm,
              "Get the current sigma build algorithm")
         .def("set_memory", &CISigmaBuilder::set_memory, "memory"_a,
@@ -105,19 +104,23 @@ void export_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,
              "I"_a, "J"_a)
         .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("sigma_one_electron", &CISigmaBuilder::sigma_one_electron, "basis"_a, "sigma"_a,
+             "Apply the scalar and one-electron part of the Hamiltonian to the wave function")
+        .def("sigma_two_electron", &CISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
+             "Apply the two-electron part of the Hamiltonian to the wave function")
+        .def("set_Hamiltonian", &CISigmaBuilder::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
+             "scratch buffers. Any argument left as None keeps its current value.")
         .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a, "threshold"_a = 1e-12,
              "Convert a CI vector to a sparse state")
-        // Spin-free RDMs and cumulants
+        // Spin-free RDMs
         .def("sf_1rdm", &CISigmaBuilder::compute_sf_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-free one-electron reduced density matrix")
         .def("sf_2rdm", &CISigmaBuilder::compute_sf_2rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-free two-electron reduced density matrix")
         .def("sf_3rdm", &CISigmaBuilder::compute_sf_3rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-free three-electron reduced density matrix")
-        .def("sf_2cumulant", &CISigmaBuilder::compute_sf_2cumulant, "C_left"_a, "C_right"_a,
-             "Compute the spin-free two-electron cumulant")
-        .def("sf_3cumulant", &CISigmaBuilder::compute_sf_3cumulant, "C_left"_a, "C_right"_a,
-             "Compute the spin-free three-electron cumulant")
         // Spinful RDMs
         .def("a_1rdm", &CISigmaBuilder::compute_a_1rdm, "C_left"_a, "C_right"_a,
              "Compute the alpha one-electron reduced density matrix")
@@ -145,46 +148,7 @@ void export_ci_sigma_builder_api(nb::module_& sub_m) {
              "C_right"_a, "Compute the spin-free one-electron transition reduced density matrix")
         .def("avg_build_time", &CISigmaBuilder::avg_build_time)
         .def("set_log_level", &CISigmaBuilder::set_log_level, "level"_a,
-             "Set the logging level for the class")
-        // RDMs debugging methods
-        .def("a_1rdm_debug", &CISigmaBuilder::compute_a_1rdm_debug, "C_left"_a, "C_right"_a,
-             "alpha"_a)
-        .def("aa_2rdm_debug", &CISigmaBuilder::compute_aa_2rdm_debug, "C_left"_a, "C_right"_a,
-             "alpha"_a,
-             "Compute the two-electron same-spin reduced density matrix for debugging purposes")
-        .def("ab_2rdm_debug", &CISigmaBuilder::compute_ab_2rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the two-electron mixed-spin reduced density matrix for debugging purposes")
-        .def("aaa_3rdm_debug", &CISigmaBuilder::compute_aaa_3rdm_debug, "C_left"_a, "C_right"_a,
-             "alpha"_a,
-             "Compute the three-electron same-spin reduced density matrix for debugging purposes")
-        .def("aab_3rdm_debug", &CISigmaBuilder::compute_aab_3rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the aab mixed-spin three-electron reduced density matrix for debugging "
-             "purposes")
-        .def("abb_3rdm_debug", &CISigmaBuilder::compute_abb_3rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the abb mixed-spin three-electron reduced density matrix for debugging "
-             "purposes")
-        .def("aaaa_4rdm_debug", &CISigmaBuilder::compute_aaaa_4rdm_debug, "C_left"_a, "C_right"_a,
-             "alpha"_a,
-             "Compute the four-electron same-spin reduced density matrix for debugging purposes")
-        .def("aaab_4rdm_debug", &CISigmaBuilder::compute_aaab_4rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the aaab mixed-spin four-electron reduced density matrix for debugging "
-             "purposes")
-        .def("aabb_4rdm_debug", &CISigmaBuilder::compute_aabb_4rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the aabb mixed-spin four-electron reduced density matrix for debugging "
-             "purposes")
-        .def("abbb_4rdm_debug", &CISigmaBuilder::compute_abbb_4rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the abbb mixed-spin four-electron reduced density matrix for debugging "
-             "purposes")
-        .def("sf_1rdm_debug", &CISigmaBuilder::compute_sf_1rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the spin-free one-electron reduced density matrix for debugging purposes")
-        .def("sf_2rdm_debug", &CISigmaBuilder::compute_sf_2rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the spin-free two-electron reduced density matrix for debugging purposes")
-        .def("sf_3rdm_debug", &CISigmaBuilder::compute_sf_3rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the spin-free three-electron reduced density matrix for debugging purposes")
-        .def("sf_2cumulant_debug", &CISigmaBuilder::compute_sf_2cumulant_debug, "C_left"_a,
-             "C_right"_a, "Compute the spin-free two-electron cumulant for debugging purposes")
-        .def("sf_3cumulant_debug", &CISigmaBuilder::compute_sf_3cumulant_debug, "C_left"_a,
-             "C_right"_a, "Compute the spin-free three-electron cumulant for debugging purposes");
+             "Set the logging level for the class");
 }
 
 void export_ci_spin_adapter_api(nb::module_& sub_m) {
@@ -202,11 +166,10 @@ void export_ci_spin_adapter_api(nb::module_& sub_m) {
 
 void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
     nb::class_<RelCISigmaBuilder>(sub_m, "RelCISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int>(),
-             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
+        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int,
+                      const std::string&>(),
+             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "algorithm"_a = "hz",
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
-        .def("set_algorithm", &RelCISigmaBuilder::set_algorithm, "algorithm"_a,
-             "Set the sigma build algorithm (options = kh, hz)")
         .def("get_algorithm", &RelCISigmaBuilder::get_algorithm,
              "Get the current sigma build algorithm")
         .def("set_memory", &RelCISigmaBuilder::set_memory, "memory"_a,
@@ -214,19 +177,21 @@ void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("form_Hdiag", &RelCISigmaBuilder::form_Hdiag, "dets"_a)
         .def("slater_rules", &RelCISigmaBuilder::slater_rules, "dets"_a, "I"_a, "J"_a)
         .def("Hamiltonian", &RelCISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
-        .def("so_1rdm", &RelCISigmaBuilder::compute_1rdm, "C_left"_a, "C_right"_a,
+        .def("sigma_one_electron", &RelCISigmaBuilder::sigma_one_electron, "basis"_a, "sigma"_a,
+             "Apply the scalar and one-electron part of the Hamiltonian to the wave function")
+        .def("sigma_two_electron", &RelCISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
+             "Apply the two-electron part of the Hamiltonian to the wave function")
+        .def("set_Hamiltonian", &RelCISigmaBuilder::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
+             "scratch buffers. Any argument left as None keeps its current value.")
+        // Cumulants are assembled in Python from these RDMs (see forte2/ci/ci_utils.py).
+        .def("so_1rdm", &RelCISigmaBuilder::compute_so_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital one-electron reduced density matrix")
-        .def("so_2rdm", &RelCISigmaBuilder::compute_2rdm, "C_left"_a, "C_right"_a,
+        .def("so_2rdm", &RelCISigmaBuilder::compute_so_2rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital two-electron reduced density matrix")
-        .def("so_2cumulant", &RelCISigmaBuilder::compute_2cumulant, "C_left"_a, "C_right"_a,
-             "Compute the spin-orbital two-electron cumulant")
-        .def("so_3rdm", &RelCISigmaBuilder::compute_3rdm, "C_left"_a, "C_right"_a,
-             "Compute the spin-orbital three-electron reduced density matrix")
-        .def("so_3cumulant", &RelCISigmaBuilder::compute_3cumulant, "C_left"_a, "C_right"_a,
-             "Compute the spin-orbital three-electron cumulant")
-        .def("so_1rdm_debug", &RelCISigmaBuilder::compute_1rdm_debug, "C_left"_a, "C_right"_a)
-        .def("so_2rdm_debug", &RelCISigmaBuilder::compute_2rdm_debug, "C_left"_a, "C_right"_a)
-        .def("so_3rdm_debug", &RelCISigmaBuilder::compute_3rdm_debug, "C_left"_a, "C_right"_a);
+        .def("so_3rdm", &RelCISigmaBuilder::compute_so_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital three-electron reduced density matrix");
 }
 
 void export_sci_helper_api(nb::module_& sub_m) {
@@ -239,8 +204,9 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "frozen_annihilation"_a = std::vector<size_t>{},
              "Initialize the SelectedCIHelper with the number of orbitals, initial determinants, "
              "energy, Hamiltonian, and integrals")
-        .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
-             "Set the Hamiltonian integrals")
+        .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Set the Hamiltonian integrals. Any argument left as None keeps its current value.")
         .def("Hamiltonian", &SelectedCIHelper::Hamiltonian, "basis"_a, "sigma"_a,
              "Apply the Hamiltonian to the basis and store the result in sigma")
         .def("Hdiag", &SelectedCIHelper::Hdiag, "Return the diagonal of the Hamiltonian matrix")
@@ -293,6 +259,8 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Return the determinants in the variational space")
         .def("ndets", &SelectedCIHelper::num_dets_var,
              "Return the number of determinants in the variational space")
+        .def("slater_rules", &SelectedCIHelper::slater_rules, "dets"_a, "I"_a, "J"_a,
+             "Compute the Hamiltonian matrix element <I|H|J>")
         .def("energies", &SelectedCIHelper::energies, "Return the energies of the roots")
         .def("ept2_var", &SelectedCIHelper::ept2_var,
              "Return the variational part of the Epstein-Nesbet second-order energy correction")
@@ -319,8 +287,10 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "frozen_annihilation"_a = std::vector<size_t>{},
              "Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, "
              "energy, complex Hamiltonian, and complex integrals")
-        .def("set_Hamiltonian", &RelSelectedCIHelper::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
-             "Set the (complex) Hamiltonian integrals")
+        .def("set_Hamiltonian", &RelSelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
+             "H"_a = nb::none(), "V"_a = nb::none(),
+             "Set the (complex) Hamiltonian integrals. Any argument left as None keeps its "
+             "current value.")
         .def("Hamiltonian", &RelSelectedCIHelper::Hamiltonian, "basis"_a, "sigma"_a,
              "Apply the Hamiltonian to the (complex) basis and store the result in sigma")
         .def("Hdiag", &RelSelectedCIHelper::Hdiag,
@@ -345,14 +315,16 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "pt2_threshold"_a, "Perform HBCI selection with the reference implementation")
         .def("select_hbci", &RelSelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
              "Perform HBCI selection with the batched implementation")
-        .def("a_1rdm", &RelSelectedCIHelper::compute_a_1rdm, "left_root"_a, "right_root"_a,
-             "Compute the complex alpha 1-RDM (or transition 1-RDM) between two roots")
-        .def("aa_2rdm", &RelSelectedCIHelper::compute_aa_2rdm, "left_root"_a, "right_root"_a,
-             "Compute the complex alpha-alpha 2-RDM (or transition 2-RDM) between two roots")
+        .def("so_1rdm", &RelSelectedCIHelper::compute_so_1rdm, "left_root"_a, "right_root"_a,
+             "Compute the complex spin-orbital 1-RDM (or transition 1-RDM) between two roots")
+        .def("so_2rdm", &RelSelectedCIHelper::compute_so_2rdm, "left_root"_a, "right_root"_a,
+             "Compute the complex spin-orbital 2-RDM (or transition 2-RDM) between two roots")
         .def("dets", &RelSelectedCIHelper::variational_dets,
              "Return the determinants in the variational space")
         .def("ndets", &RelSelectedCIHelper::num_dets_var,
              "Return the number of determinants in the variational space")
+        .def("slater_rules", &RelSelectedCIHelper::slater_rules, "dets"_a, "I"_a, "J"_a,
+             "Compute the Hamiltonian matrix element <I|H|J>")
         .def("energies", &RelSelectedCIHelper::energies, "Return the energies of the roots")
         .def("ept2_var", &RelSelectedCIHelper::ept2_var,
              "Return the variational part of the Epstein-Nesbet second-order energy correction")

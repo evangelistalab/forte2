@@ -70,7 +70,7 @@ class RosenbrockWrapper:
     def evaluate(self, x):
         fx = Rosenbrock.evaluate(x)
         return fx
-    
+
     def gradient(self, x):
         g = Rosenbrock.gradient(x)
         return g
@@ -145,3 +145,59 @@ def test_lbfgs_rosenbrock_complex():
 
     assert np.linalg.norm(x - res.x) < 1e-6
     assert fx == approx(res.fun)
+
+
+class IllConditionedQuadratic:
+    """
+    A quadratic whose diagonal Hessian spans 18 orders of magnitude.
+
+    The first coordinate stands in for a numerically redundant orbital rotation: its
+    curvature ``TRAP_CURV`` sits just above the absolute 1.0e-12 cutoff that
+    ``_apply_h0`` used to mask with, and it carries a small linear tilt, so its exact
+    Newton step is ``TILT / TRAP_CURV``, of order 1.0e4. Preconditioning by such an
+    entry puts that step into the direction vector, and because ``max_correction``
+    rescales the whole vector by ``max_dir / max(abs(p))``, every well-conditioned
+    coordinate is then advanced by a step of order 1.0e-5 and the optimization
+    stalls. The second coordinate is null by any measure and is skipped either way.
+    """
+
+    TRAP_CURV = 1.045e-12
+    TILT = 7.135e-9
+    CURV = np.array([TRAP_CURV, 1.0e-16, 1.0e6, 1.0e4, 1.0e2, 4.0, 2.0, 1.0])
+    CENTER = np.array([0.0, 0.0, 0.3, -0.5, 0.7, -0.2, 0.4, -0.6])
+
+    def evaluate(self, x):
+        d = x - self.CENTER
+        return 0.5 * np.dot(self.CURV * d, d) + self.TILT * d[0]
+
+    def gradient(self, x):
+        g = self.CURV * (x - self.CENTER)
+        g[0] += self.TILT
+        return g
+
+    def hess_diag(self, x):
+        return self.CURV.copy()
+
+
+def test_lbfgs_h0_relative_tolerance():
+    """
+    A near-null preconditioner entry must not be allowed to dominate the direction.
+    """
+    func = IllConditionedQuadratic()
+    # Mirrors how MCOptimizer drives the solver.
+    solver = LBFGS(
+        epsilon=1.0e-6,
+        maxiter=50,
+        max_dir=0.2,
+        step_length_method="max_correction",
+    )
+    x = np.zeros(len(func.CURV))
+    solver.minimize(func, x)
+
+    assert solver.converged, (
+        f"L-BFGS did not converge in {solver.iter} iterations; the near-null "
+        "preconditioner entry is dominating the direction vector"
+    )
+    # The well-conditioned coordinates must reach the analytic minimum. The two
+    # near-null ones are unconstrained by design and are not checked.
+    assert np.allclose(x[2:], func.CENTER[2:], atol=1.0e-6)

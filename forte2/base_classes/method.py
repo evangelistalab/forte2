@@ -29,6 +29,16 @@ class Method(ABC):
     @abstractmethod
     def run(self): ...
 
+    def reset(self):
+        """
+        Invalidate this stage's own run() results in place, without discarding
+        its configuration or its binding to the parent method.
+        """
+        self.executed = False
+        if hasattr(self, "converged"):
+            self.converged = False
+        return self
+
     def _register_parent_method(self, parent_method):
         """
         These checks help perform pre-run sanity checks so that incompatible methods

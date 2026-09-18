@@ -1,12 +1,10 @@
-import time
 from dataclasses import dataclass, field
 from collections import OrderedDict
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 import numpy as np
 
-from forte2.lib import det, ci_helpers, rdms
-from forte2.lib.sparse_ops import SparseState
+from forte2.lib import det, ci_helpers
 from forte2.lib.det import Determinant
 from forte2.lib.ci_helpers import CIStrings
 from forte2.helpers.comparisons import approx
@@ -14,13 +12,7 @@ from forte2.base_classes import RelCIBase
 from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 from forte2.helpers import logger
 from forte2.jkbuilder import SpinorbitalIntegrals
-from forte2.orbitals import FinalOrbitals, validate_final_orbitals
-from forte2.ci.ci_utils import (
-    pretty_print_ci_summary,
-    pretty_print_ci_dets,
-    pretty_print_ci_transition_props,
-    pretty_print_ci_nat_occ_numbers,
-)
+from forte2.ci.ci_utils import validate_single_state_rdm
 from .sci import _SelectedCISingleStateSolver, SelectedCISolver
 
 
@@ -32,9 +24,6 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
 
     two_component: ClassVar[bool] = True
     dtype: ClassVar[type] = complex
-
-    def _make_slater_rules(self):
-        return det.RelSlaterRules(self.norb, self.ints.E.real, self.ints.H, self.ints.V)
 
     def _make_sci_helper(self):
         return ci_helpers.RelSelectedCIHelper(
@@ -50,6 +39,10 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
             self.sci_params.frozen_annihilation,
         )
 
+    def _update_sci_helper_ints(self):
+        # RelSelectedCIHelper.set_Hamiltonian's E parameter is a plain double.
+        self.sci_helper.set_Hamiltonian(self.ints.E.real, self.ints.H, self.ints.V)
+
     def _compute_spin2(self):
         # Spin is not a good quantum number in the two-component (spinor) basis, and the
         # complex helper does not expose compute_spin2.
@@ -64,6 +57,11 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         the beta string empty. Guess coefficients come from diagonalizing the complex
         Hermitian Hamiltonian in the guess space.
         """
+        # local object used only to build initial guess
+        # exact diag uses sci_helper's slater_rules
+        slater_rules = det.RelSlaterRules(
+            self.norb, self.ints.E.real, self.ints.H, self.ints.V
+        )
         window_occ = self.sci_params.guess_occ_window
         window_vir = self.sci_params.guess_vir_window
         if (
@@ -79,7 +77,7 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
 
         # refine the guess determinants by determinantal energy if there are more than needed
         if len(self.sci_params.guess_dets) > 0:
-            guess_hdiag = self.slater_rules.energies(self.sci_params.guess_dets)
+            guess_hdiag = slater_rules.energies(self.sci_params.guess_dets)
             nguess_dets = len(self.sci_params.guess_dets)
             num_guess_states = min(
                 self.davidson_liu_params.guess_per_root * self.nroot, nguess_dets
@@ -88,6 +86,10 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
                 self.davidson_liu_params.ndets_per_guess * num_guess_states,
                 nguess_dets,
             )
+        else:
+            # no guess dets and only pinned guess dets
+            guess_hdiag = np.empty(0)
+            nguess_dets = 0
 
         if self.sci_params.energy_shift is not None:
             indices = np.argsort(np.abs(guess_hdiag - self.sci_params.energy_shift))[
@@ -111,7 +113,7 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
         for i in range(ndet):
             for j in range(i + 1):
-                Hguess[i, j] = self.slater_rules.slater_rules(
+                Hguess[i, j] = slater_rules.slater_rules(
                     self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
                 )
                 Hguess[j, i] = np.conj(Hguess[i, j])
@@ -204,8 +206,8 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         # the CI energy.
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
         for root in range(self.nroot):
-            rdm1 = self.make_1rdm(root)
-            rdm2 = self.make_2rdm(root)
+            rdm1 = self.make_rdm(root, order=1, spin_type="so")
+            rdm2 = self.make_rdm(root, order=2, spin_type="so")
 
             rdms_energy = self.ints.E
             rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
@@ -220,88 +222,58 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
                 f"RDMs for root {root} validated successfully.\n", self.log_level
             )
 
-    def make_so_1rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-orbital (spinor) one-particle RDM for two CI roots.
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("so",)
+    # only the 2-cumulant: it needs the 1- and 2-RDMs, and selected CI has no 3-RDM
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
+    _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("so",)
 
-        Returns the complex 1-RDM gamma[p][q] = <L| a^+_p a_q |R> over active spinors.
-        With left_root != right_root this is the transition 1-RDM. Computed by the C++
-        ``RelSelectedCIHelper`` (which conjugates the bra); see ``_make_so_1rdm_ref`` for the
-        SparseState reference implementation.
+    def make_rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: Literal[1, 2],
+        spin_type: Literal["so"],
+    ):
         """
+        Make the spin-orbital (spinor) RDM of the given order for two CI roots.
+
+        Returns the complex RDM (e.g. order=1: gamma[p][q] = <L| a^+_p a_q |R>) over active
+        spinors (full antisymmetric tensor for order=2). With left_root != right_root this is
+        the transition RDM. Computed by the C++ ``RelSelectedCIHelper``.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+        order : int
+            The RDM order (1 or 2; two-component selected CI has no 3-RDM).
+        spin_type : str
+            Must be "so" (spin-orbital). The aliases "spin_orbital", "spin-orbital",
+            and "spinorbital" are also accepted.
+
+        Returns
+        -------
+        NDArray
+            The spin-orbital RDM.
+        """
+        spin_type = validate_single_state_rdm(
+            self,
+            left_root,
+            right_root,
+            order,
+            self._rdm_orders,
+            spin_type,
+            self._rdm_spin_types,
+        )
         if right_root is None:
             right_root = left_root
-        return self.sci_helper.a_1rdm(left_root, right_root)
-
-    def make_so_2rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-orbital (spinor) two-particle RDM for two CI roots.
-
-        Returns the complex 2-RDM gamma[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R> over
-        active spinors (full antisymmetric tensor), matching RelCISigmaBuilder.compute_2rdm.
-        With left_root != right_root this is the transition 2-RDM. Computed by the C++
-        ``RelSelectedCIHelper``; see ``_make_so_2rdm_ref`` for the SparseState reference.
-        """
-        if right_root is None:
-            right_root = left_root
-        return self.sci_helper.aa_2rdm(left_root, right_root)
-
-    # Reference SparseState-based implementations kept for validation. These build a dense
-    # SparseState per root and contract via the tested complex sparse RDM helpers. The
-    # production make_so_{1,2}rdm above call the equivalent C++ RelSelectedCIHelper methods.
-    def _make_so_1rdm_ref(self, left_root: int, right_root: int | None = None):
-        """Reference spin-orbital 1-RDM via the complex SparseState helper."""
-        if right_root is None:
-            right_root = left_root
-        left = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
-        right = SparseState(
-            {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
-        )
-        return rdms.compute_a_1rdm_complex(left, right, self.norb)
-
-    def _make_so_2rdm_ref(self, left_root: int, right_root: int | None = None):
-        """Reference spin-orbital 2-RDM via the complex SparseState helper."""
-        if right_root is None:
-            right_root = left_root
-        left = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
-        right = SparseState(
-            {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
-        )
-        return rdms.compute_aa_2rdm_complex(left, right, self.norb)
-
-    # The state-averaged RDM machinery in CIBase calls make_{1,2}rdm on the sub-solvers.
-    # Two-component sCI returns spin-orbital (spinor) RDMs, matching the RelCI convention.
-    def make_1rdm(self, left_root: int, right_root: int | None = None):
-        return self.make_so_1rdm(left_root, right_root)
-
-    def make_2rdm(self, left_root: int, right_root: int | None = None):
-        return self.make_so_2rdm(left_root, right_root)
-
-    # The spin-dependent / spin-free RDMs of the base worker rely on the real C++ helper and
-    # have no meaning in the spinor basis.
-    def make_sd_1rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Spin-dependent RDMs are not defined for two-component selected CI; "
-            "use make_so_1rdm."
-        )
-
-    def make_sd_2rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Spin-dependent RDMs are not defined for two-component selected CI; "
-            "use make_so_2rdm."
-        )
-
-    def make_sf_1rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Spin-free RDMs are not defined for two-component selected CI; "
-            "use make_so_1rdm."
-        )
-
-    def make_sf_2rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Spin-free RDMs are not defined for two-component selected CI; "
-            "use make_so_2rdm."
-        )
+        if order == 1:
+            return self.sci_helper.so_1rdm(left_root, right_root)
+        return self.sci_helper.so_2rdm(left_root, right_root)
 
 
 @dataclass
@@ -319,7 +291,7 @@ class RelSelectedCISolver(RelCIBase, SelectedCISolver):
     do_test_rdms : bool, optional, default=False
         If True, compute and validate the RDMs against the CI energy after the calculation.
     log_level : int, optional
-        The logging level for the CI solver.
+        The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
     """
 
     # Selected CI is a variational truncation, not the full CI space, so unlike
@@ -333,90 +305,43 @@ class RelSelectedCISolver(RelCIBase, SelectedCISolver):
         default_factory=DavidsonLiuParams
     )
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level() + 1)
 
-    # Active-space integral class used by CIBase._make_active_space_ints
+    # Label for the two energy tables; differs from SelectedCISolver only here.
+    _energy_summary_label: ClassVar[str] = "Relativistic selected CI energy"
+
+    # Active-space integral class used by CIBase.make_active_space_ints
     _integrals_cls: ClassVar[type] = SpinorbitalIntegrals
     # Per-state worker class used by CIBase._startup
     _ss_solver_cls: ClassVar[type] = _RelSelectedCISingleStateSolver
 
-    def make_1rdm(self, left_root: int, right_root: int | None = None):
-        """Complex spin-orbital 1-RDM for two absolute CI roots (same state only)."""
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_so_1rdm(
-                left_root_in_state, right_root_in_state
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("so",)
+    # spinor RDMs between roots of *different* states are not implemented
+    _rdm_cross_state_orders: ClassVar[tuple[int, ...]] = ()
+    # only the 2-cumulant: it needs the 1- and 2-RDMs, and selected CI has no 3-RDM
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
+    _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("so",)
+
+    def make_rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        *,
+        order: Literal[1, 2],
+        spin_type: Literal["so"],
+    ):
+        """Spin-orbital RDM of the given order for two absolute CI roots (same-state only)."""
+        left_state, right_state, left_root_in_state, right_root_in_state, spin_type = (
+            self._validate_rdm_inputs(
+                left_root,
+                right_root,
+                order,
+                self._rdm_orders,
+                spin_type,
+                self._rdm_spin_types,
+                self._rdm_cross_state_orders,
             )
-        raise NotImplementedError(
-            f"Cross-state 1-RDMs are not supported for RelSelectedCI. Got left_root in "
-            f"state {left_state} and right_root in state {right_state}."
         )
-
-    def make_2rdm(self, left_root: int, right_root: int | None = None):
-        """Complex spin-orbital 2-RDM for two absolute CI roots (same state only)."""
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
+        return self.sub_solvers[left_state].make_rdm(
+            left_root_in_state, right_root_in_state, order=order, spin_type=spin_type
         )
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_so_2rdm(
-                left_root_in_state, right_root_in_state
-            )
-        raise NotImplementedError(
-            f"Cross-state 2-RDMs are not supported for RelSelectedCI. Got left_root in "
-            f"state {left_state} and right_root in state {right_state}."
-        )
-
-
-@dataclass
-class RelSelectedCI(RelSelectedCISolver):
-    """
-    Two-component selected CI specialized for a single calculation (i.e., not used in a loop).
-    See `RelSelectedCISolver` for all parameters and attributes.
-    """
-
-    die_if_not_converged: bool = True
-    final_orbitals: FinalOrbitals = "original"
-    do_transition_dipole: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
-
-    def __post_init__(self):
-        super().__post_init__()
-        validate_final_orbitals(self.final_orbitals)
-
-    def run(self):
-        self._solve()
-        self._rotate_final_orbitals()
-        self._post_process()
-        return self
-
-    def _post_process(self):
-        pretty_print_ci_summary(
-            self.sa_info,
-            self.evar_per_solver,
-            header="\nRelativistic selected CI energy (variational)",
-        )
-        pretty_print_ci_summary(
-            self.sa_info,
-            self.etot_per_solver,
-            header="\nRelativistic selected CI energy (variational + PT2)",
-        )
-        self.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(
-            self.sa_info,
-            self.mo_space,
-            self.nat_occs,
-            self.nat_occs_avg,
-        )
-        top_dets = self.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-
-        if self.do_transition_dipole:
-            self.compute_transition_properties()
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.transition_dipoles,
-                self.oscillator_strengths,
-                self.evar_per_solver,
-            )
