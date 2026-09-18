@@ -86,7 +86,6 @@ def build_fno_virtual_space(pt2, gamma_vv, p_o, n_kappa, degeneracy_tol):
     occ, U_no = occ[order], U_no[:, order]
 
     n_keep = determine_fno_n_keep(occ, p_o, n_kappa, degeneracy_tol)
-    n_discard = occ.shape[0] - n_keep
 
     virt = pt2.mo_space.virt
     U_semican_virt = pt2.semicanonicalizer.U[virt, virt]
@@ -99,14 +98,25 @@ def build_fno_virtual_space(pt2, gamma_vv, p_o, n_kappa, degeneracy_tol):
     mos_trunc = pt2.mos.copy()
     mos_trunc.C[0] = C_orig_new
 
-    # update_frozen_orbitals always recomputes core_orbitals from
-    # (core_orbitals + frozen_core_orbitals) minus whatever it's asked to
-    # newly freeze, so the existing frozen-core set must be re-passed
-    # explicitly here or it silently gets merged back into "core" and
-    # correlated.
+    # update_frozen_orbitals always recomputes a space from (space + frozen
+    # space) minus whatever it's asked to newly freeze, so an existing frozen
+    # set must be re-passed explicitly here or it silently gets merged back in
+    # and correlated. That applies to the virtual side as much as the core: an
+    # integer count would be resolved against virtual_indices +
+    # frozen_virtual_orbitals and would freeze the highest-indexed orbitals of
+    # that union, which both un-freezes an upstream frozen-virtual set (ASET's
+    # environment, say) and picks orbitals by MO index rather than by natural
+    # occupation. Pass explicit indices instead: the virtual block is ordered by
+    # descending occupation after the rotation above, so the discarded NOs are
+    # the tail of virtual_indices. With no pre-existing frozen virtuals this
+    # reduces exactly to the old integer behaviour.
+    new_frozen_virtual = sorted(
+        list(pt2.mo_space.frozen_virtual_orbitals)
+        + list(pt2.mo_space.virtual_indices[n_keep:])
+    )
     mo_space_trunc = pt2.mo_space.update_frozen_orbitals(
         frozen_core_orbitals=pt2.mo_space.frozen_core_orbitals,
-        frozen_virtual_orbitals=n_discard,
+        frozen_virtual_orbitals=new_frozen_virtual,
     )
 
     return mos_trunc, mo_space_trunc
