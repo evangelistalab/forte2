@@ -105,10 +105,9 @@ class RelDSRG_MRPT2(DSRGBase):
 
     Notes
     -----
-    GAS references are supported. Unlike the spin-adapted solvers, the Fock
-    coupling between GASes is left out of the zeroth-order Hamiltonian, so the
-    two families agree only when that coupling vanishes (see
-    `DSRGBase._fock_actv_0th`).
+    GAS references are supported. The Fock coupling between GASes is left out of
+    the zeroth-order Hamiltonian, matching `DSRG_MRPT2` (see
+    `DSRGBase._fock_actv_0th`), which the two reproduce to 1e-9.
     """
 
     fno_p_o: float | None = None

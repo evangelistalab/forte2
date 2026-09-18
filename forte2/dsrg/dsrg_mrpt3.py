@@ -80,10 +80,12 @@ class DSRG_MRPT3(DSRGBase):
     Notes
     -----
     GAS references are supported. GAS-to-GAS internal excitations are excluded
-    from the amplitudes, and the Fock coupling between GASes is treated as zeroth
-    order (see `DSRGBase._fock_actv_0th`). That coupling enters the nested
-    commutators here, so it matters more than at second order: converge the
-    reference to `g_tol` around 1e-10.
+    from the amplitudes, and the Fock coupling between GASes is kept in the
+    zeroth-order Hamiltonian, as both of forte's MRPT3 codes do -- unlike
+    `DSRG_MRPT2`, which drops it. forte's own spin-adapted and spin-integrated
+    MRPT3 nonetheless disagree by 1.7e-5 Eh on a GAS reference while agreeing to
+    4e-13 on a CAS one, so treat third-order GAS energies as provisional.
+    Converge the reference to `g_tol` around 1e-10.
     """
 
     def __post_init__(self):
@@ -341,7 +343,7 @@ class DSRG_MRPT3(DSRGBase):
 
     def _t1_active_correction(self, S2):
         """The generalized-Fock off-diagonal correction shared by T1 and F-tilde."""
-        faa = self._fock_actv_0th
+        faa = self.F0th[self.actv, self.actv]
         g1 = self.cumulants["gamma1"]
         s2 = S2[:, self.ha, :, self.pa]
         corr = 0.5 * np.einsum("ivaw,wu,uv->ia", s2, faa, g1, optimize=True)
@@ -511,8 +513,7 @@ class DSRG_MRPT3(DSRGBase):
             self.hbar1 = np.zeros((self.nact,) * 2)
             self.hbar2 = np.zeros((self.nact,) * 4)
 
-        self.F0th = self._build_fock_0th()
-        self.F1st = self.fock - self.F0th
+        self.F0th, self.F1st = self._build_fock_0th_1st()
 
         # V_bare stays dense: unlike the running operators it is contracted
         # over general index patterns by the commutator kernels.

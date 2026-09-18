@@ -187,20 +187,34 @@ class DSRGBase(Method):
     def _fock_actv_0th(self) -> NDArray:
         """Active-active block of the DSRG zeroth-order Hamiltonian.
 
-        Diagonal for a single active space. With several GASes the coupling
-        between them survives semicanonicalization and is kept here, i.e. treated
-        as zeroth order, matching forte's spin-adapted MR-DSRG. Sole seam for that
-        choice; see tests/dsrg/test_gas_dsrg_mrpt2.py.
-        """
-        return self.fock[self.actv, self.actv]
+        Only the diagonal, so H(0) holds exactly the Fock eigenvalues the
+        denominators use. With several GASes the coupling between them survives
+        semicanonicalization and is dropped here; that is a first-order term
+        whose contributions are neglected, following ref. [1], and it matches
+        forte's spin-integrated DSRG-MRPT2. A no-op for a single active space,
+        where the block is already diagonal.
 
-    def _build_fock_0th(self) -> NDArray:
-        """The block-diagonal generalized Fock matrix, i.e. the DSRG H^(0)."""
+        Second order only. `_build_fock_0th_1st`, used at third order, keeps the
+        coupling instead -- see its docstring.
+        """
+        return np.diag(np.diag(self.fock[self.actv, self.actv]))
+
+    def _build_fock_0th_1st(self) -> tuple[NDArray, NDArray]:
+        """The zeroth- and first-order parts of the generalized Fock matrix.
+
+        Takes the whole active-active block into H(0), so with several GASes the
+        coupling between them is kept there and is absent from H(1). That is what
+        both of forte's MRPT3 codes do, and it is what reproduces their
+        spin-adapted energies. It differs from `_fock_actv_0th`, i.e. from second
+        order, which is unsatisfying but is the only third-order choice with an
+        external reference until the two-component MRPT3 discrepancy tracked in
+        tests/dsrg/test_rel_pt3_vs_nonrel.py is resolved.
+        """
         fock_0th = np.zeros_like(self.fock)
         fock_0th[self.core, self.core] = self.fock[self.core, self.core]
-        fock_0th[self.actv, self.actv] = self._fock_actv_0th
+        fock_0th[self.actv, self.actv] = self.fock[self.actv, self.actv]
         fock_0th[self.virt, self.virt] = self.fock[self.virt, self.virt]
-        return fock_0th
+        return fock_0th, self.fock - fock_0th
 
     def _log_semicanonical_check(self):
         """Log per-block off-diagonal Fock norms and the coupling between GASes.

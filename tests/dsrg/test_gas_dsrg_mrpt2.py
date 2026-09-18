@@ -4,8 +4,8 @@ from forte2 import CISolver, MCOptimizer, RHF, State, System
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx, approx_abs
 
-# The forte references come from its spin-adapted MR-DSRG (sa-mrdsrg, corr_level
-# pt2), whose zeroth-order Hamiltonian convention forte2 shares; see
+# The forte references come from its spin-integrated DSRG-MRPT2, which drops the
+# Fock coupling between GASes from H(0) just as forte2 does; see
 # DSRGBase._fock_actv_0th. The tight g_tol below is load-bearing: the DSRG energy
 # is not invariant to inter-GAS rotations, the softest GASSCF directions, so the
 # default g_tol=1e-7 leaves ~5e-8 Eh of slop.
@@ -15,12 +15,12 @@ def test_gas_dsrg_mrpt2_vs_forte():
     """H2O core hole against forte: C1, DF, cc-pVDZ, s=1.0.
 
     GAS1 is the O 1s, capped at one electron. forte: gas1 [1], gas2 [6],
-    gas1max [1], mcscf_active_frozen_orbital [0].
+    gas1max [1], mcscf_active_frozen_orbital [0], correlation_solver dsrg-mrpt2.
     """
     escf_forte = -76.021492628198
     eref_forte = -56.307846585586
-    edsrg_forte = -56.484662358624
-    erelax_forte = -56.486048203768
+    edsrg_forte = -56.484543303744
+    erelax_forte = -56.485926738908
 
     xyz = """
     O
@@ -75,13 +75,14 @@ def test_sa_gas_dsrg_mrpt2_vs_forte():
 
     Exercises per-state GAS windows, symmetry-resolved roots, state averaging and
     relaxation together. forte: avg_state [[0,1,1],[2,1,1]], gas1max [2,1],
-    calc_type sa; its gas1 [1,0,0,0] / gas2 [3,0,1,2] select MOs 0 and 1-6.
+    calc_type sa, correlation_solver dsrg-mrpt2; its gas1 [1,0,0,0] /
+    gas2 [3,0,1,2] select MOs 0 and 1-6.
     """
     escf_forte = -76.021492628196
     eref_forte = -65.876345332565
-    edsrg_forte = -66.089557601576
-    erelax_forte = -66.101680417719
-    eroots_forte = [-76.201724935909, -56.001635899530]
+    edsrg_forte = -66.089549102803
+    erelax_forte = -66.101678862707
+    eroots_forte = [-76.201761280602, -56.001596444812]
 
     xyz = """
     O

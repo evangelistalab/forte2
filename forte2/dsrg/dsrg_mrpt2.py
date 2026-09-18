@@ -67,10 +67,11 @@ class DSRG_MRPT2(DSRGBase):
     Notes
     -----
     GAS references are supported [5]_. GAS-to-GAS internal excitations are
-    excluded from the amplitudes, and the Fock coupling between GASes is treated
-    as zeroth order (see `DSRGBase._fock_actv_0th`). Converge the reference
-    tightly, `g_tol` around 1e-10: the energy is not invariant to rotations
-    between GASes, which are the softest directions in a GAS-SCF.
+    excluded from the amplitudes, and the Fock coupling between GASes is dropped
+    from the zeroth-order Hamiltonian (see `DSRGBase._fock_actv_0th`); including
+    it is future work. Converge the reference tightly, `g_tol` around 1e-10: the
+    energy is not invariant to rotations between GASes, which are the softest
+    directions in a GAS-SCF.
     """
 
     def __post_init__(self):

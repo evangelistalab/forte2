@@ -44,6 +44,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Two-component relativistic DSRG-MRPT3 with reference relaxation and state-averaging [11]_
   * Frozen natural orbital (FNO) truncation of the virtual space for the two-component methods [10]_
   * GAS/ORMAS references for all of the above, excluding GAS-to-GAS internal excitations [12]_
+  * The Fock coupling between GAS spaces is dropped from the zeroth-order Hamiltonian at second order, as in ref. [12]_, and kept at third; unifying the two is future work
 
 * Various orbital manipulation routines
   
