@@ -102,6 +102,13 @@ class RelDSRG_MRPT2(DSRGBase):
            J. Chem. Phys. 2018, 148, 124106.
     .. [5] C. Li, S. Mao, R. Huang, F. A. Evangelista, "Frozen Natural Orbitals for the State-Averaged Driven Similarity Renormalization Group",
            J. Chem. Theory Comput. 2024, 20, 4170-4181.
+
+    Notes
+    -----
+    GAS references are supported. Unlike the spin-adapted solvers, the Fock
+    coupling between GASes is left out of the zeroth-order Hamiltonian, so the
+    two families agree only when that coupling vanishes (see
+    `DSRGBase._fock_actv_0th`).
     """
 
     fno_p_o: float | None = None

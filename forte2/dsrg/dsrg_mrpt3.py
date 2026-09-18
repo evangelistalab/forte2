@@ -76,6 +76,14 @@ class DSRG_MRPT3(DSRGBase):
     ----------
     .. [1] C. Li and F. A. Evangelista, "Driven similarity renormalization group: Third-order
            multireference perturbation theory", J. Chem. Phys. 2017, 146, 124132.
+
+    Notes
+    -----
+    GAS references are supported. GAS-to-GAS internal excitations are excluded
+    from the amplitudes, and the Fock coupling between GASes is treated as zeroth
+    order (see `DSRGBase._fock_actv_0th`). That coupling enters the nested
+    commutators here, so it matters more than at second order: converge the
+    reference to `g_tol` around 1e-10.
     """
 
     def __post_init__(self):
