@@ -14,6 +14,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Spin-orbit 1-electron exact two-component (so-1eX2C) [2]_
   * Spin-free and spin-orbit SAP-X2C with model two-electron picture-change effects [9]_
   * Various empirical scaling schemes to approximate two-electron spin-orbit couplings ("Boettger factors") [3]_
+  * Picture change correction of one-electron property operators, applied by default when X2C is active
 
 * Flavors of Hartree-Fock theory
   

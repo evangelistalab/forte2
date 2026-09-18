@@ -1260,9 +1260,8 @@ def cint_sprsp(system, basis1=None, basis2=None, origin=None):
           mu_{z, sigma_x}, mu_{z, sigma_y}, mu_{z, sigma_z}, mu_{z, I2} ]
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(
-        system, basis1, basis2, origin
-    )
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2, origin=origin)
     res = ints.cint_int1e_sprsp_sph(shell_slice, atm, bas, env)
     # C-layout, first index is the integral component (slowest changing)
     return _f2c(res)
