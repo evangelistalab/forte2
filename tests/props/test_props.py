@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System
+from forte2 import System, X2CParams
 from forte2.props import get_1e_property, mulliken_population
 from forte2.scf import RHF, UHF, GHF
 from forte2.helpers.comparisons import approx, approx_loose
@@ -140,3 +140,64 @@ def test_mulliken_rhf():
     dm1 = scf._build_total_density_matrix()
     mp = mulliken_population(system, dm1)
     assert mp[1] == approx([-0.4620044, 0.2310022, 0.2310022])
+
+
+def test_dipole_sfx2c1e():
+    escf_rhf = -2573.01930609129
+    escf_sf = -2597.864199663877
+
+    xyz = """
+    H 0 0 0
+    Br 0 0 1.2
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = RHF(charge=0)(system)
+    scf.run()
+    assert scf.E == approx(escf_rhf)
+
+    dm1 = scf._build_total_density_matrix()
+    dip = get_1e_property(system, dm1, "dipole")
+    assert dip == approx_loose([0.0, 0.0, -8.60272654e-01])
+
+    # turn on sfx2c1e
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
+    )
+
+    scf = RHF(charge=0)(system)
+    scf.run()
+    assert scf.E == approx(escf_sf)
+
+    dm1 = scf._build_total_density_matrix()
+
+    dip = get_1e_property(system, dm1, "dipole")
+    assert dip == approx([0.0, 0.0, -8.349868220727e-01])
+    dip = get_1e_property(system, dm1, "dipole", skip_picture_change=True)
+    assert dip == approx([0.0, 0.0, -8.349868523462e-01])
+
+
+def test_dipole_sox2c1e():
+    escf_ghf = -2597.803003174037
+
+    xyz = """
+    H 0 0 0
+    Br 0 0 1.2
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type=None),
+    )
+
+    scf = GHF(charge=0)(system)
+    scf.run()
+    assert scf.E == approx(escf_ghf)
+
+    dm1 = scf._build_total_density_matrix()
+    dip = get_1e_property(system, dm1, "dipole")
+    assert dip == approx([0.0, 0.0, -8.31845304170969e-01])
