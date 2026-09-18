@@ -1494,6 +1494,92 @@ def cint_spsigmasp(system, basis1=None, basis2=None):
     return -_f2c(res)
 
 
+def cint_cg_irxp(system, basis1=None, basis2=None, origin=None):
+    r"""
+    Compute the orbital angular momentum integrals about a common gauge origin using the
+    Libcint library.
+
+    .. math::
+        \Lambda^{12}_{\mu\nu,k} = \int \chi^{1}_\mu(\mathbf{r}) (\mathbf{r}\times\nabla)_k \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+    origin : array-like, optional
+        The gauge origin. If None, defaults to [0.0, 0.0, 0.0].
+
+    Returns
+    -------
+    cg_irxp : ndarray
+        The three Cartesian components of :math:`\mathbf{r}\times\nabla`, shape (3, nbf, nbf).
+
+    Notes
+    -----
+    These are real and antisymmetric. The angular momentum operator is
+    :math:`\hat{L} = -i \mathbf{r}\times\nabla`, so multiply by :math:`-i` to get
+    :math:`\langle \hat{L}_k \rangle`.
+    """
+    _require_libcint()
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(
+        system, basis1, basis2, origin
+    )
+    res = ints.cint_int1e_cg_irxp_sph(shell_slice, atm, bas, env)
+    return _f2c(res)
+
+
+def cint_cg_sa10sp(system, basis1=None, basis2=None, origin=None):
+    r"""
+    Compute the magnetic vector potential integrals about a common gauge origin using the
+    Libcint library.
+
+    .. math::
+        \Omega^{12}_{\mu\nu,j} = \int \chi^{1}_\mu(\mathbf{r}) (\sigma\cdot\mathbf{A}^{(10)}_j) (\sigma\cdot\hat{p}) \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    where :math:`\mathbf{A}^{(10)}_j = \frac{1}{2}(\hat{e}_j \times \mathbf{r})` is the
+    vector potential of a uniform magnetic field along :math:`j`.
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+    origin : array-like, optional
+        The gauge origin. If None, defaults to [0.0, 0.0, 0.0].
+
+    Returns
+    -------
+    cg_sa10sp : ndarray
+        Shape (12, nbf, nbf), ordered as
+        [ B_{x, sigma_x}, B_{x, sigma_y}, B_{x, sigma_z}, B_{x, I2},
+          B_{y, sigma_x}, ... , B_{z, sigma_z}, B_{z, I2} ].
+
+    Notes
+    -----
+    :math:`(\sigma\cdot\mathbf{A})(\sigma\cdot\hat{p}) = \mathbf{A}\cdot\hat{p} + i\sigma\cdot(\mathbf{A}\times\hat{p})`.
+    Because the operator carries a single :math:`\hat{p}`, the two halves have opposite
+    reality to the :func:`opVop` case: the ``I2`` block is the coefficient of
+    :math:`i`, while the three sigma blocks combine without one, and libcint returns the
+    latter negated. Assemble as
+    :math:`i\,\Omega_{I} \otimes 1_2 - \sigma\cdot\Omega`, e.g. with
+    ``1j * block_diag_2x2(...) - sigma_dot(...)``. The ``I2`` block equals
+    :math:`-\frac{1}{2}` times :func:`cint_cg_irxp`, the orbital contribution.
+    """
+    _require_libcint()
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(
+        system, basis1, basis2, origin
+    )
+    res = ints.cint_int1e_cg_sa10sp_sph(shell_slice, atm, bas, env)
+    return _f2c(res)
+
+
 def cint_coulomb_2c(system, basis1=None, basis2=None):
     r"""
     Compute the two-center two-electron Coulomb integral between two basis sets using the Libcint library.

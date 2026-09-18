@@ -1,7 +1,9 @@
 import numpy as np
 
+from forte2 import integrals
+from forte2.data.atom_data import LIGHT_SPEED
 from forte2.state import StateAverageInfo
-from forte2.helpers import logger
+from forte2.helpers import logger, block_diag_2x2, sigma_dot
 
 
 def spin_matrices(system, C, skip_picture_change=None):
@@ -150,6 +152,163 @@ def compute_spin2(system, C, g1, g2, skip_picture_change=None):
         spin_vector.append((np.trace(k_cc) + np.einsum("uv,uv->", k_aa, g1)).real)
 
     return spin2.real, np.array(spin_vector)
+
+
+def magnetic_moment_matrices(system, C, origin=None, skip_picture_change=None):
+    r"""
+    Build the magnetic dipole moment matrices in the spinor basis spanned by `C`.
+
+    Parameters
+    ----------
+    system : System
+        The two-component system.
+    C : NDArray
+        The spinor coefficients, shape (2*nbf, nspinor).
+    origin : array-like, optional
+        The gauge origin. If None, defaults to [0, 0, 0]. The orbital contribution to the
+        magnetic moment is gauge-origin dependent, so this is part of the definition of
+        the property.
+    skip_picture_change : bool | None, optional, default=None
+        If True, use the nonrelativistic form :math:`-(\hat{L} + 2\hat{S})/2c` instead of
+        the picture-change-corrected operator. If None, follow ``skip_picture_change`` on
+        the system's X2C parameters.
+
+    Returns
+    -------
+    tuple[NDArray, NDArray, NDArray]
+        The :math:`\hat{m}_x`, :math:`\hat{m}_y`, :math:`\hat{m}_z` matrices, each of
+        shape (nspinor, nspinor), in atomic units.
+    """
+    nbf = system.nbf
+    assert (
+        C.shape[0] == 2 * nbf
+    ), "C must be in the spinorbital basis, with shape (2*nbf, nspinor)."
+    if skip_picture_change is None:
+        skip_picture_change = system.skip_picture_change
+
+    if system.x2c_type in ["sf", "so"] and not skip_picture_change:
+        m = system.x2c_helper.magnetic_dipole_moment(origin=origin)
+    else:
+        ovlp = system.ints_overlap()[:nbf, :nbf]
+        # L = -i (r x nabla); the Bohr magneton is 1/2c in these units
+        lmat = integrals.cint_cg_irxp(system, origin=origin)
+        zero = np.zeros_like(ovlp)
+        spin = [
+            0.5 * sigma_dot(ovlp, zero, zero),
+            0.5 * sigma_dot(zero, ovlp, zero),
+            0.5 * sigma_dot(zero, zero, ovlp),
+        ]
+        m = [
+            -(block_diag_2x2(-1j * lmat[k]) + 2 * spin[k]) / (2 * LIGHT_SPEED)
+            for k in range(3)
+        ]
+
+    return tuple(C.conj().T @ mk @ C for mk in m)
+
+
+def compute_g_tensor(
+    system, C, g1_aa, g1_ab, g1_bb, origin=None, skip_picture_change=None
+):
+    r"""
+    Compute the g-tensor of a Kramers doublet from the magnetic dipole moment operator.
+
+    Parameters
+    ----------
+    system : System
+        The two-component system.
+    C : NDArray
+        The coefficients of the core and active spinors, shape (2*nbf, ncore + nactv),
+        with the core columns first. The number of core spinors follows from the size of
+        `g1_aa`.
+    g1_aa, g1_bb : NDArray
+        The active-space one-particle density matrices of the two doublet components.
+    g1_ab : NDArray
+        The active-space one-particle transition density matrix between them,
+        :math:`\gamma_{pq} = \langle \Psi_a | a^\dagger_p a_q | \Psi_b \rangle`.
+    origin : array-like, optional
+        The gauge origin, see :func:`magnetic_moment_matrices`.
+    skip_picture_change : bool | None, optional, default=None
+        See :func:`magnetic_moment_matrices`.
+
+    Returns
+    -------
+    g_values : NDArray
+        The three principal g-values, in ascending order.
+    g_axes : NDArray
+        The corresponding principal axes as columns, shape (3, 3).
+
+    Notes
+    -----
+    Within a Kramers doublet the Zeeman interaction is represented by the effective
+    Hamiltonian :math:`\hat{H} = \mu_B \mathbf{B}\cdot g\cdot \tilde{S}` for a pseudospin
+    :math:`\tilde{S} = 1/2`, so the moment operator is
+    :math:`\hat{m}_k = -\mu_B \sum_l g_{kl} \tilde{S}_l`. Taking traces over the
+    two-dimensional model space gives
+
+    .. math::
+        \mathrm{Tr}[M_k M_l] = \frac{\mu_B^2}{2} (g g^T)_{kl}
+
+    so the principal g-values are the square roots of the eigenvalues of
+    :math:`(2/\mu_B^2)\,\mathrm{Tr}[M_k M_l]`, with :math:`\mu_B = 1/2c`. Because only
+    traces enter, the result does not depend on which orthonormal basis of the doublet
+    the two states happen to be reported in, which is what makes this definition
+    well-posed. Signs of the principal values are not determined this way.
+
+    The accuracy is limited by the restricted kinetic balance used for the
+    picture-change correction of the moment operator; see
+    :meth:`~forte2.x2c.x2c.X2CHelper.magnetic_dipole_moment`.
+    """
+    ncore = C.shape[1] - g1_aa.shape[0]
+    m = magnetic_moment_matrices(system, C, origin, skip_picture_change)
+
+    # the 2x2 matrix of each moment component within the doublet
+    M = np.zeros((3, 2, 2), dtype=complex)
+    for k in range(3):
+        m_cc, _, _, m_aa = _split_blocks(m[k], ncore)
+        core = np.trace(m_cc)
+        M[k, 0, 0] = core + np.einsum("uv,uv->", m_aa, g1_aa)
+        M[k, 1, 1] = core + np.einsum("uv,uv->", m_aa, g1_bb)
+        # the off-diagonal block carries no core contribution: the two states are
+        # orthogonal and share the same core
+        M[k, 0, 1] = np.einsum("uv,uv->", m_aa, g1_ab)
+        M[k, 1, 0] = M[k, 0, 1].conj()
+
+    # mu_B = 1/2c, so 2/mu_B^2 = 8 c^2
+    A = 8 * LIGHT_SPEED**2 * np.einsum("kab,lba->kl", M, M).real
+    evals, g_axes = np.linalg.eigh(A)
+    g_values = np.sqrt(np.clip(evals, 0.0, None))
+    return g_values, g_axes
+
+
+def pretty_print_g_tensor(g_values, g_axes, roots, header="\nKramers doublet g-tensor"):
+    r"""
+    Print the principal g-values and axes of a Kramers doublet.
+
+    Parameters
+    ----------
+    g_values : NDArray
+        The three principal g-values.
+    g_axes : NDArray
+        The principal axes as columns, shape (3, 3).
+    roots : tuple[int, int]
+        The two CI roots forming the doublet.
+    header : str, optional
+        A header string to display at the top of the summary.
+    """
+    logger.log_info1(f"{header} (roots {roots[0]} and {roots[1]}):")
+    width = 52
+    logger.log_info1("=" * width)
+    logger.log_info1(f"{'':>10} {'g':>12} {'x':>8} {'y':>8} {'z':>8}")
+    logger.log_info1("-" * width)
+    for i in range(3):
+        ax = g_axes[:, i]
+        logger.log_info1(
+            f"{'g_' + str(i + 1):>10} {g_values[i]:>12.6f} "
+            f"{ax[0]:>8.4f} {ax[1]:>8.4f} {ax[2]:>8.4f}"
+        )
+    logger.log_info1("-" * width)
+    logger.log_info1(f"{'g_iso':>10} {np.mean(g_values):>12.6f}")
+    logger.log_info1("=" * width)
 
 
 def pretty_print_rel_spin_summary(

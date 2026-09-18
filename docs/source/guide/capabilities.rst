@@ -30,6 +30,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Support for generalized active spaces (GAS) / occupation-restricted multiple active spaces (ORMAS)
   * Two-component CI for relativistic Hamiltonians
   * Spin expectation values for two-component CI, with picture change correction of the spin operator
+  * g-tensors of Kramers doublets from the picture-change-corrected magnetic dipole moment
   * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
   
 * Multi-configuration self-consistent field (MCSCF) methods

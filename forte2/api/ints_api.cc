@@ -546,6 +546,14 @@ void export_libcint_compute_api(nb::module_& sub_m) {
               "bas"_a, "env"_a,
               "Compute the small component of the spin operator matrix using libcint in spherical "
               "harmonics.");
+    sub_m.def("cint_int1e_cg_irxp_sph", &cint_int1e_cg_irxp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a,
+              "Compute the orbital angular momentum matrix (r x nabla) about a common gauge origin "
+              "using libcint in spherical harmonics.");
+    sub_m.def("cint_int1e_cg_sa10sp_sph", &cint_int1e_cg_sa10sp_sph, "shell_slice"_a, "atm"_a,
+              "bas"_a, "env"_a,
+              "Compute the magnetic vector potential integrals (sigma.A)(sigma.p) about a common "
+              "gauge origin using libcint in spherical harmonics.");
     sub_m.def("cint_int2c2e_sph", &cint_int2c2e_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
               "Compute the two-center two-electron integral matrix using libcint in spherical "
               "harmonics.");

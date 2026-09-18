@@ -272,6 +272,77 @@ class X2CHelper:
 
         return self._spin_operator
 
+    def magnetic_dipole_moment(self, origin=None):
+        r"""
+        Compute the magnetic dipole moment integrals with picture change correction.
+
+        Parameters
+        ----------
+        origin : array-like, optional
+            The gauge origin. If None, defaults to [0, 0, 0]. The uniform-field magnetic
+            moment is gauge-origin dependent, so this is part of the definition of the
+            property, not a numerical detail.
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected magnetic dipole moment integrals along x, y and
+            z, in the two-component contracted basis, in atomic units.
+
+        Notes
+        -----
+        A magnetic field enters the Dirac equation through the minimal substitution
+        :math:`\hat{p} \to \hat{p} + \mathbf{A}/c`, which contributes
+        :math:`\alpha\cdot\mathbf{A}`. The Dirac alpha matrices are block off-diagonal, so
+        the magnetic moment :math:`\hat{m}_j = -\frac{1}{2}(\mathbf{r}\times\alpha)_j` is
+        an **odd** operator, with large-small block
+        :math:`-(\sigma\cdot\mathbf{A}^{(10)}_j)(\sigma\cdot\hat{p}) / 2c`.
+
+        The :math:`1/2c` is the small-component normalization; it is what makes the Bohr
+        magneton :math:`\mu_B = 1/2c` appear, so that the nonrelativistic limit is
+        :math:`-(\hat{L}_j + 2\hat{S}_j)/2c`.
+
+        Restricted kinetic balance expands the small component in
+        :math:`(\sigma\cdot\hat{p})\chi`, which is adequate for the field-free problem
+        but not for the magnetic response. Measured against the analytic Dirac g-factor of
+        a hydrogenic 1s(1/2) level, this recovers about 63% of the relativistic correction
+        to g, nearly independently of Z, and decontracting the basis does not improve it.
+        A finite-difference solution of the four-component equation in the same
+        representation reproduces the same value, so the shortfall belongs to restricted
+        kinetic balance rather than to the transformation; removing it needs restricted
+        magnetic balance. The nonrelativistic limit is exact.
+        """
+        nbf = len(self.xbasis)
+        om = integrals.cint_cg_sa10sp(self.system, self.xbasis, origin=origin).reshape(
+            3, 4, nbf, nbf
+        )
+        fac = -0.5 / LIGHT_SPEED
+
+        if self.x2c_type == "so":
+            # (sigma.A)(sigma.p) = A.p + i sigma.(A x p): a single p flips the reality of
+            # the two halves relative to opVop, so the I2 block carries the i and the
+            # three sigma blocks do not, and libcint returns the latter negated.
+            ints_LS = [
+                fac * (1j * block_diag_2x2(om[j, 3]) - sigma_dot(*om[j, :3]))
+                for j in range(3)
+            ]
+            m_pc = self.picture_change_odd_operator(ints_LS)
+            proj = self._get_projection_matrix()
+            return [proj.conj().T @ m @ proj for m in m_pc]
+
+        # spin-free: X and R carry no spin structure, so the identity channel and the
+        # three sigma channels each transform on their own. Taking the conjugate
+        # transpose channel by channel is the same as taking it of the assembled block.
+        ints_LS = []
+        for j in range(3):
+            ints_LS += [fac * 1j * om[j, 3], *(fac * om[j, k] for k in range(3))]
+        m_pc = self.picture_change_odd_operator(ints_LS)
+        m_pc = [self.proj.conj().T @ m @ self.proj for m in m_pc]
+        return [
+            block_diag_2x2(m_pc[4 * j]) - sigma_dot(*m_pc[4 * j + 1 : 4 * j + 4])
+            for j in range(3)
+        ]
+
     def picture_change_even_operator(self, ints_LL, ints_SS):
         """
         Apply the picture change correction to integrals of an even operator, i.e.,
