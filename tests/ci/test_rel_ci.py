@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import CI, GHF, MOSpace, RHF, RelCISolver, SpinorUpcaster, System, X2CParams
+from forte2.base_classes import CIParams
 from forte2.helpers.comparisons import approx
 from forte2 import CI
 
@@ -282,3 +283,35 @@ def test_rel_ci_final_orbitals(final_orbitals):
     )(scf)
     ci.run()
     assert ci.E_ci[0] == approx(eref)
+
+
+def test_rel_ci_24_spinors_matches_exact():
+    """HZ and the RDMs match exact diagonalization when spinor pair indices exceed 255."""
+    system = System(
+        xyz="H 0.0 0.0 0.0\nH 0.0 0.0 1.4",
+        basis_set="cc-pVTZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    scf = GHF(charge=0, e_tol=1e-12)(system)
+
+    solvers = {}
+    for algorithm in ("exact", "hz"):
+        ci = CI(
+            RelCISolver(
+                nel=2, active_orbitals=24, ci_params=CIParams(ci_algorithm=algorithm)
+            )
+        )(scf)
+        ci.run()
+        assert ci.E_ci[0] == approx(-1.165336729106)
+        solvers[algorithm] = ci.ci_solver.sub_solvers[0]
+
+    solver = solvers["exact"]
+    rdm1 = solver.make_rdm(0, order=1, spin_type="so")
+    rdm2 = solver.make_rdm(0, order=2, spin_type="so")
+    rdm_energy = (
+        solver.ints.E
+        + np.einsum("ij,ij", rdm1, solver.ints.H)
+        + 0.5 * np.einsum("ijkl,ijkl", rdm2, solver.ints.V)
+    )
+    assert rdm_energy.real == approx(-1.165336729106)
