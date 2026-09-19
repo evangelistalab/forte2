@@ -76,14 +76,22 @@ class _X2CAdjoint:
         self.h_xbasis = self.Xorthm1.conj().T @ self.h_orth @ self.Xorthm1
         self.projection = helper._get_projection_matrix()
 
+        # SNSO(W) folds the screening into W before the decoupling, so the AO-basis W
+        # here has to carry it too. _apply_snso_scaling writes in place, so pass copies.
+        W_components = helper.W
+        if helper._snso_on_w():
+            W_components = [W_components[0]] + [
+                helper._apply_snso_scaling(W.copy()) for W in W_components[1:]
+            ]
+
         if self.mode == "sf":
             self.T_ao = helper.T
             self.V_ao = helper.V
-            self.W_ao = helper.W[0]
+            self.W_ao = W_components[0]
         else:
             self.T_ao = block_diag_2x2(helper.T)
             self.V_ao = block_diag_2x2(helper.V)
-            self.W_ao = i_sigma_dot(*helper.W)
+            self.W_ao = i_sigma_dot(*W_components)
 
         self.overlap_eigenvalues, self.overlap_eigenvectors = np.linalg.eigh(helper.S)
 
@@ -196,6 +204,13 @@ class _X2CAdjoint:
             Xorth_l_bar += Xorth_bar
             W_components_bar = np.zeros((4, nx, nx))
             W_components_bar[0] = W_ao_bar.real
+
+        if helper._snso_on_w():
+            # W_scaled = f * W elementwise, so the adjoint w.r.t. the raw integrals
+            # carries the same factors
+            W_components_bar = np.asarray(W_components_bar)
+            for k in range(1, 4):
+                helper._apply_snso_scaling(W_components_bar[k])
 
         S_bar += self._canonical_orth_adjoint(Xorth_l_bar)
         return {

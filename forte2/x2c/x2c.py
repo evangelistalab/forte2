@@ -57,6 +57,7 @@ class X2CHelper:
         self.x2c_type = system.x2c_type
         self.x2c_model = system.x2c_model
         self.snso_type = system.snso_type
+        self.snso_target = system.snso_target
 
         logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
@@ -479,6 +480,11 @@ class X2CHelper:
         if self.x2c_model == "sap":
             V_ao = self.V + self.V_e
             W_ao = [W + W_e for W, W_e in zip(self.W, self.W_e)]
+        if self._snso_on_w():
+            # Scale the spin-orbit part of W before the decoupling (the SNSO(W) ansatz),
+            # so X and R -- and hence every picture-changed property -- see the screening.
+            # _apply_snso_scaling writes in place, so hand it copies.
+            W_ao = [W_ao[0]] + [self._apply_snso_scaling(W.copy()) for W in W_ao[1:]]
         if self.x2c_type == "sf":
             S = np.eye(Xorth.shape[1])
             T = Xorth.conj().T @ self.T @ Xorth
@@ -543,9 +549,21 @@ class X2CHelper:
         L = self._build_nesc_matrix(T, V, W, self.X)
         return self.R.conj().T @ L @ self.R
 
+    def _snso_on_w(self):
+        """Whether the SNSO scaling is applied to W rather than to the Hamiltonian."""
+        return (
+            self.snso_type is not None
+            and self.snso_target == "w"
+            and self.x2c_model == "1e"
+            and self.x2c_type == "so"
+        )
+
     def _apply_snso_to_hcore(self, hcore):
         # SAP-X2C already screens the spin-orbit interaction, so SNSO is 1e-only.
         if self.x2c_model != "1e" or self.x2c_type != "so" or self.snso_type is None:
+            return hcore
+        if self.snso_target == "w":
+            # already folded into W before the decoupling
             return hcore
 
         nbf = len(self.xbasis)
