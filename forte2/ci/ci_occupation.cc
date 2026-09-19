@@ -381,37 +381,36 @@ generate_1h_occupations(const std::vector<std::array<int, 6>>& gas_occupations) 
 }
 
 std::vector<std::array<int, 6>>
-generate_1h1p_occupations(const std::vector<std::array<int, 6>>& gas_occupations) {
-    // Find the number of gas spaces used in the occupations
-    size_t num_gas_spaces = 0;
-    for (const auto& gas_occupation : gas_occupations) {
-        for (size_t n = 0; n < 6; n++) {
-            if ((gas_occupation[n] > 0) and (num_gas_spaces < n + 1)) {
-                num_gas_spaces = n + 1; // +1 because n is zero-indexed
-            }
-        }
-    }
-
+generate_1h1p_occupations(const std::vector<std::array<int, 6>>& gas_occupations,
+                          const std::vector<int>& gas_size) {
+    const size_t num_gas_spaces = std::min(gas_size.size(), max_active_spaces);
     std::vector<std::array<int, 6>> one_hole_one_particle_occ;
-    // Loop over all the GAS alpha/beta occupations
+    auto add_unique = [&](const std::array<int, 6>& occ) {
+        if (std::find(one_hole_one_particle_occ.begin(), one_hole_one_particle_occ.end(), occ) ==
+            one_hole_one_particle_occ.end()) {
+            one_hole_one_particle_occ.push_back(occ);
+        }
+    };
     for (const auto& gas_occupation : gas_occupations) {
         for (size_t n = 0; n < num_gas_spaces; n++) {
-            // Check if we can remove an electron from the GAS
             if (gas_occupation[n] >= 1) {
+                // Generate all valid GAS occupations resulting from 
+                // moving an electron this GAS to all other GASes
                 for (size_t s = 0; s < num_gas_spaces; s++) {
-                    // If so, remove it and store the new occupation
                     std::array<int, 6> new_occ = gas_occupation;
                     new_occ[n] -= 1;
-                    new_occ[s] += 1; // Add an electron to another space
-                    // Check if the new occupation is already in the list
-                    auto it = std::find(one_hole_one_particle_occ.begin(),
-                                        one_hole_one_particle_occ.end(), new_occ);
-                    if (it == one_hole_one_particle_occ.end()) {
-                        one_hole_one_particle_occ.push_back(new_occ);
-                    }
+                    new_occ[s] += 1;
+                    if (new_occ[s] <= gas_size[s])
+                        add_unique(new_occ);
                 }
             }
         }
+    }
+    // Edge case: when all GASes are empty, we still need a single allowed 
+    // GAS occupation list, this is so that an empty spectator string is 
+    // generated for the Knowles-Handy algorithm
+    for (const auto& gas_occupation : gas_occupations) {
+        add_unique(gas_occupation);
     }
     return one_hole_one_particle_occ;
 }

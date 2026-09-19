@@ -442,7 +442,7 @@ def test_ci_final_orbitals(final_orbitals):
     assert ci.E_avg == approx(eref)
 
 
-@pytest.mark.parametrize("alg", ["hz"])
+@pytest.mark.parametrize("alg", ["hz", "kh"])
 def test_ci_large_active(alg):
     system = System(
         xyz="H 0.0 0.0 0.0\nH 0.0 0.0 1.4",
