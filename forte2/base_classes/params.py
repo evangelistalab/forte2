@@ -83,6 +83,14 @@ class X2CParams(ParamsBase):
             - "dc": Dirac-Coulomb scaling.
             - "dcb": Dirac-Coulomb-Breit scaling.
             - "row-dependent": Row-dependent scaling.
+    snso_target : str, optional, default="hcore"
+        Which matrix the SNSO scaling is applied to. Options are:
+            - "hcore": rescale the spin-dependent part of the X2C Hamiltonian, after the
+              decoupling. X and R are left untouched, so picture-changed property
+              operators do not see the screening.
+            - "w": rescale the spin-orbit part of W before the decoupling, so that X, R,
+              and hence every picture-changed property inherit the screening. This is the
+              SNSO(W) ansatz, preferred for derivatives and expectation values.
     skip_picture_change : bool, optional, default=False
         If True, evaluate one-electron property operators without the picture change
         correction. Individual property calls can override this.
@@ -97,6 +105,7 @@ class X2CParams(ParamsBase):
     x2c_type: Literal[None, "sf", "so"] = None
     x2c_model: Literal[None, "1e", "sap"] = None
     snso_type: Literal[None, "boettger", "dc", "dcb", "row-dependent"] = None
+    snso_target: Literal["hcore", "w"] = "hcore"
     skip_picture_change: bool = False
     light_speed: float = LIGHT_SPEED
 
