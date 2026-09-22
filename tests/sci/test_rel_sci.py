@@ -444,3 +444,28 @@ def test_rel_sci_pt2_split_is_independent_of_var_threshold():
     for var_threshold in (1e-3, 1e-4, 1e-5, 1e-7, 0.0):
         var, pt = probe(var_threshold)
         assert var + pt == approx(ref_pt)
+
+
+def test_rel_sci_spin2():
+    """Selected CI at tight thresholds reproduces the 2c CI spin expectation values."""
+    system = System(
+        xyz="""
+        O 0.0 0.0 0.0
+        H 0.0 0.0 1.1
+        """,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
+    )
+    scf = GHF(charge=0, ms_guess=0.5, e_tol=1e-11)(system)
+    ci_solver = RelSelectedCISolver(
+        nel=9,
+        core_orbitals=2,
+        active_orbitals=10,
+        nroots=4,
+        sci_params=SelectedCIParams(var_threshold=1e-12, pt2_threshold=1e-14),
+    )
+
+    mc = MCOptimizer(ci_solver)(scf)
+    mc.run()
+    assert mc.spin2 == pytest.approx([0.753865, 0.753865, 0.753859, 0.753859], abs=1e-4)

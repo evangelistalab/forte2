@@ -64,14 +64,20 @@ def test_x2c_hcore_gradient_finite_difference(x2c_type, use_gaussian_charges):
     assert analytical == pytest.approx(numerical, abs=3.0e-8)
 
 
+@pytest.mark.parametrize("snso_target", ["hcore", "w"])
 @pytest.mark.parametrize("snso_type", ["boettger", "dc", "dcb", "row-dependent"])
-def test_snso_x2c_hcore_gradient_finite_difference(snso_type):
+def test_snso_x2c_hcore_gradient_finite_difference(snso_type, snso_target):
     def make_system(z):
         return System(
             xyz=f"S 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
             basis_set="sto-3g",
             unit="bohr",
-            x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type=snso_type),
+            x2c=X2CParams(
+                x2c_type="so",
+                x2c_model="1e",
+                snso_type=snso_type,
+                snso_target=snso_target,
+            ),
             minao_basis_set=None,
         )
 
@@ -81,6 +87,57 @@ def test_snso_x2c_hcore_gradient_finite_difference(snso_type):
     numerical = _four_point_hcore_gradient_component(make_system, 1.5, density)
 
     assert analytical == pytest.approx(numerical, abs=3.0e-8)
+
+
+def test_snso_target_w_reaches_property_operators():
+    r"""SNSO(W) screens the decoupling itself, so picture-changed properties see it.
+
+    Rescaling the Hamiltonian after the transformation (``snso_target="hcore"``) leaves X
+    and R untouched, so every picture-changed property operator is bit-identical to
+    1e-X2C. Rescaling W before the decoupling (``snso_target="w"``) changes X and R and
+    therefore reaches the properties, which is why it is the preferred ansatz for
+    derivatives and expectation values. Both routes give nearly the same Hamiltonian.
+    """
+
+    def helper_for(snso_type, snso_target):
+        system = System(
+            xyz="H 0 0 0\nBr 0 0 1.2",
+            basis_set="cc-pVDZ",
+            auxiliary_basis_set="cc-pVQZ-JKFIT",
+            x2c=X2CParams(
+                x2c_type="so",
+                x2c_model="1e",
+                snso_type=snso_type,
+                snso_target=snso_target,
+            ),
+        )
+        hcore = system.x2c_helper.hcore_x2c()
+        return system.x2c_helper, hcore
+
+    bare, h_bare = helper_for(None, "hcore")
+    ham, h_ham = helper_for("dcb", "hcore")
+    wmat, h_w = helper_for("dcb", "w")
+
+    # both variants shift the Hamiltonian, and by a similar amount
+    scale = np.abs(h_bare).max()
+    assert np.abs(h_ham - h_bare).max() / scale > 1e-6
+    assert np.abs(h_w - h_bare).max() / scale > 1e-6
+    assert np.abs(h_w - h_ham).max() / scale < 1e-4
+
+    # only SNSO(W) touches the decoupling
+    assert np.abs(ham.X - bare.X).max() == approx(0.0)
+    assert np.abs(ham.R - bare.R).max() == approx(0.0)
+    assert np.abs(wmat.X - bare.X).max() > 1e-5
+
+    # ... and so only SNSO(W) reaches the picture-changed operators
+    for get in (
+        lambda h: h.spin_operator()[2],
+        lambda h: h.electric_dipole_moment()[2],
+        lambda h: h.magnetic_dipole_moment()[2],
+    ):
+        reference = get(bare)
+        assert np.abs(get(ham) - reference).max() == approx(0.0)
+        assert np.abs(get(wmat) - reference).max() > 0.0
 
 
 def test_x2c_hcore_gradient_with_truncated_overlap_space():

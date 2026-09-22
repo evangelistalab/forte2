@@ -179,6 +179,25 @@ def test_dipole_sfx2c1e():
     dip = get_1e_property(system, dm1, "dipole", skip_picture_change=True)
     assert dip == approx([0.0, 0.0, -8.349868523462e-01])
 
+    # the same escape hatch, set once on the system instead of per call
+    system_nopc = System(
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e", skip_picture_change=True),
+    )
+    scf_nopc = RHF(charge=0)(system_nopc)
+    scf_nopc.run()
+    assert scf_nopc.E == approx(escf_sf)
+    dm1_nopc = scf_nopc._build_total_density_matrix()
+    assert get_1e_property(system_nopc, dm1_nopc, "dipole") == approx(
+        [0.0, 0.0, -8.349868523462e-01]
+    )
+    # an explicit argument still wins over the system setting
+    assert get_1e_property(
+        system_nopc, dm1_nopc, "dipole", skip_picture_change=False
+    ) == approx([0.0, 0.0, -8.349868220727e-01])
+
 
 def test_dipole_sox2c1e():
     escf_ghf = -2597.803003174037

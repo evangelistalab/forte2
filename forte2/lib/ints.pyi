@@ -311,6 +311,21 @@ def cint_int1e_sprsp_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[nump
     Compute the small component of the dipole integral matrix using libcint in spherical harmonics.
     """
 
+def cint_int1e_spsigmasp_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]:
+    """
+    Compute the small component of the spin operator matrix using libcint in spherical harmonics.
+    """
+
+def cint_int1e_cg_irxp_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]:
+    """
+    Compute the orbital angular momentum matrix (r x nabla) about a common gauge origin using libcint in spherical harmonics.
+    """
+
+def cint_int1e_cg_sa10sp_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]:
+    """
+    Compute the magnetic vector potential integrals (sigma.A)(sigma.p) about a common gauge origin using libcint in spherical harmonics.
+    """
+
 def cint_int2c2e_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]:
     """
     Compute the two-center two-electron integral matrix using libcint in spherical harmonics.

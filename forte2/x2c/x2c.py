@@ -6,6 +6,7 @@ from forte2.helpers import (
     logger,
     block_diag_2x2,
     i_sigma_dot,
+    sigma_dot,
     canonical_orth,
     invsqrt_matrix,
     print_metric_info,
@@ -56,10 +57,12 @@ class X2CHelper:
         self.x2c_type = system.x2c_type
         self.x2c_model = system.x2c_model
         self.snso_type = system.snso_type
+        self.snso_target = system.snso_target
 
         logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
         self.xbasis = decontract_basis(system.basis)
+        self._spin_operator = None
 
         self.proj = scipy.linalg.solve(
             integrals.overlap(self.system, self.xbasis),
@@ -140,6 +143,9 @@ class X2CHelper:
         # build the transformation matrix R
         self.R = self._get_transformation_matrix(S, T)
 
+        # the picture-change correction of any property is tied to this X and R
+        self._spin_operator = None
+
         # build the Foldy-Wouthuysen Hamiltonian
         h_fw = self._build_foldy_wouthuysen_hamiltonian(T, V, W)
 
@@ -210,6 +216,133 @@ class X2CHelper:
         # project back to the contracted basis
         proj = self._get_projection_matrix()
         return [proj.conj().T @ mu_pc_i @ proj for mu_pc_i in mu_pc]
+
+    def spin_operator(self):
+        r"""
+        Compute the spin operator matrices with picture change correction.
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected :math:`\hat{s}_x`, :math:`\hat{s}_y`, and
+            :math:`\hat{s}_z` matrices in the two-component contracted basis, each of
+            shape (2 * nbf, 2 * nbf).
+
+        Notes
+        -----
+        :math:`\hat{s}_k = \sigma_k / 2` is an even operator, with large-large block
+        :math:`\sigma_k S / 2` and small-small block
+        :math:`(\sigma\cdot\hat{p}) \sigma_k (\sigma\cdot\hat{p}) / (8 c^2)`.
+
+        For ``x2c_type == "sf"`` the decoupling matrices are spin-free, so the spin
+        structure factors out of the transformation and each of the nine spatial blocks
+        is picture-changed on its own before being recombined.
+        """
+        if self._spin_operator is not None:
+            return self._spin_operator
+
+        nbf = len(self.xbasis)
+        ovlp = integrals.overlap(self.system, self.xbasis)
+        # (sigma.p) sigma_k (sigma.p) as [k][sigma_j]; the four I2 blocks vanish
+        ss = integrals.cint_spsigmasp(self.system, self.xbasis).reshape(3, 4, nbf, nbf)
+        # 1/2 from s_k = sigma_k / 2, 1/(4 c^2) from the small-component metric
+        fac = 0.5 * 0.25 / LIGHT_SPEED**2
+        zero = np.zeros_like(ovlp)
+
+        if self.x2c_type == "so":
+            ints_LL, ints_SS = [], []
+            for k in range(3):
+                comp = [zero] * 3
+                comp[k] = 0.5 * ovlp
+                ints_LL.append(sigma_dot(*comp))
+                ints_SS.append(fac * sigma_dot(*ss[k, :3]))
+            s_pc = self.picture_change_even_operator(ints_LL, ints_SS)
+            proj = self._get_projection_matrix()
+            self._spin_operator = [proj.conj().T @ s @ proj for s in s_pc]
+        else:
+            ints_LL, ints_SS = [], []
+            for k in range(3):
+                for j in range(3):
+                    ints_LL.append(0.5 * ovlp if j == k else zero)
+                    ints_SS.append(fac * ss[k, j])
+            s_pc = self.picture_change_even_operator(ints_LL, ints_SS)
+            s_pc = [self.proj.conj().T @ s @ self.proj for s in s_pc]
+            self._spin_operator = [
+                sigma_dot(*s_pc[3 * k : 3 * k + 3]) for k in range(3)
+            ]
+
+        return self._spin_operator
+
+    def magnetic_dipole_moment(self, origin=None):
+        r"""
+        Compute the magnetic dipole moment integrals with picture change correction.
+
+        Parameters
+        ----------
+        origin : array-like, optional
+            The gauge origin. If None, defaults to [0, 0, 0]. The uniform-field magnetic
+            moment is gauge-origin dependent, so this is part of the definition of the
+            property, not a numerical detail.
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected magnetic dipole moment integrals along x, y and
+            z, in the two-component contracted basis, in atomic units.
+
+        Notes
+        -----
+        A magnetic field enters the Dirac equation through the minimal substitution
+        :math:`\hat{p} \to \hat{p} + \mathbf{A}/c`, which contributes
+        :math:`\alpha\cdot\mathbf{A}`. The Dirac alpha matrices are block off-diagonal, so
+        the magnetic moment :math:`\hat{m}_j = -\frac{1}{2}(\mathbf{r}\times\alpha)_j` is
+        an **odd** operator, with large-small block
+        :math:`-(\sigma\cdot\mathbf{A}^{(10)}_j)(\sigma\cdot\hat{p}) / 2c`.
+
+        The :math:`1/2c` is the small-component normalization; it is what makes the Bohr
+        magneton :math:`\mu_B = 1/2c` appear, so that the nonrelativistic limit is
+        :math:`-(\hat{L}_j + 2\hat{S}_j)/2c`.
+
+        Restricted kinetic balance expands the small component in
+        :math:`(\sigma\cdot\hat{p})\chi`, which is adequate for the field-free problem
+        but not for the magnetic response. Measured against the analytic Dirac g-factor of
+        a hydrogenic 1s(1/2) level, this recovers about 63% of the relativistic correction
+        to g, nearly independently of Z, and decontracting the basis does not improve it.
+        A finite-difference solution of the four-component equation in the same
+        representation reproduces the same value, so the shortfall belongs to restricted
+        kinetic balance rather than to the transformation; removing it needs restricted
+        magnetic balance. The nonrelativistic limit is exact.
+        """
+        nbf = len(self.xbasis)
+        om = integrals.cint_cg_sa10sp(self.system, self.xbasis, origin=origin).reshape(
+            3, 4, nbf, nbf
+        )
+        fac = -0.5 / LIGHT_SPEED
+
+        if self.x2c_type == "so":
+            # (sigma.A)(sigma.p) = A.p + i sigma.(A x p): a single p flips the reality of
+            # the two halves relative to opVop, so the I2 block carries the i and the
+            # three sigma blocks do not, and libcint returns the latter negated.
+            ints_LS = [
+                fac * (1j * block_diag_2x2(om[j, 3]) - sigma_dot(*om[j, :3]))
+                for j in range(3)
+            ]
+            m_pc = self.picture_change_odd_operator(ints_LS)
+            proj = self._get_projection_matrix()
+            return [proj.conj().T @ m @ proj for m in m_pc]
+
+        # spin-free: X and R carry no spin structure, so the identity channel and the
+        # three sigma channels each transform on their own. Taking the conjugate
+        # transpose channel by channel is the same as taking it of the assembled block.
+        ints_LS = []
+        for j in range(3):
+            ints_LS += [fac * 1j * om[j, 3], *(fac * om[j, k] for k in range(3))]
+        m_pc = self.picture_change_odd_operator(ints_LS)
+        m_pc = [self.proj.conj().T @ m @ self.proj for m in m_pc]
+        return [
+            block_diag_2x2(m_pc[4 * j]) - sigma_dot(*m_pc[4 * j + 1 : 4 * j + 4])
+            for j in range(3)
+        ]
 
     def picture_change_even_operator(self, ints_LL, ints_SS):
         """
@@ -347,6 +480,11 @@ class X2CHelper:
         if self.x2c_model == "sap":
             V_ao = self.V + self.V_e
             W_ao = [W + W_e for W, W_e in zip(self.W, self.W_e)]
+        if self._snso_on_w():
+            # Scale the spin-orbit part of W before the decoupling (the SNSO(W) ansatz),
+            # so X and R -- and hence every picture-changed property -- see the screening.
+            # _apply_snso_scaling writes in place, so hand it copies.
+            W_ao = [W_ao[0]] + [self._apply_snso_scaling(W.copy()) for W in W_ao[1:]]
         if self.x2c_type == "sf":
             S = np.eye(Xorth.shape[1])
             T = Xorth.conj().T @ self.T @ Xorth
@@ -411,9 +549,21 @@ class X2CHelper:
         L = self._build_nesc_matrix(T, V, W, self.X)
         return self.R.conj().T @ L @ self.R
 
+    def _snso_on_w(self):
+        """Whether the SNSO scaling is applied to W rather than to the Hamiltonian."""
+        return (
+            self.snso_type is not None
+            and self.snso_target == "w"
+            and self.x2c_model == "1e"
+            and self.x2c_type == "so"
+        )
+
     def _apply_snso_to_hcore(self, hcore):
         # SAP-X2C already screens the spin-orbit interaction, so SNSO is 1e-only.
         if self.x2c_model != "1e" or self.x2c_type != "so" or self.snso_type is None:
+            return hcore
+        if self.snso_target == "w":
+            # already folded into W before the decoupling
             return hcore
 
         nbf = len(self.xbasis)

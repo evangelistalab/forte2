@@ -545,3 +545,104 @@ class RelCIBase(RelActiveSpaceSolver, CIBase):
             raise ValueError(
                 "RelCISolver requires a two-component system. Please use a parent method that can provide a two-component wavefunction."
             )
+
+    def compute_spin2(self, C=None):
+        r"""
+        Compute :math:`\langle \hat{S}^2 \rangle` and :math:`\langle \hat{S}_x \rangle`,
+        :math:`\langle \hat{S}_y \rangle`, :math:`\langle \hat{S}_z \rangle` for each root.
+
+        Each root needs its own 1- and 2-RDM, so this costs one two-particle RDM build per
+        root.
+
+        Parameters
+        ----------
+        C : NDArray, optional
+            The MO coefficients. If not provided, ``self.mos.C[0]`` is used.
+
+        Returns
+        -------
+        spin2 : NDArray
+            :math:`\langle \hat{S}^2 \rangle` for each root. Also saved in ``self.spin2``.
+        spin_vector : NDArray
+            :math:`\langle \hat{S}_x \rangle`, :math:`\langle \hat{S}_y \rangle`, and
+            :math:`\langle \hat{S}_z \rangle` for each root, shape (nroots, 3). Also saved
+            in ``self.spin_vector``.
+        """
+        from forte2.ci.rel_ci_utils import compute_spin2
+
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        if C is None:
+            C = self.mos.C[0]
+        C = C[:, self.core_indices + self.active_indices]
+
+        nroots = self.sa_info.nroots_sum
+        self.spin2 = np.zeros(nroots)
+        self.spin_vector = np.zeros((nroots, 3))
+        for iroot in range(nroots):
+            istate, iroot_in_state = self._get_state_root(iroot)
+            solver = self.sub_solvers[istate]
+            g1 = solver.make_rdm(iroot_in_state, order=1, spin_type="so")
+            g2 = solver.make_rdm(iroot_in_state, order=2, spin_type="so")
+            self.spin2[iroot], self.spin_vector[iroot] = compute_spin2(
+                self.system, C, g1, g2
+            )
+
+        return self.spin2, self.spin_vector
+
+    def compute_g_tensor(self, roots=(0, 1), C=None, origin=None, degeneracy_tol=1e-6):
+        r"""
+        Compute the g-tensor of a Kramers doublet.
+
+        Parameters
+        ----------
+        roots : tuple[int, int], optional, default=(0, 1)
+            The two CI roots forming the doublet.
+        C : NDArray, optional
+            The MO coefficients. If not provided, ``self.mos.C[0]`` is used.
+        origin : array-like, optional
+            The gauge origin. If None, defaults to [0, 0, 0]. The orbital contribution is
+            gauge-origin dependent, so choose it deliberately.
+        degeneracy_tol : float, optional, default=1e-6
+            Warn if the two roots differ in energy by more than this, since the pseudospin
+            g-tensor is only defined for a degenerate pair.
+
+        Returns
+        -------
+        g_values : NDArray
+            The three principal g-values, in ascending order. Also saved in
+            ``self.g_values``.
+        g_axes : NDArray
+            The principal axes as columns. Also saved in ``self.g_axes``.
+        """
+        from forte2.ci.rel_ci_utils import compute_g_tensor
+
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        if C is None:
+            C = self.mos.C[0]
+        C = C[:, self.core_indices + self.active_indices]
+
+        ia, ib = roots
+        ea, eb = (
+            self.evals_per_solver[st][ir]
+            for st, ir in (self._get_state_root(ia), self._get_state_root(ib))
+        )
+        gap = abs(np.real(ea - eb))
+        if gap > degeneracy_tol:
+            logger.log_warning(
+                f"compute_g_tensor: roots {ia} and {ib} differ in energy by {gap:.3e}, "
+                "which is larger than the degeneracy tolerance. The pseudospin g-tensor "
+                "assumes a degenerate Kramers doublet, so the result may be meaningless."
+            )
+
+        g1_aa = self.make_rdm(ia, order=1, spin_type="so")
+        g1_bb = self.make_rdm(ib, order=1, spin_type="so")
+        g1_ab = self.make_rdm(ia, ib, order=1, spin_type="so")
+
+        self.g_values, self.g_axes = compute_g_tensor(
+            self.system, C, g1_aa, g1_ab, g1_bb, origin=origin
+        )
+        return self.g_values, self.g_axes

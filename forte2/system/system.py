@@ -185,6 +185,16 @@ class System:
         """SNSO scaling from :attr:`x2c`, or None when not requested."""
         return self.x2c.snso_type if self.x2c is not None else None
 
+    @property
+    def snso_target(self):
+        """Which matrix the SNSO scaling is applied to, from :attr:`x2c`."""
+        return self.x2c.snso_target if self.x2c is not None else "hcore"
+
+    @property
+    def skip_picture_change(self):
+        """Whether :attr:`x2c` asks for property operators without picture change."""
+        return self.x2c.skip_picture_change if self.x2c is not None else False
+
     def _common_init(self, skip_basis_init=False, atoms=None):
         self._init_geometry(atoms=atoms)
         if not skip_basis_init:

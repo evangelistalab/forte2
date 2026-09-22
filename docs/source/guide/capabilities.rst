@@ -13,7 +13,8 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Spin-free 1-electron exact two-component (sf-1eX2C) [2]_
   * Spin-orbit 1-electron exact two-component (so-1eX2C) [2]_
   * Spin-free and spin-orbit SAP-X2C with model two-electron picture-change effects [9]_
-  * Various empirical scaling schemes to approximate two-electron spin-orbit couplings ("Boettger factors") [3]_
+  * Various empirical scaling schemes to approximate two-electron spin-orbit couplings ("Boettger factors"), applied either to the Hamiltonian or, so that property operators inherit the screening, to the relativistically modified potential [3]_
+  * Picture change correction of one-electron property operators, applied by default when X2C is active
 
 * Flavors of Hartree-Fock theory
   
@@ -28,6 +29,8 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Spin-adapted CI (CSF basis) for non-relativistic Hamiltonians
   * Support for generalized active spaces (GAS) / occupation-restricted multiple active spaces (ORMAS)
   * Two-component CI for relativistic Hamiltonians
+  * Spin expectation values for two-component CI, with picture change correction of the spin operator
+  * g-tensors of Kramers doublets from the picture-change-corrected magnetic dipole moment
   * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
   
 * Multi-configuration self-consistent field (MCSCF) methods

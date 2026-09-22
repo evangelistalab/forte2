@@ -3,7 +3,7 @@ import pytest
 
 from forte2 import CI, GHF, MOSpace, RHF, RelCISolver, SpinorUpcaster, System, X2CParams
 from forte2.base_classes import CIParams
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx, approx_abs
 from forte2 import CI
 
 
@@ -315,3 +315,196 @@ def test_rel_ci_24_spinors_matches_exact():
         + 0.5 * np.einsum("ijkl,ijkl", rdm2, solver.ints.V)
     )
     assert rdm_energy.real == approx(-1.165336729106)
+
+
+def _spin2_unfolded(system, C, dets, coefficients, ncore):
+    """
+    Reference <S^2>: core orbitals are explicitly treated
+    """
+    from forte2.ci.rel_ci_utils import spin_matrices
+    from forte2.lib import rdms
+    from forte2.lib.det import Determinant
+    from forte2.lib.sparse_ops import SparseState
+
+    nactv = C.shape[1] - ncore
+    shifted = {}
+    for d, c in zip(dets, coefficients):
+        new = Determinant.zero()
+        for i in range(ncore):
+            new.set_na(i, True)
+        for i in range(nactv):
+            if d.na(i):
+                new.set_na(i + ncore, True)
+        shifted[new] = c
+    state = SparseState(shifted)
+
+    S_z, S_plus, S_minus, S2_1e = spin_matrices(system, C)
+    g1 = rdms.compute_1rdm_2c(state, state, C.shape[1])
+    g2 = rdms.compute_2rdm_2c(state, state, C.shape[1])
+    value = np.einsum("pq,pq->", S2_1e, g1)
+    for A, B in ((S_z, S_z), (S_minus, S_plus)):
+        value -= np.einsum("ps,qr,pqrs->", A, B, g2, optimize=True)
+    return value.real
+
+
+def test_rel_ci_spin2_single_determinant():
+    """A one-determinant 2c CI reproduces the SCF spin expectation values."""
+    system = System(
+        xyz="C 0 0 0", basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT"
+    )
+    scf = GHF(charge=0, ms_guess=1.0)(system)
+    ci = CI(RelCISolver(nel=6, core_orbitals=5, active_orbitals=1))(scf)
+    ci.run()
+    assert scf.S2 == approx(2.0063122057820237)
+    assert ci.ci_solver.spin2[0] == approx(scf.S2)
+    assert ci.ci_solver.spin_vector[0] == approx([0.0, 0.0, 1.0])
+
+
+def test_rel_ci_spin2_spin_free_limit():
+    """Without spin-orbit coupling the 2c roots are exact spin eigenstates."""
+    system = System(
+        xyz="""
+        H 0.0 0.0 0.0
+        H 0.0 0.0 2.0
+        """,
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    scf = RHF(charge=0, e_tol=1e-12)(system)
+    conv = SpinorUpcaster(apply_random_phase=True)(scf)
+    ci = CI(RelCISolver(nel=2, active_orbitals=4, nroots=6))(conv)
+    ci.run()
+
+    # two electrons in two spatial orbitals: three singlets and one triplet
+    assert np.sort(ci.ci_solver.spin2) == approx([0.0, 0.0, 0.0, 2.0, 2.0, 2.0])
+
+    ci = CI(RelCISolver(nel=2, active_orbitals=4, nroots=6), do_compute_spin2=False)(
+        conv
+    )
+    ci.run()
+    assert not hasattr(ci.ci_solver, "spin2")
+
+
+@pytest.mark.parametrize("x2c_type", ["so", "sf"])
+def test_x2c_magnetic_moment_nonrelativistic_limit(x2c_type):
+    r"""The picture-changed magnetic moment must reduce to :math:`-(L + 2S)/2c`.
+
+    A magnetic field enters the Dirac equation as :math:`\alpha\cdot A`, so the moment is
+    an odd operator. For a light system the relativistic correction is O((Z*alpha)^2), so
+    this pins the sign and prefactor of both halves of the operator: the identity channel
+    of the (sigma.A)(sigma.p) integrals carries the orbital term and the three sigma
+    channels the spin term, with opposite reality to the opVop case.
+    """
+    from forte2 import integrals
+    from forte2.helpers import block_diag_2x2, sigma_dot
+    from forte2.data.atom_data import LIGHT_SPEED
+
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e"),
+    )
+    helper = system.x2c_helper
+    helper.hcore_x2c()
+    m = helper.magnetic_dipole_moment()
+
+    ovlp = integrals.overlap(system)
+    lmat = integrals.cint_cg_irxp(system)
+    zero = np.zeros_like(ovlp)
+    spin = [
+        0.5 * sigma_dot(ovlp, zero, zero),
+        0.5 * sigma_dot(zero, ovlp, zero),
+        0.5 * sigma_dot(zero, zero, ovlp),
+    ]
+    scale = 0.0
+    for k in range(3):
+        ref = -(block_diag_2x2(-1j * lmat[k]) + 2 * spin[k]) / (2 * LIGHT_SPEED)
+        scale = max(scale, np.abs(ref).max())
+        # hermitian, and correct to the expected O((Z*alpha)^2)
+        assert np.abs(m[k] - m[k].conj().T).max() == approx(0.0)
+        assert np.abs(m[k] - ref).max() < 2e-4 * scale
+
+
+def test_rel_ci_g_tensor():
+    """A light radical has an isotropic g-tensor at the free-electron value.
+
+    The orbital contribution is nearly quenched and the spin-orbit coupling is negligible
+    for Z=1, so all three principal values sit at 2. The picture-change correction must
+    move g below 2, the direction the analytic bound-state g-factor requires.
+    """
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4\nH 0 0 2.8",
+        basis_set="sto-3g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
+    )
+    scf = GHF(charge=0, ms_guess=0.5, e_tol=1e-11)(system)
+    # a full active space is closed under time reversal, so the Kramers degeneracy is exact
+    ci = CI(RelCISolver(nel=3, active_orbitals=6, nroots=2))(scf)
+    ci.run()
+
+    # roots 0 and 1 must be a genuine Kramers doublet for the g-tensor to mean anything
+    evals = np.array(ci.ci_solver.evals_per_solver[0]).real
+    assert abs(evals[1] - evals[0]) == approx(0.0)
+
+    g, axes = ci.ci_solver.compute_g_tensor()
+    assert g == pytest.approx([2.0, 2.0, 2.0], abs=1e-4)
+    assert np.abs(axes @ axes.T - np.eye(3)).max() == approx(0.0)
+
+    # picture change shifts g below the free-electron value, by O((Z*alpha)^2)
+    from forte2.ci.rel_ci_utils import compute_g_tensor
+
+    C = ci.mos.C[0][:, ci.ci_solver.core_indices + ci.ci_solver.active_indices]
+    rdms = (
+        ci.ci_solver.make_rdm(0, order=1, spin_type="so"),
+        ci.ci_solver.make_rdm(0, 1, order=1, spin_type="so"),
+        ci.ci_solver.make_rdm(1, order=1, spin_type="so"),
+    )
+    g_nopc, _ = compute_g_tensor(system, C, *rdms, skip_picture_change=True)
+    assert np.mean(g) < np.mean(g_nopc)
+    assert np.mean(g_nopc) - np.mean(g) < 1e-3
+
+
+@pytest.mark.parametrize("x2c_type", ["so", "sf"])
+def test_rel_ci_spin2_picture_change(x2c_type):
+    r"""Picture change corrects the spin matrices but leaves the one-electron value exact.
+
+    A single electron has :math:`\langle S^2 \rangle = 3/4` whatever the relativistic
+    treatment, and no two-body contribution, so a heavy one-electron ion pins down the
+    same-electron part of the picture-changed operator. The correction to the spin
+    matrices themselves is large for Br, which the comparison against the untransformed
+    matrices checks. The sf case exercises the spin-free path, where the decoupling
+    matrices carry no spin structure and each spatial block is transformed on its own.
+    """
+    from forte2.ci.rel_ci_utils import spin_matrices
+
+    system = System(
+        xyz="Br 0 0 0",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e"),
+    )
+    scf = GHF(charge=34, ms_guess=0.5)(system)
+    ci = CI(RelCISolver(nel=1, active_orbitals=4, nroots=1))(scf)
+    ci.run()
+
+    assert ci.ci_solver.spin2[0] == approx(0.75)
+
+    C = ci.mos.C[0][:, ci.ci_solver.core_indices + ci.ci_solver.active_indices]
+    S_z, _, _, S2_1e = spin_matrices(system, C)
+    S_z_raw, _, _, S2_1e_raw = spin_matrices(system, C, skip_picture_change=True)
+    # s_z picks up a sizeable correction, the same-electron term of S^2 none at all
+    assert np.abs(S_z - S_z_raw).max() > 1e-3
+    assert np.abs(S2_1e - S2_1e_raw).max() == approx(0.0)
+
+    # the same escape hatch, set once on the system instead of per call
+    system_nopc = System(
+        xyz="Br 0 0 0",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e", skip_picture_change=True),
+    )
+    GHF(charge=34, ms_guess=0.5)(system_nopc).run()
+    assert np.abs(spin_matrices(system_nopc, C)[0] - S_z_raw).max() == approx(0.0)

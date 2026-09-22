@@ -44,9 +44,10 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         self.sci_helper.set_Hamiltonian(self.ints.E.real, self.ints.H, self.ints.V)
 
     def _compute_spin2(self):
-        # Spin is not a good quantum number in the two-component (spinor) basis, and the
-        # complex helper does not expose compute_spin2.
-        return np.zeros(self.nroot)
+        # <S^2> in the spinor basis needs the spinor coefficients, which the worker cannot
+        # see: only the integrals are pushed to it, so its copy goes stale as soon as the
+        # orbitals change. The driver reports <S^2> once, in the final orbital basis.
+        return np.full(self.nroot, np.nan)
 
     def _initial_guess(self):
         """
