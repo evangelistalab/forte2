@@ -151,7 +151,12 @@ class ActiveSpaceDriver:
             getattr(self.ci_solver, "nat_occs_avg", None),
         )
         top_dets = self.ci_solver.get_top_determinants()
-        pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)
+        pretty_print_ci_dets(
+            self.ci_solver.sa_info,
+            self.mo_space,
+            top_dets,
+            self.ci_solver.two_component,
+        )
         self._print_orbital_composition()
         if self.do_transition_dipole:
             self.ci_solver.compute_transition_properties(self.mos.C[0])

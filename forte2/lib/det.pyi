@@ -22,6 +22,9 @@ class Determinant:
     maxnorb: Final[int] = ...
     """The maximum number of orbitals supported by the Determinant class"""
 
+    maxnspinor: Final[int] = ...
+    """The maximum number of spinors supported by the Determinant class"""
+
     def __eq__(self, arg: Determinant, /) -> bool:
         """Check if two determinants are equal"""
 
@@ -54,6 +57,15 @@ class Determinant:
 
     def count(self) -> int:
         """Count the total number of electrons"""
+
+    def set_spinor(self, n: int, value: bool) -> None:
+        """Set the occupation of spinor n (bit n of the determinant)"""
+
+    def spinor(self, n: int) -> bool:
+        """Is spinor n occupied?"""
+
+    def spinor_str(self, n: int = 128) -> str:
+        """Get the spinor occupation string of the first n spinors"""
 
     def create_alpha(self, n: int) -> float:
         """

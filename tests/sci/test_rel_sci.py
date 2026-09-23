@@ -1,13 +1,18 @@
+import itertools
+
 import numpy as np
 import pytest
 
 from forte2 import (
     CI,
+    CISolver,
     GHF,
     MCOptimizer,
     MOSpace,
+    RHF,
     RelCISolver,
     SpinorUpcaster,
+    State,
     System,
     X2CParams,
 )
@@ -15,8 +20,10 @@ from forte2 import CI
 from forte2.sci import RelSelectedCISolver
 from forte2.helpers.comparisons import approx
 from forte2.base_classes.params import SelectedCIParams
-from forte2.lib.det import Determinant
+from forte2.lib import sparse_ops
+from forte2.lib.det import Determinant, RelSlaterRules
 from forte2.lib.ci_helpers import RelSelectedCIHelper
+from forte2.lib.sparse_ops import SparseState
 
 from rdm_debug_utils import make_so_1rdm_debug, make_so_2rdm_debug
 
@@ -444,3 +451,127 @@ def test_rel_sci_pt2_split_is_independent_of_var_threshold():
     for var_threshold in (1e-3, 1e-4, 1e-5, 1e-7, 0.0):
         var, pt = probe(var_threshold)
         assert var + pt == approx(ref_pt)
+
+
+def test_rel_sci_beyond_64_spinors_agrees_with_nonrel_ci():
+    system = System(
+        xyz="He 0.0 0.0 0.0\nH 0.0 0.0 1.5",
+        basis_set={"He": "cc-pvqz", "H": "cc-pvdz"},
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
+    )
+
+    nmo = system.nbf
+    nspinor = 2 * nmo
+    assert nspinor > 64
+
+    rhf = RHF(charge=1, e_tol=1e-12)(system)
+    ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=nmo)
+    ci = CI(ci_solver=ci_solver)(rhf)
+    ci.run()
+
+    ghf = GHF(charge=1, e_tol=1e-12)(system)
+    sci_solver = RelSelectedCISolver(
+        nel=2,
+        active_orbitals=nspinor,
+        sci_params=SelectedCIParams(var_threshold=0.0, pt2_threshold=0.0),
+    )
+    sci = CI(sci_solver)(ghf)
+    sci.run()
+
+    solver = sci_solver.sub_solvers[0]
+    assert any(d.spinor(p) for d in solver.dets for p in range(64, nspinor))
+    assert sci.E_ci[0] == approx(ci.E_ci[0])
+
+
+@pytest.mark.slow
+def test_rel_sci_sigma_builder_agrees_with_sparse():
+    system = System(
+        xyz="He 0.0 0.0 0.0\nH 0.0 0.0 1.5",
+        basis_set={"He": "cc-pvqz", "H": "cc-pvdz"},
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
+    )
+
+    nmo = system.nbf
+    nspinor = 2 * nmo
+    assert nspinor == 70
+
+    rhf = RHF(charge=1, e_tol=1e-12)(system)
+    ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=nmo)
+    ci = CI(ci_solver=ci_solver)(rhf)
+    ci.run()
+
+    ghf = GHF(charge=1, e_tol=1e-12)(system)
+    sci_solver = RelSelectedCISolver(
+        nel=2,
+        active_orbitals=nspinor,
+        sci_params=SelectedCIParams(var_threshold=0.0, pt2_threshold=0.0),
+    )
+    sci = CI(sci_solver)(ghf)
+    sci.run()
+
+    # arbitrary set of determinants with occupations beyond the 64th spinor
+    dets = []
+    for occupied in itertools.combinations([0, 1, 2, 31, 63, 67], 3):
+        d = Determinant.zero()
+        for i in occupied:
+            d.set_spinor(i, True)
+        dets.append(d)
+    ndet = len(dets)
+
+    ints = sci_solver.sub_solvers[0].ints
+    E = ints.E
+    H = ints.H
+    V = ints.V
+
+    helper = RelSelectedCIHelper(
+        nspinor, dets, np.eye(ndet, 1, dtype=complex), E, H, V, 0
+    )
+    H_sigma = np.zeros((ndet, ndet), dtype=complex)
+    for j in range(ndet):
+        basis = np.zeros(ndet, dtype=complex)
+        basis[j] = 1.0
+        sigma = np.zeros(ndet, dtype=complex)
+        helper.Hamiltonian(basis, sigma)
+        H_sigma[:, j] = sigma
+
+    rules = RelSlaterRules(nspinor, E, H, V)
+    H_rules = np.array([[rules.slater_rules(bra, ket) for ket in dets] for bra in dets])
+
+    ham = sparse_ops.sparse_operator_hamiltonian(E, H, V, 1e-14)
+    H_sparse = np.zeros((ndet, ndet), dtype=complex)
+    for j, ket in enumerate(dets):
+        H_ket = sparse_ops.apply_op(ham, SparseState({ket: 1.0}), screen_thresh=1e-14)
+        H_sparse[:, j] = [H_ket[bra] for bra in dets]
+
+    assert np.allclose(H_sigma, H_rules, atol=1e-10)
+    assert np.allclose(H_sparse, H_rules, atol=1e-10)
+
+
+@pytest.mark.slow
+def test_rel_sci_reference_rdms_beyond_64_spinors():
+    """The SparseState reference 1- and 2-RDMs match the production ones above spinor 64."""
+    system = System(
+        xyz="H 0.0 0.0 0.0\nH 0.0 0.0 1.4",
+        basis_set="aug-cc-pvtz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    scf = GHF(charge=0, e_tol=1e-12)(system)
+    sci = CI(
+        RelSelectedCISolver(
+            nel=2,
+            active_orbitals=66,
+            sci_params=SelectedCIParams(var_threshold=5e-2, pt2_threshold=0.0),
+        )
+    )(scf)
+    sci.run()
+
+    solver = sci.ci_solver.sub_solvers[0]
+    rdm1 = sci.make_rdm(0, order=1, spin_type="so")
+    rdm2 = sci.make_rdm(0, order=2, spin_type="so")
+    # the selected determinants reach spinors 64 and 65
+    assert np.abs(rdm2[64:]).max() > 1e-3
+    assert np.allclose(make_so_1rdm_debug(solver, 0), rdm1, atol=1e-12)
+    assert np.allclose(make_so_2rdm_debug(solver, 0), rdm2, atol=1e-12)

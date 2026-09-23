@@ -38,6 +38,11 @@ void RelSlaterRules::update_integrals(int nspinor, std::optional<double> scalar_
                                     std::to_string(nspinor));
     }
     const auto new_nspinor = static_cast<std::size_t>(nspinor);
+    if (new_nspinor > Determinant::size()) {
+        throw std::invalid_argument("RelSlaterRules: nspinor = " + std::to_string(nspinor) +
+                                    " exceeds the determinant capacity of " +
+                                    std::to_string(Determinant::size()) + ".");
+    }
 
     if (one_electron_integrals) {
         if (one_electron_integrals->ndim() != 2) {
@@ -136,7 +141,7 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
     if (ndiff == 4) {
         const auto [i, j, a, b] = find_double_connection(lhs, rhs);
         auto v_el = v(i, j, a, b) - v(i, j, b, a); // <ij||ab>
-        const double sign = lhs.slater_sign_aaaa(i, j, a, b);
+        const double sign = lhs.double_excitation_sign(i, j, a, b);
         return sign * v_el;
     }
 
@@ -146,7 +151,7 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
         lhs.for_each_occ([&](size_t j) {
             matrix_element += v(i, j, a, j) - v(i, j, j, a); // \sum_j<ij||aj>
         });
-        const double sign = lhs.slater_sign_aa(i, a);
+        const double sign = lhs.slater_sign(i, a);
         return sign * matrix_element;
     }
 

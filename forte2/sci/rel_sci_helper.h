@@ -27,21 +27,14 @@ using RelDetRootMap = ankerl::unordered_dense::map<Determinant, size_t, Determin
 /// @brief A set of determinants (shared with the real helper via <sci/sci_helper.h>)
 // DetSet is defined in sci/sci_helper.h
 
-/// @brief A helper class for two-component (relativistic) selected CI methods.
+/// @brief Two-component counterpart of SelectedCIHelper, with complex Hermitian integrals.
 ///
-/// This is the spinor-basis counterpart of `SelectedCIHelper`. It runs the same
-/// Heat-Bath CI (HBCI) selection and sigma-vector build, but on complex Hermitian
-/// integrals. Because every active electron occupies the "alpha" string with an empty
-/// beta string (`nb == 0`), only the single-alpha and double-alpha-alpha excitation
-/// classes ever contribute, so the beta / alpha-beta / spin machinery of the real helper
-/// is absent here. The reduced density matrices (`compute_so_1rdm` / `compute_so_2rdm`)
-/// likewise only need the alpha string; they conjugate the bra so the diagonal RDMs are
-/// Hermitian and the two-root case yields the transition RDM.
+/// Spinor p is bit p of a Determinant, so at most Determinant::size() spinors are supported.
 class RelSelectedCIHelper {
   public:
     // == Class Constructor ==
     /// @brief Construct a RelSelectedCIHelper object
-    /// @param norb Number of spinors (active spin-orbitals)
+    /// @param norb Number of active spinors
     /// @param dets The initial determinants in the variational space
     /// @param c The initial CI coefficients for the determinants (shape: (n_dets, n_roots))
     /// @param E Hamiltonian scalar energy (real)
@@ -148,7 +141,7 @@ class RelSelectedCIHelper {
     /// @param right_root The root supplying the ket coefficients
     /// @return gamma1[p][q] = <left_root| a^+_p a_q |right_root> as a complex (norb, norb) matrix.
     ///         With left_root == right_root this is the ordinary 1-RDM; with left_root !=
-    ///         right_root it is the transition 1-RDM. Only the alpha string contributes (nb == 0).
+    ///         right_root it is the transition 1-RDM.
     np_matrix_complex compute_so_1rdm(size_t left_root, size_t right_root) const;
 
     /// @brief Compute the (complex) spin-orbital 2-RDM between two roots of the stored CI vectors.
@@ -174,17 +167,13 @@ class RelSelectedCIHelper {
     /// `abs_v` is the magnitude |V_J| of the (complex) coupling.
     double compute_delta_ept2(double delta, double abs_v) const;
 
-    /// @brief Single-alpha coupling <J|H|new_det> for the excitation i -> a, computed inline
-    /// from the complex integrals (the 2C analogue of SlaterRules::singles_coupling_a).
-    std::complex<double> singles_coupling_a(size_t i, size_t a, const Determinant& d) const;
+    /// @return h(i, a) + sum_j <ij||aj>, with j running over the spinors occupied in d
+    std::complex<double> singles_coupling(size_t i, size_t a, const Determinant& d) const;
 
-    /// @brief Hamiltonian sub-blocks. Only H0 (diagonal), H1a (single alpha) and H2a (double
-    /// alpha-alpha) contribute when the beta string is empty. Because every determinant is uniquely
-    /// identified by its alpha string, H1a/H2a scatter directly into sigma (indexed by the string
-    /// permutation) instead of going through a determinant hash lookup.
+    /// @brief Diagonal, one-electron, and two-electron contributions to sigma
     void H0(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
-    void H1a(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
-    void H2a(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
+    void H1(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
+    void H2(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
 
     /// @brief Reusable working buffers for select_hbci_batch
     struct RelSelectHbciScratch {
@@ -197,8 +186,8 @@ class RelSelectedCIHelper {
         /// at least one of its connections exceeds var_threshold and it therefore will join the
         /// variational space in the next iteration
         std::vector<uint8_t> promoted;
-        /// @brief Scratch occupation vectors for occupied/virtual spinors
-        std::vector<size_t> aocc, avir;
+        /// @brief Occupied and virtual spinors of the current determinant
+        std::vector<size_t> occ, vir;
     };
 
     /// @brief Enumerate the determinants of one batch that are connected to the variational space
@@ -243,10 +232,8 @@ class RelSelectedCIHelper {
     const size_t norb2_;
     const size_t norb3_;
 
-    /// @brief Number of alpha electrons (all active electrons; nb_ is enforced to be 0)
-    size_t na_;
-    /// @brief Number of beta electrons (must be 0 in the two-component basis)
-    size_t nb_;
+    /// @brief Number of electrons
+    size_t nel_;
 
     /// @brief The scalar energy
     double E_;
@@ -255,33 +242,24 @@ class RelSelectedCIHelper {
     RelSlaterRules slater_rules_;
 
     /// @brief Masks controlling which orbitals cannot be created into / annihilated from
-    String frozen_creation_mask_ = String::zero();
-    String frozen_annihilation_mask_ = String::zero();
+    SpinorString frozen_creation_mask_ = SpinorString::zero();
+    SpinorString frozen_annihilation_mask_ = SpinorString::zero();
 
     /// @brief Orbital energies: e[p] = Re <p|H|p> (real; H is Hermitian)
     std::vector<double> epsilon_;
     /// @brief One-electron integrals: h[p][q] = <p|H|q>
     std::vector<std::complex<double>> h_;
-    /// @brief Two-electron integrals: V[p][q][r][s] = <pq|rs>
-    std::vector<std::complex<double>> v_;
     /// @brief Antisymmetrized two-electron integrals: Va[p][q][r][s] = <pq||rs>
     std::vector<std::complex<double>> v_a_;
 
-    /// @brief Sorted antisymmetrized two-electron integrals for fast HBCI selection.
-    /// Each tuple is (criterion_key, integral, r, s) where the key is a real magnitude used
-    /// for sorting and the sorted early-break, and the integral payload is complex.
+    /// @brief va_sorted_[p * norb + q], for p < q: tuples (|<pq||rs>|, <pq||rs>, r, s) with r < s,
+    /// sorted by decreasing magnitude.
     std::vector<std::vector<std::tuple<double, std::complex<double>, u_int32_t, u_int32_t>>>
         va_sorted_;
 
     /// @return The one-electron integral <i|h|j>
     inline const std::complex<double>& h(std::size_t i, std::size_t j) const noexcept {
         return h_[i * norb_ + j];
-    }
-
-    /// @return The two-electron integral <pq|rs>
-    inline const std::complex<double>& V(std::size_t p, std::size_t q, std::size_t r,
-                                         std::size_t s) const noexcept {
-        return v_[p * norb3_ + q * norb2_ + r * norb_ + s];
     }
 
     /// @return The antisymmetrized two-electron integral <pq||rs>
@@ -310,8 +288,8 @@ class RelSelectedCIHelper {
     /// vector of size dets_.size() * nroots_ (coefficient for det i, root r at index i*nroots_+r).
     std::vector<std::complex<double>> c_;
 
-    /// @brief The alpha/beta strings for the determinants in the variational space
-    SelectedCIStrings ab_list_;
+    /// @brief String lists for the determinants in the variational space
+    RelSelectedCIStrings ab_list_;
 
     /// @brief The energies of the roots (real)
     std::vector<double> root_energies_;

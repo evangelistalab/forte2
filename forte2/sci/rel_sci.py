@@ -1,3 +1,4 @@
+import itertools
 from dataclasses import dataclass, field
 from collections import OrderedDict
 from typing import ClassVar, Literal
@@ -6,7 +7,6 @@ import numpy as np
 
 from forte2.lib import det, ci_helpers
 from forte2.lib.det import Determinant
-from forte2.lib.ci_helpers import CIStrings
 from forte2.helpers.comparisons import approx
 from forte2.base_classes import RelCIBase
 from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
@@ -53,9 +53,9 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         Build the initial guess for the two-component (spinor) selected CI.
 
         Spin is not a good quantum number, so there is no S^2 projection, no spin penalty,
-        and no spin-complement pairing. All active electrons occupy the "alpha" string with
-        the beta string empty. Guess coefficients come from diagonalizing the complex
-        Hermitian Hamiltonian in the guess space.
+        and no spin-complement pairing. Spinor p is bit p of each determinant. Guess
+        coefficients come from diagonalizing the complex Hermitian Hamiltonian in the guess
+        space.
         """
         # local object used only to build initial guess
         # exact diag uses sci_helper's slater_rules
@@ -154,7 +154,7 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
             )
             d0 = Determinant.zero()
             for i in range(nel_active):
-                d0.set_na(i, True)
+                d0.set_spinor(i, True)
             return [d0]
 
         # spinors are singly occupied, so the occupation window is measured in spinors
@@ -177,28 +177,27 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
                 "determinants."
             )
 
-        # all electrons in the alpha string (nb=0); GAS constraints come from the State
-        if nocc == 0:
-            ci_strings = CIStrings(nel_active, 0, 0, [[0] * nactv], [], [])
-        else:
-            ci_strings = CIStrings(
-                nel_active, 0, 0, [[0] * nocc, [0] * nactv], [nocc], [nocc]
-            )
-        return ci_strings.make_determinants()
+        dets = []
+        window = range(nocc, nocc + nactv)
+        for occupied in reversed(list(itertools.combinations(window, window_occ))):
+            d = Determinant.zero()
+            for i in [*range(nocc), *occupied]:
+                d.set_spinor(i, True)
+            dets.append(d)
+        return dets
 
     def _check_guess_dets(self, guess_dets):
         for d in guess_dets:
-            na = d.count_alpha()
-            nb = d.count_beta()
-            if nb != 0:
+            if any(d.spinor(i) for i in range(self.norb, Determinant.maxnspinor)):
                 raise ValueError(
-                    f"Two-component guess determinant {d.str(self.norb)} must place all "
-                    f"electrons in the alpha (spinor) string, but has {nb} beta electrons."
+                    f"Guess determinant {d.spinor_str()} occupies a spinor outside the "
+                    f"{self.norb} active spinors."
                 )
-            if na + self.ncore != self.state.nel:
+            nel = d.count()
+            if nel + self.ncore != self.state.nel:
                 raise ValueError(
-                    f"Guess determinant {d.str(self.norb)} has {na} electrons, expected "
-                    f"{self.state.nel - self.ncore}."
+                    f"Guess determinant {d.spinor_str(self.norb)} has {nel} electrons, "
+                    f"expected {self.state.nel - self.ncore}."
                 )
 
     def _test_rdms(self):
