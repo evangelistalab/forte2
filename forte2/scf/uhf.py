@@ -5,6 +5,7 @@ from numpy.typing import NDArray
 
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
+from forte2.base_classes import MO
 from forte2.helpers import logger
 from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
@@ -254,3 +255,37 @@ class UHF(SCFBase):
         basis_info.print_ao_composition(
             self.C[1], list(range(self.na, min(self.na + 5, self.nmo)))
         )
+
+
+def rohf_to_uhf(rohf):
+    """
+    Convert a ROHF object to a fake UHF object by copying the orbitals and orbital energies.
+
+    Parameters
+    ----------
+    rohf : ROHF
+        The ROHF object to convert.
+
+    Returns
+    -------
+    UHF
+        The fake UHF object with the same orbitals and orbital energies as the ROHF object.
+    """
+    uhf = UHF(charge=rohf.charge, ms=rohf.ms)(rohf.system)
+    uhf.C = [rohf.C[0].copy(), rohf.C[0].copy()]
+    uhf.D = [rohf.D[0].copy(), rohf.D[1].copy()]
+    uhf.eps = [rohf.eps[0].copy(), rohf.eps[0].copy()]
+    uhf.E = rohf.E
+    uhf.nmo = rohf.nmo
+    uhf.irrep_labels = [
+        rohf.irrep_labels[0].copy(),
+        rohf.irrep_labels[0].copy(),
+    ]
+    uhf.irrep_indices = [
+        rohf.irrep_indices[0].copy(),
+        rohf.irrep_indices[0].copy(),
+    ]
+    uhf.mos = MO(uhf.C, False, uhf.irrep_labels, uhf.irrep_indices)
+    uhf.converged = rohf.converged
+    uhf.executed = True
+    return uhf
