@@ -3,7 +3,7 @@ import numpy as np
 
 from forte2 import CISolver, GHF, MCOptimizer, RHF, State, System
 from forte2.base_classes import X2CParams
-from forte2.gradients import FDGradient
+from forte2.gradients import FiniteDifference
 
 
 def _rhf(x2c=None):
@@ -53,7 +53,7 @@ def test_fd_gradient_matches_analytic_hf_gradient(_hf):
     hf = _hf()
     analytic = hf.gradient()
 
-    fd = FDGradient(step=1.0e-3, npoints=4)(_hf())
+    fd = FiniteDifference(step=1.0e-3, npoints=4)(_hf())
     numeric = fd.gradient()
 
     np.testing.assert_allclose(numeric, analytic, atol=1.0e-7)
@@ -63,7 +63,7 @@ def test_fd_gradient_matches_analytic_casscf_gradient():
     mc = _casscf()
     analytic = mc.gradient()
 
-    fd = FDGradient(step=1.0e-3, npoints=4)(_casscf())
+    fd = FiniteDifference(step=1.0e-3, npoints=4)(_casscf())
     numeric = fd.gradient()
 
     np.testing.assert_allclose(numeric, analytic, atol=1.0e-6)
