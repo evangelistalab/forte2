@@ -14,6 +14,7 @@ from .aset import ASET
 from .iao import IAO, IBO
 from .converters import SpinorUpcaster
 from .orbital_overlap import mo_overlap, project_orbitals, project_occupied_orbitals
+from .ci_rotation import rotate_ci_vectors
 from .wavefunction_overlap import ci_overlap
 
 # Backward compatibility: keep the old public name available

@@ -26,6 +26,7 @@
 \begin{abstract}
 This note derives how forte2 computes the overlap $\braket{\Psi|\Psi'}$ of two configuration interaction (CI) wavefunctions whose orbitals differ, such as two CASSCF states optimized separately, or one state at two geometries.
 Following Malmqvist, it transforms the two orbital sets into a biorthonormal pair, re-expresses each CI vector in its new orbitals, and takes the dot product of the two vectors.
+The same re-expression rotates the CI vectors of a solved CI into new orbitals, such as natural orbitals, without solving the CI again.
 \end{abstract}
 
 \maketitle
@@ -490,6 +491,17 @@ Every factor except the rotation is exact, and the rotation is accurate to the T
 It requires the same numbers of core and active orbitals on both sides, since \cref{sec:construct} pairs core with core and active with active, and the complete CAS determinant space, since $\bvec{U}_{\bvec{A}}$ and $\bvec{V}_{\bvec{A}}$ mix every active orbital and would move amplitude out of a GAS- or symmetry-restricted space.
 It raises an error otherwise, and for a singular $\SMO_{\bvec{C}\bvec{C}'}$ or $\bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'}$.
 
+\section{Rotating CI vectors}
+\label{sec:rotation}
+
+\texttt{rotate\_ci\_vectors} re-expresses the CI vectors of a solved CI in rotated active orbitals, such as natural orbitals.
+The rotation $\bvec{U}$ is a transform of the form of \cref{eq:factor-bra} with $\bvec{U}_{\bvec{C}} = \bvec{1}$, $\bvec{X} = \bvec{0}$, and $\bvec{U}_{\bvec{A}} = \bvec{U}$, so by \cref{eq:ctilde-bra}, with $\bvec{U} = \bvec{P}\bvec{R}$, the rotated vector is $\hat{\rho}[\bvec{R}]\,\hat{\rho}[\bvec{P}]\,\bvec{c}$.
+A rotation that is block diagonal over GAS spaces and irreps keeps a restricted CI space closed (Malmqvist Sec.~V), so $\bvec{U}$ may not couple blocks, and $\bvec{P}$ and $\log\bvec{R}$ are computed block by block.
+$\hat{E}_{uv}$ commutes with the total spin, so a nonrelativistic vector is converted from configuration state functions to determinants and back without loss.
+
+The rotated vectors are the same states re-expressed in a unitarily rotated basis, and should in theory be identical to the CI vectors obtained by diagonalizing the CI problem in the rotated orbital basis.
+However, solving the CI again in the rotated orbitals can converge to a different root, reorder the roots, flip their phases, or mix degenerate roots; rotating keeps each root's identity, order, and phase, at a cost comparable to one CI solve.
+
 \section{Validation}
 \label{sec:validation}
 
@@ -498,7 +510,8 @@ The tests check properties that hold independently of the implementation, for bo
 \item rotations within the core and within the active space leave a CASCI wavefunction unchanged, so its overlap with its rotated representation has magnitude 1, including for improper rotations and complex phases;
 \item a closed-shell single determinant, whose hole orbitals are all occupied, has overlap $|\det\SMO|^g$, for every split of its orbitals between core and active;
 \item without spin--orbit coupling, a two-component CASCI reproduces the nonrelativistic overlap between two geometries, and $\braket{\Psi|\Psi'} = \braket{\Psi'|\Psi}^*$;
-\item the two algorithms agree on every root pair of CASCI wavefunctions at two geometries, with the orbitals of one side reordered.
+\item the two algorithms agree on every root pair of CASCI wavefunctions at two geometries, with the orbitals of one side reordered;
+\item rotated CI vectors equal the vectors of a CI solved again in the rotated orbitals, for CAS and GAS spaces.
 \end{itemize}
 
 \section{Limitations and extensions}
@@ -534,8 +547,9 @@ Function & Section \\
  \cref{sec:lowdin,sec:algorithm} \\
 \texttt{biorthogonalize\_casscf\_orbitals} (\texttt{wavefunction\_overlap.py})
  & \cref{sec:construct} \\
-\texttt{\_transform\_ci\_vector} (\texttt{wavefunction\_overlap.py}) &
+\texttt{transform\_ci\_vectors} (\texttt{ci\_rotation.py}) &
  \cref{sec:transform} \\
+\texttt{rotate\_ci\_vectors} (\texttt{ci\_rotation.py}) & \cref{sec:rotation} \\
 \hline
 \end{tabular}
 \end{table}
