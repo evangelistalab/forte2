@@ -4,7 +4,7 @@ import pytest
 from forte2 import CISolver, GeometryOptimizer, MCOptimizer, State, System
 from forte2.scf import RHF
 from forte2.system import BSE_AVAILABLE
-from forte2.gradients import FDGradient
+from forte2.gradients import FiniteDifference
 from forte2.dsrg import DSRG_MRPT2
 
 
@@ -39,7 +39,7 @@ def test_geometry_optimizer_h2_fd():
         unit="bohr",
     )
     rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
-    fd = FDGradient()(rhf)
+    fd = FiniteDifference()(rhf)
 
     optimizer = GeometryOptimizer(
         maxiter=25,
@@ -176,7 +176,7 @@ def test_geometry_optimizer_casscf_fd():
     # A chained method only acquires `system` when it runs, and rebuilding it at a
     # new geometry means rebuilding every stage including the nested CI solver.
     mc = _h2_casscf(1.7)
-    fd = FDGradient()(mc)
+    fd = FiniteDifference()(mc)
 
     optimizer = GeometryOptimizer(maxiter=25, g_tol=1.0e-7, max_step=0.5)(fd)
     optimizer.run()
@@ -211,22 +211,14 @@ def test_geometry_optimizer_sa_casscf_excited_root(findiff):
         ci_solver, e_tol=1.0e-12, g_tol=1.0e-10, final_orbitals="original"
     )(rhf)
 
-    if findiff:
-        fd = FDGradient(energy_accessor=lambda method: method.E_ci[1])(mc)
-        optimizer = GeometryOptimizer(
-            maxiter=25,
-            g_tol=1.0e-7,
-            max_step=0.5,
-        )(fd)
-        optimizer.run()
-    else:
-        optimizer = GeometryOptimizer(
-            maxiter=25,
-            root=1,
-            g_tol=1.0e-7,
-            max_step=0.5,
-        )(mc)
-        optimizer.run()
+    method = FiniteDifference()(mc) if findiff else mc
+    optimizer = GeometryOptimizer(
+        maxiter=25,
+        root=1,
+        g_tol=1.0e-7,
+        max_step=0.5,
+    )(method)
+    optimizer.run()
 
     bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
 
@@ -255,7 +247,7 @@ def test_fd_gradient_dsrg_mrpt2():
     )(rhf)
     dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference=True)(mc)
 
-    fd = FDGradient(
+    fd = FiniteDifference(
         step=1.0e-3,
         npoints=4,
         energy_accessor=lambda method: method.E_relaxed_ref,

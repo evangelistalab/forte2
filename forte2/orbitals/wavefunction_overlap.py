@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import comb
 
 import numpy as np
@@ -60,6 +60,66 @@ def ci_overlap(ci_1, ci_2, root_1=0, root_2=0, algorithm="biorthogonal"):
 
     See docs/technical_notes/ci_overlap.tex for detailed derivations.
     """
+    two_component = _check_pair(ci_1, ci_2, algorithm)
+    bra = _Wavefunction.from_driver(ci_1, [root_1], two_component)
+    ket = _Wavefunction.from_driver(ci_2, [root_2], two_component)
+    counts_bra, counts_ket = bra.blocks[0].counts, ket.blocks[0].counts
+    if counts_bra != counts_ket:
+        raise ValueError(
+            "The wavefunctions must have the same numbers of electrons, "
+            f"got {counts_bra} and {counts_ket}."
+        )
+    overlap = _overlap_matrix(bra, ket, algorithm)[0, 0]
+    return complex(overlap) if two_component else float(overlap)
+
+
+def ci_overlap_matrix(ci_1, ci_2, roots_1=None, roots_2=None, algorithm="biorthogonal"):
+    r"""
+    Computes the overlaps :math:`\langle \Psi_i | \Psi'_j \rangle` between
+    roots of two CI wavefunctions.
+
+    The orbital transformation is built once and shared by every root pair,
+    so the whole matrix costs about as much as a single `ci_overlap`. Roots
+    with different numbers of alpha and beta electrons, which can only happen
+    in a nonrelativistic calculation, have zero overlap.
+
+    Parameters
+    ----------
+    ci_1, ci_2 : ActiveSpaceDriver
+        Either CI or MCoptimizer holding the bra and ket wavefunctions.
+    roots_1, roots_2 : list[int], optional
+        The absolute root indices of each wavefunction, counted across all
+        states. All roots if None.
+    algorithm : {"biorthogonal", "naive"}, optional, default="biorthogonal"
+        As in `ci_overlap`.
+
+    Returns
+    -------
+    NDArray
+        The overlaps, shape ``(len(roots_1), len(roots_2))``, complex if the
+        wavefunctions are two-component.
+
+    Raises
+    ------
+    TypeError
+        If the solver of either driver isn't a `CISolver` or `RelCISolver`.
+    ValueError
+        If ``algorithm`` is unknown, if only one wavefunction is
+        two-component, if the total electron counts differ, or if
+        ``algorithm`` is ``"biorthogonal"`` and the wavefunctions don't meet
+        its requirements.
+    """
+    two_component = _check_pair(ci_1, ci_2, algorithm)
+    bra = _Wavefunction.from_driver(ci_1, roots_1, two_component)
+    ket = _Wavefunction.from_driver(ci_2, roots_2, two_component)
+    return _overlap_matrix(bra, ket, algorithm)
+
+
+def _check_pair(ci_1, ci_2, algorithm):
+    """
+    Validates two CI drivers for an overlap and returns whether they're
+    two-component.
+    """
     from forte2.ci import CISolver, RelCISolver
 
     if algorithm not in ("biorthogonal", "naive"):
@@ -77,91 +137,108 @@ def ci_overlap(ci_1, ci_2, root_1=0, root_2=0, algorithm="biorthogonal"):
         raise ValueError(
             "The wavefunctions must be both nonrelativistic or both two-component."
         )
+    return two_component
 
-    bra = _Wavefunction.from_driver(ci_1, root_1, two_component)
-    ket = _Wavefunction.from_driver(ci_2, root_2, two_component)
-    if bra.electron_counts != ket.electron_counts:
-        raise ValueError(
-            "The wavefunctions must have the same numbers of electrons, "
-            f"got {bra.electron_counts} and {ket.electron_counts}."
-        )
 
-    S = mo_overlap(bra.C, bra.system, ket.C, ket.system)
-    if algorithm == "naive":
-        overlap = _naive_overlap(S, bra, ket)
-    else:
-        _check_biorthogonal_applies(bra, ket)
-        overlap = _biorthogonal_overlap(S, bra, ket)
-    return complex(overlap) if two_component else float(overlap)
+@dataclass
+class _RootBlock:
+    """
+    The requested roots of one CI sub-solver.
+
+    Attributes
+    ----------
+    solver : _CISingleStateSolver or _RelCISingleStateSolver
+        The sub-solver that holds the roots.
+    positions : list[int]
+        The positions of the roots among all requested roots.
+    vectors : NDArray
+        The CI vectors in the determinant basis of solver, shape
+        (ndet, len(positions)).
+    counts : tuple[int, ...]
+        The numbers of alpha and beta electrons, or (number of electrons,) if
+        two-component.
+    """
+
+    solver: object
+    positions: list[int]
+    vectors: NDArray
+    counts: tuple[int, ...]
 
 
 @dataclass
 class _Wavefunction:
     """
-    One root of a CI wavefunction in the determinant basis, with the orbitals
-    it's expanded in.
+    The requested roots of a CI wavefunction in the determinant basis, with
+    the orbitals they're expanded in.
 
     Attributes
     ----------
     system : System
         The system that the orbitals belong to.
     C : NDArray
-        The core, then active, MO coefficients, shape ``(nbasis, ndocc + nactv)``.
+        The core, then active, MO coefficients, shape (nbasis, ndocc + nactv).
     ndocc, nactv : int
         The numbers of core orbitals, frozen ones included, and active orbitals.
-    solver : _CISingleStateSolver or _RelCISingleStateSolver
-        The sub-solver that holds the root.
-    c : NDArray
-        The CI vector in the determinant basis of ``solver``.
     two_component : bool
         Whether the orbitals are spinors.
+    blocks : list[_RootBlock]
+        The requested roots, grouped by the sub-solver that holds them.
+    nroots : int
+        The number of requested roots.
     """
 
     system: object
     C: NDArray
     ndocc: int
     nactv: int
-    solver: object
-    c: NDArray
     two_component: bool
+    blocks: list[_RootBlock]
+    nroots: int
 
     @classmethod
-    def from_driver(cls, ci, root, two_component):
-        """Gets a root of a CI driver, running the driver first if needed."""
+    def from_driver(cls, ci, roots, two_component):
+        """
+        Gets roots of a CI driver, all of them if roots is None, running the
+        driver first if needed.
+        """
         if not ci.executed:
             ci.run()
-        state, root_in_state = ci.ci_solver._get_state_root(root)
-        solver = ci.ci_solver.sub_solvers[state]
-        c = solver.evecs[:, root_in_state]
-        if not two_component:
-            c = solver.csf_C_to_det_C(c)
+        if roots is None:
+            roots = range(ci.ci_solver.sa_info.nroots_sum)
+        members = {}
+        for position, root in enumerate(roots):
+            state, root_in_state = ci.ci_solver._get_state_root(root)
+            members.setdefault(state, []).append((position, root_in_state))
+
         space = ci.mo_space
         ndocc = space.nfrozen_core + space.ncore
+        blocks = []
+        for state, pairs in members.items():
+            solver = ci.ci_solver.sub_solvers[state]
+            vectors = solver.evecs[:, [root_in_state for _, root_in_state in pairs]]
+            if not two_component:
+                vectors = np.column_stack([solver.csf_C_to_det_C(c) for c in vectors.T])
+            strings = solver.ci_strings
+            if two_component:
+                counts = (ndocc + strings.na,)
+            else:
+                counts = (ndocc + strings.na, ndocc + strings.nb)
+            blocks.append(
+                _RootBlock(solver, [position for position, _ in pairs], vectors, counts)
+            )
         C = ci.mos.C[0][:, space.orig_to_contig][:, : ndocc + space.nactv]
-        return cls(ci.system, C, ndocc, space.nactv, solver, c, two_component)
+        return cls(ci.system, C, ndocc, space.nactv, two_component, blocks, len(roots))
 
-    @property
-    def electron_counts(self):
+    def occupations(self, solver):
         """
-        The numbers of alpha and beta electrons, or the number of electrons if
-        two-component.
-        """
-        strings = self.solver.ci_strings
-        na = self.ndocc + strings.na
-        if self.two_component:
-            return na
-        return na, self.ndocc + strings.nb
-
-    def occupations(self):
-        """
-        Gets the occupied alpha and beta orbital indices of each determinant, in
-        ascending order. A two-component determinant holds all its electrons,
-        core included, in the alpha string.
+        Gets the occupied alpha and beta orbital indices of each determinant of
+        a sub-solver, in ascending order. A two-component determinant holds all
+        its electrons, core included, in the alpha string.
         """
         docc = list(range(self.ndocc))
         actv = range(self.nactv)
         occupations = []
-        for d in self.solver.dets:
+        for d in solver.dets:
             alpha = docc + [self.ndocc + p for p in actv if d.na(p)]
             if self.two_component:
                 beta = []
@@ -171,40 +248,86 @@ class _Wavefunction:
         return occupations
 
 
-def _naive_overlap(S, bra, ket):
+def _overlap_matrix(bra, ket, algorithm):
     """
-    Computes <Psi|Psi'> as a Löwdin sum over all determinant pairs.
+    Computes <Psi_i|Psi'_j> for every pair of requested roots of the bra and
+    the ket.
+    """
+    for block_bra in bra.blocks:
+        for block_ket in ket.blocks:
+            if sum(block_bra.counts) != sum(block_ket.counts):
+                raise ValueError(
+                    "The wavefunctions must have the same numbers of electrons, "
+                    f"got {sum(block_bra.counts)} and {sum(block_ket.counts)}."
+                )
+    S = mo_overlap(bra.C, bra.system, ket.C, ket.system)
+    if algorithm == "naive":
+        return _naive_overlaps(S, bra, ket)
+    _check_biorthogonal_applies(bra, ket)
+    return _biorthogonal_overlaps(S, bra, ket)
+
+
+def _matching_blocks(blocks_bra, blocks_ket):
+    """
+    Yields the pairs of root blocks with the same numbers of alpha and beta
+    electrons. Other pairs don't overlap.
+    """
+    for block_bra in blocks_bra:
+        for block_ket in blocks_ket:
+            if block_bra.counts == block_ket.counts:
+                yield block_bra, block_ket
+
+
+def _naive_overlaps(S, bra, ket):
+    """
+    Computes <Psi_i|Psi'_j> as Löwdin sums over all determinant pairs.
 
     Parameters
     ----------
     S : NDArray
         The MO overlap between the core, then active, orbitals of the bra and
-        the ket, shape ``(bra.ndocc + bra.nactv, ket.ndocc + ket.nactv)``.
+        the ket, shape (bra.ndocc + bra.nactv, ket.ndocc + ket.nactv).
     bra, ket : _Wavefunction
         The two wavefunctions.
 
     Returns
     -------
-    float or complex
-        The overlap.
+    NDArray
+        The overlaps, shape (bra.nroots, ket.nroots).
     """
-    overlap = 0.0
-    occupations_ket = ket.occupations()
-    for c_bra, (alpha_bra, beta_bra) in zip(bra.c, bra.occupations()):
-        for c_ket, (alpha_ket, beta_ket) in zip(ket.c, occupations_ket):
+    dtype = complex if bra.two_component else float
+    overlaps = np.zeros((bra.nroots, ket.nroots), dtype=dtype)
+    for block_bra, block_ket in _matching_blocks(bra.blocks, ket.blocks):
+        D = _determinant_overlaps(
+            S, bra.occupations(block_bra.solver), ket.occupations(block_ket.solver)
+        )
+        overlaps[np.ix_(block_bra.positions, block_ket.positions)] = (
+            block_bra.vectors.conj().T @ D @ block_ket.vectors
+        )
+    return overlaps
+
+
+def _determinant_overlaps(S, occupations_bra, occupations_ket):
+    """
+    Computes the Löwdin overlap <D_I|D'_J> of every pair of determinants, given
+    their occupied alpha and beta orbital indices.
+    """
+    D = np.empty((len(occupations_bra), len(occupations_ket)), dtype=S.dtype)
+    for I, (alpha_bra, beta_bra) in enumerate(occupations_bra):
+        for J, (alpha_ket, beta_ket) in enumerate(occupations_ket):
             # all alpha creation operators precede all beta ones, so the
             # spin-orbital overlap matrix is block diagonal. scipy's det, unlike
             # numpy's, doesn't warn on exactly singular complex blocks
-            det_alpha = det(S[np.ix_(alpha_bra, alpha_ket)])
-            det_beta = det(S[np.ix_(beta_bra, beta_ket)])
-            overlap += np.conj(c_bra) * c_ket * det_alpha * det_beta
-    return overlap
+            D[I, J] = det(S[np.ix_(alpha_bra, alpha_ket)]) * det(
+                S[np.ix_(beta_bra, beta_ket)]
+            )
+    return D
 
 
 def _check_biorthogonal_applies(bra, ket):
     """
     Raises ValueError unless both wavefunctions have the same core and active
-    spaces and span the complete CAS determinant space.
+    spaces and their sub-solvers span the complete CAS determinant space.
     """
     if (bra.ndocc, bra.nactv) != (ket.ndocc, ket.nactv):
         raise ValueError(
@@ -213,16 +336,17 @@ def _check_biorthogonal_applies(bra, ket):
             f"{(ket.ndocc, ket.nactv)}. Use algorithm='naive' instead."
         )
     for wfn in (bra, ket):
-        strings = wfn.solver.ci_strings
-        ndet_cas = comb(wfn.nactv, strings.na) * comb(wfn.nactv, strings.nb)
-        # a rotation of the active orbitals can move amplitude out of a
-        # restricted determinant space
-        if strings.ngas_spaces > 1 or strings.ndet != ndet_cas:
-            raise ValueError(
-                "The biorthogonal algorithm requires the complete CAS "
-                "determinant space, without GAS or point-group restrictions. "
-                "Use algorithm='naive' instead."
-            )
+        for block in wfn.blocks:
+            strings = block.solver.ci_strings
+            ndet_cas = comb(wfn.nactv, strings.na) * comb(wfn.nactv, strings.nb)
+            # a rotation of the active orbitals can move amplitude out of a
+            # restricted determinant space
+            if strings.ngas_spaces > 1 or strings.ndet != ndet_cas:
+                raise ValueError(
+                    "The biorthogonal algorithm requires the complete CAS "
+                    "determinant space, without GAS or point-group restrictions. "
+                    "Use algorithm='naive' instead."
+                )
 
 
 @dataclass
@@ -341,10 +465,10 @@ def _check_nonsingular(singular_values, block):
         )
 
 
-def _biorthogonal_overlap(S, bra, ket):
+def _biorthogonal_overlaps(S, bra, ket):
     """
-    Computes <Psi|Psi'> as the dot product of the two CI vectors re-expressed
-    in biorthonormal orbitals.
+    Computes <Psi_i|Psi'_j> as dot products of the CI vectors re-expressed in
+    biorthonormal orbitals.
     """
     bio = biorthogonalize_casscf_orbitals(S, bra.ndocc, bra.nactv)
     # the core block of each transform multiplies every coefficient by its
@@ -352,11 +476,30 @@ def _biorthogonal_overlap(S, bra, ket):
     g = 1 if bra.two_component else 2
     scale_bra = det(bio.U_C) ** -g
     scale_ket = det(bio.V_C / bio.d_C) ** -g
-
-    c_bra = scale_bra * transform_ci_vectors(
-        bra.solver, bra.c[:, None], bio.U_A, bra.two_component
-    )
-    c_ket = scale_ket * transform_ci_vectors(
-        ket.solver, ket.c[:, None], bio.V_A, ket.two_component, d=bio.d_A
-    )
-    return np.vdot(c_bra, c_ket)
+    blocks_bra = [
+        replace(
+            block,
+            vectors=scale_bra
+            * transform_ci_vectors(
+                block.solver, block.vectors, bio.U_A, bra.two_component
+            ),
+        )
+        for block in bra.blocks
+    ]
+    blocks_ket = [
+        replace(
+            block,
+            vectors=scale_ket
+            * transform_ci_vectors(
+                block.solver, block.vectors, bio.V_A, ket.two_component, d=bio.d_A
+            ),
+        )
+        for block in ket.blocks
+    ]
+    dtype = complex if bra.two_component else float
+    overlaps = np.zeros((bra.nroots, ket.nroots), dtype=dtype)
+    for block_bra, block_ket in _matching_blocks(blocks_bra, blocks_ket):
+        overlaps[np.ix_(block_bra.positions, block_ket.positions)] = (
+            block_bra.vectors.conj().T @ block_ket.vectors
+        )
+    return overlaps
