@@ -353,6 +353,57 @@ def random_unitary(size, cmplx=True, rng=None, rotation=True):
     return Q
 
 
+def real_orthogonal_logm(Q, tol=1e-10):
+    r"""
+    Computes the real antisymmetric logarithm of a proper rotation.
+
+    ``scipy.linalg.logm`` works in the complex Schur form and returns a complex
+    result for rotation angles near :math:`\pi`. This function works in the
+    real Schur form instead: it reads the angle of each 2x2 block with
+    ``arctan2``, which is exact over the full range, and pairs the eigenvalues
+    at -1 into rotations by :math:`\pi`.
+
+    Parameters
+    ----------
+    Q : NDArray
+        A real orthogonal matrix with determinant +1, shape (n, n).
+    tol : float, optional, default=1e-10
+        The subdiagonal magnitude of the real Schur form below which an
+        eigenvalue counts as real.
+
+    Returns
+    -------
+    NDArray
+        The real antisymmetric matrix :math:`K` with :math:`e^K = Q`, shape (n, n).
+
+    Raises
+    ------
+    ValueError
+        If ``Q`` has determinant -1, which leaves an eigenvalue at -1 unpaired.
+    """
+    n = Q.shape[0]
+    T, Z = sp.linalg.schur(Q, output="real")
+    K = np.zeros((n, n))
+    unpaired = []
+    i = 0
+    while i < n:
+        if i + 1 < n and abs(T[i + 1, i]) > tol:
+            theta = np.arctan2(T[i + 1, i], T[i, i])
+            K[i, i + 1] = -theta
+            K[i + 1, i] = theta
+            i += 2
+        else:
+            if T[i, i] < 0:
+                unpaired.append(i)
+            i += 1
+    if len(unpaired) % 2:
+        raise ValueError("Q must be a proper rotation, with determinant +1.")
+    for a, b in zip(unpaired[::2], unpaired[1::2]):
+        K[a, b] = -np.pi
+        K[b, a] = np.pi
+    return Z @ K @ Z.T
+
+
 def i_sigma_dot(scalar, x, y, z):
     """
     Construct the matrix i * (I2, sigma_x, sigma_y, sigma_z) dot (scalar, x, y, z).
@@ -444,7 +495,7 @@ def compute_Am1y(A, y, ortho_rtol=None):
     y : NDArray
         The vector that A^{-1} is to be applied onto
     ortho_rtol : None | float, optional
-        The relative tolerance for orthogonalizing A. 
+        The relative tolerance for orthogonalizing A.
         If supplied, a truncated eigendecomposition of A is used to compute the action of A^{-1},
         otherwise, a complete Cholesky decomposition is used.
     Returns

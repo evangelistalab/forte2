@@ -1,7 +1,14 @@
 import numpy as np
+import pytest
 import scipy as sp
 
-from forte2.helpers import invsqrt_matrix, eigh_gen, canonical_orth, random_unitary
+from forte2.helpers import (
+    invsqrt_matrix,
+    eigh_gen,
+    canonical_orth,
+    random_unitary,
+    real_orthogonal_logm,
+)
 from forte2.helpers.comparisons import approx
 
 
@@ -68,6 +75,25 @@ def test_random_unitary():
         assert np.allclose(U.T.conj() @ U, np.eye(size))
         assert np.allclose(U @ U.T.conj(), np.eye(size))
         assert np.isclose(np.linalg.det(U), 1.0)
+
+
+def test_real_orthogonal_logm():
+    rng = np.random.default_rng(42)
+    rotations = [random_unitary(n, cmplx=False, rng=rng) for n in (1, 2, 7, 20)]
+    # eigenvalues at -1 in a random basis, and an angle just short of pi, where
+    # scipy's logm returns a complex result
+    Z = random_unitary(6, cmplx=False, rng=rng)
+    rotations.append(Z @ np.diag([-1.0, -1.0, -1.0, -1.0, 1.0, 1.0]) @ Z.T)
+    c, s = np.cos(np.pi - 1e-9), np.sin(np.pi - 1e-9)
+    W = random_unitary(3, cmplx=False, rng=rng)
+    rotations.append(W @ np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]]) @ W.T)
+    for Q in rotations:
+        K = real_orthogonal_logm(Q)
+        assert np.isrealobj(K)
+        assert np.allclose(K, -K.T)
+        assert np.allclose(sp.linalg.expm(K), Q)
+    with pytest.raises(ValueError):
+        real_orthogonal_logm(np.diag([-1.0, 1.0, 1.0]))
 
 
 def test_symmetric_orth():
