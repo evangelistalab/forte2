@@ -1,0 +1,580 @@
+\documentclass[aip,jcp,preprint]{revtex4-1}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{array}
+\usepackage{braket}
+\usepackage[capitalize]{cleveref}
+
+\newcommand{\bvec}[1]{\mathbf{#1}}
+\newcommand{\SAO}{\bvec{S}^{\mathrm{AO}}}
+\newcommand{\SMO}{\bvec{S}^{\mathrm{MO}}}
+\newcommand{\Ncore}{N_{\bvec{C}}}
+\newcommand{\Nact}{N_{\bvec{A}}}
+\newcommand{\Nel}{N_\mathrm{el}}
+\newcommand{\Ndet}{N_\mathrm{det}}
+\newcommand{\diag}{\operatorname{diag}}
+
+\begin{document}
+
+\title{Technical Notes: Overlaps of CI Wavefunctions in Different Orbital Bases}
+\author{Forte2 Developers}
+\noaffiliation
+\date{\today}
+
+\begin{abstract}
+This note derives how forte2 computes the overlap $\braket{\Psi|\Psi'}$ of two configuration interaction (CI) wavefunctions whose orbitals differ, such as two CASSCF states optimized separately, or one state at two geometries.
+Following Malmqvist, it transforms the two orbital sets into a biorthonormal pair, re-expresses each CI vector in its new orbitals, and takes the dot product of the two vectors.
+The same re-expression rotates the CI vectors of a solved CI into new orbitals, such as natural orbitals, without solving the CI again.
+\end{abstract}
+
+\maketitle
+
+\section{Goal and result}
+\label{sec:goal}
+
+Because the bra and ket orbitals aren't orthonormal to each other, every bra determinant overlaps every ket determinant, and $\braket{\Psi|\Psi'}$ is a double sum over determinant pairs (\cref{sec:lowdin}).
+To reduce it, we introduce two nonunitary orbital transformations, $\bvec{M}$ for the bra orbitals and $\bvec{M}'$ for the ket orbitals, such that the transformed orbitals are biorthonormal, $\bvec{M}^\dagger\SMO\bvec{M}' = \bvec{1}$ (\cref{eq:biorthonormal}).
+Re-expressing each CI vector in its transformed orbitals, $\tilde{\bvec{c}} = \hat{\rho}[\bvec{M}]\,\bvec{c}$ and $\tilde{\bvec{c}}' = \hat{\rho}[\bvec{M}']\,\bvec{c}'$ (\cref{sec:transform}), reduces the overlap to a dot product,
+\begin{equation}
+ \braket{\Psi|\Psi'} = \sum_I \tilde{c}_I^{*}\, \tilde{c}'_I.
+ \label{eq:payoff}
+\end{equation}
+The rest of this note computes the ingredients:
+\begin{enumerate}
+\item the MO overlap $\SMO$, \cref{eq:smo};
+\item the transformations $\bvec{M}$ and $\bvec{M}'$ (\cref{sec:construct});
+\item the CI vectors $\tilde{\bvec{c}}$ and $\tilde{\bvec{c}}'$ (\cref{sec:transform});
+\item their dot product, \cref{eq:payoff} (\cref{sec:dot,sec:algorithm}).
+\end{enumerate}
+
+\section{Setting and notation}
+\label{sec:notation}
+
+The bra and the ket are CI wavefunctions, each normalized and expanded in determinants of its own orbitals,
+\begin{equation}
+ \ket{\Psi} = \sum_I c_I \ket{\Phi_I},
+ \qquad
+ \ket{\Psi'} = \sum_J c'_J \ket{\Phi'_J}.
+\end{equation}
+Each orbital set is orthonormal, but the two sets aren't orthonormal to each other: they can come from separate orbital optimizations, geometries, or basis sets.
+
+\paragraph{Index classes.}
+Orbital indices name the space they run over, as \cref{tab:indices} lists.
+
+\begin{table}[h]
+\caption{Index classes.}
+\label{tab:indices}
+\begin{tabular}{@{}ll@{}}
+\hline
+Indices & Range \\
+\hline
+$m, n$ & core orbitals, occupied in every determinant \\
+$u, v, x, y$ & active orbitals \\
+$i, j$ & hole orbitals: core and active \\
+$p, q$ & any orbital \\
+$\mu, \nu$ & atomic orbitals (AOs) \\
+\hline
+\end{tabular}
+\end{table}
+Virtual orbitals are never occupied, so nothing in this note involves them.
+
+\paragraph{Bra, ket, and biorthonormal quantities.}
+Unprimed quantities belong to the bra and primed quantities to the ket: the orbitals $\varphi_i$ and $\varphi_{i'}$, the AOs $\chi_\mu$ and $\chi_{\mu'}$, the determinants $\Phi_I$ and $\Phi'_J$, and the CI coefficients $c_I$ and $c'_J$.
+A tilde marks the biorthonormal orbitals constructed in \cref{sec:construct}, $\varphi_{\tilde{i}}$ for the bra and $\varphi_{\tilde{i}'}$ for the ket, and the quantities built from them, such as the determinants $\tilde{\Phi}_I$ and $\tilde{\Phi}'_I$ and the CI coefficients $\tilde{c}_I$ and $\tilde{c}'_I$.
+The labels $\tilde{i}$ and $\tilde{i}'$ run over the same values: each biorthonormal bra orbital has one ket partner, and $\tilde{\Phi}_I$ and $\tilde{\Phi}'_I$ occupy partner orbitals.
+
+\paragraph{Matrices and vectors.}
+A bold symbol is a matrix or a vector, and the same symbol with indices is one of its elements.
+A block carries the labels of its row and column spaces as subscripts, $\bvec{C}$ for core and $\bvec{A}$ for active, primed for the ket and tilded for the biorthonormal orbitals: $\SMO_{\bvec{C}\bvec{A}'}$ is the block of $\SMO$ with bra-core rows and ket-active columns.
+\begin{itemize}
+\item \textbf{AO coefficients}, $\bvec{C}$ and $\bvec{C}'$:
+ \begin{equation}
+  \varphi_i = \sum_\mu \chi_\mu C_{\mu i},
+  \qquad
+  \varphi_{i'} = \sum_{\mu'} \chi_{\mu'} C_{\mu' i'}.
+ \end{equation}
+\item \textbf{AO overlap}, $\SAO$, with bra AOs as rows and ket AOs as columns: $S^{\mathrm{AO}}_{\mu\nu'} = \braket{\chi_\mu|\chi_{\nu'}}$.
+\item \textbf{MO overlap}, $\SMO$, between the hole orbitals of the two sets:
+ \begin{equation}
+  S^{\mathrm{MO}}_{ij'} = \braket{\varphi_i|\varphi_{j'}},
+  \qquad
+  \SMO = \bvec{C}^\dagger \SAO \bvec{C}'.
+  \label{eq:smo}
+ \end{equation}
+\item \textbf{Biorthonormal transforms}, $\bvec{M}$ and $\bvec{M}'$:
+ \begin{equation}
+  \varphi_{\tilde{i}} = \sum_i \varphi_i M_{i\tilde{i}},
+  \qquad
+  \varphi_{\tilde{i}'} = \sum_{i'} \varphi_{i'} M_{i'\tilde{i}'},
+  \qquad
+  \bvec{M}^\dagger \SMO \bvec{M}' = \bvec{1},
+  \label{eq:biorthonormal}
+ \end{equation}
+ that is, $\braket{\varphi_{\tilde{i}}|\varphi_{\tilde{j}'}} = \delta_{\tilde{i}\tilde{j}'}$.
+\end{itemize}
+
+\section{The reference: L\"owdin's sum}
+\label{sec:lowdin}
+
+Expanding both wavefunctions gives
+\begin{equation}
+ \braket{\Psi|\Psi'} = \sum_{IJ} c_I^{*} c'_J \braket{\Phi_I|\Phi'_J},
+ \qquad
+ \braket{\Phi_I|\Phi'_J} = \det \bvec{S}^{IJ},
+ \label{eq:lowdin}
+\end{equation}
+where $\bvec{S}^{IJ}$ is the overlap of the spin orbitals occupied in $\Phi_I$ with those occupied in $\Phi'_J$.\cite{Loewdin1955}
+forte2 orders the $\alpha$ creation operators of a determinant before the $\beta$ ones, so $\bvec{S}^{IJ}$ is block diagonal in spin, and its determinant factorizes into an $\alpha$ and a $\beta$ determinant, each a submatrix of $\SMO$ (Plasser \emph{et al.}, Eqs.~4 and 8\cite{Plasser2016}).
+A two-component determinant is a single spinor string, so $\det\bvec{S}^{IJ}$ doesn't factorize.
+
+The sum costs $\Ndet\Ndet'$ determinant evaluations.
+It holds for any two expansions with the same numbers of electrons, including different core and active spaces, GAS, and point-group restrictions.
+forte2 implements it as \texttt{algorithm="naive"} and uses it as the reference for the biorthogonal algorithm.
+
+\section{Biorthonormal orbitals reduce the overlap to a dot product}
+\label{sec:dot}
+
+Let $\bvec{M}$ and $\bvec{M}'$ satisfy \cref{eq:biorthonormal}, and let $\tilde{\Phi}_I$ and $\tilde{\Phi}'_I$ occupy the partner orbitals $\varphi_{\tilde{i}}$ and $\varphi_{\tilde{i}'}$ with the same pattern.
+By \cref{eq:lowdin}, $\braket{\tilde{\Phi}_I|\tilde{\Phi}'_J}$ is the determinant of a submatrix of $\bvec{M}^\dagger\SMO\bvec{M}' = \bvec{1}$: the identity if $I = J$, and a matrix with a zero row otherwise, so
+\begin{equation}
+ \braket{\tilde{\Phi}_I|\tilde{\Phi}'_J} = \delta_{IJ}.
+\end{equation}
+If both wavefunctions can be expanded in these determinants, $\ket{\Psi} = \sum_I \tilde{c}_I\ket{\tilde{\Phi}_I}$ and $\ket{\Psi'} = \sum_I \tilde{c}'_I\ket{\tilde{\Phi}'_I}$, the overlap is \cref{eq:payoff}.
+
+That expansion exists only if the transforms keep the CI space closed.
+A CAS determinant has every core orbital fully occupied, so the old core orbitals must span the same space as the new ones, and the new core orbitals can't contain old active orbitals:
+\begin{equation}
+ \bvec{M}_{\bvec{A}\tilde{\bvec{C}}} = \bvec{0},
+ \qquad
+ \bvec{M}'_{\bvec{A}'\tilde{\bvec{C}}'} = \bvec{0}.
+ \label{eq:closure}
+\end{equation}
+New active orbitals may contain old core orbitals: in a determinant, a core component of an active orbital meets the same core orbital already occupied, and vanishes.
+With \cref{eq:closure}, both expansions run over the same CAS determinants, provided the bra and ket have the same numbers of core orbitals, active orbitals, and electrons.
+
+\section{Constructing the biorthonormal transforms}
+\label{sec:construct}
+
+With \cref{eq:closure}, each transform has three nonzero blocks, and $\bvec{M}^\dagger\SMO\bvec{M}' = \bvec{1}$ reads
+\begin{equation}
+ \begin{pmatrix}
+  \bvec{M}_{\bvec{C}\tilde{\bvec{C}}}^\dagger & \bvec{0} \\
+  \bvec{M}_{\bvec{C}\tilde{\bvec{A}}}^\dagger &
+  \bvec{M}_{\bvec{A}\tilde{\bvec{A}}}^\dagger
+ \end{pmatrix}
+ \begin{pmatrix}
+  \SMO_{\bvec{C}\bvec{C}'} & \SMO_{\bvec{C}\bvec{A}'} \\
+  \SMO_{\bvec{A}\bvec{C}'} & \SMO_{\bvec{A}\bvec{A}'}
+ \end{pmatrix}
+ \begin{pmatrix}
+  \bvec{M}'_{\bvec{C}'\tilde{\bvec{C}}'} & \bvec{M}'_{\bvec{C}'\tilde{\bvec{A}}'} \\
+  \bvec{0} & \bvec{M}'_{\bvec{A}'\tilde{\bvec{A}}'}
+ \end{pmatrix}
+ =
+ \begin{pmatrix} \bvec{1} & \bvec{0} \\ \bvec{0} & \bvec{1} \end{pmatrix}.
+ \label{eq:block-structure}
+\end{equation}
+From the above conditions we may obtain explicit expressions for blocks of $\bvec{M}$ and $\bvec{M}'$
+
+\paragraph{Core block.}
+The $\tilde{\bvec{C}}\tilde{\bvec{C}}'$ block being identity on the RHS of \cref{eq:block-structure} requires
+\begin{equation}
+ \bvec{M}_{\bvec{C}\tilde{\bvec{C}}}^\dagger\, \SMO_{\bvec{C}\bvec{C}'}\,
+ \bvec{M}'_{\bvec{C}'\tilde{\bvec{C}}'} = \bvec{1}.
+ \label{eq:core-cond}
+\end{equation}
+With the singular value decomposition $\SMO_{\bvec{C}\bvec{C}'} = \bvec{U}_{\bvec{C}}\bvec{D}_{\bvec{C}}\bvec{V}_{\bvec{C}}^\dagger$, the choice
+\begin{equation}
+ \bvec{M}_{\bvec{C}\tilde{\bvec{C}}} = \bvec{U}_{\bvec{C}},
+ \qquad
+ \bvec{M}'_{\bvec{C}'\tilde{\bvec{C}}'} =
+ \bvec{V}_{\bvec{C}}\bvec{D}_{\bvec{C}}^{-1}
+ \label{eq:core-blocks}
+\end{equation}
+solves it, provided $\SMO_{\bvec{C}\bvec{C}'}$ is nonsingular.
+The new core orbitals are Malmqvist's pseudo-corresponding core orbitals (Eq.~A.2), with the ket side rescaled by $\bvec{D}_{\bvec{C}}^{-1}$.
+
+\paragraph{Core-active blocks.}
+The $\tilde{\bvec{C}}\tilde{\bvec{A}}'$ and $\tilde{\bvec{A}}\tilde{\bvec{C}}'$ blocks must vanish:
+\begin{align}
+ \bvec{M}_{\bvec{C}\tilde{\bvec{C}}}^\dagger
+ \big(\SMO_{\bvec{C}\bvec{C}'}\bvec{M}'_{\bvec{C}'\tilde{\bvec{A}}'}
+ + \SMO_{\bvec{C}\bvec{A}'}\bvec{M}'_{\bvec{A}'\tilde{\bvec{A}}'}\big)
+ &= \bvec{0},\\
+ \big(\bvec{M}_{\bvec{C}\tilde{\bvec{A}}}^\dagger\SMO_{\bvec{C}\bvec{C}'}
+ + \bvec{M}_{\bvec{A}\tilde{\bvec{A}}}^\dagger\SMO_{\bvec{A}\bvec{C}'}\big)
+ \bvec{M}'_{\bvec{C}'\tilde{\bvec{C}}'} &= \bvec{0}.
+\end{align}
+We can see that the following will satisfy the above ($\SMO_{\bvec{C}\bvec{C}'}$ must be nonsingular / invertible):
+\begin{align}
+ \bvec{M}'_{\bvec{C}'\tilde{\bvec{A}}'} &= -(\SMO_{\bvec{C}\bvec{C}'})^{-1}\,
+ \SMO_{\bvec{C}\bvec{A}'}\, \bvec{M}'_{\bvec{A}'\tilde{\bvec{A}}'},
+ \label{eq:ket-core-active}\\
+ \bvec{M}_{\bvec{C}\tilde{\bvec{A}}} &= -(\SMO_{\bvec{C}\bvec{C}'})^{-\dagger}\,
+ (\SMO_{\bvec{A}\bvec{C}'})^{\dagger}\, \bvec{M}_{\bvec{A}\tilde{\bvec{A}}}.
+ \label{eq:bra-core-active}
+\end{align}
+The core--active blocks of $\bvec{M}$ and $\bvec{M}'$ mix the bra or ket core orbitals into the active orbitals of the same side, such that they're orthogonal to the other side's core orbitals, as biorthonormality requires (Malmqvist Eq.~A.6).
+As explained in \cref{sec:dot}, this mixing leaves every CAS determinant unchanged.
+
+\paragraph{Active block.}
+Grouping the four terms of the $\tilde{\bvec{A}}\tilde{\bvec{A}}'$ block of \cref{eq:block-structure} by their left factor gives
+\begin{equation}
+ \bvec{M}_{\bvec{C}\tilde{\bvec{A}}}^\dagger
+ \big(\SMO_{\bvec{C}\bvec{C}'}\bvec{M}'_{\bvec{C}'\tilde{\bvec{A}}'}
+ + \SMO_{\bvec{C}\bvec{A}'}\bvec{M}'_{\bvec{A}'\tilde{\bvec{A}}'}\big)
+ + \bvec{M}_{\bvec{A}\tilde{\bvec{A}}}^\dagger
+ \big(\SMO_{\bvec{A}\bvec{C}'}\bvec{M}'_{\bvec{C}'\tilde{\bvec{A}}'}
+ + \SMO_{\bvec{A}\bvec{A}'}\bvec{M}'_{\bvec{A}'\tilde{\bvec{A}}'}\big)
+ = \bvec{1}.
+ \label{eq:active-block}
+\end{equation}
+The first bracket is zero by \cref{eq:ket-core-active}.
+Substituting \cref{eq:ket-core-active} into the second bracket turns it into $\bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'}\bvec{M}'_{\bvec{A}'\tilde{\bvec{A}}'}$, where $\bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'}$ is the Schur complement
+\begin{equation}
+ \bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'} = \SMO_{\bvec{A}\bvec{A}'}
+ - \SMO_{\bvec{A}\bvec{C}'}(\SMO_{\bvec{C}\bvec{C}'})^{-1}\SMO_{\bvec{C}\bvec{A}'}.
+ \label{eq:schur}
+\end{equation}
+In all, the active block condition is given by:
+\begin{equation}
+ \bvec{M}_{\bvec{A}\tilde{\bvec{A}}}^\dagger\,
+ \bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'}\,
+ \bvec{M}'_{\bvec{A}'\tilde{\bvec{A}}'} = \bvec{1}.
+ \label{eq:active-cond}
+\end{equation}
+Grouping by the right factor instead uses \cref{eq:bra-core-active} and gives the same condition.
+The Schur complement $\bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'}$ is the overlap between the bra and ket active orbitals once the core--active blocks have made each orthogonal to the other side's core (Malmqvist Eq.~A.3).
+With its singular value decomposition $\bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'} = \bvec{U}_{\bvec{A}}\bvec{D}_{\bvec{A}}\bvec{V}_{\bvec{A}}^\dagger$ (Eq.~A.4), the choice
+\begin{equation}
+ \bvec{M}_{\bvec{A}\tilde{\bvec{A}}} = \bvec{U}_{\bvec{A}},
+ \qquad
+ \bvec{M}'_{\bvec{A}'\tilde{\bvec{A}}'} =
+ \bvec{V}_{\bvec{A}}\bvec{D}_{\bvec{A}}^{-1}
+ \label{eq:active-blocks}
+\end{equation}
+solves it, provided $\bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'}$ is nonsingular.
+
+\paragraph{Result.}
+Together, \cref{eq:core-blocks,eq:ket-core-active,eq:bra-core-active,eq:active-blocks} give
+\begin{align}
+ \bvec{M} &=
+ \begin{pmatrix}
+  \bvec{U}_{\bvec{C}} &
+  -(\SMO_{\bvec{C}\bvec{C}'})^{-\dagger}(\SMO_{\bvec{A}\bvec{C}'})^\dagger
+  \bvec{U}_{\bvec{A}} \\
+  \bvec{0} & \bvec{U}_{\bvec{A}}
+ \end{pmatrix},
+ \label{eq:transform-bra}\\
+ \bvec{M}' &=
+ \begin{pmatrix}
+  \bvec{V}_{\bvec{C}}\bvec{D}_{\bvec{C}}^{-1} &
+  -(\SMO_{\bvec{C}\bvec{C}'})^{-1}\SMO_{\bvec{C}\bvec{A}'}
+  \bvec{V}_{\bvec{A}}\bvec{D}_{\bvec{A}}^{-1} \\
+  \bvec{0} & \bvec{V}_{\bvec{A}}\bvec{D}_{\bvec{A}}^{-1}
+ \end{pmatrix}.
+ \label{eq:transform-ket}
+\end{align}
+These are the transforms of Malmqvist's Appendix (Eqs.~A.1--A.7).\cite{Malmqvist1986}
+In his construction, the bra orbitals rotated by $\bvec{U}_{\bvec{C}}$ and $\bvec{U}_{\bvec{A}}$ and the ket orbitals rotated by $\bvec{V}_{\bvec{C}}$ and $\bvec{V}_{\bvec{A}}$ are the pseudo-corresponding orbitals.
+The SVDs make the bra's active block unitary and the ket's a unitary times a diagonal, which \cref{sec:transform} applies cheaply.
+A biorthonormal pair that keeps both CAS spaces closed exists if and only if $\SMO_{\bvec{C}\bvec{C}'}$ and $\bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'}$ are nonsingular.
+
+An SVD is unique only up to the order and phases of its singular vectors, and up to unitary mixing within degenerate singular values.
+Any choice satisfies \cref{eq:biorthonormal}, but $\bvec{U}_{\bvec{A}}$ and $\bvec{V}_{\bvec{A}}$ can come out far from the identity, especially for nearly identical orbital sets.
+Their singular values then all lie near 1, so the order the SVD sorts them in, and the mixing among nearly degenerate ones, are close to arbitrary: $\bvec{U}_{\bvec{A}}$ and $\bvec{V}_{\bvec{A}}$ stay close to each other, but each can be close to a signed permutation.
+That is a problem for re-expressing the CI vectors, which applies each of them as the exponential of its logarithm: the cost grows with the norm of the logarithm, which is near $\pi$ for a matrix close to a signed permutation, and a real matrix with a negative determinant, such as an orthogonal matrix with determinant $-1$, has no real logarithm at all.
+\Cref{sec:transform} resolves this by splitting off the signed permutation, which it applies exactly.
+
+\section{Re-expressing the CI vectors in the biorthonormal orbitals}
+\label{sec:transform}
+
+By \cref{eq:closure}, the bra has coefficients in both its original and its biorthonormal determinants, $\ket{\Psi} = \sum_I c_I\ket{\Phi_I} = \sum_I \tilde{c}_I\ket{\tilde{\Phi}_I}$, related by $\tilde{\bvec{c}} = \hat{\rho}[\bvec{M}]\,\bvec{c}$, and the ket likewise, with primes.
+Every invertible matrix has a logarithm, so writing the transform as $\bvec{M} = e^{\log\bvec{M}}$, the transformed determinants are
+\begin{equation}
+ e^{\hat{T}}\ket{\Phi_I},
+ \qquad
+ \hat{T} = \sum_{pq} (\log\bvec{M})_{pq}\hat{E}_{pq},
+ \label{eq:det-exp}
+\end{equation}
+where $\hat{E}_{pq}$ is $\sum_\sigma \hat{a}^\dagger_{p\sigma}\hat{a}_{q\sigma}$ for spatial orbitals and $\hat{a}^\dagger_p\hat{a}_q$ for spinors.\cite{MoshinskySeligman1971,Malmqvist1986}
+Since the wavefunction doesn't change, equating the two equivalent expansions gives
+\begin{equation}
+ \sum_I \tilde{c}_I\, e^{\hat{T}}\ket{\Phi_I} = \sum_I c_I\ket{\Phi_I}
+ \quad\Longrightarrow\quad
+ \sum_I \tilde{c}_I\ket{\Phi_I} = e^{-\hat{T}}\sum_I c_I\ket{\Phi_I},
+\end{equation}
+which allows us to identify,
+\begin{equation}
+ \hat{\rho}[\bvec{M}] = e^{-\hat{T}}
+ = \exp\Big(-\sum_{pq}(\log\bvec{M})_{pq}\hat{E}_{pq}\Big).
+ \label{eq:rho-exp}
+\end{equation}
+This holds for any invertible transform and any of its logarithms, which aren't unique and can be complex even for a real transform.
+To apply $e^{-\hat{T}}$ to CI vectors, though, $\hat{T}$ must keep the CAS space closed.
+Its terms $(\log\bvec{M})_{um}\hat{E}_{um}$ move an electron from the core to the active space, so this requires $(\log\bvec{M})_{\bvec{A}\tilde{\bvec{C}}} = \bvec{0}$, which holds for the standard logarithm of $\bvec{M}$.\footnote{A matrix has many logarithms.
+The standard, \emph{primary} logarithm applies one scalar logarithm to all eigenvalues of $\bvec{M}$, so every occurrence of an eigenvalue $\lambda$ gets the same $\log\lambda$.
+It equals a polynomial in $\bvec{M}$, and a polynomial in a block upper-triangular matrix is block upper triangular, so $(\log\bvec{M})_{\bvec{A}\tilde{\bvec{C}}} = \bvec{0}$, with diagonal blocks $\log\bvec{M}_{\bvec{C}\tilde{\bvec{C}}}$ and $\log\bvec{M}_{\bvec{A}\tilde{\bvec{A}}}$.
+The \emph{principal} logarithm is the primary one with every $\mathrm{Im}\log\lambda$ in $(-\pi, \pi)$.
+It exists only if no eigenvalue is real and negative, which excludes a real $\bvec{M}$ with $\det\bvec{M} < 0$.
+A logarithm that isn't primary can give repeated eigenvalues different $\log\lambda$ and need not be block upper triangular: with one core and one active orbital, $\bvec{t} = \bvec{S}\,\diag(0, 2\pi i)\,\bvec{S}^{-1}$ with $\bvec{S} = \left(\begin{smallmatrix}1 & 0\\ 1 & 1\end{smallmatrix}\right)$ satisfies $e^{\bvec{t}} = \bvec{1}$ but has $t_{um} = -2\pi i$.}
+
+With the blocks of \cref{eq:transform-bra,eq:transform-ket}, each transform factors into its core block, a factor that mixes core orbitals into the active orbitals and so leaves every determinant unchanged (\cref{sec:dot}), and its active block:
+\begin{align}
+ \bvec{M} &=
+ \begin{pmatrix} \bvec{U}_{\bvec{C}} & \bvec{0} \\ \bvec{0} & \bvec{1} \end{pmatrix}
+ \begin{pmatrix} \bvec{1} & \bvec{X} \\ \bvec{0} & \bvec{1} \end{pmatrix}
+ \begin{pmatrix} \bvec{1} & \bvec{0} \\ \bvec{0} & \bvec{U}_{\bvec{A}} \end{pmatrix},
+ \label{eq:factor-bra}\\
+ \bvec{M}' &=
+ \begin{pmatrix} \bvec{V}_{\bvec{C}}\bvec{D}_{\bvec{C}}^{-1} & \bvec{0} \\
+  \bvec{0} & \bvec{1} \end{pmatrix}
+ \begin{pmatrix} \bvec{1} & \bvec{X}' \\ \bvec{0} & \bvec{1} \end{pmatrix}
+ \begin{pmatrix} \bvec{1} & \bvec{0} \\
+  \bvec{0} & \bvec{V}_{\bvec{A}}\bvec{D}_{\bvec{A}}^{-1} \end{pmatrix},
+ \label{eq:factor-ket}
+\end{align}
+with $\bvec{X} = \bvec{U}_{\bvec{C}}^\dagger\, \bvec{M}_{\bvec{C}\tilde{\bvec{A}}}\,\bvec{U}_{\bvec{A}}^\dagger$ and $\bvec{X}' = \bvec{D}_{\bvec{C}}\bvec{V}_{\bvec{C}}^\dagger\, \bvec{M}'_{\bvec{C}'\tilde{\bvec{A}}'}\,\bvec{D}_{\bvec{A}}\bvec{V}_{\bvec{A}}^\dagger$, which can be ignored.
+The unitary parts of the active blocks factor further into a signed permutation and a rotation close to the identity, $\bvec{U}_{\bvec{A}} = \bvec{P}\bvec{R}$ and $\bvec{V}_{\bvec{A}} = \bvec{P}'\bvec{R}'$.
+Orbitals transform by right multiplication, so the leftmost factor acts on the orbitals first, and its action on the CI vector comes first.
+\Cref{tab:factors} lists the factors in that order.
+There, $g$ is the number of electrons per core orbital, 2 for spatial orbitals and 1 for spinors, $\omega_u(I)$ is the occupation of active orbital $u$ in $\Phi_I$, and $d_u$ are the singular values in $\bvec{D}_{\bvec{A}}$.
+
+\begin{table}[h]
+\caption{Factors of the biorthonormal transforms, in the order they act on the CI vector, and their exact actions.
+The ket's factors carry primes.}
+\label{tab:factors}
+\begin{tabular}{@{}p{0.30\linewidth}p{0.40\linewidth}>{\raggedright\arraybackslash}p{0.24\linewidth}@{}}
+\hline
+Factor & Action on the CI vector & Cost \\
+\hline
+Core block $\bvec{M}_{\bvec{C}\tilde{\bvec{C}}}$
+ & $\bvec{c} \to \det(\bvec{M}_{\bvec{C}\tilde{\bvec{C}}})^{-g}\,\bvec{c}$
+ & a scalar \\
+Core--active factor $\bvec{X}$ & none & none \\
+Signed permutation $\bvec{P}$ & $c_I \to \epsilon_I\, c_{\pi(I)}$
+ & one pass over the determinants \\
+Rotation $\bvec{R}$ & $\bvec{c} \to e^{-\hat{T}}\bvec{c}$,
+ $\hat{T} = \sum_{uv}(\log\bvec{R})_{uv}\hat{E}_{uv}$
+ & one sigma build per Taylor term \\
+Diagonal $\bvec{D}_{\bvec{A}}^{-1}$, ket only
+ & $c_I \to \prod_u d_u^{\omega_u(I)}\, c_I$
+ & one sigma build \\
+\hline
+\end{tabular}
+\end{table}
+
+\paragraph{Core block.}
+The core factor has the logarithm $\diag(\log\bvec{M}_{\bvec{C}\tilde{\bvec{C}}}, \bvec{0})$, so its $\hat{T} = \sum_{mn} (\log\bvec{M}_{\bvec{C}\tilde{\bvec{C}}})_{mn}\hat{E}_{mn}$ involves only core orbitals, which are fully occupied in every determinant.
+An off-diagonal $\hat{E}_{mn}$ creates an electron in the full orbital $m$ and gives zero, and $\hat{E}_{mm}$ counts the $g$ electrons in orbital $m$.
+Every determinant is therefore an eigenfunction of $\hat{T}$ with the same eigenvalue,
+\begin{equation}
+ \hat{T}\ket{\Phi_I}
+ = g\sum_m (\log\bvec{M}_{\bvec{C}\tilde{\bvec{C}}})_{mm}\ket{\Phi_I}
+ = g\,\mathrm{Tr}(\log\bvec{M}_{\bvec{C}\tilde{\bvec{C}}})\ket{\Phi_I}
+ = g\log\det(\bvec{M}_{\bvec{C}\tilde{\bvec{C}}})\ket{\Phi_I},
+\end{equation}
+and by \cref{eq:rho-exp}, the core block multiplies the CI vector by $e^{-g\log\det(\bvec{M}_{\bvec{C}\tilde{\bvec{C}}})} = \det(\bvec{M}_{\bvec{C}\tilde{\bvec{C}}})^{-g}$.
+Because $g$ is an integer, every branch of the logarithm gives the same factor.
+
+For the bra, $\bvec{U}_{\bvec{C}}$ is unitary, so $\det(\bvec{U}_{\bvec{C}})^{-g}$ is a phase.
+For spinors, $g = 1$ and the phase is $\det(\bvec{U}_{\bvec{C}})^*$.
+For real spatial orbitals, $\det(\bvec{U}_{\bvec{C}}) = \pm1$, and with $g = 2$ the factor is exactly 1.
+For the ket, $\bvec{V}_{\bvec{C}}$ is unitary but $\bvec{D}_{\bvec{C}}^{-1}$ isn't, so
+\begin{equation}
+ \det(\bvec{V}_{\bvec{C}}\bvec{D}_{\bvec{C}}^{-1})^{-g}
+ = \det(\bvec{V}_{\bvec{C}})^{-g}\prod_m d_m^{g},
+\end{equation}
+with $d_m$ the singular values in $\bvec{D}_{\bvec{C}}$, which is $\prod_m d_m^2$ for spatial orbitals.
+In the dot product, the two factors combine to
+\begin{equation}
+ \left[\det(\bvec{U}_{\bvec{C}})^{-g}\right]^*
+ \det(\bvec{V}_{\bvec{C}}\bvec{D}_{\bvec{C}}^{-1})^{-g}
+ = \det(\bvec{U}_{\bvec{C}}\bvec{D}_{\bvec{C}}\bvec{V}_{\bvec{C}}^\dagger)^{g}
+ = \det(\SMO_{\bvec{C}\bvec{C}'})^{g},
+\end{equation}
+which is the overlap of the bra and ket closed-shell cores.
+
+\paragraph{Signed permutation.}
+As \cref{sec:construct} explains, $\bvec{U}_{\bvec{A}}$ and $\bvec{V}_{\bvec{A}}$ are often close to a signed permutation, because the SVD returns orbitals in its own order and with arbitrary signs even when they barely change.
+The logarithm of such a matrix has a norm near $\pi$ (norm of the $\log(\sigma_1)$ (Pauli $x$-matrix) is $\pi$ exactly), and for a real matrix with a negative determinant only a complex logarithm exist, which would force complex arithmetic on a real CI vector.
+The split $\bvec{U}_{\bvec{A}} = \bvec{P}\bvec{R}$ moves the reordering and the signs into $\bvec{P}$, which is applied exactly, and leaves a rotation $\bvec{R}$ close to the identity, whose logarithm is small.
+For a real $\bvec{U}_{\bvec{A}}$ with a negative determinant, the split is necessary, not just efficient: $\bvec{P}$ absorbs the negative determinant, so $\bvec{R}$ has a real logarithm and the CI vector stays real.
+
+$\bvec{P}$ has one nonzero element in each row and column, $P_{\sigma(u)u} = s_u$ with $|s_u| = 1$: it makes orbital $u$ the old orbital $\sigma(u)$ times a sign, or a phase for spinors.
+Relabeling orbitals relabels determinants, so $\bvec{P}$ only reorders the CI vector and multiplies its elements with a sign/phase.
+For one electron in two orbitals, a $\bvec{P}$ that swaps them maps the coefficients $(c_1, c_2)$ to $(c_2, c_1)$.
+This corresponds to the permutation matrix of $\sigma_1$, which would have had a complex algorithm that made the CI vector complex if we performed transformation via \cref{eq:rho-exp}.
+
+In general, determinant $I$ of the permuted orbitals is
+\begin{equation}
+ \ket{\Phi^{\bvec{P}}_I}
+ = \prod_{u \in I} \big(s_u\,\hat{a}^\dagger_{\sigma(u)}\big)\ket{0}
+ = (-1)^{\kappa_I}\Big(\prod_{u \in I} s_u\Big)\ket{\Phi_{\pi(I)}},
+\end{equation}
+where $\Phi_{\pi(I)}$ is the determinant that occupies the orbitals $\sigma(u)$, and $\kappa_I$ is the number of swaps that sort its creation operators into the order of \cref{sec:lowdin}.
+Solving for $\ket{\Phi_{\pi(I)}}$ gives
+\begin{equation}
+ c_I \to \epsilon_I\, c_{\pi(I)},
+ \qquad
+ \epsilon_I = (-1)^{\kappa_I}\prod_{u \in I} s_u^*.
+\end{equation}
+For example, if $\bvec{P}$ swaps two orbitals that hold electrons of the same spin, $\hat{a}^\dagger_2\hat{a}^\dagger_1 = -\hat{a}^\dagger_1\hat{a}^\dagger_2$, and the coefficient changes sign.
+For spatial orbitals, $\bvec{P}$ acts on the $\alpha$ and $\beta$ strings separately, and $\epsilon_I$ is the product of their factors.
+
+$\bvec{P}$ is chosen to bring $\bvec{R} = \bvec{P}^\dagger\bvec{U}_{\bvec{A}}$ as close to the identity as possible.
+It matches each orbital $u$ to the old orbital $\sigma(u)$ with the largest weight $|(\bvec{U}_{\bvec{A}})_{\sigma(u)u}|$, using every old orbital once, which is a linear assignment problem.
+Each $s_u$ takes the phase of the matched element, so the diagonal elements of $\bvec{R}$ are the matched weights $|(\bvec{U}_{\bvec{A}})_{\sigma(u)u}|$.
+For spatial orbitals, if this leaves $\det\bvec{R} = -1$, the sign of the weakest match is flipped, so that $\bvec{R}$ has a real logarithm.
+$\bvec{P}'$ comes from $\bvec{V}_{\bvec{A}}$ the same way.
+
+\paragraph{Rotation.}
+The rotation factor has the logarithm $\diag(\bvec{0}, \log\bvec{R})$, so by \cref{eq:rho-exp}, the coefficients transform by $e^{-\hat{T}}$ with $\hat{T} = \sum_{uv} (\log\bvec{R})_{uv}\hat{E}_{uv}$.
+The product $e^{-\hat{T}}\bvec{c}$ is summed as its Taylor series, $\bvec{c} - \hat{T}\bvec{c} + \frac{1}{2}\hat{T}^2\bvec{c} - \cdots$.
+The matrix elements of $\hat{T}$ are the one-electron coupling coefficients contracted with $\log\bvec{R}$, so each application is a one-electron sigma build with $\log\bvec{R}$ in place of the one-electron integrals.
+Since $\log\bvec{R}$ isn't Hermitian, we implemented a non-Hermitian one-electron sigma builder.
+
+The Taylor series is guranteed to converge only if $\lVert\hat{T}\rVert<1$.
+The norm of $\hat{T}$ is too expensive compute directly (it's in the determinantal basis), but a bound is cheap: $\hat{T}$ applies $\log\bvec{R}$ to each active electron in turn, so $\lVert\hat{T}\rVert \le \Nel\lVert\log\bvec{R}\rVert_2$, with $\Nel$ the number of active electrons.
+Therefore, we can halve $\hat{T}$ $s$ times, where $s$ is the smallest integer that brings this bound to at most 1.
+We compute $e^{-\hat{T}/2^s}\bvec{c}$ in a recursive manner to a relative tolerance of $10^{-13}$.
+$e^{-\hat{T}/2^s}$ is applied to the resulting CI vector again, for a total of $2^s$ times, since $e^{-\hat{T}} = (e^{-\hat{T}/2^s})^{2^s}$.
+Splitting off $\bvec{P}$ keeps $\lVert\log\bvec{R}\rVert_2$ small, which keeps $s$ and the number of sigma builds required small.
+
+A matrix logarithm applies a scalar logarithm to the eigenvalues.
+If $\bvec{M} = \bvec{V}\bvec{\Lambda}\bvec{V}^{-1}$ is diagonalizable, $\log\bvec{M} = \bvec{V}(\log\bvec{\Lambda})\bvec{V}^{-1}$, where each $\log\lambda$ is fixed up to a multiple of $2\pi i$ by the choice of branch.
+This formula loses accuracy when the eigenvectors are nearly linearly dependent, and it fails when $\bvec{M}$ can't be diagonalized.
+Numerical libraries therefore start from the Schur decomposition $\bvec{M} = \bvec{Q}\bvec{T}\bvec{Q}^\dagger$, with $\bvec{Q}$ unitary and $\bvec{T}$ upper triangular with the eigenvalues on its diagonal, and compute $\log\bvec{M} = \bvec{Q}(\log\bvec{T})\bvec{Q}^\dagger$.\cite{Higham2008}
+The logarithm of $\bvec{T}$ comes from inverse scaling and squaring: $k$ repeated square roots bring $\bvec{T}$ close to the identity, where a rational approximation of $\log(\bvec{1} + \bvec{X})$ is accurate, and the result is multiplied by $2^k$, since $\log\bvec{T} = 2^k\log\bvec{T}^{1/2^k}$.
+Library routines take the principal branch, whose imaginary part jumps by $2\pi$ across the negative real axis.
+
+For spatial orbitals, $\bvec{P}$ makes $\det\bvec{R} = +1$, so $\bvec{R}$ is guranteed to have a real logarithm, but the standard matrix logarithm (\texttt{scipy.linalg.logm}) uses the complex Schur decomposition and could return a complex result for rotation angles near $\pi$.
+The code instead builds $\log\bvec{R}$ from the real Schur form $\bvec{R} = \bvec{Z}\bvec{B}\bvec{Z}^\mathrm{T}$, equivalent to an eigendecomposition of an orthogonal (not symmetric!) in real arithmetic.
+There, $\bvec{Z}$ is real orthogonal, and $\bvec{B}$ is block diagonal: it has a $2\times2$ block $\left(\begin{smallmatrix}\cos\theta & -\sin\theta\\ \sin\theta & \cos\theta\end{smallmatrix}\right)$ for each pair of eigenvalues $e^{\pm i\theta}$, and $1\times1$ blocks for the eigenvalues $\pm1$.
+Each $2\times2$ block has the logarithm $\theta\left(\begin{smallmatrix}0 & -1\\ 1 & 0\end{smallmatrix}\right)$, with $\theta = \mathrm{atan2}(\sin\theta, \cos\theta)$ exact over $(-\pi, \pi]$.
+Each $+1$ has the logarithm 0.
+The eigenvalues $-1$ come in pairs, since $\det\bvec{R} = +1$.
+Their two $1\times1$ blocks together form $-\bvec{1} = \left(\begin{smallmatrix}\cos\pi & -\sin\pi\\ \sin\pi & \cos\pi\end{smallmatrix}\right)$, a rotation by $\pi$, so each pair has the logarithm $\pi\left(\begin{smallmatrix}0 & -1\\ 1 & 0\end{smallmatrix}\right)$, the $\theta = \pi$ case of the $2\times2$ blocks.
+Then $\log\bvec{R} = \bvec{Z}(\log\bvec{B})\bvec{Z}^\mathrm{T}$.
+For spinors, $\bvec{R}$ is complex, and its complex logarithm can come from the standard \texttt{logm} routine.
+
+\paragraph{Diagonal.}
+By \cref{eq:rho-exp}, the diagonal factor has the logarithm $\diag(\bvec{0}, -\log\bvec{D}_{\bvec{A}})$, so $\hat{\rho}[\bvec{D}_{\bvec{A}}^{-1}] = \exp\big(\sum_u \log d_u\,\hat{E}_{uu}\big)$.
+This operator does not turn a determinant into another determinant: $\sum_u \log d_u\,\hat{E}_{uu}\ket{\Phi_I} = \sum_u \omega_u(I)\log d_u\ket{\Phi_I}\equiv x_I\ket{\Phi_I}$, so its exponential is diagonal too, with elements $\exp\big(\sum_u \log d_u\,\hat{E}_{uu}\big)\ket{\Phi_I} = e^{x_I}\ket{\Phi_I}$.
+The code gets every $x_I$ at once as one sigma build of $\sum_u \log d_u\,\hat{E}_{uu}$ on a vector of ones, then multiplies each $c_I$ by $e^{x_I}$.
+
+\paragraph{Result.}
+In all,
+\begin{align}
+ \tilde{\bvec{c}} &= \det(\bvec{U}_{\bvec{C}})^{-g}\,
+ \hat{\rho}[\bvec{R}]\,\hat{\rho}[\bvec{P}]\,\bvec{c},
+ \label{eq:ctilde-bra}\\
+ \tilde{\bvec{c}}' &= \det(\bvec{V}_{\bvec{C}}\bvec{D}_{\bvec{C}}^{-1})^{-g}\,
+ \hat{\rho}[\bvec{D}_{\bvec{A}}^{-1}]\,\hat{\rho}[\bvec{R}']\,
+ \hat{\rho}[\bvec{P}']\,\bvec{c}',
+ \label{eq:ctilde-ket}
+\end{align}
+where $\hat{\rho}$ of an active-space matrix is the action of the transform that applies it to the active orbitals alone.
+Every factor except the rotation is exact, and the rotation is accurate to the Taylor tolerance.
+
+\section{The overlap algorithm}
+\label{sec:algorithm}
+
+\texttt{ci\_overlap} with \texttt{algorithm="biorthogonal"} computes \cref{eq:payoff} in four steps:
+\begin{enumerate}
+\item form $\SMO$ from \cref{eq:smo};
+\item form $\bvec{M}$ and $\bvec{M}'$ from \cref{eq:transform-bra,eq:transform-ket};
+\item compute $\tilde{\bvec{c}}$ and $\tilde{\bvec{c}}'$ from \cref{eq:ctilde-bra,eq:ctilde-ket};
+\item take the dot product $\tilde{\bvec{c}}^\dagger\tilde{\bvec{c}}'$.
+\end{enumerate}
+It requires the same numbers of core and active orbitals on both sides, since \cref{sec:construct} pairs core with core and active with active, and the complete CAS determinant space, since $\bvec{U}_{\bvec{A}}$ and $\bvec{V}_{\bvec{A}}$ mix every active orbital and would move amplitude out of a GAS- or symmetry-restricted space.
+It raises an error otherwise, and for a singular $\SMO_{\bvec{C}\bvec{C}'}$ or $\bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'}$.
+
+\section{Rotating CI vectors}
+\label{sec:rotation}
+
+\texttt{rotate\_ci\_vectors} re-expresses the CI vectors of a solved CI in rotated active orbitals, such as natural orbitals.
+The rotation $\bvec{U}$ is a transform of the form of \cref{eq:factor-bra} with $\bvec{U}_{\bvec{C}} = \bvec{1}$, $\bvec{X} = \bvec{0}$, and $\bvec{U}_{\bvec{A}} = \bvec{U}$, so by \cref{eq:ctilde-bra}, with $\bvec{U} = \bvec{P}\bvec{R}$, the rotated vector is $\hat{\rho}[\bvec{R}]\,\hat{\rho}[\bvec{P}]\,\bvec{c}$.
+A rotation that is block diagonal over GAS spaces and irreps keeps a restricted CI space closed (Malmqvist Sec.~V), so $\bvec{U}$ may not couple blocks, and $\bvec{P}$ and $\log\bvec{R}$ are computed block by block.
+$\hat{E}_{uv}$ commutes with the total spin, so a nonrelativistic vector is converted from configuration state functions to determinants and back without loss.
+
+The rotated vectors are the same states re-expressed in a unitarily rotated basis, and should in theory be identical to the CI vectors obtained by diagonalizing the CI problem in the rotated orbital basis.
+However, solving the CI again in the rotated orbitals can converge to a different root, reorder the roots, flip their phases, or mix degenerate roots; rotating keeps each root's identity, order, and phase, at a cost comparable to one CI solve.
+
+\section{Validation}
+\label{sec:validation}
+
+The tests check properties that hold independently of the implementation, for both algorithms and both regimes:
+\begin{itemize}
+\item rotations within the core and within the active space leave a CASCI wavefunction unchanged, so its overlap with its rotated representation has magnitude 1, including for improper rotations and complex phases;
+\item a closed-shell single determinant, whose hole orbitals are all occupied, has overlap $|\det\SMO|^g$, for every split of its orbitals between core and active;
+\item without spin--orbit coupling, a two-component CASCI reproduces the nonrelativistic overlap between two geometries, and $\braket{\Psi|\Psi'} = \braket{\Psi'|\Psi}^*$;
+\item the two algorithms agree on every root pair of CASCI wavefunctions at two geometries, with the orbitals of one side reordered;
+\item rotated CI vectors equal the vectors of a CI solved again in the rotated orbitals, for CAS and GAS spaces.
+\end{itemize}
+
+\section{Limitations and extensions}
+\label{sec:limitations}
+
+\begin{itemize}
+\item For GAS spaces, \texttt{algorithm="naive"} is needed, because the biorthogonal algorithm handles only CAS spaces.
+Malmqvist's Sec.~V extends the construction to GAS spaces.
+\item Tight core orbitals follow their nuclei, so their mutual overlap decays steeply with displacement.
+Plasser \emph{et al.} discard them (Eq.~21); forte2 doesn't.
+\item Overlaps are computed one pair of states at a time.
+Orthogonalizing the overlap matrix of two sets of states (Plasser \emph{et al.}, Eqs.~25--26) isn't implemented.
+\item CI vectors aren't truncated (Plasser \emph{et al.}, Sec.~3.2), which matters only for expansions much larger than CAS.
+\item Malmqvist's Sec.~IV replaces the exponential with an exact sequence of single-orbital transformations from an LU factorization, at about $2\Nact$ one-electron passes per vector.
+\item A two-component wavefunction can't be compared with a nonrelativistic one.
+\end{itemize}
+
+\appendix
+
+\section{Code map}
+\label{app:code}
+
+\begin{table}[h]
+\caption{Functions and the sections that describe them.
+Modules are in \texttt{forte2/orbitals}.}
+\label{tab:code}
+\begin{tabular}{@{}p{0.52\linewidth}p{0.42\linewidth}@{}}
+\hline
+Function & Section \\
+\hline
+\texttt{mo\_overlap} (\texttt{orbital\_overlap.py}) & \cref{eq:smo} \\
+\texttt{ci\_overlap} (\texttt{wavefunction\_overlap.py}) &
+ \cref{sec:lowdin,sec:algorithm} \\
+\texttt{biorthogonalize\_casscf\_orbitals} (\texttt{wavefunction\_overlap.py})
+ & \cref{sec:construct} \\
+\texttt{transform\_ci\_vectors} (\texttt{ci\_rotation.py}) &
+ \cref{sec:transform} \\
+\texttt{rotate\_ci\_vectors} (\texttt{ci\_rotation.py}) & \cref{sec:rotation} \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{thebibliography}{9}
+\bibitem{Loewdin1955}
+P.-O. L\"owdin, Phys. Rev. \textbf{97}, 1474 (1955).
+\bibitem{MoshinskySeligman1971}
+M. Moshinsky and T. H. Seligman, Ann. Phys. \textbf{66}, 311 (1971).
+\bibitem{Malmqvist1986}
+P.-\AA.~Malmqvist,
+``Calculation of transition density matrices by nonunitary orbital
+transformations,''
+Int. J. Quantum Chem. \textbf{30}, 479--494 (1986).
+\bibitem{Plasser2016}
+F. Plasser, M. Ruckenbauer, S. Mai, M. Oppel, P. Marquetand, and
+L. Gonz\'alez,
+``Efficient and flexible computation of many-electron wave function
+overlaps,''
+J. Chem. Theory Comput. \textbf{12}, 1207--1219 (2016).
+\bibitem{Higham2008}
+N. J. Higham,
+\emph{Functions of Matrices: Theory and Computation}
+(SIAM, Philadelphia, 2008).
+\end{thebibliography}
+
+\end{document}

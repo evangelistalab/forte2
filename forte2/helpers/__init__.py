@@ -7,6 +7,7 @@ from .matrix_functions import (
     givens_rotation,
     block_diag_2x2,
     random_unitary,
+    real_orthogonal_logm,
     i_sigma_dot,
 )
 from .diis import DIIS
