@@ -101,8 +101,8 @@ declared per driver because the default legitimately differs (`"original"` for t
 
 ### Rebuilding a chain at a new geometry
 `forte2/base_classes/rebuild.py` reconstructs or rebinds an entire method chain against a displaced
-`System`, and is what `GeometryOptimizer` and `FDGradient` (`forte2/gradients/fd_gradient.py`) are
-built on:
+`System`, and is what `GeometryOptimizer` and `FiniteDifference` (`forte2/gradients/fd_gradient.py`)
+are built on:
 - `rebuild_method_chain(method, new_system)` walks root-to-leaf and calls `type(stage)(**kwargs)` per
   stage, with `kwargs` read straight from `dataclasses.fields()`. That means **every init field must
   survive being fed back into the constructor unchanged** — a field that a method overwrites with a
@@ -161,8 +161,11 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 - `x2c` — exact two-component relativistic transform (`sf` scalar, `so` spin-orbit); gated by `System.x2c_type`.
 - `orbitals` — AVAS, ASET embedding, IAO/IBO, semicanonicalizer, cube generation, `SpinorUpcaster`.
 - `props`, `gradients`, `optimize` — 1e-properties/populations; DF-based analytic gradients plus
-  `FDGradient`, which differentiates *any* rebuildable method's energy by finite differences (see
-  "Rebuilding a chain at a new geometry" above); `GeometryOptimizer` drives either.
+  `FiniteDifference`, which differentiates *any* rebuildable method's energy by finite differences
+  (see "Rebuilding a chain at a new geometry" above) and, for multi-root CI/MCSCF, gives nonadiabatic
+  couplings from overlaps with the displaced wavefunctions (`orbitals.ci_overlap_matrix`), aligning
+  each displaced root's phase (or degenerate manifold) to the reference first; `GeometryOptimizer`
+  drives either.
 - `state`, `symmetry` — `State`/`RelState`/`MOSpace`/state-averaging; point-group MO symmetry detection.
 
 ## Environment And Build
