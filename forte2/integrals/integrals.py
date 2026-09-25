@@ -2,12 +2,10 @@ import numpy as np
 
 from forte2.lib import ints
 from forte2.integrals.libcint_utils import (
-    CHARGE_OF,
     PTR_RINV_ORIG,
     PTR_RINV_ZETA,
     PTR_ZETA,
-    conc_env,
-    basis_to_cint_envs,
+    CintEnv,
 )
 
 LIBCINT_AVAILABLE = getattr(ints, "HAS_LIBCINT", False)
@@ -447,7 +445,7 @@ def opVop(system, basis1=None, basis2=None):
 
 def _gaussian_nuclear_deriv_blocks(system, basis):
     """Yield Gaussian nuclear-attraction derivatives one atom at a time."""
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis, basis)
+    atm, bas, env, shell_slice = _cint_env(system, basis, basis)
     all_nuc_ip = ints.cint_int1e_ipnuc_sph(shell_slice, atm, bas, env).transpose(
         0, 2, 1
     )
@@ -502,7 +500,7 @@ def nuclear_deriv(system, weights, basis1=None, basis2=None):
 
 def _opvop_cint_deriv_blocks(system, basis):
     """Yield analytic libcint opVop derivatives one atom at a time."""
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis, basis)
+    atm, bas, env, shell_slice = _cint_env(system, basis, basis)
 
     def format_cint_ip(raw):
         raw = raw.transpose(0, 2, 1).reshape(3, 4, basis.size, basis.size)
@@ -574,120 +572,6 @@ def _opvop_finite_difference_blocks(system, basis1, basis2):
                 12.0 * step
             )
             yield 3 * atom + cart, derivative[:, None]
-
-
-def _opvop_deriv_blocks(system, basis1, basis2):
-    """Select the analytic same-basis or finite-difference derivative blocks."""
-    if LIBCINT_AVAILABLE and basis1 is basis2:
-        return _opvop_cint_deriv_blocks(system, basis1)
-    return _opvop_finite_difference_blocks(system, basis1, basis2)
-
-
-def opVop_deriv(system, weights, basis1=None, basis2=None):
-    """Contract all four opVop component derivatives with AO weights."""
-    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
-    weights = np.asarray(weights)
-    expected = (4, basis1.size, basis2.size)
-    if weights.shape != expected:
-        raise ValueError(
-            f"Expected opVop derivative weights shape {expected}, got {weights.shape}."
-        )
-
-    gradient = np.zeros(3 * system.natoms)
-    for coordinate, block in _opvop_deriv_blocks(system, basis1, basis2):
-        gradient[coordinate : coordinate + block.shape[1]] = np.einsum(
-            "cxmn,cmn->x", block, weights, optimize=True
-        ).real
-    return gradient
-
-
-def _gaussian_nuclear_deriv_blocks(system, basis):
-    """Yield Gaussian nuclear-attraction derivatives one atom at a time."""
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis, basis)
-    all_nuc_ip = ints.cint_int1e_ipnuc_sph(shell_slice, atm, bas, env).transpose(
-        0, 2, 1
-    )
-
-    for atom, (charge, center) in enumerate(system.atoms):
-        env_atom = env.copy()
-        env_atom[PTR_RINV_ORIG : PTR_RINV_ORIG + 3] = center
-        env_atom[PTR_RINV_ZETA] = env[atm[atom, PTR_ZETA]]
-        explicit = -charge * ints.cint_int1e_iprinv_sph(
-            shell_slice, atm, bas, env_atom
-        ).transpose(0, 2, 1)
-
-        first, last = basis.center_first_and_last[atom]
-        total = explicit.copy()
-        total[:, first:last, :] -= all_nuc_ip[:, first:last, :]
-        yield atom, total + total.transpose(0, 2, 1)
-
-
-def nuclear_deriv(system, weights, basis1=None, basis2=None):
-    """Contract nuclear-attraction derivatives without storing all matrices."""
-    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
-    weights = np.asarray(weights)
-    expected = (basis1.size, basis2.size)
-    if weights.shape != expected:
-        raise ValueError(
-            f"Expected nuclear derivative weights shape {expected}, got {weights.shape}."
-        )
-
-    if not system.use_gaussian_charges:
-        _require_libint2_deriv_backend(max(basis1.max_l, basis2.max_l), "nuclear")
-        return ints.nuclear_deriv(
-            basis1,
-            basis2,
-            np.ascontiguousarray(weights.real),
-            system.atoms,
-        )
-
-    _require_libcint()
-    if basis1 is not basis2:
-        raise NotImplementedError(
-            "Gaussian nuclear-attraction derivative contractions currently require "
-            "the same basis on the bra and ket."
-        )
-
-    gradient = np.zeros(3 * system.natoms)
-    for atom, block in _gaussian_nuclear_deriv_blocks(system, basis1):
-        gradient[3 * atom : 3 * atom + 3] = np.einsum(
-            "xmn,mn->x", block, weights, optimize=True
-        ).real
-    return gradient
-
-
-def _opvop_cint_deriv_blocks(system, basis):
-    """Yield analytic libcint opVop derivatives one atom at a time."""
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis, basis)
-
-    def format_cint_ip(raw):
-        raw = raw.transpose(0, 2, 1).reshape(3, 4, basis.size, basis.size)
-        # Libcint's cross-product components use the transpose convention.
-        raw[:, :3] *= -1.0
-        return raw
-
-    all_nuc_ip = format_cint_ip(
-        ints.cint_int1e_ipspnucsp_sph(shell_slice, atm, bas, env)
-    )
-    component_prefactor = np.array([-1.0, -1.0, -1.0, 1.0])
-    transpose_sign = np.array([-1.0, -1.0, -1.0, 1.0])
-
-    for atom, (charge, center) in enumerate(system.atoms):
-        env_atom = env.copy()
-        env_atom[PTR_RINV_ORIG : PTR_RINV_ORIG + 3] = center
-        env_atom[PTR_RINV_ZETA] = env[atm[atom, PTR_ZETA]]
-        explicit = -charge * format_cint_ip(
-            ints.cint_int1e_ipsprinvsp_sph(shell_slice, atm, bas, env_atom)
-        )
-
-        first, last = basis.center_first_and_last[atom]
-        total = explicit.copy()
-        total[:, :, first:last, :] -= all_nuc_ip[:, :, first:last, :]
-        block = component_prefactor[None, :, None, None] * (
-            total + transpose_sign[None, :, None, None] * total.transpose(0, 1, 3, 2)
-        )
-        # Libcint order is [x, y, z, scalar]; Forte2 uses [scalar, x, y, z].
-        yield 3 * atom, block.transpose(1, 0, 2, 3)[[3, 0, 1, 2]]
 
 
 def _opvop_deriv_blocks(system, basis1, basis2):
@@ -853,9 +737,9 @@ def coulomb_3c(
     else:
         res = cint_coulomb_3c(
             system,
-            basis1,
-            basis2,
-            basis3,
+            _basis1,
+            _basis2,
+            _basis3,
             preserve_density_norm=preserve_density_norm,
         )
 
@@ -897,7 +781,7 @@ def coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
     if backend == "libint2":
         return ints.coulomb_3c_opVop(_basis1, _basis2, _basis3)
     else:
-        return cint_coulomb_3c_opVop(system, basis1, basis2, basis3)
+        return cint_coulomb_3c_opVop(system, _basis1, _basis2, _basis3)
 
 
 def coulomb_2c(system, basis1=None, basis2=None):
@@ -929,7 +813,7 @@ def coulomb_2c(system, basis1=None, basis2=None):
     if _backend == "libint2":
         res = ints.coulomb_2c(_basis1, _basis2)
     else:
-        res = cint_coulomb_2c(system, basis1, basis2)
+        res = cint_coulomb_2c(system, _basis1, _basis2)
 
     return res
 
@@ -1126,96 +1010,24 @@ def erfc_coulomb_2c(system, omega, basis1=None, basis2=None):
     return ints.erfc_coulomb_2c(basis1, basis2, omega)
 
 
-def _parse_basis_args_cint_1e(system, basis1, basis2, origin=None):
-    # 2 possible cases:
-    # 1. both basis sets are None -> set both to system.basis
-    # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
-    if basis1 is None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(system, system.basis, common_origin=origin)
-        shell_slice = [0, system.basis.nshells, 0, system.basis.nshells]
-    elif basis1 is not None and (basis2 is None or basis2 is basis1):
-        atm, bas, env = basis_to_cint_envs(system, basis1, common_origin=origin)
-        shell_slice = [0, basis1.nshells, 0, basis1.nshells]
-    elif basis1 is None and basis2 is not None:
-        raise ValueError("If basis2 is provided, basis1 must also be provided.")
-    else:
-        atm1, bas1, env1 = basis_to_cint_envs(system, basis1, common_origin=origin)
-        atm2, bas2, env2 = basis_to_cint_envs(system, basis2, common_origin=origin)
-        atm, bas, env = conc_env(atm1, bas1, env1, atm2, bas2, env2)
-        # Cross-basis environments duplicate the atom table so each shell can
-        # retain its own atom index. Only the first copy may contribute to
-        # nuclear-potential operators.
-        atm[len(atm1) :, CHARGE_OF] = 0
-        ns1 = basis1.nshells
-        ns2 = basis2.nshells
-        shell_slice = [0, ns1, ns1, ns1 + ns2]
-    return atm, bas, env, shell_slice
+def _cint_env(system, *bases, origin=None):
+    """
+    Build the libcint environment for integrals over ``bases``.
 
+    Every basis sits on its own shell centers, while the nuclei of ``system``
+    occupy ``atm[:natoms]`` and alone generate nuclear potentials. A basis
+    passed more than once is stored once.
 
-def _parse_basis_args_cint_2c2e(system, basis1, basis2, origin=None):
-    # 2 possible cases:
-    # 1. both basis sets are None -> set both to system.auxiliary_basis
-    # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
-    if basis1 is None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(
-            system, system.auxiliary_basis, common_origin=origin
-        )
-        shell_slice = [
-            0,
-            system.auxiliary_basis.nshells,
-            0,
-            system.auxiliary_basis.nshells,
-        ]
-    elif basis1 is not None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(system, basis1, common_origin=origin)
-        shell_slice = [0, basis1.nshells, 0, basis1.nshells]
-    elif basis1 is None and basis2 is not None:
-        raise ValueError("If basis2 is provided, basis1 must also be provided.")
-    else:
-        atm1, bas1, env1 = basis_to_cint_envs(system, basis1, common_origin=origin)
-        atm2, bas2, env2 = basis_to_cint_envs(system, basis2, common_origin=origin)
-        atm, bas, env = conc_env(atm1, bas1, env1, atm2, bas2, env2)
-        ns1 = basis1.nshells
-        ns2 = basis2.nshells
-        shell_slice = [0, ns1, ns1, ns1 + ns2]
-    return atm, bas, env, shell_slice
-
-
-def _parse_basis_args_cint_3c2e(system, basis1, basis2, basis3, origin=None):
-    # Note that cint expects (ij | P), but we output in (P | ij) layout like libint2.
-    # We handle all 8 possible cases for basis set inputs
-    if basis1 is None:
-        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
-            system, system.auxiliary_basis, common_origin=origin
-        )
-        nsh_aux = system.auxiliary_basis.nshells
-    else:
-        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
-            system, basis1, common_origin=origin
-        )
-        nsh_aux = basis1.nshells
-
-    if basis2 is None and basis3 is None:
-        bas_atm, bas_bas, bas_env = basis_to_cint_envs(
-            system, system.basis, common_origin=origin
-        )
-        nsh_bas = system.basis.nshells
-        shell_slice = [nsh_bas, nsh_bas + nsh_aux, 0, nsh_bas, 0, nsh_bas]
-    elif basis2 is not None and (basis3 is None or basis3 == basis2):
-        bas_atm, bas_bas, bas_env = basis_to_cint_envs(
-            system, basis2, common_origin=origin
-        )
-        nsh_bas = basis2.nshells
-        shell_slice = [nsh_bas, nsh_bas + nsh_aux, 0, nsh_bas, 0, nsh_bas]
-    elif basis2 is not None and basis3 is not None:
-        raise ValueError(
-            "libcint doesn't support (P|QR) with Q and R being different basis sets."
-        )
-    else:
-        raise ValueError("If basis3 is provided, basis2 must also be provided.")
-
-    atm, bas, env = conc_env(bas_atm, bas_bas, bas_env, aux_atm, aux_bas, aux_env)
-    return atm, bas, env, shell_slice
+    Returns
+    -------
+    tuple
+        The ``atm``, ``bas``, and ``env`` arrays, and the shell slice listing
+        the first and past-the-last shell of each basis in ``bases``.
+    """
+    cint = CintEnv()
+    cint.add_nuclei(system.atoms, gaussian=system.use_gaussian_charges)
+    shell_slice = [shell for basis in bases for shell in cint.add_basis(basis)]
+    return (*cint.arrays(common_origin=origin), shell_slice)
 
 
 def _f2c(arr):
@@ -1243,7 +1055,8 @@ def cint_overlap(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2)
     res = ints.cint_int1e_ovlp_sph(shell_slice, atm, bas, env)
     return _f2c(res)
 
@@ -1266,7 +1079,8 @@ def cint_overlap_spinor(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2)
     res = ints.cint_int1e_ovlp_spinor(shell_slice, atm, bas, env)
     np.conjugate(res, out=res)
     return _f2c(res)
@@ -1290,7 +1104,8 @@ def cint_kinetic(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2)
     res = ints.cint_int1e_kin_sph(shell_slice, atm, bas, env)
     return _f2c(res)
 
@@ -1313,7 +1128,8 @@ def cint_nuclear(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2)
     res = ints.cint_int1e_nuc_sph(shell_slice, atm, bas, env)
     return _f2c(res)
 
@@ -1341,7 +1157,8 @@ def cint_opVop(system, basis1=None, basis2=None):
         [(p cross Vp)_x, (p cross Vp)_y, (p cross Vp)_z, p dot Vp]
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2)
     res = ints.cint_int1e_spnucsp_sph(shell_slice, atm, bas, env)
     # the x/y/z components are antisymmetric due to the cross produce (swapping the two basis functions changes the sign)
     # libcint returns the transposed version, hence the sign flip
@@ -1372,7 +1189,8 @@ def cint_opVop_spinor(system, basis1=None, basis2=None):
         The small component nuclear potential integrals in spinor basis
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2)
     res = ints.cint_int1e_spnucsp_spinor(shell_slice, atm, bas, env)
     np.conj(res, out=res)
     return _f2c(res)
@@ -1406,9 +1224,8 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
         The first electric multipole moment integrals
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(
-        system, basis1, basis2, origin
-    )
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2, origin=origin)
     res = ints.cint_int1e_r_sph(shell_slice, atm, bas, env)
     # C-layout, first index is the integral component (slowest changing)
     return _f2c(res)
@@ -1437,7 +1254,8 @@ def cint_coulomb_2c(system, basis1=None, basis2=None):
         The two-center two-electron Coulomb integral matrix.
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_2c2e(system, basis1, basis2)
+    basis1, basis2 = _parse_basis_args_2c2e(system, basis1, basis2)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2)
     res = ints.cint_int2c2e_sph(shell_slice, atm, bas, env)
     return _f2c(res)
 
@@ -1475,13 +1293,11 @@ def cint_coulomb_3c(
     contractions.
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_3c2e(
-        system, basis1, basis2, basis3
-    )
+    basis1, basis2, basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
+    atm, bas, env, shell_slice = _cint_env(system, basis1, basis2, basis3)
     res = ints.cint_int3c2e_sph(shell_slice, atm, bas, env)
     if preserve_density_norm:
-        _basis1, _, _ = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
-        scales = _s_density_contraction_norms(_basis1)
+        scales = _s_density_contraction_norms(basis1)
         res = np.einsum("P,Pmn->Pmn", scales, res, optimize=True)
     return res
 
@@ -1499,9 +1315,7 @@ def cint_coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
     # physical norm of each unnormalized SAP s function after integral evaluation.
     scales = _s_density_contraction_norms(_basis1)
 
-    atm, bas, env, shell_slice = _parse_basis_args_cint_3c2e(
-        system, _basis1, _basis2, None
-    )
+    atm, bas, env, shell_slice = _cint_env(system, _basis1, _basis2, _basis3)
     # Libcint returns x, y, z, scalar components. Its cross-product components
     # use the opposite orbital-center order from Forte2, so change their signs
     # while reordering to the scalar, x, y, z one-electron opVop convention.
@@ -1514,19 +1328,18 @@ class CInt3cBySlice:
     def __init__(self, system):
         _require_libcint()
         self.system = system
-        self.atm, self.bas, self.env, _ = _parse_basis_args_cint_3c2e(
-            system, None, None, None
+        self.atm, self.bas, self.env, shell_slice = _cint_env(
+            system, system.auxiliary_basis, system.basis
         )
-        self.nauxsh = system.auxiliary_basis.nshells
-        self.nprimsh = system.basis.nshells
+        self.first_aux_shell = shell_slice[0]
+        self.first_prim_shell = shell_slice[2]
         self.sh_offset_aux = system.auxiliary_basis.shell_offsets
         self.sh_offset_prim = system.basis.shell_offsets
 
     def _convert_shell_slices(self, shell_slices):
-        auxsh = (shell_slices[0][0] + self.nprimsh, shell_slices[0][1] + self.nprimsh)
-        prim1sh = shell_slices[1]
-        prim2sh = shell_slices[2]
-        return [*auxsh, *prim1sh, *prim2sh]
+        (aux0, aux1), (prim10, prim11), (prim20, prim21) = shell_slices
+        a, p = self.first_aux_shell, self.first_prim_shell
+        return [aux0 + a, aux1 + a, prim10 + p, prim11 + p, prim20 + p, prim21 + p]
 
     def _get_shape(self, shell_slices):
         ib0 = self.sh_offset_aux[shell_slices[0][0]]
