@@ -28,6 +28,41 @@ def test_libcint_overlap():
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_mixed_geom():
+    # Each basis carries its own centers, and the nuclei come from system1.
+    xyz1 = """
+    Li 0 0 0
+    Li 0 0 1.9
+    """
+    system1 = System(
+        xyz1, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+    xyz2 = """
+    Li 0 0 0
+    Li 0 0 2.5
+    """
+    system2 = System(xyz2, basis_set="cc-pvdz")
+    b1, b2 = system1.basis, system2.basis
+
+    s_cint = integrals.cint_overlap(system1, b1, b2)
+    assert s_cint.shape == (10, 28)
+    assert np.linalg.norm(s_cint - integrals.overlap(system1, b1, b2)) < 1e-8
+    assert np.linalg.norm(s_cint) == pytest.approx(4.332697983158035, rel=1e-6)
+
+    t_cint = integrals.cint_kinetic(system1, b1, b2)
+    assert np.linalg.norm(t_cint - integrals.kinetic(system1, b1, b2)) < 1e-8
+
+    v_cint = integrals.cint_nuclear(system1, b1, b2)
+    assert np.linalg.norm(v_cint - integrals.nuclear(system1, b1, b2)) < 1e-8
+
+    aux = system1.auxiliary_basis
+    b_cint = integrals.cint_coulomb_3c(system1, aux, b1, b2)
+    b_int2 = integrals.coulomb_3c(system1, aux, b1, b2)
+    assert np.linalg.norm(b_cint - b_int2) < 1e-8
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_overlap_cross():
     xyz = """
     Li 0 0 0
