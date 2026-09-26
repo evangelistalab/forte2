@@ -11,13 +11,7 @@ from .natural_orbitals import NaturalOrbitals
 from .orbital_blocks import OrbitalBlockBuilder
 from .semicanonicalizer import Semicanonicalizer
 
-FinalOrbitals = Literal[
-    "original",
-    "semicanonical",
-    "natural",
-    "ibo",
-    "ibo_atomic",
-]
+FinalOrbitals = Literal["original", "semicanonical", "natural", "ibo", "ibo_atomic"]
 
 VALID_FINAL_ORBITALS = get_args(FinalOrbitals)
 
@@ -39,16 +33,12 @@ def make_final_orbitals(
 
     - ``"semicanonical"``: The active space is semicanonicalized.
     - ``"natural"``: The active space is rotated to make the active 1-RDM diagonal.
-    - ``"ibo"``: The active orbitals are localized as intrinsic bond orbitals
-      (IBOs) and ordered by their generalized-Fock diagonal elements.
-    - ``"ibo_atomic"``: The active orbitals are localized and aligned to the
-      global axis-oriented IAOs. Atom-local blocks are validated with a
-      rotation-invariant population matrix and maximally aligned to full-rank
-      projected IAO targets. Weak target populations are reported instead of
-      causing the entire block to be rejected. The final orbitals are ordered
-      by their generalized-Fock diagonal elements. Localization and ordering
-      are applied separately within each GAS partition, and both IBO modes are
-      available only in C1 symmetry.
+    - ``"ibo"``: Localize the active orbitals as intrinsic bond orbitals (IBOs).
+    - ``"ibo_atomic"``: Also align atom-local IBO sets with projected,
+      axis-oriented MINAO functions.
+
+    Both IBO modes operate independently within each GAS, order the result by
+    generalized-Fock energy, and require C1 symmetry.
 
     Parameters
     ----------
@@ -84,18 +74,7 @@ def make_final_orbitals(
 
     ibo_mode = mode in ("ibo", "ibo_atomic")
     if ibo_mode:
-        point_group = str(getattr(system, "point_group", "C1")).upper()
-        if point_group != "C1":
-            raise ValueError(
-                f"final_orbitals={mode!r} is only available in C1 symmetry, but the "
-                f"system uses point group {point_group!r}. Construct the System with "
-                "symmetry=False to disable point-group symmetry."
-            )
-        if getattr(system, "two_component", False) or np.iscomplexobj(C_contig):
-            raise NotImplementedError(
-                f"final_orbitals={mode!r} is currently implemented only for real, "
-                "nonrelativistic orbitals."
-            )
+        _validate_ibo_inputs(mode, system, C_contig)
 
     # Semicanonicalize every inactive subspace. The active space is included
     # only for semicanonical mode; natural and IBO modes define it separately.
@@ -111,52 +90,13 @@ def make_final_orbitals(
     C_final = semi.C_semican.copy()
 
     if ibo_mode:
-        # Rotations across GAS partitions change the variational space of a GAS
-        # calculation, so localize each active partition independently. Since
-        # do_active=False above, these columns are still the input active MOs.
-        orbital_blocks = OrbitalBlockBuilder(mo_space)
-        for block_number, active_block in enumerate(
-            orbital_blocks.active_blocks(relative_index=False), start=1
-        ):
-            if active_block.size < 2 and mode == "ibo":
-                continue
-            ibo = IBO(system, C_final[:, active_block])
-            logger.log_info1(
-                f"IBO localization succeeded for all {active_block.size} orbital(s) "
-                f"in GAS block {block_number}."
-            )
-            if mode == "ibo_atomic":
-                ibo_aligner = IBOAligner(ibo)
-                ibo_aligner.align_to_atomic_orbitals()
-                C_localized = ibo_aligner.C_ibo
-                U_localized = ibo_aligner.U_ibo
-            else:
-                C_localized = ibo.C_ibo
-                U_localized = ibo.U_ibo
-
-            # The active block was deliberately left unchanged by the
-            # semicanonicalizer. Transform its generalized Fock matrix with the
-            # complete IBO (and, where applicable, atomic-alignment) rotation,
-            # then put the localized orbitals in ascending-energy order. Keep
-            # each GAS separate so this permutation cannot change the GAS
-            # variational space.
-            fock_block = semi.fock_semican[np.ix_(active_block, active_block)]
-            fock_localized = U_localized.T.conj() @ fock_block @ U_localized
-            orbital_energies = np.diag(fock_localized).real
-            energy_order = np.argsort(orbital_energies, kind="stable")
-            C_final[:, active_block] = C_localized[:, energy_order]
-
-            if mode == "ibo_atomic":
-                # Report the final, energy-ordered orbitals. These indices are
-                # the user-facing MO slots after contiguous ordering is undone.
-                mo_indices = np.asarray(mo_space.orig_to_contig)[active_block] + 1
-                ibo_aligner.log_atomic_alignment_summary(
-                    block_number=block_number,
-                    order=energy_order,
-                    mo_indices=mo_indices,
-                    orbital_energies=orbital_energies[energy_order],
-                )
-        return C_final
+        return _make_ibo_orbitals(
+            mode,
+            system=system,
+            mo_space=mo_space,
+            C_semican=C_final,
+            fock_semican=semi.fock_semican,
+        )
 
     if mode == "natural":
         natural_orbital = NaturalOrbitals(mo_space, irrep_indices=irrep_indices)
@@ -164,6 +104,95 @@ def make_final_orbitals(
         C_final = natural_orbital.C_natural.copy()
 
     return C_final
+
+
+def _validate_ibo_inputs(mode: str, system, C_contig: NDArray) -> None:
+    """Reject representations that the real, C1-only IBO code cannot handle."""
+
+    point_group = str(getattr(system, "point_group", "C1")).upper()
+    if point_group != "C1":
+        raise ValueError(
+            f"final_orbitals={mode!r} is only available in C1 symmetry, but the "
+            f"system uses point group {point_group!r}. Construct the System with "
+            "symmetry=False to disable point-group symmetry."
+        )
+    if getattr(system, "two_component", False) or np.iscomplexobj(C_contig):
+        raise NotImplementedError(
+            f"final_orbitals={mode!r} is currently implemented only for real, "
+            "nonrelativistic orbitals."
+        )
+
+
+def _make_ibo_orbitals(
+    mode: str,
+    *,
+    system,
+    mo_space,
+    C_semican: NDArray,
+    fock_semican: NDArray,
+) -> NDArray:
+    """Localize and energy-order each active GAS independently."""
+
+    # ``C_semican`` is already a private copy made by ``make_final_orbitals``.
+    C_final = C_semican
+    orbital_partition = OrbitalBlockBuilder(mo_space)
+    for gas_number, gas_indices in enumerate(
+        orbital_partition.active_blocks(relative_index=False), start=1
+    ):
+        # A one-orbital GAS is already localized. ``ibo_atomic`` still
+        # processes it because the atomic alignment fixes its phase and label.
+        if gas_indices.size < 2 and mode == "ibo":
+            continue
+
+        C_localized, U_localized, aligner = _localize_ibo_set(
+            mode, system, C_final[:, gas_indices], gas_number
+        )
+        fock_block = fock_semican[np.ix_(gas_indices, gas_indices)]
+        energy_order, orbital_energies = _localized_orbital_energy_order(
+            fock_block, U_localized
+        )
+        C_final[:, gas_indices] = C_localized[:, energy_order]
+
+        if aligner is not None:
+            # These are the user-facing MO slots after contiguous ordering is
+            # undone. The energies and coefficients are already in final order.
+            mo_indices = np.asarray(mo_space.orig_to_contig)[gas_indices] + 1
+            aligner.log_atomic_alignment_summary(
+                gas_number=gas_number,
+                order=energy_order,
+                mo_indices=mo_indices,
+                orbital_energies=orbital_energies,
+            )
+    return C_final
+
+
+def _localize_ibo_set(
+    mode: str, system, C_active: NDArray, gas_number: int
+) -> tuple[NDArray, NDArray, IBOAligner | None]:
+    """Return localized coefficients, their rotation, and optional aligner."""
+
+    ibo = IBO(system, C_active)
+    logger.log_info1(
+        f"IBO localization succeeded for all {C_active.shape[1]} orbital(s) "
+        f"in GAS {gas_number}."
+    )
+    if mode == "ibo":
+        return ibo.C_ibo, ibo.U_ibo, None
+
+    aligner = IBOAligner(ibo)
+    aligner.align_to_atomic_orbitals()
+    return aligner.C_ibo, aligner.U_ibo, aligner
+
+
+def _localized_orbital_energy_order(
+    fock_block: NDArray, orbital_rotation: NDArray
+) -> tuple[NDArray, NDArray]:
+    """Return stable ascending order and Fock diagonals in that order."""
+
+    fock_localized = orbital_rotation.T.conj() @ fock_block @ orbital_rotation
+    orbital_energies = np.diag(fock_localized).real
+    order = np.argsort(orbital_energies, kind="stable")
+    return order, orbital_energies[order]
 
 
 def check_final_orbital_energy_invariance(

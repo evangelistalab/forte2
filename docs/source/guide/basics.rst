@@ -72,32 +72,20 @@ Final orbital representations
 -----------------------------
 
 Single-shot CI methods and ``MCOptimizer`` accept a ``final_orbitals`` option.
-In addition to ``"original"``, ``"semicanonical"``, and ``"natural"``, real
-nonrelativistic calculations can request ``final_orbitals="ibo"`` to localize
-only the active orbitals. ``final_orbitals="ibo_atomic"`` performs the same IBO
-localization and then aligns atom-local blocks with the corresponding
-canonical, axis-oriented IAOs. It uses a rotation-invariant atomic-population
-test and pivoted-QR target selection, and performs the maximal-overlap alignment
-whenever the projected target space is full-rank. Weak target populations are
-treated as confidence diagnostics instead of rejecting the entire atomic block.
-Each assigned orbital is labeled by its atomic MINAO target. All IBO modes order
-the final active orbitals by the diagonal elements of the generalized Fock
-matrix (ascending) within each GAS partition. For ``ibo_atomic``, a summary
-reports the assigned target, target population, and dominant IAO character of
-every final orbital. Orbitals that cannot be assigned to an atom-local canonical
-target are reported as unassigned but remain localized IBOs. Assignments in the
-aligner's native atom/MINAO order are available as
-``IBOAligner.atomic_orbital_assignments`` when using the post-processing class
-directly.
+In addition to ``"original"``, ``"semicanonical"``, and ``"natural"``, two
+options are available for localized orbitals: ``"ibo"`` localizes the active
+orbitals, while ``"ibo_atomic"`` also aligns atom-local IBOs with projected,
+axis-oriented MINAO functions. IAO populations provide the atom-locality test;
+the MINAO functions provide the atomic targets and labels. Its summary reports
+each orbital's assigned target and dominant IAO character; weak assignments are
+warnings and do not undo IBO localization.
 
-A block can span different atomic shells: a full valence block, for example,
-is aligned jointly before this final ordering. This applies to all angular
-momenta; d functions use Forte2's real-spherical convention. The alignment
-uses the molecule's input coordinate frame.
-
-All IBO modes semicanonicalize the inactive orbital subspaces and localize
-separate GAS partitions independently. They are available only when the system
-runs in C1 symmetry; use ``System(..., symmetry=False)``.
+Both modes operate independently within each GAS, semicanonicalize inactive
+orbitals, and order the final active orbitals by generalized-Fock energy. They
+support all angular momenta, use the molecule's input coordinate frame, and
+require C1 symmetry. Use ``System(..., symmetry=False)`` to disable point-group
+symmetry. Direct users of ``IBOAligner`` can inspect
+``atomic_orbital_assignments`` in atom/MINAO order.
 
 Parallelism
 -----------

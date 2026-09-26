@@ -21,6 +21,9 @@ class IAO:
     ----------
     C_iao : NDArray
         The orthonormalized IAO coefficients, shape (nbf, nminao).
+    C_minao_projected : NDArray
+        Coefficients of the MINAO functions projected into the working AO
+        basis, shape (nbf, nminao).
 
     Notes
     -----
@@ -68,6 +71,8 @@ class IAO:
 
         # projector onto the large basis
         P12 = S1_inv @ self.S12
+        # Retain the projected MINAO functions for optional post-IBO alignment.
+        self.C_minao_projected = P12
         # projector onto the minao basis
         P21 = S2_inv @ self.S12.T.conj()
         # downproject and upproject the occupied MOs to get a set of depolarized MOs
@@ -192,23 +197,17 @@ class IBO(IAO):
                         Bij += 4 * Qij * (Qii**3 - Qjj**3)
                     grad += Bij**2
                     phi_ij = 0.25 * np.arctan2(Bij, -Aij)
-                    i_new = (
-                        np.cos(phi_ij) * C_occ_iao[:, i]
-                        + np.sin(phi_ij) * C_occ_iao[:, j]
+                    cosine = np.cos(phi_ij)
+                    sine = np.sin(phi_ij)
+                    rotation = np.array(
+                        [[cosine, -sine], [sine, cosine]],
+                        dtype=self.C_occ.dtype,
                     )
-                    j_new = (
-                        -np.sin(phi_ij) * C_occ_iao[:, i]
-                        + np.cos(phi_ij) * C_occ_iao[:, j]
-                    )
-                    C_occ_iao[:, i] = i_new.copy()
-                    C_occ_iao[:, j] = j_new.copy()
-
-                    # Accumulate the same Jacobi rotation in the input orbital
-                    # basis so the final IBOs remain exactly in that subspace.
-                    i_new = np.cos(phi_ij) * U_ibo[:, i] + np.sin(phi_ij) * U_ibo[:, j]
-                    j_new = -np.sin(phi_ij) * U_ibo[:, i] + np.cos(phi_ij) * U_ibo[:, j]
-                    U_ibo[:, i] = i_new.copy()
-                    U_ibo[:, j] = j_new.copy()
+                    pair = [i, j]
+                    C_occ_iao[:, pair] = C_occ_iao[:, pair] @ rotation
+                    # Accumulate exactly the same Jacobi rotation in the input
+                    # orbital basis so the IBOs remain in the input subspace.
+                    U_ibo[:, pair] = U_ibo[:, pair] @ rotation
             if np.sqrt(grad) < self.g_tol:
                 logger.log_info1(f"\nIBO converged after {ibo_iter} iterations.")
                 break

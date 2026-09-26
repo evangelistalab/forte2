@@ -53,17 +53,14 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
         - "natural": Same as semicanonical, but the active orbitals are natural orbitals
           and diagonalize the spin- and state-averaged 1-RDM within the CAS
           subspace or within each of the GAS subspaces.
-        - "ibo": Localize only the active orbitals as intrinsic bond orbitals.
-          Inactive orbitals are semicanonical, GAS blocks are preserved, and
-          localized orbitals are ordered by generalized-Fock energy within each
-          GAS. This option is available only in C1 symmetry.
-        - "ibo_atomic": As ``"ibo"``, followed by alignment of atom-local
-          blocks with canonical axis-oriented IAOs. Atom locality is validated
-          for the complete rotation-invariant subspace. Full-rank projected IAO
-          targets are maximally aligned even when their individual populations
-          are weak, in which case confidence warnings are reported. Final
-          orbitals are ordered by generalized-Fock energy within each GAS
-          partition.
+        - "ibo": Localize the active orbitals as intrinsic bond orbitals.
+        - "ibo_atomic": Also align atom-local IBO sets with projected,
+          axis-oriented MINAO functions.
+          Weak assignments are reported as confidence warnings.
+
+          Both IBO modes operate independently within each GAS, semicanonicalize
+          inactive orbitals, order the result by generalized-Fock energy, and
+          require C1 symmetry.
         - "original": The orbitals are left in the original basis after the optimization.
           This option is only for debugging purposes and should generally be avoided
           as the active orbitals will not be uniquely defined and may not be suitable
