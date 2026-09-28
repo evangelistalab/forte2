@@ -22,6 +22,7 @@ from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
 from .ci import CI, CISolver, RelCISolver
 from .sci import SelectedCISolver, RelSelectedCISolver
+from .dmrg import DMRGSolver, RelDMRGSolver
 from .x2c import x2c
 from .orbitals import (
     AVAS,

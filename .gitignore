@@ -84,3 +84,6 @@ vmd_mo_script.vmd
 # claude-related files
 .claude
 CLAUDE.md
+
+# Vendored block2 build (USE_BLOCK2=ON)
+forte2/_block2/

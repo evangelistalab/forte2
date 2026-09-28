@@ -84,7 +84,8 @@ jobs:
         ccache --zero-stats
         pip install --no-build-isolation -ve . \
           --config-settings=cmake.define.CMAKE_C_COMPILER_LAUNCHER=ccache \
-          --config-settings=cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=ccache
+          --config-settings=cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          --config-settings=cmake.define.USE_BLOCK2=ON
         ccache --show-stats
         pip list
 

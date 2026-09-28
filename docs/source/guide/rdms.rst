@@ -107,6 +107,16 @@ belong to different states are more restricted.
      - ``so``
      - All orders
      - Not supported
+   * - ``DMRGSolver``
+     - 1, 2, 3
+     - ``sf``
+     - All orders
+     - Not supported
+   * - ``RelDMRGSolver``
+     - 1, 2, 3
+     - ``so``
+     - All orders
+     - Not supported
 
 A transition RDM between two states also requires the two states to have the same number of alpha
 and beta electrons.
@@ -137,6 +147,12 @@ transition counterpart.
      - ``sf``
    * - ``RelSelectedCISolver``
      - 2
+     - ``so``
+   * - ``DMRGSolver``
+     - 2, 3
+     - ``sf``
+   * - ``RelDMRGSolver``
+     - 2, 3
      - ``so``
 
 To get a state-averaged cumulant, call ``make_average_cumulant(order)`` instead. Cumulants are

@@ -45,6 +45,10 @@ cmake.build-type = "Release"
 # or: CMAKE_ARGS="-DUSE_LIBCINT=ON" pip install .
 USE_LIBCINT = "ON"
 
+# DMRG support is opt-in: block2 is fetched and built from source, which takes
+# ~10-30 min. See USE_BLOCK2 in forte2/CMakeLists.txt.
+#   pip install . --config-settings=cmake.define.USE_BLOCK2=ON
+
 # Pytest configuration
 [tool.pytest.ini_options]
 minversion = "6.0"
