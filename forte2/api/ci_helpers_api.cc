@@ -18,6 +18,7 @@
 
 // Must be at global scope:
 NB_MAKE_OPAQUE(std::vector<forte2::Determinant>);
+NB_MAKE_OPAQUE(std::vector<forte2::SpinorDeterminant>);
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -52,6 +53,7 @@ void export_ci_helpers_api(nb::module_& m) {
 namespace {
 void export_ci_strings_api(nb::module_& sub_m) {
     nb::bind_vector<std::vector<forte2::Determinant>>(sub_m, "DeterminantVector");
+    nb::bind_vector<std::vector<forte2::SpinorDeterminant>>(sub_m, "SpinorDeterminantVector");
 
     nb::class_<CIStrings>(sub_m, "CIStrings")
         .def(
@@ -83,7 +85,9 @@ void export_ci_strings_api(nb::module_& sub_m) {
         .def_prop_ro("gas_occupations", &CIStrings::gas_occupations)
         .def("determinant", &CIStrings::determinant, "address"_a)
         .def("determinant_index", &CIStrings::determinant_address, "d"_a)
-        .def("make_determinants", &CIStrings::make_determinants);
+        .def("make_determinants", &CIStrings::make_determinants)
+        .def("make_spinor_determinants", &CIStrings::make_spinor_determinants,
+             "The determinants with alpha orbital p read as spinor p (requires nb == 0)");
 }
 
 void export_ci_sigma_builder_api(nb::module_& sub_m) {
@@ -274,15 +278,12 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Return the total selection time");
 }
 void export_rel_sci_helper_api(nb::module_& sub_m) {
-    // Two-component (relativistic) selected CI helper. Mirrors SelectedCIHelper but with complex
-    // Hermitian integrals and CI coefficients, and without the beta / spin machinery (nb == 0).
-    // Only the alpha 1-/2-RDMs are exposed (the beta / alpha-beta / spin-free variants are absent
-    // in the spinor basis).
+    // SelectedCIHelper on SpinorDeterminants, with complex Hermitian integrals and CI coefficients
     nb::class_<RelSelectedCIHelper>(sub_m, "RelSelectedCIHelper")
-        .def(nb::init<size_t, const std::vector<Determinant>&, np_matrix_complex&, double,
+        .def(nb::init<size_t, const std::vector<SpinorDeterminant>&, np_matrix_complex&, double,
                       np_matrix_complex&, np_tensor4_complex&, int, const std::string&,
                       const std::vector<size_t>&, const std::vector<size_t>&>(),
-             "norb"_a, "dets"_a, "c"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
+             "nspinor"_a, "dets"_a, "c"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
              "screening_criterion"_a = "hbci", "frozen_creation"_a = std::vector<size_t>{},
              "frozen_annihilation"_a = std::vector<size_t>{},
              "Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, "

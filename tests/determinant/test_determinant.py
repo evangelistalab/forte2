@@ -1,4 +1,7 @@
-from forte2.lib.det import Determinant
+import numpy as np
+import pytest
+
+from forte2.lib.det import Determinant, RelSlaterRules, SpinorDeterminant
 
 PARITY_ALPHA_OCC = (0, 1, 5, 17, 62, 63)
 PARITY_BETA_OCC = (0, 3, 11, 31, 62, 63)
@@ -323,3 +326,32 @@ def test_excitation_connection():
     assert conn[1] == [4, 9]  # alfa particle
     assert conn[2] == [1, 2]  # beta hole
     assert conn[3] == [7, 9]  # beta particle
+
+
+def test_spinor_determinant():
+    occ = (0, 1, 5, 63, 64, 70, 127)
+    s = SpinorDeterminant.zero()
+    for p in occ:
+        s.set(p, True)
+    assert s == SpinorDeterminant("".join("1" if p in occ else "0" for p in range(128)))
+    assert s.count() == len(occ)
+    assert repr(SpinorDeterminant("0110")) == "|011>"
+
+    # signs follow bit order across the two storage words
+    for p in (2, 63, 64, 65, 126):
+        sign = (-1) ** sum(q < p for q in occ)
+        assert s.slater_sign(p) == sign
+        assert SpinorDeterminant(s).create(p) == (0 if p in occ else sign)
+        assert SpinorDeterminant(s).destroy(p) == (sign if p in occ else 0)
+
+    assert SpinorDeterminant.from_determinant(s.to_determinant()) == s
+
+    with pytest.raises(TypeError):
+        Determinant(s)
+    rules = RelSlaterRules(
+        2, 0.0, np.zeros((2, 2), complex), np.zeros((2,) * 4, complex)
+    )
+    with pytest.raises(TypeError):
+        rules.energy(Determinant.zero())
+    with pytest.raises(IndexError):
+        s.set(128, True)

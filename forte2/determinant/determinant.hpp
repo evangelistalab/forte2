@@ -70,6 +70,10 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @brief Constructor from packed occupation storage.
     DeterminantImpl(const BitArray<N>& ba) : BitArray<N>(ba) {}
 
+    /// Explicitly disallow conversion from Strings,
+    /// including spinor determinants, into determinants.
+    DeterminantImpl(const StringImpl<N>&) = delete;
+
     /// @brief Return a determinant with all occupations set to zero (unoccupied).
     /// @return a DeterminantImpl with all occupations set to zero
     static DeterminantImpl zero() {
@@ -221,14 +225,6 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
             },
             storage_words_per_spin, nwords_);
     }
-
-    /// @brief Apply a callable to each occupied orbital (alpha and beta), in ascending orbital
-    /// order. The callable may return either void or a bool-like value. Void callables always
-    /// continue. Bool callables continue when they return true and stop early when they return
-    /// false. The callable receives orbital indices in the spatial-orbital range [0, 2 * norb()).
-    /// @param func a callable that accepts the orbital index as a size_t.
-    /// @return true if all occupied orbitals were visited, false if the callback stopped
-    template <typename Func> bool for_each_occ(Func&& func) const { return for_each_set_bit(func); }
 
     /// @brief Find all occupied alpha orbitals
     /// @return a vector of occupied alpha orbital indices

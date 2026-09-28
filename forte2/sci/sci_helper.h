@@ -39,12 +39,12 @@ enum class PT2Regularizer { None, Shift, DSRG };
 /// @param s The string to assign
 /// @param num_batches The number of batches (must be > 0)
 /// @return The batch index in [0, num_batches)
-inline size_t batch_of(const String& s, size_t num_batches) {
+template <size_t N> inline size_t batch_of(const StringImpl<N>& s, size_t num_batches) {
     // the hash returns just returns the string for Norb == 64
     // so hash % num_batches directly would distribute determinants
     // by the occupation of the lowest few orbitals, leading to load imbalance.
     // Add a pass through a mixer to send determinants equally to all batches.
-    uint64_t x = splitmix64(static_cast<uint64_t>(String::Hash()(s)));
+    uint64_t x = splitmix64(static_cast<uint64_t>(typename StringImpl<N>::Hash()(s)));
     return static_cast<size_t>(x % num_batches);
 }
 

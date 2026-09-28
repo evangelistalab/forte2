@@ -2,7 +2,7 @@ from dataclasses import dataclass, field, fields
 from abc import ABC
 from typing import Literal, get_args, get_type_hints, get_origin
 
-from forte2.lib.det import Determinant
+from forte2.lib.det import Determinant, SpinorDeterminant
 
 
 @dataclass
@@ -211,14 +211,15 @@ class SelectedCIParams(ParamsBase):
         to override it.
     do_spin_penalty: bool, optional, default=True
         Whether to apply a spin penalty to the Hamiltonian to enforce correct spin symmetry.
-    guess_dets: list[Determinant], optional
+    guess_dets: list[Determinant] | list[SpinorDeterminant], optional
         A list of determinants to use as the initial guess for the CI wavefunction.
+        Two-component solvers take `SpinorDeterminant`.
         Note that this set will be further filtered by `DavidsonLiuParams.ndets_per_guess` using the determinantal energies,
         before finally being enlarged to a spin-complete set.
         Therefore, it is not recommended to provide energetically disjoint guess determinants, as the higher energy ones will likely be filtered out.
         Use `pinned_guess_dets` to ensure certain determinants are included in the guess without relying on their energies.
         If not provided, the guess determinants will be generated based on the guess_occ_window and guess_vir_window parameters.
-    pinned_guess_dets: list[Determinant], optional
+    pinned_guess_dets: list[Determinant] | list[SpinorDeterminant], optional
         A list of determinants that are pinned to the initial guess, ensuring they are included in the variational space.
     frozen_creation: list[int], optional
         A list of orbital indices for which creation operators are frozen (i.e., not allowed to be occupied in the selected determinants).
@@ -258,8 +259,12 @@ class SelectedCIParams(ParamsBase):
     ci_algorithm: Literal["iterative", "exact"] = "iterative"
     num_batches_per_thread: int = 4
     do_spin_penalty: bool = True
-    guess_dets: list[Determinant] = field(default_factory=list)
-    pinned_guess_dets: list[Determinant] = field(default_factory=list)
+    guess_dets: list[Determinant] | list[SpinorDeterminant] = field(
+        default_factory=list
+    )
+    pinned_guess_dets: list[Determinant] | list[SpinorDeterminant] = field(
+        default_factory=list
+    )
     frozen_creation: list[int] = field(default_factory=list)
     frozen_annihilation: list[int] = field(default_factory=list)
     screening_criterion: Literal["hbci", "ehbci"] = "hbci"

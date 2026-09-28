@@ -7,6 +7,7 @@ import numpy as np
 
 from .active_space_solver import ActiveSpaceSolver, RelActiveSpaceSolver
 from forte2.helpers import logger
+from forte2.lib.det import SpinorDeterminant
 
 
 @dataclass
@@ -237,6 +238,9 @@ class CIBase(ActiveSpaceSolver):
             self.core_indices,
         )
 
+    def _check_active_capacity(self):
+        """Hook for solvers with a limit on the number of active orbitals."""
+
     def _extra_worker_kwargs(self, index, state):
         """Hook for per-state worker kwargs beyond the shared ones."""
         return {}
@@ -245,6 +249,7 @@ class CIBase(ActiveSpaceSolver):
         super()._startup()
 
         self.norb = self.mo_space.nactv
+        self._check_active_capacity()
         # no distinction between core and frozen core in the CI solver
         self.core_indices = (
             self.mo_space.frozen_core_indices + self.mo_space.core_indices
@@ -538,6 +543,15 @@ class RelCIBase(RelActiveSpaceSolver, CIBase):
     """
     Two-component counterpart of :class:`CIBase`.
     """
+    # RelCI: overriden to 64, RelSelectedCI: 128
+    _max_nspinor: ClassVar[int] = SpinorDeterminant.maxnspinor
+
+    def _check_active_capacity(self):
+        if self.norb > self._max_nspinor:
+            raise ValueError(
+                f"{type(self).__name__} supports at most {self._max_nspinor} active "
+                f"spinors, got {self.norb}."
+            )
 
     def _startup(self):
         super()._startup()

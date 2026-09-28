@@ -129,6 +129,10 @@ class CIStrings {
     /// @return the list of determinants
     std::vector<Determinant> make_determinants() const;
 
+    /// @return the list of determinants, with alpha orbital p read as spinor p
+    /// @throws std::runtime_error if nb != 0
+    std::vector<SpinorDeterminant> make_spinor_determinants() const;
+
     const VOListElement& get_alpha_vo_list(int class_I, int class_J) const;
     const VOListElement& get_beta_vo_list(int class_I, int class_J) const;
 
