@@ -11,8 +11,43 @@ from forte2.props import (
     rmp2_mpq_onthefly_no,
     ump2_mpq_onthefly_no,
 )
+from forte2.props.mutual_correlation import _block_natural_orbital_rotation
 from forte2.helpers.comparisons import approx
 from forte2.base_classes import DavidsonLiuParams
+
+
+def test_block_natural_orbital_rotation_procrustes_gauge(monkeypatch):
+    """Align arbitrary degenerate eigenvectors to canonical-MO axes."""
+    theta_occ = 0.37
+    theta_vir = -0.61
+    rotations = iter(
+        (
+            (
+                np.array([1.5, 1.5]),
+                np.array(
+                    [
+                        [np.cos(theta_occ), -np.sin(theta_occ)],
+                        [np.sin(theta_occ), np.cos(theta_occ)],
+                    ]
+                ),
+            ),
+            (
+                np.array([0.2, 0.2]),
+                np.array(
+                    [
+                        [np.cos(theta_vir), -np.sin(theta_vir)],
+                        [np.sin(theta_vir), np.cos(theta_vir)],
+                    ]
+                ),
+            ),
+        )
+    )
+    monkeypatch.setattr(np.linalg, "eigh", lambda _: next(rotations))
+
+    U, occupations = _block_natural_orbital_rotation(np.eye(4), nocc=2)
+
+    assert U == approx(np.eye(4))
+    assert occupations == approx(np.array([1.5, 1.5, 0.2, 0.2]))
 
 
 def test_significant_score_selection_completes_degenerate_groups():
