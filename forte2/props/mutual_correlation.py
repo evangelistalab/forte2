@@ -8,22 +8,37 @@ from forte2.lib import cpp_helpers
 
 
 def _block_natural_orbital_rotation(gamma1, nocc):
-    """Diagonalize occupied and virtual 1-RDM blocks independently."""
+    """Diagonalize occupied and virtual 1-RDM blocks independently.
+
+    Within each occupation-degenerate manifold, choose the unitary rotation
+    closest to the corresponding canonical-MO coordinate axes.  This fixes
+    arbitrary eigenvector rotations and signs relative to the input canonical
+    orbitals without mixing the occupied and virtual spaces.
+    """
     gamma1 = np.asarray(gamma1)
     gamma1 = 0.5 * (gamma1 + gamma1.T.conj())
     nmo = gamma1.shape[0]
 
-    occ_vals, Uo = np.linalg.eigh(gamma1[:nocc, :nocc])
-    vir_vals, Uv = np.linalg.eigh(gamma1[nocc:, nocc:])
-    occ_order = np.argsort(occ_vals)[::-1]
-    vir_order = np.argsort(vir_vals)[::-1]
-
     U = np.eye(nmo, dtype=gamma1.dtype)
-    U[:nocc, :nocc] = Uo[:, occ_order]
-    U[nocc:, nocc:] = Uv[:, vir_order]
-    occupations = np.concatenate(
-        (occ_vals[occ_order].real, vir_vals[vir_order].real)
-    )
+    occupations = np.empty(nmo)
+    for space in (slice(0, nocc), slice(nocc, nmo)):
+        values, vectors = np.linalg.eigh(gamma1[space, space])
+        order = np.argsort(values)[::-1]
+        values, vectors = values[order], vectors[:, order]
+
+        breaks = np.flatnonzero(
+            ~np.isclose(values[1:], values[:-1], atol=1e-10, rtol=1e-8)
+        ) + 1
+        canonical_axes = np.eye(len(values), dtype=vectors.dtype)
+        for group in np.split(np.arange(len(values)), breaks):
+            left, _, right_h = np.linalg.svd(
+                vectors[:, group].conj().T @ canonical_axes[:, group]
+            )
+            vectors[:, group] = vectors[:, group] @ left @ right_h
+
+        U[space, space] = vectors
+        occupations[space] = values.real
+
     return U, occupations
 
 
