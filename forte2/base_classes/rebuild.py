@@ -1,8 +1,9 @@
-from dataclasses import fields
-from types import SimpleNamespace
+from dataclasses import dataclass, fields
 
-from forte2.orbitals.orbital_overlap import project_occupied_orbitals
+from forte2.helpers import logger
+from forte2.orbitals.orbital_overlap import transfer_orbitals
 from .method import Method
+from .mo import MO
 
 
 def list_method_chain(method):
@@ -111,26 +112,49 @@ def rebind_method_chain(method, new_system):
     return method
 
 
+@dataclass(frozen=True)
+class OrbitalSnapshot:
+    """
+    SCF orbitals captured from a method chain, for seeding another chain.
+
+    Attributes
+    ----------
+    system : System
+        The system whose AO basis the orbitals are expressed in.
+    mos : MO
+        A copy of the SCF orbitals.
+    scf_class : type
+        The class of the SCF method that produced the orbitals.
+    """
+
+    system: object
+    mos: MO
+    scf_class: type
+
+
 def snapshot_orbitals(method):
     """
-    Capture a method's current system and MO coefficients.
+    Capture the SCF orbitals of a method chain.
+
+    The snapshot is a copy, so it stays valid after the chain is rebound to
+    another geometry.
 
     Parameters
     ----------
     method : object
-        A method exposing `.system` and `.mos`.
+        The last stage of the chain.
 
     Returns
     -------
-    object | None
-        A snapshot usable anywhere a source method is expected (it exposes
-        `.system` and `.mos.C`, matching `project_scf_guess`/
-        `project_occupied_orbitals`), or None if `method` has no orbitals yet.
+    OrbitalSnapshot | None
+        The snapshot, or None if the chain's SCF has not been run.
     """
-    mos = getattr(method, "mos", None)
-    if mos is None or mos.C is None:
+    root = list_method_chain(method)[0]
+    if not root.executed:
         return None
-    return SimpleNamespace(system=method.system, mos=mos.copy())
+    return OrbitalSnapshot(
+        system=root.system, mos=root.mos.copy(), scf_class=type(root)
+    )
 
 
 def _fresh_copy(obj):
@@ -149,26 +173,35 @@ def _fresh_value(value):
     return value
 
 
-def project_scf_guess(source_method, method):
+def seed_scf_guess(snapshot, method):
     """
-    Seed a rebuilt chain with orbitals projected from an already-converged one.
-    The guess is installed on the SCF method of the chain.
+    Seed the SCF of a method chain with orbitals transferred from a snapshot.
 
     Parameters
     ----------
-    source_method : object
-        A converged method supplying the orbitals to project.
+    snapshot : OrbitalSnapshot
+        Orbitals captured with `snapshot_orbitals`.
     method : object
-        The last stage of the chain to seed. Its root is modified in place.
+        The last stage of the chain to seed. Its SCF is modified in place.
 
     Returns
     -------
     bool
-        True if a guess was installed, False if the projection does not apply.
+        True if a guess was installed, False if the SCF keeps its default guess.
     """
     root = list_method_chain(method)[0]
-    projected = project_occupied_orbitals(source_method, root)
-    if projected is None:
+    if type(root) is not snapshot.scf_class:
+        logger.log_warning(
+            f"Cannot seed {type(root).__name__} with {snapshot.scf_class.__name__} "
+            "orbitals; it will start from its default guess."
+        )
         return False
-    root.C = projected
+
+    guess = []
+    for C in snapshot.mos.C:
+        C_new = transfer_orbitals(C, snapshot.system, root.system)
+        if C_new is None:
+            return False
+        guess.append(C_new)
+    root.C = guess
     return True

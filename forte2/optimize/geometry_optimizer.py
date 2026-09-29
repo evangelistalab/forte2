@@ -7,7 +7,7 @@ from forte2.base_classes import Method
 from forte2.base_classes.rebuild import (
     rebind_method_chain,
     rebuild_method_chain,
-    project_scf_guess,
+    seed_scf_guess,
     snapshot_orbitals,
 )
 from forte2.data import Z_TO_ATOM_SYMBOL
@@ -39,9 +39,8 @@ class GeometryOptimizer(Method):
     max_step : float, optional, default=1.0
         Maximum line-search step length.
     project_orbitals : bool, optional, default=True
-        If True, project the occupied orbitals from the previous evaluated
-        geometry into the AO basis of the next geometry and use them as the SCF
-        initial guess.
+        If True, seed the SCF at each new geometry with the SCF orbitals of the
+        previous one, which keeps the optimization on the same SCF solution.
     lbfgs_kwargs : dict, optional
         Additional keyword arguments forwarded to ``LBFGS``.
     """
@@ -305,19 +304,19 @@ class _GeometryObjective:
                 self._record_progress()
             return
 
-        # Snapshot the projection source before method_builder runs: once the
+        # Snapshot the previous orbitals before method_builder runs: once the
         # chain is reused in place (rebind_method_chain), self.previous_method
         # and the about-to-be-rebuilt self.method are the same live object, so
         # its orbitals must be captured now, not read back off it afterwards.
-        projection_source = None
+        previous_orbitals = None
         if self.project_orbitals and self.previous_method is not None:
-            projection_source = snapshot_orbitals(self.previous_method)
+            previous_orbitals = snapshot_orbitals(self.previous_method)
 
         self.x = np.asarray(x, dtype=float).copy()
         self.system = self.template_system.with_geometry(self.x.reshape(-1, 3))
         self.method = self.method_builder(self.system)
-        if projection_source is not None:
-            project_scf_guess(projection_source, self.method)
+        if previous_orbitals is not None:
+            seed_scf_guess(previous_orbitals, self.method)
         if not self.method.executed:
             self.method.run()
         self.E = _method_energy(self.method, self.root)

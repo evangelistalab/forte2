@@ -1,8 +1,7 @@
 import numpy as np
-import scipy as sp
 
 import forte2.integrals as integrals
-from forte2.helpers import block_diag_2x2
+from forte2.helpers import block_diag_2x2, logger
 
 
 def mo_overlap(C_a, system_a, C_b, system_b=None):
@@ -37,130 +36,78 @@ def mo_overlap(C_a, system_a, C_b, system_b=None):
     return C_a.T.conj() @ S @ C_b
 
 
-def project_orbitals(C_source, system_source, system_target, nocc):
+def transfer_orbitals(C_source, system_source, system_target):
     r"""
-    Project `nocc` occupied orbitals from `system_source`'s basis into
-    `system_target`'s basis, completing the result to a full orthonormal MO
-    coefficient matrix.
+    Express orbitals from `system_source` in the AO basis of `system_target`.
 
-    The occupied block is built from the cross-basis overlap,
+    If both systems carry the same shells on the same atoms, as with
+    ``System.with_geometry``, the AOs move with their atoms and the coefficients
+    carry over unchanged. Otherwise, the orbitals are projected onto the target
+    basis through the cross-basis overlap. In both cases, the result is then
+    orthonormalized with the symmetric (Löwdin) procedure, which changes the
+    orbitals as little as possible and keeps their order.
 
-    ``Q_occ = X_target^H S(target, source) C_occ_source``,
-
-    where ``X_target`` is the canonical orthogonalizer for `system_target`'s AO
-    basis. The projected occupied subspace is orthonormalized, then completed
-    with an orthonormal virtual complement, so the result is a valid full MO
-    guess.
+    If the target has fewer orbitals than the source, the trailing source
+    orbitals are dropped. If it has more, the set is completed with an
+    orthonormal complement.
 
     Parameters
     ----------
     C_source : NDArray
-        Source MO coefficients, shape ``(nbf_source, n_source)``.
+        Source coefficients, shape ``(nbf_source, n_source)``.
     system_source : System
         The system whose AO basis `C_source` is expressed in.
     system_target : System
-        The system whose AO basis the projected orbitals should be expressed in.
-    nocc : int
-        Number of occupied orbitals to project from `C_source`.
+        The system whose AO basis the orbitals are transferred to.
 
     Returns
     -------
     NDArray | None
-        Projected coefficients in `system_target`'s AO basis, shape
-        ``(nbf_target, nmo_target)``, or None if the projection is numerically
-        singular (occupied subspace not resolvable, or too small a virtual
-        complement).
+        Orthonormal coefficients in `system_target`'s AO basis, shape
+        ``(nbf_target, nmo_target)``, or None if the target basis cannot
+        represent the source orbitals.
     """
-    X_target = system_target.get_Xorth()
-    if nocc == 0:
-        return X_target.copy()
-    if nocc > C_source.shape[1] or nocc > X_target.shape[1]:
-        return None
-
-    Q_occ_raw = mo_overlap(X_target, system_target, C_source[:, :nocc], system_source)
-    svals = np.linalg.svd(Q_occ_raw, compute_uv=False)
-    if len(svals) < nocc or svals[-1] < 1.0e-8:
-        return None
-
-    Q_occ, _ = np.linalg.qr(Q_occ_raw, mode="reduced")
-    Q_occ = Q_occ[:, :nocc]
-
-    nvirt = X_target.shape[1] - nocc
-    if nvirt > 0:
-        Q_virt = sp.linalg.null_space(Q_occ.T.conj())
-        if Q_virt.shape[1] < nvirt:
-            return None
-        Q = np.hstack((Q_occ, Q_virt[:, :nvirt]))
+    X = system_target.get_Xorth()
+    n = min(C_source.shape[1], X.shape[1])
+    if _same_basis_layout(system_source, system_target):
+        # transported: essentially C1 = C0 [C0^H S1 C0]^{-1/2}
+        Q = mo_overlap(X, system_target, C_source[:, :n])
     else:
-        Q = Q_occ
+        # projected: essentially C1 = P [P^H S1 P]^{-1/2}, with P = S1^{-1} S10 C0
+        Q = mo_overlap(X, system_target, C_source[:, :n], system_source)
 
-    return X_target @ Q
+    # Q = U s Vh = (U Vh) (V s Vh) = (U Vh) (Q^H Q)^{1/2}
+    # therefore U Vh = Q (Q^H Q)^{-1/2},
+    # where (Q^H Q)^{-1/2} is the symmetric/Lowdin orthogonalizer of Q
+    # Therefore, X U Vh = X Q (Q^H Q)^{-1/2}
 
-
-def project_occupied_orbitals(source_method, method):
-    """
-    Project occupied orbitals from ``source_method`` into ``method.system``.
-
-    The projection uses the cross-overlap between the new and old AO bases:
-
-    ``Q_occ = X_new^T S(new, old) C_occ_old``,
-
-    where ``X_new`` is the canonical orthogonalizer for the new AO basis. The
-    projected occupied subspace is orthonormalized, then completed with an
-    orthonormal virtual complement so the SCF object receives a full MO guess.
-
-    Parameters
-    ----------
-    source_method : object
-        A converged method whose orbitals are used as the source.
-    method : object
-        The method whose system defines the target AO basis.
-
-    Returns
-    -------
-    list[NDArray] | None
-        The projected MO coefficients, or None if the projection does not apply
-        (mismatched representations between `source_method` and `method`,
-        unsupported references, or a numerically singular projection).
-    """
-    if not _can_project_orbitals(source_method, method):
+    # with transported orbitals, Q = X^H S1 C0, so
+    #   X Q = X X^H S1 C0 = C0, and Q^H Q = C0^H S1 C0
+    # with projected orbitals, Q = X^H S10 C0, so
+    #   X Q = S1^{-1} S10 C0, and Q^H Q = C0^H S01 S1^{-1} S10 C0
+    U, s, Vh = np.linalg.svd(Q)
+    if s[-1] < 1.0e-8:
+        logger.log_warning(
+            "Cannot transfer orbitals: the target basis does not represent them "
+            f"(smallest singular value {s[-1]:.2e})."
+        )
         return None
-
-    source_C = source_method.mos.C
-    occupied_counts = _occupied_counts(method)
-    if occupied_counts is None or len(occupied_counts) != len(source_C):
-        return None
-
-    projected = []
-    for C_old, nocc in zip(source_C, occupied_counts):
-        C_new = project_orbitals(C_old, source_method.system, method.system, nocc)
-        if C_new is None:
-            return None
-        projected.append(C_new)
-
-    return projected
+    return X @ np.hstack((U[:, :n] @ Vh, U[:, n:]))
 
 
-def _can_project_orbitals(source_method, target_method):
-    if getattr(source_method, "mos", None) is None:
+def _same_basis_layout(system_a, system_b):
+    # Same shells on the same atoms, in the same order; only the centers may differ.
+    if not np.array_equal(system_a.atomic_charges, system_b.atomic_charges):
         return False
-    # check that source can provide the orbital shape that target wants
-    if source_method.mos.spinorbital != getattr(target_method, "two_component", False):
+    basis_a, basis_b = system_a.basis, system_b.basis
+    if basis_a.nshells != basis_b.nshells:
         return False
-    if len(source_method.mos.C) not in [1, 2]:
+    if basis_a.center_first_and_last_shell != basis_b.center_first_and_last_shell:
         return False
+    for i in range(basis_a.nshells):
+        a, b = basis_a[i], basis_b[i]
+        if a.l != b.l or a.is_pure != b.is_pure:
+            return False
+        if a.exponents != b.exponents or a.coeff != b.coeff:
+            return False
     return True
-
-
-def _occupied_counts(method):
-    method_name = (
-        method._scf_type() if hasattr(method, "_scf_type") else type(method).__name__
-    )
-    if method_name == "GHF":
-        return [method.nel] if hasattr(method, "nel") else None
-    if not hasattr(method, "na") or not hasattr(method, "nb"):
-        return None
-    if method_name in ["UHF", "CUHF"]:
-        return [method.na, method.nb]
-    # handles the RHF/ROHF cases
-    return [max(method.na, method.nb)]

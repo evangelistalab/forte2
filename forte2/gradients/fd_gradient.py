@@ -10,7 +10,8 @@ from forte2.base_classes.rebuild import (
     list_method_chain,
     rebind_method_chain,
     rebuild_method_chain,
-    project_scf_guess,
+    seed_scf_guess,
+    snapshot_orbitals,
 )
 from forte2.helpers import logger
 from .fd_gradient_helper import central_stencil, finite_difference
@@ -51,8 +52,8 @@ class FDGradient(Method):
         Which root to differentiate, for upstream methods that report several
         energies. Required when the upstream method has more than one root.
     project_orbitals : bool, optional, default=True
-        Whether to seed each displaced calculation with orbitals projected from
-        the reference geometry.
+        Whether to seed the SCF at each displacement with the reference-geometry
+        SCF orbitals, transferred to the displaced geometry.
     residual_tol : float, optional, default=1.0e-6
         Warn when the residual net force or net torque exceeds this value, in
         Eh/Bohr.
@@ -209,8 +210,9 @@ class FDGradient(Method):
             rebind_method_chain(self._scratch_chain, system)
         if self.project_orbitals:
             # Always from the reference geometry, never from the previous
-            # displacement: see the class docstring.
-            project_scf_guess(self.parent_method, self._scratch_chain)
+            # displacement: the guess then depends only on the displaced geometry,
+            # so the convergence errors at +h and -h roughly cancel in the difference.
+            seed_scf_guess(snapshot_orbitals(self.parent_method), self._scratch_chain)
         self._scratch_chain.run()
         energy = self._get_energy(self._scratch_chain)
         self._displaced_energies.append(energy)
