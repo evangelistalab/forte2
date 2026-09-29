@@ -6,5 +6,6 @@ User guide
     basics
     capabilities
     integrals
+    mp2
     rdms
     gradients

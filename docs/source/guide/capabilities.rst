@@ -23,6 +23,12 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Constrained unrestricted Hartree-Fock (CUHF)
   * Generalized Hartree-Fock (GHF)
 
+* Density-fitted second-order Møller--Plesset perturbation theory (MP2)
+
+  * Restricted MP2 (RMP2)
+  * Restricted open-shell MP2 (ROMP2)
+  * Unrestricted MP2 (UMP2)
+
 * A flexible configuration interaction (CI) module
   
   * Spin-adapted CI (CSF basis) for non-relativistic Hamiltonians
