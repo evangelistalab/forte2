@@ -41,6 +41,11 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Non-relativistic DSRG-MRPT2 with reference relaxation and state-averaging [7]_
   * Two-component relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
   
+* Nuclear derivatives
+
+  * Density-fitted analytic gradients for RHF, UHF, GHF, and state-specific CASSCF/GASSCF
+  * Finite-difference gradients of any method, and finite-difference nonadiabatic couplings of one- and two-component CI and MCSCF wavefunctions
+
 * Various orbital manipulation routines
   
   * Zeroth order active space embedding theory (ASET(0)) [5]_

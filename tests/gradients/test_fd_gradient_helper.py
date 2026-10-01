@@ -24,6 +24,10 @@ def test_finite_difference_of_scalar_functions():
 
     np.testing.assert_allclose(derivative, expected, atol=1.0e-9)
 
+    # f: R -> C
+    derivative = finite_difference(lambda t: np.exp(1j * t), t)
+    assert derivative == pytest.approx(1j * np.exp(1j * t), abs=1.0e-10)
+
 
 def test_finite_difference_of_vector_functions():
     def f(v):
