@@ -104,12 +104,18 @@ class DIIS:
         # Drop the oldest vectors until B becomes well conditioned, 
         # or skip the extrapolation if that's not possible
         B = self._build_B()
-        while np.linalg.cond(B) > _MAX_B_CONDITION and len(self.p_diis) > self.diis_min:
+        while True:
+            try:
+                condition = np.linalg.cond(B)
+            except np.linalg.LinAlgError:
+                condition = np.inf
+            if np.isfinite(condition) and condition <= _MAX_B_CONDITION:
+                break
+            if len(self.p_diis) <= self.diis_min:
+                return p
             self.p_diis.popleft()
             self.e_diis.popleft()
             B = self._build_B()
-        if np.linalg.cond(B) > _MAX_B_CONDITION:
-            return p
 
         diis_dim = len(self.p_diis)
         bsol = np.zeros(diis_dim + 1, dtype=B.dtype)
