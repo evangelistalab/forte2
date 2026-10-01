@@ -9,6 +9,7 @@
 #include <nanobind/ndarray.h>
 
 #include "ci/ci_strings.h"
+#include "ci/ci_permutation.hpp"
 #include "ci/ci_string_address.h"
 #include "ci/ci_sigma_builder.h"
 #include "determinant/ci_spin_adapter.h"
@@ -84,6 +85,16 @@ void export_ci_strings_api(nb::module_& sub_m) {
         .def("determinant", &CIStrings::determinant, "address"_a)
         .def("determinant_index", &CIStrings::determinant_address, "d"_a)
         .def("make_determinants", &CIStrings::make_determinants);
+
+    const char* permutation_map_doc =
+        "Re-express the determinants in orbitals relabeled by a phased permutation, where orbital "
+        "u of the permuted set is phase[u] times orbital perm[u] of the original set. Return pi(I) "
+        "and epsilon_I for every determinant I, so that the permutation maps the CI coefficients "
+        "as c_I -> epsilon_I c_{pi(I)}.";
+    sub_m.def("permutation_map", &permutation_map<double>, "ci_strings"_a, "perm"_a, "phase"_a,
+              permutation_map_doc);
+    sub_m.def("permutation_map", &permutation_map<std::complex<double>>, "ci_strings"_a, "perm"_a,
+              "phase"_a, permutation_map_doc);
 }
 
 void export_ci_sigma_builder_api(nb::module_& sub_m) {
