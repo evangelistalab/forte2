@@ -5,8 +5,10 @@ import numpy as np
 
 from forte2.base_classes import Method
 from forte2.base_classes.rebuild import (
+    list_method_chain,
     rebind_method_chain,
     rebuild_method_chain,
+    require_displaceable,
     seed_scf_guess,
     snapshot_orbitals,
 )
@@ -81,7 +83,13 @@ class GeometryOptimizer(Method):
 
         The upstream method supplies both the initial ``System`` and the method
         configuration used to rebuild a fresh method chain at each geometry.
+
+        Raises
+        ------
+        NotImplementedError
+            If the upstream system has ``symmetry=True``.
         """
+        require_displaceable(list_method_chain(method)[0].system, "GeometryOptimizer")
         self._register_parent_method(method)
         return self
 
@@ -99,6 +107,11 @@ class GeometryOptimizer(Method):
         -------
         GeometryOptimizer
             The executed optimizer object.
+
+        Raises
+        ------
+        NotImplementedError
+            If `system` has ``symmetry=True``.
         """
         objective, x = self._build_objective(system)
         self._print_start(objective)
@@ -170,6 +183,7 @@ class GeometryOptimizer(Method):
                     "system is required when GeometryOptimizer is used with "
                     "method_factory."
                 )
+            require_displaceable(system, "GeometryOptimizer")
             objective = _GeometryObjective(
                 system,
                 self.method_factory,

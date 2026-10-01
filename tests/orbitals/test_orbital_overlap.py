@@ -1,6 +1,7 @@
 import logging
 
 import numpy as np
+import pytest
 
 from forte2 import GHF, RHF, System
 from forte2.orbitals import mo_overlap, transfer_orbitals
@@ -121,3 +122,17 @@ def test_transfer_orbitals_warns_when_the_target_cannot_represent_them(caplog):
     with caplog.at_level(logging.CRITICAL):
         assert transfer_orbitals(hf.C[0], source, far_away) is None
     assert "Cannot transfer orbitals" in caplog.text
+
+
+def test_transfer_orbitals_rejects_mismatched_coefficients():
+    xyz = "H 0 0 0\nH 0 0 1.4"
+    kwargs = dict(
+        basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT", unit="bohr"
+    )
+    source = System(xyz=xyz, **kwargs)
+    C = RHF(charge=0)(source).run().C[0]
+
+    two_component = System(xyz=xyz, **kwargs)
+    GHF(charge=0)(two_component)
+    with pytest.raises(ValueError, match="two-component"):
+        transfer_orbitals(C, source, two_component)

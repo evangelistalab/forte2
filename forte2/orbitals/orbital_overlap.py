@@ -51,6 +51,10 @@ def transfer_orbitals(C_source, system_source, system_target):
     orbitals are dropped. If it has more, the set is completed with an
     orthonormal complement.
 
+    If either system has ``symmetry=True``, a warning is logged: the result
+    carries no irrep labels, and symmetry detection reorients each molecule
+    independently.
+
     Parameters
     ----------
     C_source : NDArray
@@ -66,8 +70,28 @@ def transfer_orbitals(C_source, system_source, system_target):
         Orthonormal coefficients in `system_target`'s AO basis, shape
         ``(nbf_target, nmo_target)``, or None if the target basis cannot
         represent the source orbitals.
+
+    Raises
+    ------
+    ValueError
+        If the number of rows of `C_source` doesn't match the AO count of
+        `system_source` in the one- or two-component representation of
+        `system_target`.
     """
+    if system_source.symmetry or system_target.symmetry:
+        logger.log_warning(
+            "transfer_orbitals got a system with symmetry=True. The transferred "
+            "orbitals carry no irrep labels, and symmetry detection reorients each "
+            "molecule independently."
+        )
     X = system_target.get_Xorth()
+    ncomp = X.shape[0] // system_target.nbf
+    if C_source.shape[0] != ncomp * system_source.nbf:
+        raise ValueError(
+            f"C_source has {C_source.shape[0]} rows, but transferring to a "
+            f"{'two' if ncomp == 2 else 'one'}-component system_target needs "
+            f"{ncomp * system_source.nbf}."
+        )
     n = min(C_source.shape[1], X.shape[1])
     if _same_basis_layout(system_source, system_target):
         # transported: essentially C1 = C0 [C0^H S1 C0]^{-1/2}

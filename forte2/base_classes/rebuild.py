@@ -40,6 +40,29 @@ def list_method_chain(method):
     return stages[::-1]
 
 
+def require_displaceable(system, caller):
+    """
+    Raise if `system` can't be rebuilt at displaced geometries.
+
+    Parameters
+    ----------
+    system : System
+        The system to check.
+    caller : str
+        The name of the method that needs displaced geometries, for the error.
+
+    Raises
+    ------
+    NotImplementedError
+        If `system` has ``symmetry=True``.
+    """
+    if system.symmetry:
+        raise NotImplementedError(
+            f"{caller} requires symmetry=False: it rebuilds the system at displaced "
+            "geometries, and symmetry detection would reorient the molecule."
+        )
+
+
 def rebuild_method_chain(method, new_system):
     """
     Rebuild an entire method chain against `new_system`.

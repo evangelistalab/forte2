@@ -10,6 +10,7 @@ from forte2.base_classes.rebuild import (
     list_method_chain,
     rebind_method_chain,
     rebuild_method_chain,
+    require_displaceable,
     seed_scf_guess,
     snapshot_orbitals,
 )
@@ -110,7 +111,15 @@ class FDGradient(Method):
         self._scratch_chain = None
 
     def __call__(self, method):
-        """Attach to the upstream method whose energy will be differentiated."""
+        """
+        Attach to the upstream method whose energy will be differentiated.
+
+        Raises
+        ------
+        NotImplementedError
+            If the upstream system has ``symmetry=True``.
+        """
+        require_displaceable(list_method_chain(method)[0].system, "FDGradient")
         self._register_parent_method(method)
         return self
 
