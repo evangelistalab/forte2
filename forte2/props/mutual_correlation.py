@@ -71,7 +71,7 @@ class MutualCorrelationAnalysis:
 
         self.active_mo_indices = solver.mo_space.active_indices[:]
 
-        sub_solver = solver.ci_solver.sub_solvers[sub_solver_index]
+        sub_solver = solver.sub_solvers[sub_solver_index]
 
         # extract the spin-dependent 1-RDM  from the solver
         γa, γb = sub_solver.make_rdm(root, order=1, spin_type="sd")
