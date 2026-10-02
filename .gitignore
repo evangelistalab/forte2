@@ -68,7 +68,6 @@ CMakeFiles/
 forte/CMakeFiles
 cmake_install.cmake
 *.DS_Store
-*.rst
 *.bat
 vmd_cube_command
 vmd_mo_script.vmd
