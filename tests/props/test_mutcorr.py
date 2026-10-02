@@ -176,6 +176,12 @@ class FakeSolver:
         self.sub_solvers = [FakeSubSolver()]
 
 
+class FakeDriver:
+    def __init__(self):
+        self.mo_space = type("MOSpace", (), {"active_indices": [0, 1]})()
+        self.ci_solver = FakeSolver()
+
+
 def test_mutual_correlation_uses_direct_sub_solvers(monkeypatch):
     """MutualCorrelationAnalysis should accept an active-space solver directly."""
 
@@ -188,6 +194,25 @@ def test_mutual_correlation_uses_direct_sub_solvers(monkeypatch):
     )
 
     analysis = MutualCorrelationAnalysis(FakeSolver())
+
+    assert analysis.active_mo_indices == [0, 1]
+    assert analysis.total_correlation == 0.0
+    np.testing.assert_array_equal(analysis.M1, np.zeros(2))
+    np.testing.assert_array_equal(analysis.M2, np.zeros((2, 2)))
+
+
+def test_mutual_correlation_accepts_driver(monkeypatch):
+    """MutualCorrelationAnalysis should accept CI/MC drivers that own a ci_solver."""
+
+    from forte2.props import mutual_correlation
+
+    monkeypatch.setattr(
+        mutual_correlation.cpp_helpers,
+        "packed_tensor4_to_tensor4",
+        lambda tensor: tensor,
+    )
+
+    analysis = MutualCorrelationAnalysis(FakeDriver())
 
     assert analysis.active_mo_indices == [0, 1]
     assert analysis.total_correlation == 0.0

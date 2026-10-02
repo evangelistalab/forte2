@@ -12,8 +12,9 @@ class MutualCorrelationAnalysis:
 
     Parameters
     ----------
-    solver : forte2 solver object of type ActiveSpaceSolver
-        The solver from which to extract the RDMs.
+    solver : forte2 active-space solver or driver
+        The object from which to extract the RDMs. This can be a solver
+        (`CISolver`) or a driver that owns one (`CI`, `MCOptimizer`).
     root : int, optional
         The root index for which to perform the analysis. Default is 0.
     sub_solver_index : int, optional
@@ -71,7 +72,8 @@ class MutualCorrelationAnalysis:
 
         self.active_mo_indices = solver.mo_space.active_indices[:]
 
-        sub_solver = solver.sub_solvers[sub_solver_index]
+        ci_solver = getattr(solver, "ci_solver", solver)
+        sub_solver = ci_solver.sub_solvers[sub_solver_index]
 
         # extract the spin-dependent 1-RDM  from the solver
         γa, γb = sub_solver.make_rdm(root, order=1, spin_type="sd")
