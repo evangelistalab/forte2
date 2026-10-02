@@ -16,9 +16,9 @@ Both methods take a ``spin_type`` argument that selects the representation:
 The spelled-out forms are also accepted: ``spin_dependent`` or ``spin-dependent``,
 ``spin_free`` or ``spin-free``, and ``spin_orbital``, ``spin-orbital``, or ``spinorbital``.
 
-Which orders and spin types are available depends on the solver. ``MCOptimizer`` forwards both
-methods to its ``ci_solver``, so the tables that follow also describe an MCSCF calculation built
-on a given solver.
+Which orders and spin types are available depends on the solver. The drivers, ``CI`` and
+``MCOptimizer``, forward both methods to their ``ci_solver``, so the tables that follow also
+describe a CI or MCSCF calculation built on a given solver.
 
 .. note::
     For RDMs, "spin-free" simply means spin-summed, e.g., the spin-free three-body RDMs are given by:
