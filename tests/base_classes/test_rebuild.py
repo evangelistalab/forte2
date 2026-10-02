@@ -1,11 +1,15 @@
+import logging
+
 import numpy as np
 import pytest
 
 from forte2 import (
     CISolver,
+    CUHF,
     GHF,
     MCOptimizer,
     RHF,
+    ROHF,
     RelCISolver,
     SpinorUpcaster,
     State,
@@ -17,7 +21,7 @@ from forte2.base_classes.rebuild import (
     rebind_method_chain,
     rebuild_method_chain,
     reset_method_chain,
-    project_scf_guess,
+    seed_scf_guess,
     snapshot_orbitals,
 )
 from forte2.orbitals import mo_overlap
@@ -25,10 +29,10 @@ from forte2.orbitals import mo_overlap
 _DISPLACED = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.5]])
 
 
-def _h2(bond_length=1.4):
+def _h2(bond_length=1.4, basis_set="sto-3g"):
     return System(
         xyz=f"H 0.0 0.0 0.0\nH 0.0 0.0 {bond_length}",
-        basis_set="sto-3g",
+        basis_set=basis_set,
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
     )
@@ -53,6 +57,13 @@ def _rel_ci(system):
     return RelCISolver(nel=2, active_orbitals=[0, 1, 2, 3])(
         SpinorUpcaster()(_rhf(system))
     )
+
+
+def _triplet(scf_class):
+    def builder(system):
+        return scf_class(charge=0, ms=1.0, e_tol=1.0e-12, d_tol=1.0e-10)(system)
+
+    return builder
 
 
 def test_rebuild_preserves_method_options():
@@ -154,35 +165,29 @@ def test_rebuild_preserves_a_user_provided_mo_space_override():
     assert rebuilt.mo_space_override is mc.mo_space
 
 
-def test_project_scf_guess():
-    system = _h2()
-    method = _casscf(system)
-    method.run()
-
-    rebuilt = rebuild_method_chain(method, system.with_geometry(_DISPLACED))
-    applied = project_scf_guess(method, rebuilt)
-
-    root = list_method_chain(rebuilt)[0]
-    assert applied
-    assert root.C is not None
-    assert getattr(rebuilt, "C", None) is None
-
-    new_system = root.system
-    np.testing.assert_allclose(
-        mo_overlap(root.C[0], new_system, root.C[0]),
-        np.eye(new_system.nmo),
-        atol=1.0e-10,
-    )
-
-
-def test_seeded_chain_converges_to_the_same_energy_as_an_unseeded_one():
-    system = _h2()
-    method = _casscf(system)
+@pytest.mark.parametrize(
+    "builder",
+    [
+        pytest.param(_casscf, id="casscf"),
+        pytest.param(_rel_ci, id="spinor-ci"),
+        pytest.param(_ghf, id="ghf"),
+        pytest.param(_triplet(ROHF), id="rohf"),
+        pytest.param(_triplet(UHF), id="uhf"),
+        pytest.param(_triplet(CUHF), id="cuhf"),
+    ],
+)
+def test_seeded_chain_converges_to_the_same_energy_as_an_unseeded_one(builder):
+    system = _h2(basis_set="6-31g")
+    method = builder(system)
     method.run()
     displaced_system = system.with_geometry(_DISPLACED)
 
     seeded = rebuild_method_chain(method, displaced_system)
-    project_scf_guess(method, seeded)
+    assert seed_scf_guess(snapshot_orbitals(method), seeded)
+    for C in list_method_chain(seeded)[0].C:
+        np.testing.assert_allclose(
+            mo_overlap(C, displaced_system, C), np.eye(C.shape[1]), atol=1.0e-10
+        )
     seeded.run()
 
     unseeded = rebuild_method_chain(method, displaced_system)
@@ -191,19 +196,7 @@ def test_seeded_chain_converges_to_the_same_energy_as_an_unseeded_one():
     assert seeded.E == pytest.approx(unseeded.E, abs=1.0e-10)
 
 
-def test_project_scf_guess_rejects_rel_to_non_rel():
-    system = _h2()
-    method = _rel_ci(system)
-    method.run()
-
-    rebuilt = rebuild_method_chain(method, system.with_geometry(_DISPLACED))
-
-    assert not project_scf_guess(method, rebuilt)
-    # without a guess the rebuilt method can still run
-    rebuilt.run()
-
-
-def test_project_scf_guess_rejects_non_rel_to_rel():
+def test_seed_scf_guess_rejects_a_different_scf_class(caplog):
     system = _h2()
     source = _rhf(system)
     source.run()
@@ -212,44 +205,10 @@ def test_project_scf_guess_rejects_non_rel_to_rel():
         GHF(charge=0)(system), system.with_geometry(_DISPLACED)
     )
 
-    assert not project_scf_guess(source, target)
-    assert getattr(target, "C", None) is None
-
-
-def test_project_scf_guess_for_a_relativistic_ghf_chain():
-    system = _h2()
-    method = _ghf(system)
-    method.run()
-
-    rebuilt = rebuild_method_chain(method, system.with_geometry(_DISPLACED))
-    applied = project_scf_guess(method, rebuilt)
-
-    root = list_method_chain(rebuilt)[0]
-    assert applied
-    assert root.C is not None
-
-    new_system = root.system
-    np.testing.assert_allclose(
-        mo_overlap(root.C[0], new_system, root.C[0]),
-        np.eye(root.C[0].shape[1]),
-        atol=1.0e-10,
-    )
-
-
-def test_seeded_ghf_chain_converges_to_the_same_energy_as_an_unseeded_one():
-    system = _h2()
-    method = _ghf(system)
-    method.run()
-    displaced_system = system.with_geometry(_DISPLACED)
-
-    seeded = rebuild_method_chain(method, displaced_system)
-    project_scf_guess(method, seeded)
-    seeded.run()
-
-    unseeded = rebuild_method_chain(method, displaced_system)
-    unseeded.run()
-
-    assert seeded.E == pytest.approx(unseeded.E, abs=1.0e-10)
+    with caplog.at_level(logging.CRITICAL):
+        assert not seed_scf_guess(snapshot_orbitals(source), target)
+    assert "Cannot seed GHF with RHF orbitals" in caplog.text
+    assert target.C is None
 
 
 def test_reset_method_chain_invalidates_every_stage():

@@ -48,21 +48,82 @@ implementation, including as the driver of a geometry optimization::
 Choosing a step
 ~~~~~~~~~~~~~~~
 
-The truncation error of an ``n``-point central stencil falls as ``step**n``,
-while noise in the energy is amplified by ``1 / step``. The default
-``step = 1e-3`` Bohr with a four-point stencil is a good starting point.
+The step :math:`h` (``step``, in Bohr) balances two errors:
 
-The noise term is much smaller than it first appears. Every displacement is
-seeded with orbitals projected from the *reference* geometry, so the residual
-convergence error is nearly identical at ``+h`` and ``-h`` and largely cancels
-in the difference. Measured on H\ :sub:`2`\ O/STO-3G RHF, an upstream ``e_tol``
-of ``1e-5`` still yields a gradient accurate to ``1.5e-8`` Eh/Bohr.
+- **Truncation error** grows with the step. A central stencil with :math:`n`
+  points (``npoints``) is exact for polynomials up to degree :math:`n`, so it
+  leaves an error of order :math:`h^n`.
+- **Noise** grows as the step shrinks. Each energy carries an error
+  :math:`\epsilon`, and the stencil divides differences of energies by
+  :math:`h`, so the noise adds an error of order :math:`\epsilon / h`.
 
-That cancellation depends on the initial guess being a function of the displaced
-geometry alone, not of the order in which displacements are evaluated. Seeding
-each displacement from the *previous* one instead costs about a factor of 700 in
-accuracy at the same threshold, which is why the reference geometry is used even
-though a neighbouring displacement would be a marginally better guess.
+The total error is about :math:`C h^n + \epsilon / h`, where :math:`C` depends on
+the :math:`(n+1)`-th derivative of the energy. It is smallest at
+:math:`h \sim (\epsilon / C)^{1/(n+1)}`, where it is of order
+:math:`\epsilon^{n/(n+1)}`. The noisier the energies, the larger the best step,
+and a stencil with more points tolerates a larger step.
+
+The energy error :math:`\epsilon` has two sources:
+
+- **Rounding**, about :math:`10^{-15}` times the total energy, so it is larger
+  for heavy elements.
+- **Incomplete convergence.** If the energy is variational in all of its
+  parameters, as for SCF and CASSCF, the convergence error enters the energy
+  quadratically, and default thresholds keep it near the rounding level. If it
+  isn't, as for a CI on fixed SCF orbitals or a perturbation theory, the SCF
+  convergence error enters linearly and usually dominates.
+
+The following table shows both regimes for the RHF gradient of
+H\ :sub:`2`\ O/STO-3G, converged to ``e_tol=1e-12`` and ``d_tol=1e-10``:
+
+.. list-table:: Maximum error (Eh/Bohr) against the analytic gradient
+   :header-rows: 1
+
+   * - ``npoints``
+     - ``step=1e-5``
+     - ``1e-4``
+     - ``1e-3``
+     - ``1e-2``
+     - ``3e-2``
+   * - 2
+     - 5e-9
+     - 6e-9
+     - 6e-7
+     - 6e-5
+     - 6e-4
+   * - 4
+     - 7e-9
+     - 7e-10
+     - 6e-11
+     - 2e-8
+     - 1e-6
+   * - 6
+     - 9e-9
+     - 8e-10
+     - 7e-11
+     - 9e-12
+     - 2e-9
+
+At the smallest step, all three stencils give the same error, and it grows as
+the step shrinks: that's noise. At the largest steps, the error falls steeply
+as ``npoints`` increases: that's truncation error. For a CI on fixed RHF orbitals
+of the same molecule, with ``npoints=4`` and ``step=1e-3``, the error is
+``2e-10`` with ``d_tol=1e-10`` but ``3e-7`` with the default ``d_tol=1e-6``.
+
+Follow these recommendations:
+
+- Start from the defaults, ``step=1e-3`` and ``npoints=4``. With well-converged
+  energies, they give gradients accurate to about ``1e-10`` Eh/Bohr.
+- If the energy isn't variational in the SCF orbitals, converge the SCF to
+  ``d_tol=1e-10``. If you can't, increase the step to ``1e-2``.
+- Keep the step at ``1e-4`` or above. Below that, noise dominates even for
+  well-converged energies.
+- To halve the cost, use ``npoints=2`` with ``step=1e-3``, which is accurate to
+  about ``1e-6``. That is enough to drive a geometry optimization to the default
+  ``g_tol=1e-4``.
+- For the highest accuracy, use ``npoints=6`` with ``step=1e-2``.
+
+To measure the actual error of a result, see `Checking the result`_.
 
 Checking the result
 ~~~~~~~~~~~~~~~~~~~
@@ -102,13 +163,6 @@ Displaced geometries are built with
 ``symmetry=False`` (symmetry detection reorients the molecule, which would
 invalidate Cartesian displacements), a defined ``basis_set``, and not a
 ``ModelSystem``.
-
-Orbital projection also applies to two-component (relativistic) chains, provided
-the source and target share the same representation -- for example, a GHF root
-projects cleanly onto a rebuilt GHF root at the displaced geometry. It falls back
-to the default guess only when source and target disagree (e.g. a one-component
-source projected onto a two-component target, or vice versa); the gradients
-remain correct in that case, but each displacement takes more iterations.
 
 Numerical differentiation on its own
 ------------------------------------

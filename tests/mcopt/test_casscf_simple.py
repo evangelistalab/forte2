@@ -1,5 +1,8 @@
+import pytest
+
 from forte2 import CISolver, MCOptimizer, RHF, State, System
 from forte2.helpers.comparisons import approx, is_diagonal_matrix
+from forte2.orbitals import transfer_orbitals
 
 
 def test_casscf_h2():
@@ -168,3 +171,44 @@ def test_casscf_water_nos():
     # Check that the 1-RDM is diagonal in the active space block (natural orbitals)
     g1 = mc.make_average_rdm(1)
     assert is_diagonal_matrix(g1)
+
+
+def test_casscf_rejects_orbitals_from_another_geometry():
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.069592187400
+    H            0.000000000000    -0.783151105291     0.552239257834
+    H            0.000000000000     0.783151105291     0.552239257834
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="angstrom",
+    )
+    displaced = system.with_geometry(
+        system.atomic_positions + [[0.0, 0.0, 0.05], [0.0, -0.03, 0.0], [0.0, 0.0, 0.0]]
+    )
+
+    def casscf(rhf):
+        ci_solver = CISolver(
+            State(nel=10, multiplicity=1, ms=0.0),
+            active_orbitals=[1, 2, 3, 4, 5, 6],
+            core_orbitals=[0],
+        )
+        return MCOptimizer(ci_solver, g_tol=1e-6, e_tol=1e-10)(rhf)
+
+    mc = casscf(RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system))
+    mc.run()
+
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(displaced)
+    rhf.run()
+    rhf.mos.C[0] = mc.mos.C[0]
+    with pytest.raises(ValueError, match="orthonormal"):
+        casscf(rhf).run()
+
+    rhf.mos.C[0] = transfer_orbitals(mc.mos.C[0], system, displaced)
+    seeded = casscf(rhf)
+    seeded.run()
+    fresh = casscf(RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(displaced))
+    fresh.run()
+    assert seeded.E == approx(fresh.E)

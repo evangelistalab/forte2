@@ -10,12 +10,16 @@ from forte2.base_classes import (
     RelCIBase,
     Method,
 )
-from forte2.orbitals import FinalOrbitals
+from forte2.orbitals import FinalOrbitals, mo_overlap
 from forte2.helpers import logger, LBFGS
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.symmetry import real_sph_to_j_adapted
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
+
+# Largest tolerated deviation of C^H S C from the identity. Valid orbitals stay
+# below ~1e-9 even in nearly linearly dependent bases.
+_ORTHONORMALITY_TOL = 1.0e-8
 
 
 @dataclass
@@ -105,6 +109,7 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
 
         self.system = self.parent_method.system
         self.mos = self.parent_method.mos.copy()
+        self._check_orthonormal_orbitals()
         # make sure to register parent_method
         self.ci_solver = self.ci_solver(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
@@ -141,6 +146,19 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
 
         self.nrr = self._get_nonredundant_rotations()
 
+    def _check_orthonormal_orbitals(self):
+        # The optimizer only applies unitary rotations, so it never repairs
+        # non-orthonormal starting orbitals.
+        C = self.mos.C[0]
+        error = np.max(np.abs(mo_overlap(C, self.system, C) - np.eye(C.shape[1])))
+        if error > _ORTHONORMALITY_TOL:
+            raise ValueError(
+                "MCOptimizer requires starting orbitals that are orthonormal in the "
+                "AO basis of its system, but C^H S C deviates from the identity by "
+                f"{error:.2e}. Orbitals from another geometry or basis set must be "
+                "mapped with forte2.orbitals.transfer_orbitals first."
+            )
+
     def run(self):
         """
         Run the two-step orbital-CI optimization.
@@ -149,6 +167,12 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
         -------
         self : MCOptimizer
             The instance of the optimizer with the results stored in its attributes.
+
+        Raises
+        ------
+        ValueError
+            If the starting orbitals are not orthonormal in the AO basis of the
+            system.
         """
         self._startup()
         self.Hcore = self.system.ints_hcore()  # hcore in AO basis
