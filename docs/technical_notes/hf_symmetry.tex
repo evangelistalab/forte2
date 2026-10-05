@@ -1,0 +1,646 @@
+\documentclass[aip,jcp,preprint,nobibnotes,nofootinbib]{revtex4-1}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{array}
+\usepackage{braket}
+\usepackage[capitalize]{cleveref}
+
+\newcommand{\bvec}[1]{\mathbf{#1}}
+\newcommand{\Id}{\bvec{1}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+
+\begin{document}
+
+\title{Technical Notes: Symmetry in Hartree--Fock Calculations}
+\author{Forte2 Developers}
+\noaffiliation
+\date{\today}
+
+\begin{abstract}
+This note describes how Forte2 represents molecular symmetry in atomic-orbital
+and molecular-orbital spaces, preserves it during Hartree--Fock (HF)
+diagonalization, and selects occupations for a requested electronic symmetry
+or orbital configuration. Spatial HF uses one-dimensional irreducible
+representations of Abelian point groups. Spin--orbit generalized HF uses their
+full double groups, with character projectors for spinor spaces and Slater
+determinant projectors for the total electronic state. The derivations specify
+the matrix conventions, occupation algorithms, representability restrictions,
+and interfaces between the symmetry and SCF components.
+\end{abstract}
+
+\maketitle
+
+\section{Scope and notation}
+\label{sec:scope}
+
+With \code{System(symmetry=True)}, Forte2 centers the molecule at its center of
+mass, reorients it along its principal axes of inertia, and detects a supported
+Abelian subgroup. The supported spatial groups are $C_1$, $C_i$, $C_2$, $C_s$,
+$C_{2h}$, $D_2$, $C_{2v}$, and $D_{2h}$. All spatial operations used below are
+defined in this principal frame. Larger molecular groups are represented by
+the detected subgroup. With symmetry disabled the spatial group is $C_1$.
+
+Let $\chi_\mu$ denote an atomic orbital (AO), $\bvec{S}$ the AO overlap matrix,
+and $\bvec{C}$ the matrix whose columns contain molecular-orbital (MO)
+coefficients:
+\begin{equation}
+ \varphi_p=\sum_\mu\chi_\mu C_{\mu p},\qquad
+ S_{\mu\nu}=\braket{\chi_\mu|\chi_\nu},\qquad
+ \bvec{C}^\dagger\bvec{S}\bvec{C}=\Id.
+ \label{eq:mo}
+\end{equation}
+The canonical AO orthogonalizer $\bvec{X}$ spans the retained orbital space and
+satisfies $\bvec{X}^\dagger\bvec{S}\bvec{X}=\Id$. It may be rectangular when
+near-linear dependencies have been removed. An irrep is denoted by $\Gamma$,
+its dimension by $d_\Gamma$, and its character by $\chi_\Gamma(g)$. The identity
+irrep has index zero.
+
+The public option \code{target_symmetry} specifies the total electronic
+determinant's irrep. The option \code{irrep_occupations} specifies the numbers
+of occupied orbitals in each irrep, with the conventions in
+\cref{tab:occupations}. These are distinct constraints: several orbital
+configurations may produce the same total irrep. Both may be supplied if they
+are compatible.
+
+\begin{table}[ht]
+\setlength{\tabcolsep}{10pt}
+\caption{Meaning of each value in \code{irrep_occupations}. Unlisted irreps have
+zero occupation; the dictionary specifies a complete configuration.}
+\label{tab:occupations}
+\begin{tabular}{@{}lll@{}}
+\hline
+Method & Count per irrep & Required total \\
+\hline
+RHF & Doubly occupied spatial orbitals & $N/2$ \\
+ROHF, UHF, CUHF & $(n_\alpha,n_\beta)$ spatial orbitals & $(N_\alpha,N_\beta)$ \\
+GHF & Singly occupied spinors & $N$ \\
+\hline
+\end{tabular}
+\end{table}
+
+Labels are case insensitive, and integer indices are also accepted. Spatial
+indices use Cotton ordering. Double-group bosonic irreps retain those indices,
+and fermionic irreps follow them. Separate $\alpha/\beta$ counts are not
+defined for GHF. ROHF and CUHF require the minority-spin count to be no larger
+than the majority-spin count in every irrep.
+
+\section{Molecular frame and point-group detection}
+\label{sec:geometry}
+
+\code{GeometryHelper} forms the center of mass and inertia tensor from atomic
+masses $m_a$ and positions $\bvec{r}_a$:
+\begin{equation}
+ \bvec{r}_{\mathrm{COM}}=\frac{\sum_a m_a\bvec{r}_a}{\sum_a m_a},\qquad
+ \bvec{I}=\sum_a m_a\left[
+  |\bvec{q}_a|^2\Id_3-\bvec{q}_a\bvec{q}_a^{\mathsf T}\right],
+ \quad\bvec{q}_a=\bvec{r}_a-\bvec{r}_{\mathrm{COM}}.
+ \label{eq:inertia}
+\end{equation}
+\code{PGSymmetryDetector} diagonalizes $\bvec{I}$ and classifies the molecule
+according to degeneracies of its principal moments. For an asymmetric top,
+the inertia eigenvectors determine the axes, with axis ordering chosen using
+the available twofold rotations. For a symmetric top, the unique inertia
+axis determines $z$; candidate perpendicular twofold axes through atoms or
+equivalent-atom midpoints, or a vertical mirror plane, fix the transverse
+frame. A linear molecule uses its zero-moment axis as $z$, with an arbitrary
+orthonormal transverse frame. For spherical tops, candidate twofold axes
+and, for octahedral geometry, fourfold axes determine the frame. Cases for
+which the supported frame cannot be established, including icosahedral
+geometry, use $C_1$.
+
+The rotation matrix is made orthogonal if necessary and adjusted to have
+determinant $+1$. Centered coordinates are transformed into this right-handed
+frame, and these principal-frame coordinates replace the input coordinates
+used by subsequent integral and symmetry operations.
+
+The detector tests inversion, the three Cartesian twofold rotations, and the
+three Cartesian mirror planes. An operation is present if every transformed
+position coincides, within the geometric tolerance, with an atom of the same
+element. The tuple consisting of inversion presence, the number of twofold
+axes, and the number of mirror planes selects the group in
+\cref{tab:group-detection}. A single atom at the origin is assigned $D_{2h}$
+as its supported spatial subgroup.
+
+\begin{table}[ht]
+\setlength{\tabcolsep}{10pt}
+\caption{Supported point groups selected from the operation tests.}
+\label{tab:group-detection}
+\begin{tabular}{@{}lccc@{}}
+\hline
+Group & Inversion & Twofold axes & Mirror planes \\
+\hline
+$C_1$ & No & 0 & 0 \\
+$C_i$ & Yes & 0 & 0 \\
+$C_2$ & No & 1 & 0 \\
+$C_s$ & No & 0 & 1 \\
+$D_2$ & No & 3 & 0 \\
+$C_{2v}$ & No & 1 & 2 \\
+$C_{2h}$ & Yes & 1 & 1 \\
+$D_{2h}$ & Yes & 3 & 3 \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Spatial symmetry in the AO basis}
+\label{sec:ao}
+
+\subsection{Permutation and phase representation}
+
+Define $\bvec{U}(g)$ by its action on AO coefficient vectors:
+\begin{equation}
+ \hat U(g)\chi_\nu=\sum_\mu\chi_\mu U_{\mu\nu}(g).
+ \label{eq:ao-action}
+\end{equation}
+For the supported spatial groups, each operation maps an atom onto an
+equivalent atom and each real spherical harmonic onto itself up to a sign.
+Consequently $\bvec{U}(g)$ is a permutation matrix multiplied by local phases.
+The builder transforms each atomic position, locates an atom of the same
+element at that position, and matches basis functions with the same shell and
+angular labels. The radial part of the basis function is unchanged.
+
+\Cref{tab:phases} gives the phases used by \code{local_sign}. Here $l$ is the
+angular momentum and $q=|m|$; positive and negative $m$ label the cosine and
+sine real harmonics, respectively. The $m=0$ column is included in $m\geq0$.
+\begin{table}[ht]
+\setlength{\tabcolsep}{10pt}
+\caption{Local real-spherical-harmonic phases in the principal frame.}
+\label{tab:phases}
+\begin{tabular}{@{}lll@{}}
+\hline
+Operation & $m\geq0$ & $m<0$ \\
+\hline
+$E$ & $1$ & $1$ \\
+$i$ & $(-1)^l$ & $(-1)^l$ \\
+$C_{2z}$ & $(-1)^q$ & $(-1)^q$ \\
+$C_{2x}$ & $(-1)^{l+q}$ & $(-1)^{l+q+1}$ \\
+$C_{2y}$ & $(-1)^l$ & $(-1)^{l+1}$ \\
+$\sigma_{xz}$ & $1$ & $-1$ \\
+$\sigma_{yz}$ & $(-1)^q$ & $(-1)^{q+1}$ \\
+$\sigma_{xy}$ & $(-1)^{l+q}$ & $(-1)^{l+q}$ \\
+\hline
+\end{tabular}
+\end{table}
+
+The coefficient transformation is distinct from the AO matrix element of the
+operator. Using \cref{eq:ao-action},
+\begin{equation}
+ \braket{\chi_\mu|\hat U(g)|\chi_\nu}
+   =\bigl[\bvec{S}\bvec{U}(g)\bigr]_{\mu\nu},\qquad
+ \bvec{R}(g)=\bvec{C}^\dagger\bvec{S}\bvec{U}(g)\bvec{C}.
+ \label{eq:mo-rep}
+\end{equation}
+The overlap metric is essential in the MO representation. In a closed AO
+space,
+\begin{equation}
+ \bvec{U}(g)^\dagger\bvec{S}\bvec{U}(g)=\bvec{S}.
+ \label{eq:metric-invariance}
+\end{equation}
+Consequently $\bvec{R}(g)$ is unitary whenever the MO space is invariant under
+$g$.
+
+\subsection{Spatial character labels and products}
+
+The spatial character tables contain only one-dimensional real irreps with
+characters $\pm1$. A symmetry-adapted orbital therefore satisfies
+\begin{equation}
+ \hat U(g)\varphi_p=\chi_{\Gamma_p}(g)\varphi_p,
+ \qquad R_{pq}(g)=\delta_{pq}\chi_{\Gamma_p}(g).
+ \label{eq:adapted}
+\end{equation}
+The orbital's character vector across all operations is matched to the table.
+The Cotton index convention makes direct products an exclusive-or operation,
+\begin{equation}
+ h(\Gamma\otimes\Lambda)=h(\Gamma)\mathbin{\mathrm{XOR}}h(\Lambda).
+ \label{eq:xor}
+\end{equation}
+For example, the $D_{2h}$ ordering is
+$a_g,b_{1g},b_{2g},b_{3g},a_u,b_{1u},b_{2u},b_{3u}$.
+The determinant irrep is the product of its occupied spin-orbital irreps.
+Two occurrences of any spatial irrep cancel in \cref{eq:xor}, so doubly
+occupied spatial orbitals contribute the identity. Every closed-shell RHF
+determinant is therefore totally symmetric.
+
+\section{Resolving and preserving orbital symmetry}
+\label{sec:spatial-basis}
+
+\subsection{Invariant MO blocks}
+
+\code{MOSymmetryDetector} computes all representations in
+\cref{eq:mo-rep}. A graph connects MO indices $p$ and $q$ if any operation has
+$|R_{pq}(g)|$ above the representation tolerance. The adjacency is symmetrized,
+and each connected component defines a candidate invariant block. The
+construction includes nonadjacent MO columns and is independent of orbital
+energy differences. Energy proximity alone does not establish closure under
+the symmetry operations.
+
+Within each connected block, the detector simultaneously resolves the
+commuting operations. Starting with the whole block, it diagonalizes one
+operation and separates its positive and negative eigenspaces. The next
+operation is diagonalized only within each of these subspaces. Repeating this
+process preserves every previously resolved character while subdividing the
+space into irreps.
+
+Let $\bvec{V}_\Gamma$ contain the resulting rotation vectors in one irrep
+subspace and let $\bvec{e}=\operatorname{diag}(\epsilon_p)$ be the supplied
+orbital-energy operator in the original block. The detector diagonalizes
+\begin{equation}
+ \bvec{e}_\Gamma=\bvec{V}_\Gamma^\dagger\bvec{e}\bvec{V}_\Gamma
+ \label{eq:energy-proxy}
+\end{equation}
+to fix the remaining freedom among repeated copies of the same irrep. The
+updated coefficients and projected energies are sorted together within the
+connected block. If the input orbitals are not eigenvectors of a
+symmetry-invariant operator, this is a projected energy convention rather
+than preservation of each input orbital energy.
+
+After adaptation, every operation must have a diagonal representation of unit
+magnitude, and each character vector must match a table row. The default
+absolute tolerance is $10^{-6}$, with zero relative tolerance. Failure raises
+\code{RuntimeError}; an unresolved orbital is not assigned an arbitrary label.
+The detector updates both coefficients and energies in place.
+
+\subsection{Symmetry-block Fock diagonalization}
+
+\code{SymmetryBasis.build} applies the spatial detector to $\bvec{X}$ with
+zero energy proxies, producing orthonormal AO coefficient blocks
+$\bvec{B}_\Gamma$. For any Hermitian AO Fock matrix $\bvec{F}$, it solves
+\begin{equation}
+ \bvec{F}_\Gamma=\bvec{B}_\Gamma^\dagger\bvec{F}\bvec{B}_\Gamma,
+ \qquad
+ \bvec{F}_\Gamma\bvec{v}_\Gamma
+   =\bvec{v}_\Gamma\bvec{\epsilon}_\Gamma,
+ \qquad
+ \bvec{C}_\Gamma=\bvec{B}_\Gamma\bvec{v}_\Gamma.
+ \label{eq:block-fock}
+\end{equation}
+The complete result is stably sorted by energy, carrying coefficients and
+irrep indices through the same permutation. For an invariant Fock operator
+the off-diagonal irrep blocks vanish; restricting diagonalization to the
+diagonal blocks also prevents numerical or guess-induced inter-irrep mixing.
+
+Spin-free GHF uses the spatial action $\Id_2\otimes\bvec{U}(g)$ in the
+two-component AO basis. This duplicates the spatial representation without
+rotating the spin. Spin--orbit GHF instead uses the double-group construction
+in \cref{sec:double-group}.
+
+\section{Occupation selection}
+\label{sec:selection}
+
+An occupation policy returns a permutation of MO columns. The same
+permutation is applied to coefficients, energies, and irrep metadata before
+the density is constructed. Occupied orbitals precede virtual orbitals, with
+stable energy ordering within each partition. ROHF additionally separates
+doubly occupied, singly occupied, and virtual columns. These conventions
+preserve the occupied-column slices used by the density builders.
+
+\subsection{Explicit irrep counts}
+
+With explicit counts, the policy takes the lowest-energy orbitals within each
+irrep. It checks that counts are nonnegative integers, their totals match the
+electron numbers, and no count exceeds the corresponding basis capacity.
+Equivalent label and integer keys cannot specify an irrep twice. If a target
+is also supplied, the configuration must realize it. ROHF and CUHF enforce
+nested minority/majority counts in every irrep.
+
+\subsection{A target in a one-dimensional irrep algebra}
+
+Target-only selection minimizes the sum of occupied orbital energies at the
+current iteration. This local occupation criterion does not guarantee the
+globally lowest HF stationary solution in the target irrep.
+
+For $M$ orbitals and a requested occupation $N$, let $A_p(k,h)$ be the minimum
+energy sum obtained by occupying $k$ of the first $p$ orbitals with total irrep
+$h$. For orbital $p$ with energy $\epsilon_p$ and irrep $\gamma_p$,
+\begin{equation}
+ A_p(k,h)=\min\left\{
+ A_{p-1}(k,h),\,
+ A_{p-1}(k-1,h\otimes\gamma_p^{-1})+\epsilon_p
+ \right\}.
+ \label{eq:dp}
+\end{equation}
+The initial condition is $A_0(0,0)=0$, with all other entries infinite.
+Backtracking from $A_M(N,h_{\mathrm{target}})$ yields the occupied indices.
+The algorithm and its stored backtracking history cost $O(MNR)$ for $R$
+irreps. Spatial products use \cref{eq:xor}; Abelian double-group products use
+the character-derived multiplication table in \cref{eq:products}.
+
+UHF constructs independent energy spectra $A_\alpha(h)$ and $A_\beta(h)$ at
+the required spin electron counts, then minimizes
+\begin{equation}
+ \min_h\left[
+ A_\alpha(h)+A_\beta(h^{-1}\otimes h_{\mathrm{target}})
+ \right].
+ \label{eq:uhf-selection}
+\end{equation}
+Thus both spins are selected jointly subject to their combined target.
+
+For ROHF and CUHF the policy uses a dynamic program over core count, open-shell
+count, and total irrep. In each irrep, let $c$ be the minority-spin count and
+$s$ the number of additional majority-spin orbitals. With $P_\sigma(n)$ the
+prefix sum of the lowest $n$ orbital energies of spin $\sigma$, the local cost
+is
+\begin{equation}
+ E_\Gamma(c,s)=P_{\mathrm{minor}}(c)
+              +P_{\mathrm{major}}(c+s).
+ \label{eq:nested-cost}
+\end{equation}
+ROHF uses its common orbital spectrum for both prefix sums. The transition
+adds $c$ core and $s$ open-shell occupations and contributes
+$\Gamma^{\otimes s}$ to the total irrep. The final counts must be
+$N_{\mathrm{core}}=\min(N_\alpha,N_\beta)$ and
+$N_{\mathrm{open}}=|N_\alpha-N_\beta|$. RHF permits only an identity target;
+explicit pair counts can select among closed-shell configurations sharing it.
+
+\section{Double groups for spin--orbit GHF}
+\label{sec:double-group}
+
+\subsection{Spin lifts and character tables}
+
+Two-component coefficients use the block layout
+\code{[alpha AOs, beta AOs]}. The unbarred lift of a spatial operation is
+\begin{equation}
+ \bvec{U}^*(g)=\bvec{D}^{1/2}(g)\otimes\bvec{U}(g),\qquad
+ \bvec{D}^{1/2}(C_{2k})=-\mathrm{i}\bvec{\sigma}_k,
+ \label{eq:spin-lift}
+\end{equation}
+where $\bvec{\sigma}_k$ is a Pauli matrix. Both identity and inversion act as
+$\Id_2$ on spin. A mirror is inversion times the $\pi$ rotation about its
+normal and therefore uses the same spin matrix as that rotation.
+
+The double group $G^*$ contains an unbarred and a barred lift for every spatial
+operation. The central $2\pi$ rotation, $\bar E$, acts as $-\Id$ on a spinor,
+and
+\begin{equation}
+ \bvec{U}^*(\bar g)=-\bvec{U}^*(g).
+ \label{eq:barred}
+\end{equation}
+Bosonic characters are unchanged by barring, while fermionic characters
+change sign. \code{DoubleGroup} stores all unbarred operations followed by
+all barred operations in the same spatial order.
+
+\Cref{tab:spinors} lists the fermionic labels. In $C_2^*$, $C_s^*$, and
+$C_{2h}^*$, the labels beginning with \code{1} and \code{2} have characters
+$+\mathrm{i}$ and $-\mathrm{i}$ under the unbarred $C_2$ rotation (the mirror
+for $C_s^*$). Their products are not given by spatial Cotton-index XOR.
+\begin{table}[ht]
+\setlength{\tabcolsep}{10pt}
+\caption{Fermionic irreps appended after the ordinary Cotton-indexed irreps.}
+\label{tab:spinors}
+\begin{tabular}{@{}lll@{}}
+\hline
+Double group & Implementation labels & Dimension \\
+\hline
+$C_1^*$ & \code{a1/2} & 1 \\
+$C_i^*$ & \code{a1/2g}, \code{a1/2u} & 1 \\
+$C_2^*$, $C_s^*$ & \code{1e1/2}, \code{2e1/2} & 1 \\
+$C_{2h}^*$ & \code{1e1/2g}, \code{2e1/2g}, & 1 \\
+ & \code{1e1/2u}, \code{2e1/2u} & \\
+$D_2^*$, $C_{2v}^*$ & \code{e1/2} & 2 \\
+$D_{2h}^*$ & \code{e1/2g}, \code{e1/2u} & 2 \\
+\hline
+\end{tabular}
+\end{table}
+
+Direct-product multiplicities are computed from the characters:
+\begin{equation}
+ N_{\Gamma\Lambda}^{\Omega}
+ =\frac{1}{|G^*|}\sum_{g\in G^*}
+   \chi_\Gamma(g)\chi_\Lambda(g)\chi_\Omega(g)^*.
+ \label{eq:products}
+\end{equation}
+For an Abelian double group exactly one multiplicity is one, giving the
+product table used in \cref{eq:dp}. For the non-Abelian groups products can be
+reducible. For example,
+\begin{equation}
+ E_{1/2,g}\otimes E_{1/2,g}
+   =A_g\oplus B_{1g}\oplus B_{2g}\oplus B_{3g}
+ \quad\text{in }D_{2h}^*.
+ \label{eq:reducible}
+\end{equation}
+An occupied-spinor label product therefore does not by itself determine the
+total irrep of a Slater determinant.
+
+\subsection{Orthonormal spinor blocks}
+
+Noncommuting spin rotations cannot be simultaneously diagonalized as in the
+spatial detector. \code{DoubleGroupBasis} instead constructs character
+projectors in the retained orthonormal AO space:
+\begin{equation}
+ \bvec{P}_\Gamma
+  =\frac{d_\Gamma}{|G^*|}\sum_{g\in G^*}\chi_\Gamma(g)^*
+    \bvec{X}^\dagger\bvec{S}\bvec{U}^*(g)\bvec{X}.
+ \label{eq:spinor-projector}
+\end{equation}
+The eigenvectors with eigenvalue one span the isotypic block for $\Gamma$,
+including every equivalent copy of that irrep. Multiplying these vectors by
+$\bvec{X}$ produces the AO coefficient block $\bvec{B}_\Gamma$ used in
+\cref{eq:block-fock}.
+
+Before building these blocks, the implementation verifies that every
+representation $\bvec{X}^\dagger\bvec{S}\bvec{U}^*(g)\bvec{X}$ is unitary.
+It also checks that projector eigenvalues are zero or one and that the blocks
+span the full retained space with the correct overlap orthonormality. These
+checks reject, for example, an orthogonalizer that retains only one component
+of a spinor multiplet. The absolute tolerance is $10^{-6}$ with zero relative
+tolerance.
+
+A spinor labelled by a two-dimensional irrep belongs to its isotypic block;
+an individual column need not be an eigenvector of every operation.
+Unpaired block diagonalization preserves this membership while allowing the
+Fock eigenvectors to mix equivalent copies.
+
+\section{Total determinant symmetry and allowed targets}
+\label{sec:determinant}
+
+\subsection{Slater determinant projectors}
+
+Let $\bvec{C}_{\mathrm{occ}}$ contain the $N$ occupied orthonormal spinors.
+The overlap with the symmetry-transformed determinant is
+\begin{equation}
+ f(g)=\braket{\Phi|\hat U^*(g)|\Phi}
+     =\det\left(
+       \bvec{C}_{\mathrm{occ}}^\dagger\bvec{S}
+       \bvec{U}^*(g)\bvec{C}_{\mathrm{occ}}
+       \right).
+ \label{eq:det-overlap}
+\end{equation}
+The total-irrep weight is the expectation value of its character projector:
+\begin{equation}
+ w_\Gamma=\frac{d_\Gamma}{|G^*|}
+   \sum_{g\in G^*}\chi_\Gamma(g)^*f(g).
+ \label{eq:det-weight}
+\end{equation}
+The weights are real, nonnegative, and sum to one for a normalized
+determinant. The implementation verifies nonnegativity and normalization
+within $10^{-6}$, clips small numerical excursions to $[0,1]$, and reports a
+pure irrep when exactly one weight is one within that tolerance.
+
+\code{hf.state_symmetry_weights} stores the weights by irrep label.
+\code{hf.state_symmetry} is the pure label or \code{None} for a mixture. For a
+multidimensional irrep, a pure weight means membership in that total isotypic
+space; it does not mean the state transforms by a scalar under every
+operation.
+
+The central rotation satisfies
+$\hat U^*(\bar E)\ket{\Phi}=(-1)^N\ket{\Phi}$.
+Thus odd-electron targets must be fermionic and even-electron targets bosonic.
+Every requested target is checked against the final determinant through
+\cref{eq:det-weight}.
+
+\subsection{Non-Abelian single-determinant restrictions}
+
+For $D_2^*$, $C_{2v}^*$, and $D_{2h}^*$, the one-electron fermionic irreps are
+two dimensional. An even-electron determinant transforming as a
+one-dimensional total irrep must have an occupied subspace invariant under
+every group operation: a transformed determinant proportional to the
+original has the same occupied space. Such a space is a direct sum of complete
+copies of the spinor irreps.
+
+Each complete copy has determinant one for every operation. Proper spin
+rotations have determinant one, the barred lift has determinant
+$\det(-\Id_2)=1$, and inversion contributes $\det(\pm\Id_2)=1$. Hence the
+determinant of any invariant occupied space is totally symmetric. Other
+bosonic targets in these three double groups require a multideterminant
+wavefunction and are rejected by the HF occupation policy.
+
+For an odd-electron target in these groups, the fermionic isotypic space is
+fixed by inversion parity when inversion is present. The occupation search
+then reduces to the parity version of \cref{eq:dp}. $D_2^*$ and $C_{2v}^*$
+have only one fermionic irrep, while $D_{2h}^*$ distinguishes its $g$ and $u$
+irreps. This reduction follows from the character table of these particular
+groups; it is not a general replacement for double-group symmetry.
+
+Explicit counts without a target may describe an even-electron determinant
+with several nonzero total-irrep weights. Those counts constrain spinor block
+membership, while \cref{eq:det-weight} determines the resulting electronic
+mixture. Abelian double groups use the full one-dimensional product table and
+do not have the complete-two-dimensional-multiplet restriction.
+
+\subsection{Paired diagonalization for the identity target}
+\label{sec:paired}
+
+To realize a totally symmetric even-electron determinant in a non-Abelian
+double group, the basis must supply complete partner pairs. Within an
+isotypic block, \code{DoubleGroupBasis} constructs and caches two component
+bases, $\bvec{B}_0$ and $\bvec{B}_1$. The first spans the $-\mathrm{i}$
+eigenspace of $C_{2z}$, and the second is obtained by applying $C_{2y}$ for
+$D_2^*$ and $D_{2h}^*$, or $\sigma_{xz}$ for $C_{2v}^*$.
+
+Schur's lemma gives the invariant Fock operator by tracing over the irrep
+components. Its multiplicity-space matrix is
+\begin{equation}
+ \bvec{F}_{\mathrm{eff}}=\frac12\left(
+     \bvec{B}_0^\dagger\bvec{F}\bvec{B}_0
+    +\bvec{B}_1^\dagger\bvec{F}\bvec{B}_1\right).
+ \label{eq:schur}
+\end{equation}
+If $\bvec{F}_{\mathrm{eff}}\bvec{v}=\bvec{v}\bvec{\epsilon}$, the two
+partners are $\bvec{B}_0\bvec{v}$ and $\bvec{B}_1\bvec{v}$ with identical
+energies. This component trace is equivalent to the full group average in
+the isotypic block,
+\begin{equation}
+ \overline{\bvec{F}}_\Gamma
+ =\frac{1}{|G^*|}\sum_{g\in G^*}
+    \bvec{R}_\Gamma(g)^\dagger\bvec{F}_\Gamma\bvec{R}_\Gamma(g).
+ \label{eq:group-average}
+\end{equation}
+Caching the component bases avoids constructing all transformed Fock blocks
+in each SCF iteration.
+
+Partners are interleaved before stable global energy sorting. The occupation
+policy selects whole pairs, including at accidental energy degeneracies.
+With explicit counts and this target, every spinor-irrep count must be even.
+Without explicit counts, the lowest-energy pairs are filled.
+
+\section{Shared SCF interfaces and data flow}
+\label{sec:implementation}
+
+The spatial and double-group basis classes share two operations:
+\begin{itemize}
+ \item \code{eigh(F)} returns energies, coefficients, and irrep indices
+       from a symmetry-block diagonalization.
+ \item \code{adapt(C, eps)} returns the same three quantities for a supplied
+       orbital guess.
+\end{itemize}
+Spatial adaptation uses the cached AO operations and the MO detector. Spinor
+adaptation constructs the AO energy proxy
+\begin{equation}
+ \bvec{F}_{\mathrm{guess}}
+ =\bvec{S}\bvec{C}\operatorname{diag}(\epsilon_p)
+    \bvec{C}^\dagger\bvec{S},
+ \label{eq:guess-proxy}
+\end{equation}
+then calls the double-group basis diagonalizer. This also enforces paired
+structure when required by \cref{sec:paired}. If no guess energies are stored,
+the diagonal of $\bvec{C}^\dagger\bvec{H}\bvec{C}$ supplies the proxy, where
+$\bvec{H}$ is the core Hamiltonian.
+
+\code{SCFBase} owns the shared orchestration:
+\begin{enumerate}
+ \item Constructor validation checks option types and count shapes.
+ \item Binding resolves the group, electron numbers, labels, and compatible
+       occupation constraints.
+ \item Run startup constructs the symmetry basis once from $\bvec{X}$ and
+       checks capacity and target feasibility before the first density or
+       J/K build. Feasibility uses the occupation policy with zero costs.
+ \item With constraints active, SAP/core guesses use symmetry-block
+       diagonalization, and supplied or perturbed guesses are adapted before
+       selecting their occupations.
+ \item Each SCF Fock diagonalization returns irrep metadata with its
+       coefficients; the occupation policy permutes all three arrays before
+       density construction.
+ \item Final labels use that metadata. The total determinant irrep is
+       computed separately and verified against the requested target.
+\end{enumerate}
+Spatial symmetry blocks and spin--orbit double-group blocks are also used
+when no occupation constraint is requested. In that case ordinary energy
+ordering determines occupations and the final determinant symmetry is
+reported. Spatial $C_1$ can use the ordinary orthogonalized diagonalizer.
+
+Raw symmetry and occupation options are preserved. Resolved count arrays,
+normalized labels, symmetry bases, and cached multiplet components are
+derived state. Rebuilding a method chain can therefore pass the original
+options unchanged to a new constructor. Rebinding clears orbital and
+determinant metadata, and the basis caches are reconstructed at run startup.
+
+The source responsibilities are:
+\begin{description}
+ \item[\code{system/geom_utils.py}] Center of mass, inertia tensor, and
+       principal-frame coordinates.
+ \item[\code{symmetry/pg_sym_detect.py}] Frame selection and molecular
+       operation tests for the supported spatial point groups.
+ \item[\code{symmetry/sym_utils.py}] Operation order, spatial character
+       tables, Cotton indices, and geometric operations.
+ \item[\code{symmetry/mo_sym_detect.py}] AO permutation/phase matrices,
+       connected MO blocks, simultaneous spatial resolution, and character
+       validation.
+ \item[\code{symmetry/symmetry_basis.py}] Spatial orthonormal irrep blocks
+       and the common diagonalization/adaptation interface.
+ \item[\code{symmetry/double_group.py}] Spin lifts, character tables and
+       products, spinor projectors, paired blocks, and determinant weights.
+ \item[\code{scf/occupations.py}] Shared input/capacity validation and
+       separate spatial and double-group occupation policies.
+ \item[\code{scf/scf_base.py}] SCF lifecycle, guess preparation, consistent
+       orbital permutations, and final determinant verification.
+\end{description}
+The two occupation policies share \code{_OccupationConstraints} for label
+resolution and capacity checks. The double-group policy is independent of the
+spatial policy, so shared validation carries no spatial XOR assumption.
+
+\section{Boundary with relativistic CI}
+\label{sec:ci}
+
+The current CI string algebra implements one-dimensional spatial XOR
+products. Spin--orbit \code{RelCIBase} therefore supplies $C_1$ orbital indices
+to its CI workers and requires the CI state-symmetry index to be zero.
+\code{CIBase._active_orbital_symmetries} provides the hook for this conversion.
+Spin-free relativistic CI retains spatial symmetry handling.
+
+An HF double-group target constrains the HF reference determinant. It does
+not select a subsequent CI or MCSCF electronic irrep. Full double-group
+state selection in those methods requires a determinant/state representation
+that handles the reducible products and multidimensional irreps explicitly.
+
+\end{document}

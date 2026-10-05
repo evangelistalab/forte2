@@ -1,11 +1,9 @@
 Contributor Guide
 =================
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Technical notes
-
-   technical/hf_symmetry
+The :download:`HF symmetry technical note <../technical_notes/hf_symmetry.tex>`
+describes the AO representations, orbital adaptation, occupation algorithms,
+and double-group determinant projectors.
 
 Code Standards
 --------------

@@ -190,8 +190,9 @@ These double-group constraints apply to HF. Spin-orbit CI continues to solve
 in C1; its spatial-irrep XOR string machinery does not support double-group
 state selection. The HF double-group indices are therefore not passed to it.
 
-See :doc:`../technical/hf_symmetry` for the algorithms, determinant projector
-formulas, refactoring boundaries, and validation strategy.
+See the :download:`HF symmetry technical note <../../technical_notes/hf_symmetry.tex>`
+for the AO representations, orbital adaptation, occupation algorithms, and
+double-group determinant projectors.
 
 Parallelism
 -----------
