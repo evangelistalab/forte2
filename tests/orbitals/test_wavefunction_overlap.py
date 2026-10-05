@@ -5,7 +5,7 @@ from forte2 import CI, CISolver, GHF, MCOptimizer, RelCISolver, RHF, State, Syst
 from forte2.base_classes import X2CParams
 from forte2.helpers import random_unitary
 from forte2.helpers.comparisons import approx, approx_abs
-from forte2.orbitals import ci_overlap, mo_overlap
+from forte2.orbitals import ci_overlap, ci_overlap_matrix, mo_overlap
 from forte2.orbitals.wavefunction_overlap import biorthogonalize_casscf_orbitals
 
 ALGORITHMS = ["naive", "biorthogonal"]
@@ -33,7 +33,7 @@ def test_ci_overlap_roots(algorithm):
     Ms = 1, against its representation in rotated orbitals. Roots are counted
     across all states, so the Ms = 0 roots have overlaps of 1 in magnitude for
     matching roots and 0 otherwise, the singlet-triplet ones by spin symmetry.
-    Roots with different Ms have different electron counts.
+    Roots with different Ms don't overlap at all.
     """
     system = _water(1.0)
     rhf = RHF(charge=0, e_tol=1e-12)(system)
@@ -74,8 +74,7 @@ def test_ci_overlap_roots(algorithm):
         ci_overlap(ci_1, ci_2, 0, 0, algorithm=algorithm)
     )
     for roots in ((0, 3), (3, 2)):
-        with pytest.raises(ValueError):
-            ci_overlap(ci_1, ci_2, *roots, algorithm=algorithm)
+        assert ci_overlap(ci_1, ci_2, *roots, algorithm=algorithm) == 0.0
 
 
 @pytest.mark.parametrize("algorithm", ALGORITHMS)
@@ -287,10 +286,11 @@ def test_ci_overlap_two_component_single_determinant(algorithm):
 
 def test_ci_overlap_algorithms_agree():
     """
-    The two algorithms agree for every root pair of a two-root CASCI at two
-    geometries, where the second calculation orders its core and active
-    orbitals differently. The reordering puts the biorthogonalizing rotations
-    far from the identity.
+    Both algorithms agree, pair by pair and as a matrix, for every root pair of
+    a CASCI over two singlets and an Ms = 1 triplet at two geometries, where
+    the second calculation orders its core and active orbitals differently.
+    The reordering puts the biorthogonalizing rotations far from the identity.
+    Roots with different Ms don't overlap.
     """
     cis = []
     for scale, order in ((1.0, [0, 1, 2, 3, 4, 5, 6]), (1.1, [1, 2, 0, 6, 3, 5, 4])):
@@ -299,20 +299,33 @@ def test_ci_overlap_algorithms_agree():
         rhf.run()
         rhf.mos.C[0][:, :7] = rhf.mos.C[0][:, order]
         ci_solver = CISolver(
-            State(nel=10, multiplicity=1, ms=0.0),
+            states=[
+                State(nel=10, multiplicity=1, ms=0.0),
+                State(nel=10, multiplicity=3, ms=1.0),
+            ],
             core_orbitals=[0, 1, 2],
             active_orbitals=[3, 4, 5, 6],
-            nroots=2,
+            nroots=[2, 1],
         )
         ci = CI(ci_solver=ci_solver)(rhf)
         ci.run()
         cis.append(ci)
 
-    for root_1 in range(2):
-        for root_2 in range(2):
-            S_naive = ci_overlap(cis[0], cis[1], root_1, root_2, algorithm="naive")
-            S_bio = ci_overlap(cis[0], cis[1], root_1, root_2, algorithm="biorthogonal")
-            assert S_bio == approx(S_naive), f"roots ({root_1}, {root_2})"
+    S = {alg: ci_overlap_matrix(*cis, algorithm=alg) for alg in ALGORITHMS}
+    for root_1, root_2 in ((0, 0), (0, 1), (1, 0), (1, 1), (2, 2)):
+        S_naive = ci_overlap(cis[0], cis[1], root_1, root_2, algorithm="naive")
+        S_bio = ci_overlap(cis[0], cis[1], root_1, root_2, algorithm="biorthogonal")
+        assert S_bio == approx(S_naive), f"roots ({root_1}, {root_2})"
+        for alg in ALGORITHMS:
+            assert S[alg][root_1, root_2] == approx(S_naive), f"{alg} matrix"
+    for alg in ALGORITHMS:
+        assert S[alg].shape == (3, 3)
+        assert S[alg][:2, 2] == approx_abs(np.zeros(2), 0)
+        assert S[alg][2, :2] == approx_abs(np.zeros(2), 0)
+    assert ci_overlap(cis[0], cis[1], 0, 2) == 0.0
+
+    S_sub = ci_overlap_matrix(*cis, roots_1=[1], roots_2=[2, 0])
+    assert S_sub == approx(S["biorthogonal"][np.ix_([1], [2, 0])])
 
 
 def test_ci_overlap_two_component_algorithms_agree():
@@ -335,11 +348,16 @@ def test_ci_overlap_two_component_algorithms_agree():
         ci.run()
         cis.append(ci)
 
+    S_naive = ci_overlap_matrix(*cis, algorithm="naive")
+    S_bio = ci_overlap_matrix(*cis, algorithm="biorthogonal")
+    assert S_bio.shape == (4, 4)
+    assert S_bio == approx(S_naive)
     for root_1 in range(4):
         for root_2 in range(4):
-            S_naive = ci_overlap(*cis, root_1, root_2, algorithm="naive")
-            S_bio = ci_overlap(*cis, root_1, root_2, algorithm="biorthogonal")
-            assert S_bio == approx(S_naive), f"roots ({root_1}, {root_2})"
+            S_pair = ci_overlap(*cis, root_1, root_2, algorithm="biorthogonal")
+            assert S_bio[root_1, root_2] == approx(
+                S_pair
+            ), f"roots ({root_1}, {root_2})"
 
 
 @pytest.mark.parametrize("cmplx", [False, True])
@@ -375,7 +393,8 @@ def test_biorthogonalize_casscf_orbitals(cmplx):
 def test_ci_overlap_biorthogonal_rejects_unsupported_expansions():
     """
     The biorthogonal algorithm needs matching core and active spaces and the
-    complete CAS determinant space. The naive algorithm handles both cases.
+    complete CAS determinant space. The naive algorithm handles both cases,
+    and the automatic choice falls back to it.
     """
     rhf = RHF(charge=0, e_tol=1e-12)(_water(1.0))
     ci_solver_44 = CISolver(
@@ -395,7 +414,9 @@ def test_ci_overlap_biorthogonal_rejects_unsupported_expansions():
 
     with pytest.raises(ValueError):
         ci_overlap(ci_44, ci_65, algorithm="biorthogonal")
-    assert 0.0 < abs(ci_overlap(ci_44, ci_65, algorithm="naive")) < 1.0
+    S_naive = ci_overlap(ci_44, ci_65, algorithm="naive")
+    assert 0.0 < abs(S_naive) < 1.0
+    assert ci_overlap(ci_44, ci_65) == approx(S_naive)
 
     rhf_sym = RHF(charge=0, e_tol=1e-12)(_water(1.0, symmetry=True))
     ci_solver_sym = CISolver(
@@ -409,6 +430,7 @@ def test_ci_overlap_biorthogonal_rejects_unsupported_expansions():
     with pytest.raises(ValueError):
         ci_overlap(ci_sym, ci_sym, algorithm="biorthogonal")
     assert abs(ci_overlap(ci_sym, ci_sym, algorithm="naive")) == approx(1.0)
+    assert abs(ci_overlap(ci_sym, ci_sym)) == approx(1.0)
 
     with pytest.raises(ValueError):
         ci_overlap(ci_44, ci_44, algorithm="lowdin")

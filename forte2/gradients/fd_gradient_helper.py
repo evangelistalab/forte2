@@ -47,7 +47,8 @@ def finite_difference(f, x, *, step=1.0e-3, npoints=4, components=None, progress
     r"""
     Differentiate `f` at `x` by central finite differences.
 
-    `f` may return a scalar or an array; the derivative preserves that shape.
+    `f` may return a real or complex scalar or array; the derivative preserves
+    its shape, and is complex if `f` is.
     `x` may be a scalar or an array of any shape, and `f` receives displaced
     values of the same shape. `x` itself is never modified.
 
@@ -117,7 +118,8 @@ def finite_difference(f, x, *, step=1.0e-3, npoints=4, components=None, progress
 
     def evaluate(displaced):
         nonlocal done
-        value = np.asarray(f(displaced), dtype=float)
+        value = np.asarray(f(displaced))
+        value = value.astype(complex if np.iscomplexobj(value) else float)
         done += 1
         if progress is not None:
             progress(done, total)

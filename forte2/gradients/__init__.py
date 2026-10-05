@@ -4,4 +4,4 @@ from .utils import (
     compute_gradient,
 )
 from .fd_gradient_helper import finite_difference, central_stencil
-from .fd_gradient import FDGradient
+from .fd_gradient import FiniteDifference
