@@ -54,8 +54,9 @@ class GHF(SCFBase):
     break_complex_symmetry: bool = False
     j_adapt: bool = False
 
+    _occupation_type = "generalized"
+
     _diis_update = RHF._diis_update
-    _assign_orbital_symmetries = RHF._assign_orbital_symmetries
 
     def __post_init__(self):
         super().__post_init__()
@@ -74,6 +75,7 @@ class GHF(SCFBase):
             self.nmo_spinor = info["n_kept"]
         self = super().__call__(system)
         self._parse_state()
+        self._configure_occupation_constraints()
         return self
 
     def _parse_state(self):
@@ -96,7 +98,11 @@ class GHF(SCFBase):
             ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
-        if self.iter == 0 and self.ms_guess is not None:
+        if (
+            self.iter == 0
+            and self.ms_guess is not None
+            and self._occupation_policy is None
+        ):
             # Apply na/nb_guess
             mo_a, mo_b = self._guess_ms(self.C[0])
             occ = list(mo_a[: self.na_guess]) + list(mo_b[: self.nb_guess])
@@ -113,7 +119,11 @@ class GHF(SCFBase):
 
     def _build_density_matrix(self):
         # D = Cocc Cocc^+
-        if self.iter == 0 and self.ms_guess is not None:
+        if (
+            self.iter == 0
+            and self.ms_guess is not None
+            and self._occupation_policy is None
+        ):
             # apply na/nb_guess
             occ_a, occ_b = self._guess_ms(self.C[0])
             Ca = self.C[0][:, occ_a[: self.na_guess]]
@@ -175,19 +185,22 @@ class GHF(SCFBase):
         return AO_grad
 
     def _eigh(self, F):
+        if self._symmetry_basis is not None:
+            return super()._eigh(F)
+        self._last_eigh_irreps = None
         Xorth = self.Xorth_spinor if self.j_adapt else self.Xorth
         Ftilde = Xorth.conj().T @ F @ Xorth
         e, c = np.linalg.eigh(Ftilde)
         return e, Xorth @ c
 
     def _diagonalize_fock(self, F):
-        if self.j_adapt:
-            F_spinor = self.Usph2j.conj().T @ F[0] @ self.Usph2j
-            eps, C = self._eigh(F_spinor)
-            C = self.Usph2j @ C
-        else:
-            eps, C = self._eigh(F[0])
-        return [eps], [C]
+        if self._symmetry_basis is not None or not self.j_adapt:
+            return super()._diagonalize_fock(F)
+        F_spinor = self.Usph2j.conj().T @ F[0] @ self.Usph2j
+        eps, C = self._eigh(F_spinor)
+        C = self.Usph2j @ C
+        self._orbital_irreps = [np.zeros(len(eps), dtype=int)]
+        return self._apply_occupation_constraints([eps], [C])
 
     def _spin(self, S):
         """

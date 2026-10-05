@@ -68,6 +68,131 @@ You can then run the whole chain with a single call:
 
 >>> casscf.run()
 
+Molecular symmetry
+------------------
+
+Set ``symmetry=True`` on ``System`` to detect the largest Abelian point group.
+Spatial Hartree-Fock methods (RHF, ROHF, UHF, and CUHF) then diagonalize the
+Fock matrix separately in each irrep, preventing numerical mixing of nearly
+degenerate orbitals with different symmetries. Without occupation constraints,
+orbitals remain ordered by energy.
+Use ``symmetry=False`` to allow solutions that break spatial symmetry.
+
+MO symmetry detection resolves coupled orbital blocks under all point-group
+operations, including noncontiguous orbitals. If the orbital space cannot be
+resolved into valid irreps, it raises ``RuntimeError`` instead of assigning
+totally symmetric labels to every orbital.
+
+HF symmetry and occupations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+All HF methods accept ``target_symmetry`` to select the total electronic
+determinant irrep. Specify an irrep label (case insensitive) or its Cotton index.
+For example, an open-shell calculation can target ``"b1u"``:
+
+.. code-block:: python
+
+    hf = forte2.UHF(charge=1, ms=0.5, target_symmetry="b1u")(system)
+    hf.run()
+    print(hf.state_symmetry)
+
+At every SCF iteration, occupations are selected using orbital energies subject
+to the electron counts and requested determinant symmetry. Closed-shell RHF
+determinants are always totally symmetric. Use explicit occupations to choose
+a particular configuration when several configurations share the same irrep.
+
+``irrep_occupations`` fixes the number of occupied orbitals in each irrep:
+
+* RHF: an integer number of occupied **spatial orbitals**, each doubly occupied.
+* ROHF, UHF, and CUHF: an ``(alpha, beta)`` pair of occupied spatial-orbital counts.
+* GHF: an integer number of occupied **spinors**, each occupied by one electron.
+
+Unlisted irreps have zero occupation, so the supplied counts must account for
+all electrons. ROHF and CUHF require minority-spin occupations to be nested
+within majority-spin occupations in every irrep. Both options can be supplied
+together; incompatible requests raise ``ValueError``.
+
+For stretched N2 at 2.5 Angstrom with cc-pVTZ, this selects the configuration
+with three occupied ``ag`` orbitals, two ``b1u`` orbitals, and one of each
+``pi_u`` component:
+
+.. code-block:: python
+
+    system = forte2.System(
+        xyz="N 0 0 0; N 0 0 2.5",
+        basis_set="cc-pvtz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    hf = forte2.RHF(
+        charge=0,
+        irrep_occupations={"ag": 3, "b1u": 2, "b2u": 1, "b3u": 1},
+    )(system)
+    hf.run()
+
+Constrained orbitals are stored with occupied orbitals first and virtual
+orbitals last, sorted by energy within each block. ROHF stores doubly occupied,
+singly occupied, and virtual blocks separately. The raw constructor options
+are preserved when a method chain is rebuilt or rebound.
+
+Spin-free GHF uses the detected spatial point group. With spin-orbit coupling,
+GHF uses its full double group, including spin rotations and the 2π rotation.
+``hf.orbital_point_group`` identifies it with a trailing ``*`` (for example,
+``"D2H*"``). Character projectors resolve multidimensional irreps rather than
+assigning ordinary spatial labels to spinors. Separate alpha/beta occupation
+counts are not defined for spin-orbit GHF.
+
+The spinor labels are:
+
+.. list-table:: Fermionic double-group irreps
+    :header-rows: 1
+
+    * - Spatial group
+      - Spinor labels
+      - Dimension
+    * - C1
+      - ``a1/2``
+      - 1
+    * - Ci
+      - ``a1/2g``, ``a1/2u``
+      - 1
+    * - C2, Cs
+      - ``1e1/2``, ``2e1/2``
+      - 1
+    * - C2h
+      - ``1e1/2g``, ``2e1/2g``, ``1e1/2u``, ``2e1/2u``
+      - 1
+    * - D2, C2v
+      - ``e1/2``
+      - 2
+    * - D2h
+      - ``e1/2g``, ``e1/2u``
+      - 2
+
+Ordinary (bosonic) irreps retain their Cotton indices; the spinor irreps follow
+in the order shown above. For C2, Cs, and C2h, the ``1``/``2`` partners have
+characters ``+i``/``-i`` under the unbarred C2 rotation (mirror for Cs).
+Odd-electron targets must be fermionic and even-electron targets bosonic.
+For example, ``GHF(charge=1, target_symmetry="e1/2u")`` targets an odd-electron
+ungerade state in D2h*, and ``irrep_occupations={"e1/2g": 4, "e1/2u": 3}``
+fixes seven occupied spinors in those two irreps.
+
+For D2*, C2v*, and D2h*, a symmetry-pure even-electron single determinant must
+fill complete two-dimensional spinor multiplets and is totally symmetric.
+Targeting that irrep enforces paired occupations; other bosonic target irreps
+require a multideterminant wavefunction and raise ``ValueError``. Explicit
+spinor counts without a target can produce a mixture of total irreps.
+``hf.state_symmetry_weights`` reports their character-projector weights, and
+``hf.state_symmetry`` is ``None`` when the determinant is mixed. Every requested
+target is checked against the determinant itself after convergence.
+
+These double-group constraints apply to HF. Spin-orbit CI continues to solve
+in C1; its spatial-irrep XOR string machinery does not support double-group
+state selection. The HF double-group indices are therefore not passed to it.
+
+See :doc:`../technical/hf_symmetry` for the algorithms, determinant projector
+formulas, refactoring boundaries, and validation strategy.
+
 Parallelism
 -----------
 

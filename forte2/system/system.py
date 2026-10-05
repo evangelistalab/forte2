@@ -60,6 +60,7 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     symmetry : bool, optional, default=False
         Whether to automatically detect the largest Abelian point group symmetry of the molecule.
+        Spatial Hartree-Fock methods preserve this symmetry during Fock diagonalization.
         This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
     symmetry_tol : float, optional, default=1e-4
         The tolerance for detecting symmetry.

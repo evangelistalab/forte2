@@ -1,6 +1,12 @@
 Contributor Guide
 =================
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Technical notes
+
+   technical/hf_symmetry
+
 Code Standards
 --------------
 Forte2 uses the `functional composition <https://en.wikipedia.org/wiki/Function_composition_(computer_science)>`_ style (like the `TensorFlow functional API <https://www.tensorflow.org/guide/keras/functional_api>`_) for most quantum chemical methods, with the following programmatic flow:

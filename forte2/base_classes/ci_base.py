@@ -241,6 +241,12 @@ class CIBase(ActiveSpaceSolver):
         """Hook for per-state worker kwargs beyond the shared ones."""
         return {}
 
+    def _active_orbital_symmetries(self):
+        return [
+            [self.mos.irrep_indices[0][i] for i in active_space]
+            for active_space in self.mo_space.active_orbitals
+        ]
+
     def _startup(self):
         super()._startup()
 
@@ -253,10 +259,7 @@ class CIBase(ActiveSpaceSolver):
 
         ints = self.make_active_space_ints()
 
-        active_orbsym = [
-            [self.mos.irrep_indices[0][i] for i in active_space]
-            for active_space in self.mo_space.active_orbitals
-        ]
+        active_orbsym = self._active_orbital_symmetries()
 
         self.sub_solvers = []
         for i, state in enumerate(self.sa_info.states):
@@ -538,6 +541,17 @@ class RelCIBase(RelActiveSpaceSolver, CIBase):
     """
     Two-component counterpart of :class:`CIBase`.
     """
+
+    def _active_orbital_symmetries(self):
+        if self.system.x2c_type == "so":
+            # CIStrings uses ordinary spatial-irrep XOR products. Full double-
+            # group indices from SO-GHF must not be passed to that algebra.
+            if any(state.symmetry != 0 for state in self.sa_info.states):
+                raise ValueError(
+                    "Spin-orbit CI currently supports only C1 state symmetry."
+                )
+            return [[0] * len(space) for space in self.mo_space.active_orbitals]
+        return super()._active_orbital_symmetries()
 
     def _startup(self):
         super()._startup()

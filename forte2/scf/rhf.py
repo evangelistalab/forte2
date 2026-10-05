@@ -5,7 +5,6 @@ from numpy.typing import NDArray
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .scf_utils import minao_initial_guess, core_initial_guess
 
@@ -16,6 +15,8 @@ class RHF(SCFBase):
     A class that runs restricted Hartree-Fock calculations.
     """
 
+    _occupation_type = "restricted"
+
     def __post_init__(self):
         super().__post_init__()
         self.two_component = False
@@ -25,6 +26,7 @@ class RHF(SCFBase):
         system.two_component = False
         self = super().__call__(system)
         self._parse_state()
+        self._configure_occupation_constraints()
         return self
 
     def _parse_state(self):
@@ -46,11 +48,14 @@ class RHF(SCFBase):
         return 2 * self._build_density_matrix()[0]
 
     def _initial_guess(self, H, guess_type="minao"):
+        diagonalizer = (
+            self._initial_symmetry_eigh if self._occupation_policy is not None else None
+        )
         match guess_type:
             case "minao":
-                C = minao_initial_guess(self.system, H)
+                C = minao_initial_guess(self.system, H, diagonalizer=diagonalizer)
             case "hcore":
-                C = core_initial_guess(self.system, H)
+                C = core_initial_guess(self.system, H, diagonalizer=diagonalizer)
             case _:
                 raise RuntimeError(f"Unknown initial guess type: {guess_type}")
 
@@ -63,10 +68,6 @@ class RHF(SCFBase):
 
     def _energy(self, H, F):
         return np.sum(self.D[0] * (H + F[0]))
-
-    def _diagonalize_fock(self, F):
-        eps, C = self._eigh(F[0])
-        return [eps], [C]
 
     def _spin(self, S):
         return self.ms * (self.ms + 1)
@@ -141,16 +142,3 @@ class RHF(SCFBase):
         basis_info.print_ao_composition(
             self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
         )
-
-    def _assign_orbital_symmetries(self):
-        S = self._get_overlap()
-        mosym = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[0],
-            self.eps[0],
-        )
-        mosym.run()
-        self.irrep_labels = [mosym.labels]
-        self.irrep_indices = [mosym.irrep_indices]

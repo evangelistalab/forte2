@@ -23,18 +23,18 @@ class CUHF(SCFBase):
     ms: float = None
     guess_mix: bool = False  # only used if ms == 0
 
+    _occupation_type = "constrained_unrestricted"
+
     _parse_state = UHF._parse_state
     _build_density_matrix = UHF._build_density_matrix
     _initial_guess = UHF._initial_guess
     _build_ao_grad = UHF._build_ao_grad
-    _diagonalize_fock = UHF._diagonalize_fock
     _spin = UHF._spin
     _energy = UHF._energy
     _diis_update = UHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
     _get_occupation = UHF._get_occupation
     _print_orbital_energies = UHF._print_orbital_energies
-    _assign_orbital_symmetries = UHF._assign_orbital_symmetries
     _print_orbital_energies = UHF._print_orbital_energies
     _print_ao_composition = UHF._print_ao_composition
     _apply_level_shift = UHF._apply_level_shift
@@ -47,6 +47,7 @@ class CUHF(SCFBase):
         system.two_component = False
         self = super().__call__(system)
         self._parse_state()
+        self._configure_occupation_constraints()
         return self
 
     def _build_fock(self, H, fock_builder, S):

@@ -7,6 +7,23 @@ from forte2.helpers.comparisons import approx
 from forte2 import CI
 
 
+def test_rel_ci_consumes_double_group_hf_orbitals_in_c1():
+    # The SO-GHF label is a fermionic 2D irrep, whose index cannot be used
+    # as an ordinary spatial XOR irrep in the current CI string builder.
+    system = System(
+        xyz="H 0 0 0",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-jkfit",
+        symmetry=True,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
+    )
+    hf = GHF(charge=0, target_symmetry="e1/2g")(system).run()
+    ci = CI(RelCISolver(nel=1, active_orbitals=2))(hf).run()
+    assert hf.irrep_labels[0] == ["e1/2g", "e1/2g"]
+    assert ci.ci_solver.sub_solvers[0].ndet == 2
+    assert ci.E_ci[0] == pytest.approx(hf.E, abs=1e-10)
+
+
 def test_rel_ci_orbital_invariance_is_true():
     # test that the orbital rotation invariance flag is set to True for CI
     xyz = """H 0.0 0.0 0.0"""

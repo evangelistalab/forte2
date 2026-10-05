@@ -7,7 +7,7 @@ from forte2.system.build_basis import build_sap_potential_basis
 from forte2.helpers.matrix_functions import givens_rotation
 
 
-def minao_initial_guess(system, H):
+def minao_initial_guess(system, H, diagonalizer=None):
     """
     Generate a superposition of atomic potentials (SAP) initial guess for the SCF procedure
     S. Lehtola, J. Chem. Theory Comput. 15, 1593-1604 (2019), arXiv:1810.11659.
@@ -19,6 +19,8 @@ def minao_initial_guess(system, H):
         The system object containing the atoms and basis set.
     H : NDArray
         The core Hamiltonian matrix.
+    diagonalizer : callable | None, optional
+        Function returning energies and coefficients for an AO Hamiltonian.
 
     Returns
     -------
@@ -43,6 +45,9 @@ def minao_initial_guess(system, H):
     else:
         _SAP_V = SAP_V
 
+    if diagonalizer is not None:
+        return diagonalizer(H + _SAP_V)[1]
+
     # generate the SAP Hamiltonian and diagonalize it
     Xorth = system.get_Xorth()
     H_SAP = Xorth.T @ (H + _SAP_V) @ Xorth
@@ -51,7 +56,7 @@ def minao_initial_guess(system, H):
     return Xorth @ C
 
 
-def core_initial_guess(system: System, H):
+def core_initial_guess(system: System, H, diagonalizer=None):
     """
     Generate an initial guess by diagonalizing the core Hamiltonian.
 
@@ -61,12 +66,16 @@ def core_initial_guess(system: System, H):
         The system object containing the atoms and basis set.
     H : NDArray
         The core Hamiltonian matrix.
+    diagonalizer : callable | None, optional
+        Function returning energies and coefficients for an AO Hamiltonian.
 
     Returns
     -------
     NDArray
         The initial MO guess for the SCF procedure.
     """
+    if diagonalizer is not None:
+        return diagonalizer(H)[1]
     Xorth = system.get_Xorth()
     Htilde = Xorth.T @ H @ Xorth
     _, C = np.linalg.eigh(Htilde)
