@@ -118,7 +118,19 @@ class SymmetryBasis:
         return eps[order], C[:, order], self.irreps[order]
 
     def adapt(self, C, eps):
-        """Symmetry-adapt orbitals by diagonalizing their orbital-energy operator."""
+        """
+        Symmetry-adapt orbitals by diagonalizing S C diag(eps) C^dagger S in each irrep.
+
+        Orbitals that already transform as irreps are returned unchanged, up to rotations
+        among equal values of ``eps``. Otherwise the result is the set of symmetry-adapted
+        orbitals that best follows the ranking given by ``eps``.
+
+        Returns
+        -------
+        tuple[NDArray, NDArray, NDArray]
+            The values of ``eps`` for the adapted orbitals in ascending order, the
+            orbitals, and their irreps.
+        """
         SC = self.S @ C
         return self.eigh((SC * eps) @ SC.conj().T)
 

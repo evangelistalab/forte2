@@ -5,6 +5,8 @@ import forte2
 from forte2.scf import RHF, UHF, GHF
 from forte2.helpers.comparisons import approx, approx_abs
 from forte2.integrals import emultipole1
+from forte2.symmetry import SymmetryBasis
+from forte2.system import BasisInfo
 
 
 def test_rhf_h2o_c2v():
@@ -637,3 +639,35 @@ def test_symmetry_check_on_core_hamiltonian():
 
     with pytest.raises(ValueError, match="core Hamiltonian breaks C2V symmetry"):
         PerpendicularFieldRHF(charge=0)(_water()).run()
+
+
+def test_supplied_guess_is_symmetry_adapted():
+    system = _water()
+    rhf = RHF(charge=0)(system).run()
+    C = rhf.C[0].copy()
+    homo, lumo = rhf.na - 1, rhf.na
+    assert rhf.irrep_labels[0][homo] != rhf.irrep_labels[0][lumo]
+    # Mixing the HOMO and LUMO, which have different irreps, breaks the symmetry.
+    c, s = np.cos(0.3), np.sin(0.3)
+    C[:, [homo, lumo]] = C[:, [homo, lumo]] @ np.array([[c, -s], [s, c]])
+
+    # Ranking by occupation recovers the symmetric occupied space of the guess.
+    occupations = (np.arange(C.shape[1]) < rhf.na).astype(float)
+    basis = SymmetryBasis.build(
+        system,
+        BasisInfo(system, system.basis),
+        system.ints_overlap(),
+        system.get_Xorth(),
+    )
+    _, adapted, _ = basis.adapt(C, -occupations)
+    basis.orbital_irreps(adapted)
+    occupied, reference = adapted[:, : rhf.na], rhf.C[0][:, : rhf.na]
+    np.testing.assert_allclose(
+        occupied @ occupied.T, reference @ reference.T, atol=1e-10
+    )
+
+    guess = RHF(charge=0)(system)
+    guess.C = [C]
+    guess.run()
+    assert guess.E == approx(rhf.E)
+    assert guess.irrep_labels[0] == rhf.irrep_labels[0]

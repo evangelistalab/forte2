@@ -172,25 +172,34 @@ class SCFBase(Method):
         self._guess_irreps = irreps
         return eps, C
 
-    def _prepare_initial_occupations(self, H):
-        if self._occupation_policy is None:
+    def _prepare_initial_orbitals(self):
+        if self._guess_eps is not None:
+            # Guesses built here are already symmetry-adapted and in aufbau order.
+            if self._occupation_policy is None:
+                return
+            eps = [self._guess_eps] * len(self.C)
+            irreps = [self._guess_irreps] * len(self.C)
+        elif self._symmetry_basis is not None:
+            # Symmetry-adapt a supplied guess, ranking orbitals by their occupation in it.
+            adapted = [
+                self._symmetry_basis.adapt(C, -w)
+                for C, w in zip(self.C, self._guess_occupations())
+            ]
+            eps, self.C, irreps = (list(x) for x in zip(*adapted))
+        elif self._occupation_policy is not None:
+            eps = [-w for w in self._guess_occupations()]
+            irreps = [np.zeros(len(e), dtype=int) for e in eps]
+        else:
             return
-        coefficients, eps, irreps = [], [], []
-        for C in self.C:
-            e = (
-                self._guess_eps.copy()
-                if self._guess_eps is not None
-                else np.diag(C.T.conj() @ H @ C).real.copy()
-            )
-            if self._symmetry_basis is not None:
-                e, C, h = self._symmetry_basis.adapt(C, e)
-            else:
-                h = np.zeros(C.shape[1], dtype=int)
-            eps.append(e)
-            coefficients.append(C)
-            irreps.append(h)
         self._orbital_irreps = irreps
-        self.eps, self.C = self._apply_occupation_constraints(eps, coefficients)
+        self.eps, self.C = self._apply_occupation_constraints(eps, self.C)
+
+    def _guess_occupations(self):
+        """Occupation numbers of a supplied guess, whose occupied orbitals come first."""
+        index = np.arange(self.C[0].shape[1])
+        if len(self.C) == 1:
+            return [(index < self.na).astype(float) + (index < self.nb)]
+        return [(index < n).astype(float) for n in (self.na, self.nb)]
 
     def _apply_occupation_constraints(self, eps, C):
         if self._occupation_policy is None:
@@ -276,7 +285,7 @@ class SCFBase(Method):
         self._guess_irreps = None
         if self.C is None:
             self.C = self._initial_guess(H, guess_type=self.guess_type)
-        self._prepare_initial_occupations(H)
+        self._prepare_initial_orbitals()
         self.D = self._build_density_matrix()
         F, F_canon = self._build_fock(H, fock_builder, S)
         self.F = F_canon
