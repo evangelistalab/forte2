@@ -4,6 +4,9 @@ import numpy as np
 
 from .mo_sym_detect import MOSymmetryDetector
 
+# The geometry is exactly symmetric, so the AO representations are exact to roundoff.
+_AO_SYMMETRY_TOL = 1e-8
+
 
 @dataclass
 class SymmetryBasis:
@@ -20,7 +23,9 @@ class SymmetryBasis:
     @classmethod
     def build(cls, system, info, S, X):
         C = X.copy()
-        detector = MOSymmetryDetector(system, info, S, C, np.zeros(C.shape[1]))
+        detector = MOSymmetryDetector(
+            system, info, S, C, np.zeros(C.shape[1]), tol=_AO_SYMMETRY_TOL
+        )
         detector.run()
         return cls(
             C,
