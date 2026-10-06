@@ -203,13 +203,15 @@ class SCFBase(Method):
             c[:, order] for c, order in zip(C, orders)
         ]
 
-    def _setup_orbital_symmetry(self, S):
+    def _setup_orbital_symmetry(self, S, H):
         """Build an orthonormal symmetry basis once per SCF run."""
         self._symmetry_basis = None
         if self.orbital_point_group != "C1":
             self._symmetry_basis = SymmetryBasis.build(
                 self.system, self.basis_info, S, self.Xorth
             )
+            # A symmetric density then gives a symmetric Fock matrix at every iteration.
+            self._symmetry_basis.check_symmetric(H, "core Hamiltonian")
         if self._occupation_policy is not None:
             irreps = (
                 self._symmetry_basis.irreps
@@ -254,7 +256,7 @@ class SCFBase(Method):
             self.basis_info = None
         else:
             self.basis_info = BasisInfo(self.system, self.system.basis)
-        self._setup_orbital_symmetry(S)
+        self._setup_orbital_symmetry(S, H)
 
         logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF

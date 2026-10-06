@@ -4,6 +4,7 @@ import pytest
 import forte2
 from forte2.scf import RHF, UHF, GHF
 from forte2.helpers.comparisons import approx, approx_abs
+from forte2.integrals import emultipole1
 
 
 def test_rhf_h2o_c2v():
@@ -606,3 +607,33 @@ def test_rhf_symmetrizes_near_symmetric_geometry():
     rhf = RHF(charge=0)(system).run()
     assert rhf.E == approx_abs(RHF(charge=0)(water(False)).run().E, 1e-9)
     assert rhf.irrep_labels[0][:5] == ["a1", "a1", "b2", "a1", "b1"]
+
+
+def _water():
+    return forte2.System(
+        xyz="O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.587",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+
+
+def test_symmetry_check_on_core_hamiltonian():
+    class FieldRHF(RHF):
+        component = 3  # along z, the C2 axis (a1)
+
+        def _get_hcore(self):
+            mu = emultipole1(self.system)
+            return self.system.ints_hcore() + 1e-3 * mu[self.component]
+
+    class PerpendicularFieldRHF(FieldRHF):
+        component = 1  # along x, perpendicular to the molecular plane (b1)
+
+    # A totally symmetric field keeps C2v, so the symmetric solution is stationary.
+    rhf = FieldRHF(charge=0)(_water()).run()
+    S = rhf.system.ints_overlap()
+    F, D = rhf.F[0], rhf.D[0]
+    assert np.linalg.norm(F @ D @ S - S @ D @ F) < 1e-6
+
+    with pytest.raises(ValueError, match="core Hamiltonian breaks C2V symmetry"):
+        PerpendicularFieldRHF(charge=0)(_water()).run()

@@ -122,6 +122,32 @@ class SymmetryBasis:
         SC = self.S @ C
         return self.eigh((SC * eps) @ SC.conj().T)
 
+    def check_symmetric(self, M, name):
+        """
+        Check that an AO operator does not couple different irreps.
+
+        Parameters
+        ----------
+        M : NDArray
+            The AO operator.
+        name : str
+            The name of the operator, used in the error message.
+
+        Raises
+        ------
+        ValueError
+            If the largest coupling between different irreps, relative to the largest
+            element of ``M`` in the symmetry basis, exceeds roundoff.
+        """
+        M = self.vectors.conj().T @ M @ self.vectors
+        off_block = self.irreps[:, None] != self.irreps[None, :]
+        coupling = np.abs(M[off_block]).max(initial=0.0) / np.abs(M).max()
+        if coupling > _AO_SYMMETRY_TOL:
+            raise ValueError(
+                f"The {name} breaks {self.point_group} symmetry (relative coupling "
+                f"between irreps {coupling:.1e}). Run with symmetry=False."
+            )
+
     def orbital_irreps(self, C, tol=1e-6):
         """
         Return the irrep index of each orbital.
