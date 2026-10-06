@@ -64,7 +64,8 @@ class System:
         This will center the molecule at its center of mass, reorient it along its principal axes of inertia,
         and move each atom by at most ``symmetry_tol`` to make the geometry exactly symmetric.
     symmetry_tol : float, optional, default=1e-4
-        The tolerance for detecting symmetry.
+        A symmetry operation is accepted when it maps every atom to within this distance,
+        in bohr, of an atom of the same element.
     use_gaussian_charges : bool, optional, default=False
         Whether to use Gaussian nuclear charge distributions instead of point charges.
     jk_mem_thres_mb : float | None, optional, default=None

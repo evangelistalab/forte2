@@ -327,6 +327,7 @@ class GeometryHelper:
                 self.inertia_matrix,
                 com_atomic_positions,
                 self.atomic_charges,
+                self.atomic_masses,
                 tol=self.tol,
             )
             sym_detector.run()

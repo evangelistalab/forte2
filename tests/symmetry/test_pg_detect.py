@@ -44,3 +44,18 @@ def test_pg_detection_honors_symmetry_tol():
     water = "O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.58703"
     assert _detect(water, symmetry_tol=1e-6).point_group == "CS"
     assert _detect(water, symmetry_tol=1e-3).point_group == "C2V"
+
+
+def test_pg_detection_near_symmetric_benzene():
+    # Displacements of 1e-5 bohr, well within symmetry_tol, keep the full D2h group.
+    rng = np.random.default_rng(265)
+    displacements = rng.normal(size=(12, 3))
+    displacements *= 1e-5 / np.linalg.norm(displacements, axis=1)[:, None]
+    angles = np.arange(6) * np.pi / 3
+    atoms = [("C", 2.63 * np.cos(a), 2.63 * np.sin(a)) for a in angles]
+    atoms += [("H", 4.67 * np.cos(a), 4.67 * np.sin(a)) for a in angles]
+    benzene = "\n".join(
+        f"{el} {x + d[0]:.12f} {y + d[1]:.12f} {d[2]:.12f}"
+        for (el, x, y), d in zip(atoms, displacements)
+    )
+    assert _detect(benzene, unit="bohr").point_group == "D2H"

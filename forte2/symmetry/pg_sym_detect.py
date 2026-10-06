@@ -7,10 +7,13 @@ from forte2.helpers import logger
 from .sym_utils import rotation_mat, equivalent_under_operation
 from .mo_sym_detect import get_symmetry_ops
 
+# Distinct symmetry axes are at least 180/n degrees apart for an n-fold axis, so
+# unit-vector estimates of an axis that agree to 0.01 rad describe the same axis.
+_SAME_AXIS_TOL = 1e-2
 
-def _is_colinear(v1, v2, tol=1e-4):
-    cross_prod = np.cross(v1, v2)
-    return np.linalg.norm(cross_prod) < tol
+
+def _same_axis(axis1, axis2):
+    return np.linalg.norm(np.cross(axis1, axis2)) < _SAME_AXIS_TOL
 
 
 @dataclass
@@ -26,8 +29,12 @@ class PGSymmetryDetector:
         Atomic positions in the center-of-mass frame.
     charges : ndarray of shape (natoms,)
         Atomic numbers.
+    masses : ndarray of shape (natoms,)
+        Atomic masses, in amu.
     tol : float, optional, default=1e-4
-        Tolerance for detecting symmetry.
+        An operation is a symmetry when it maps every atom to within this distance, in
+        bohr, of an atom of the same element. The tolerances on moments of inertia and
+        interatomic distances are bounds implied by it.
 
     Notes
     -----
@@ -63,6 +70,7 @@ class PGSymmetryDetector:
     inertia_tensor: np.ndarray
     com_atomic_positions: np.ndarray
     charges: np.ndarray
+    masses: np.ndarray
     tol: float = 1e-4
 
     def run(self):
@@ -79,10 +87,18 @@ class PGSymmetryDetector:
         self.moi, self.moi_vectors = np.linalg.eigh(self.inertia_tensor)
         logger.log_info1(f"Principal moments of inertia: {self.moi}")
 
+        # Symmetry within tol puts every atom less than tol from an exactly symmetric
+        # geometry, which changes each principal moment by at most 2 tol sum(m |r|),
+        # so degenerate moments may differ by twice that.
+        radii = np.linalg.norm(self.com_atomic_positions, axis=1)
+        self.moi_tol = 4 * self.tol * np.dot(self.masses, radii)
+        # Atoms within tol of a line give a smallest moment of at most tol^2 sum(m).
+        self.linear_tol = self.tol**2 * np.sum(self.masses)
+
         self._find_symmetry_equivalent_atoms()
 
         # count degeneracies
-        ndegen = (np.abs(self.moi[1:] - self.moi[:-1]) < self.tol).sum() + 1
+        ndegen = (np.abs(self.moi[1:] - self.moi[:-1]) < self.moi_tol).sum() + 1
 
         force_c1 = False
         self.prinrot = None
@@ -95,15 +111,11 @@ class PGSymmetryDetector:
             # The detected point group is validated against the atoms either way.
             self.prinrot = self._find_principal_rotation_axes_asym_top()
 
-        det = np.linalg.det(self.prinrot)
+        # Axes found from a slightly asymmetric geometry are only nearly orthogonal.
+        u, _, vh = np.linalg.svd(self.prinrot)
+        self.prinrot = u @ vh
 
-        if not np.isclose(np.abs(det), 1.0, atol=self.tol):
-            # re-orthogonalize
-            u, _, vh = np.linalg.svd(self.prinrot)
-            self.prinrot = u @ vh
-            det = np.linalg.det(self.prinrot)
-
-        if det < 0:
+        if np.linalg.det(self.prinrot) < 0:
             # make it a proper rotation (det=1)
             self.prinrot[2, :] *= -1
 
@@ -196,11 +208,11 @@ class PGSymmetryDetector:
 
     def _find_principal_rotation_axes_sym_top(self):
         force_c1 = False
-        if abs(self.moi[0]) < self.tol:
+        if abs(self.moi[0]) < self.linear_tol:
             # linear molecule: arbitrary x/y plane is fine, don't bother with the rest
             prinrot = self.moi_vectors[:, [1, 2, 0]].T
         else:
-            unique_axis = 0 if abs(self.moi[0] - self.moi[1]) > self.tol else 2
+            unique_axis = 0 if abs(self.moi[0] - self.moi[1]) > self.moi_tol else 2
             z_axis = self.moi_vectors[:, unique_axis]
             # Find all possible C2 axes orthogonal to the unique axis
             c2_axes = []
@@ -208,12 +220,7 @@ class PGSymmetryDetector:
             c2_axes += self.find_c2_axes_through_midpoint()
             unique_c2_axes = [z_axis]
             for ax in c2_axes[1:]:
-                is_unique = True
-                for uax in unique_c2_axes:
-                    if _is_colinear(ax, uax, tol=self.tol):
-                        is_unique = False
-                        break
-                if is_unique:
+                if not any(_same_axis(ax, uax) for uax in unique_c2_axes):
                     unique_c2_axes.append(ax)
             if len(unique_c2_axes) == 1:
                 # No C2 axes, but there could be mirror planes.
@@ -227,7 +234,8 @@ class PGSymmetryDetector:
                 for equiv_set in self.equivalent_sets:
                     for i in equiv_set:
                         vec = self.com_atomic_positions[i]
-                        if _is_colinear(vec, z_axis, tol=self.tol):
+                        # skip atoms on the unique axis
+                        if np.linalg.norm(np.cross(vec, z_axis)) < self.tol:
                             continue
                         x_axis = vec - np.dot(vec, z_axis) * z_axis
                         x_axis /= np.linalg.norm(x_axis)
@@ -252,12 +260,7 @@ class PGSymmetryDetector:
         c2_axes += self.find_c2_axes_through_midpoint()
         unique_c2_axes = []
         for ax in c2_axes:
-            is_unique = True
-            for uax in unique_c2_axes:
-                if _is_colinear(ax, uax, tol=self.tol):
-                    is_unique = False
-                    break
-            if is_unique:
+            if not any(_same_axis(ax, uax) for uax in unique_c2_axes):
                 unique_c2_axes.append(ax)
 
         nc2 = len(unique_c2_axes)
@@ -304,11 +307,12 @@ class PGSymmetryDetector:
                 if self.charges[i] != self.charges[j]:
                     continue
                 # if i and j are symmetry equivalent,
-                # then they must have the same sorted distance list to all other atoms
+                # then they must have the same sorted distance list to all other atoms,
+                # each within 2 tol since an atom and its image differ by up to tol
                 if np.allclose(
                     np.sort(distance_matrix[i, :].copy()),
                     np.sort(distance_matrix[j, :].copy()),
-                    atol=self.tol,
+                    atol=2 * self.tol,
                     rtol=0,
                 ):
                     self.equivalent_pairs.append((i, j))
@@ -374,12 +378,18 @@ class PGSymmetryDetector:
             pos = [self.com_atomic_positions[i] for i in quad]
             dists = sp.spatial.distance.pdist(pos, "euclidean")
             dists = np.sort(dists)
-            # check if the 4 atoms form a square
+            # check if the 4 atoms form a square, each distance being within 2 tol
+            dist_tol = 2 * self.tol
             if (
-                np.allclose(dists[0:4], dists[0], atol=self.tol, rtol=0)
-                and np.allclose(dists[4:6], dists[4], atol=self.tol, rtol=0)
+                np.allclose(dists[0:4], dists[0], atol=dist_tol, rtol=0)
+                and np.allclose(dists[4:6], dists[4], atol=dist_tol, rtol=0)
                 and dists[4] > dists[0]
-                and np.isclose(dists[4], np.sqrt(2) * dists[0], atol=self.tol, rtol=0)
+                and np.isclose(
+                    dists[4],
+                    np.sqrt(2) * dists[0],
+                    atol=(1 + np.sqrt(2)) * dist_tol,
+                    rtol=0,
+                )
             ):
                 # normal of the square is a C4 axis
                 v1 = pos[1] - pos[0]
@@ -391,11 +401,6 @@ class PGSymmetryDetector:
         # keep only unique axes
         unique_c4_axes = []
         for ax in c4_axes:
-            is_unique = True
-            for uax in unique_c4_axes:
-                if _is_colinear(ax, uax, tol=self.tol):
-                    is_unique = False
-                    break
-            if is_unique:
+            if not any(_same_axis(ax, uax) for uax in unique_c4_axes):
                 unique_c4_axes.append(ax)
         return unique_c4_axes
