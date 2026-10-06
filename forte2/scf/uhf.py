@@ -6,7 +6,6 @@ from numpy.typing import NDArray
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .scf_utils import guess_mix
 
@@ -27,6 +26,8 @@ class UHF(SCFBase):
     ms: float = None
     guess_mix: bool = False  # only used if ms == 0
 
+    _occupation_type = "unrestricted"
+
     def __post_init__(self):
         super().__post_init__()
         self.two_component = False
@@ -36,6 +37,7 @@ class UHF(SCFBase):
         system.two_component = False
         self = super().__call__(system)
         self._parse_state()
+        self._configure_occupation_constraints()
         return self
 
     def _parse_state(self):
@@ -96,11 +98,6 @@ class UHF(SCFBase):
         )
         return AO_grad
 
-    def _diagonalize_fock(self, F):
-        eps_a, C_a = self._eigh(F[0])
-        eps_b, C_b = self._eigh(F[1])
-        return [eps_a, eps_b], [C_a, C_b]
-
     def _spin(self, S):
         # alpha-beta orbital overlap matrix
         # S_ij = < psi_i | psi_j >, i,j=occ
@@ -154,9 +151,7 @@ class UHF(SCFBase):
             return F
         D_vir = [S - S @ d @ S for d in self.D]
 
-        return [
-            f + ls * d for ls, f, d in zip(self._current_level_shift, F, D_vir)
-        ]
+        return [f + ls * d for ls, f, d in zip(self._current_level_shift, F, D_vir)]
 
     def _get_occupation(self):
         self.aocc = self.na
@@ -210,28 +205,6 @@ class UHF(SCFBase):
                 f"{idx:<4d} ({self.irrep_labels[1][idx]}) {self.eps[1][idx]:<12.6f} "
             )
         logger.log_info1(string)
-
-    def _assign_orbital_symmetries(self):
-        S = self._get_overlap()
-        mosym_a = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[0],
-            self.eps[0],
-        )
-        mosym_a.run()
-
-        mosym_b = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[1],
-            self.eps[1],
-        )
-        mosym_b.run()
-        self.irrep_labels = [mosym_a.labels, mosym_b.labels]
-        self.irrep_indices = [mosym_a.irrep_indices, mosym_b.irrep_indices]
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):

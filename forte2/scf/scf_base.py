@@ -6,6 +6,9 @@ import numpy as np
 from forte2.system import System, ModelSystem, BasisInfo
 from forte2.base_classes import Method, MO
 from forte2.helpers import logger, DIIS
+from forte2.symmetry.symmetry_basis import SymmetryBasis
+from forte2.symmetry.sym_utils import COTTON_LABELS
+from .occupations import OccupationPolicy, validate_occupation_options
 
 
 @dataclass
@@ -39,6 +42,11 @@ class SCFBase(Method):
         If energy change is below this threshold, level shift is turned off.
     die_if_not_converged : bool, optional, default=True
         Whether to raise an error if the SCF calculation does not converge.
+    target_symmetry : str | int | None, optional
+        Total determinant irrep, specified by label or irrep index. Not supported by GHF.
+    irrep_occupations : dict | None, optional
+        Occupied spatial orbitals per irrep for RHF, or (alpha, beta) counts for
+        ROHF/UHF/CUHF. Unlisted irreps have zero occupation. Not supported by GHF.
 
     Attributes
     ----------
@@ -52,6 +60,11 @@ class SCFBase(Method):
         The Fock matrices.
     eps : list[NDArray]
         The orbital energies.
+    orbital_point_group : str
+        Point group used for orbital labels and occupation constraints. Spin-orbit
+        GHF uses C1.
+    state_symmetry : str
+        Total determinant irrep.
 
     Raises
     ------
@@ -71,12 +84,19 @@ class SCFBase(Method):
     level_shift: float = None
     level_shift_thresh: float = 1e-5
     die_if_not_converged: bool = True
+    target_symmetry: str | int | None = None
+    irrep_occupations: dict | None = None
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
 
+    _occupation_type = None
+
     def __post_init__(self):
         self.provides = {"system", "mos", "eps"}
+        validate_occupation_options(
+            self.target_symmetry, self.irrep_occupations, self._occupation_type
+        )
 
     def __call__(self, system):
         assert isinstance(
@@ -94,6 +114,14 @@ class SCFBase(Method):
 
         self.C = None
         self.Xorth = self.system.get_Xorth()
+        self._symmetry_basis = None
+        self._orbital_irreps = None
+        self._occupation_policy = None
+        self.state_symmetry = None
+        # Spatial irreps do not label spin-orbit coupled spinors.
+        self.orbital_point_group = (
+            "C1" if system.x2c_type == "so" else system.point_group
+        )
         self._validate_level_shift()
         self.called = True
         return self
@@ -111,9 +139,86 @@ class SCFBase(Method):
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
 
     def _eigh(self, F):
+        self._last_eigh_irreps = None
+        if self._symmetry_basis is not None:
+            eps, C, self._last_eigh_irreps = self._symmetry_basis.eigh(F)
+            return eps, C
         Ftilde = self.Xorth.T @ F @ self.Xorth
         e, c = np.linalg.eigh(Ftilde)
         return e, self.Xorth @ c
+
+    def _configure_occupation_constraints(self):
+        validate_occupation_options(
+            self.target_symmetry, self.irrep_occupations, self._occupation_type
+        )
+        self._occupation_policy = None
+        if self.target_symmetry is None and self.irrep_occupations is None:
+            return
+        nelec = (
+            (self.na,) if self._occupation_type == "restricted" else (self.na, self.nb)
+        )
+        self._occupation_policy = OccupationPolicy(
+            self._occupation_type,
+            self.orbital_point_group,
+            nelec,
+            self.target_symmetry,
+            self.irrep_occupations,
+        )
+
+    def _initial_symmetry_eigh(self, F):
+        # Initial guesses use the same symmetry blocks as subsequent iterations.
+        if self._symmetry_basis is not None:
+            eps, C, _ = self._symmetry_basis.eigh(F)
+        else:
+            eps, C = SCFBase._eigh(self, F)
+        self._guess_eps = eps
+        return eps, C
+
+    def _prepare_initial_occupations(self, H):
+        if self._occupation_policy is None:
+            return
+        coefficients, eps, irreps = [], [], []
+        for C in self.C:
+            e = (
+                self._guess_eps.copy()
+                if self._guess_eps is not None
+                else np.diag(C.T.conj() @ H @ C).real.copy()
+            )
+            if self._symmetry_basis is not None:
+                e, C, h = self._symmetry_basis.adapt(C, e)
+            else:
+                h = np.zeros(C.shape[1], dtype=int)
+            eps.append(e)
+            coefficients.append(C)
+            irreps.append(h)
+        self._orbital_irreps = irreps
+        self.eps, self.C = self._apply_occupation_constraints(eps, coefficients)
+
+    def _apply_occupation_constraints(self, eps, C):
+        if self._occupation_policy is None:
+            return eps, C
+        orders = self._occupation_policy.permutations(eps, self._orbital_irreps)
+        self._orbital_irreps = [
+            h[order] for h, order in zip(self._orbital_irreps, orders)
+        ]
+        return [e[order] for e, order in zip(eps, orders)], [
+            c[:, order] for c, order in zip(C, orders)
+        ]
+
+    def _setup_orbital_symmetry(self, S):
+        """Build an orthonormal symmetry basis once per SCF run."""
+        self._symmetry_basis = None
+        if not self.two_component and self.orbital_point_group != "C1":
+            self._symmetry_basis = SymmetryBasis.build(
+                self.system, self.basis_info, S, self.Xorth, self.orbital_point_group
+            )
+        if self._occupation_policy is not None:
+            irreps = (
+                self._symmetry_basis.irreps
+                if self._symmetry_basis is not None
+                else np.zeros(self.Xorth.shape[1], dtype=int)
+            )
+            self._occupation_policy.validate_capacity(irreps)
 
     def _scf_type(self):
         return type(self).__name__.upper()
@@ -128,6 +233,7 @@ class SCFBase(Method):
                 The SCF object.
         """
         self._validate_level_shift()
+        self._configure_occupation_constraints()
         self._current_level_shift = self.level_shift
         start = time.monotonic()
 
@@ -150,6 +256,7 @@ class SCFBase(Method):
             self.basis_info = None
         else:
             self.basis_info = BasisInfo(self.system, self.system.basis)
+        self._setup_orbital_symmetry(S)
 
         logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF
@@ -165,8 +272,10 @@ class SCFBase(Method):
         logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
         self.iter = 0
+        self._guess_eps = None
         if self.C is None:
             self.C = self._initial_guess(H, guess_type=self.guess_type)
+        self._prepare_initial_occupations(H)
         self.D = self._build_density_matrix()
         F, F_canon = self._build_fock(H, fock_builder, S)
         self.F = F_canon
@@ -243,9 +352,7 @@ class SCFBase(Method):
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
         self._post_process()
-        self.mos = MO(
-            self.C, self.two_component, self.irrep_labels, self.irrep_indices
-        )
+        self.mos = MO(self.C, self.two_component, self.irrep_labels, self.irrep_indices)
 
         self.executed = True
         return self
@@ -277,8 +384,19 @@ class SCFBase(Method):
     @abstractmethod
     def _build_ao_grad(self, S, F): ...
 
-    @abstractmethod
-    def _diagonalize_fock(self, F): ...
+    def _diagonalize_fock(self, F):
+        eps, C, irreps = [], [], []
+        for f in F:
+            e, c = self._eigh(f)
+            eps.append(e)
+            C.append(c)
+            irreps.append(
+                self._last_eigh_irreps
+                if self._last_eigh_irreps is not None
+                else np.zeros(len(e), dtype=int)
+            )
+        self._orbital_irreps = irreps
+        return self._apply_occupation_constraints(eps, C)
 
     @abstractmethod
     def _spin(self, S): ...
@@ -295,8 +413,42 @@ class SCFBase(Method):
     @abstractmethod
     def _print_orbital_energies(self): ...
 
-    @abstractmethod
-    def _assign_orbital_symmetries(self): ...
+    def _assign_orbital_symmetries(self):
+        if self._orbital_irreps is None:
+            raise RuntimeError(
+                "Orbital symmetry metadata is missing after SCF diagonalization."
+            )
+        names = {
+            index: label
+            for label, index in COTTON_LABELS[self.orbital_point_group].items()
+        }
+        self.irrep_indices = [h.tolist() for h in self._orbital_irreps]
+        self.irrep_labels = [[names[index] for index in h] for h in self.irrep_indices]
+        self._assign_determinant_symmetry(names)
+        if self._occupation_policy is not None:
+            target = self._occupation_policy.target
+            if target is not None and self.state_symmetry != names[target]:
+                raise RuntimeError("HF determinant does not have target_symmetry.")
+        logger.log_info1(f"HF determinant symmetry: {self.state_symmetry}")
+
+    def _assign_determinant_symmetry(self, names):
+        symmetry = 0
+        occupations = (
+            (self.nel,)
+            if self.two_component
+            else (
+                (self.na, self.nb)
+                if len(self._orbital_irreps) == 2
+                else (max(self.na, self.nb),)
+            )
+        )
+        for h, nocc in zip(self._orbital_irreps, occupations):
+            if len(self._orbital_irreps) == 1 and not self.two_component:
+                h = h[min(self.na, self.nb) : nocc]
+            else:
+                h = h[:nocc]
+            symmetry ^= int(np.bitwise_xor.reduce(h, initial=0))
+        self.state_symmetry = names[symmetry]
 
     @abstractmethod
     def _apply_level_shift(self, F, S): ...
