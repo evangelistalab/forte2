@@ -48,14 +48,11 @@ class RHF(SCFBase):
         return 2 * self._build_density_matrix()[0]
 
     def _initial_guess(self, H, guess_type="minao"):
-        diagonalizer = (
-            self._initial_symmetry_eigh if self._occupation_policy is not None else None
-        )
         match guess_type:
             case "minao":
-                C = minao_initial_guess(self.system, H, diagonalizer=diagonalizer)
+                C = minao_initial_guess(self.system, H, self._initial_symmetry_eigh)
             case "hcore":
-                C = core_initial_guess(self.system, H, diagonalizer=diagonalizer)
+                C = core_initial_guess(self.system, H, self._initial_symmetry_eigh)
             case _:
                 raise RuntimeError(f"Unknown initial guess type: {guess_type}")
 
