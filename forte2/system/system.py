@@ -61,7 +61,8 @@ class System:
     symmetry : bool, optional, default=False
         Whether to automatically detect the largest Abelian point group symmetry of the molecule.
         RHF, ROHF, UHF, and CUHF preserve this symmetry during Fock diagonalization.
-        This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
+        This will center the molecule at its center of mass, reorient it along its principal axes of inertia,
+        and move each atom by at most ``symmetry_tol`` to make the geometry exactly symmetric.
     symmetry_tol : float, optional, default=1e-4
         The tolerance for detecting symmetry.
     use_gaussian_charges : bool, optional, default=False

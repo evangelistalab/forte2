@@ -334,6 +334,8 @@ class GeometryHelper:
             self.point_group = sym_detector.pg_name
             logger.log_info1(f"Detected point group: {self.point_group}")
             self.prin_atomic_positions = sym_detector.prin_atomic_positions
+            if sym_detector.symmetrization_displacement > 1e-10:
+                self._report_symmetrization(sym_detector.symmetrization_displacement)
 
             # Overwrite original inputted atomic positions with principal atomic positions
             self.atomic_positions = self.prin_atomic_positions.copy()
@@ -349,3 +351,15 @@ class GeometryHelper:
             logger.log_info1(
                 "Point group symmetry detection not performed. Running in C1 symmetry."
             )
+
+    def _report_symmetrization(self, displacement):
+        geometry = "\n".join(
+            f"{Z_TO_ATOM_SYMBOL[Z]:<3} "
+            + " ".join(f"{x / ANGSTROM_TO_BOHR + 0.0:>16.10f}" for x in r)
+            for Z, r in zip(self.atomic_charges, self.prin_atomic_positions)
+        )
+        logger.log_warning(
+            f"Symmetrized the geometry to {self.point_group}; the largest atomic "
+            f"displacement is {displacement:.2e} bohr. Symmetrized geometry "
+            f"(angstrom):\n{geometry}"
+        )

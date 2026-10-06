@@ -1,8 +1,9 @@
+import numpy as np
 import pytest
 
 import forte2
 from forte2.scf import RHF, UHF, GHF
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx, approx_abs
 
 
 def test_rhf_h2o_c2v():
@@ -581,3 +582,27 @@ def test_uhf_guess_mix_with_symmetry():
     assert uhf.E == approx(-7.932395483955529)
     assert uhf.S2 == approx(0.9784292338841001)
     assert uhf.irrep_labels[0][:2] == ["a1", "a1"]
+
+
+def test_rhf_symmetrizes_near_symmetric_geometry():
+    # One H is 1e-5 angstrom off the C2v geometry, within symmetry_tol.
+    def water(symmetry):
+        return forte2.System(
+            xyz="O 0 0 0; H 0 0.76 0.59; H 0 -0.76 0.59001",
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="cc-pvtz-jkfit",
+            symmetry=symmetry,
+        )
+
+    system = water(True)
+    assert system.point_group == "C2V"
+    positions = system.prin_atomic_positions
+    reflected = positions * [1, -1, 1]
+    assert np.allclose(
+        np.sort(reflected, axis=0), np.sort(positions, axis=0), atol=1e-14
+    )
+
+    # Symmetrization changes the energy only at second order in the displacement.
+    rhf = RHF(charge=0)(system).run()
+    assert rhf.E == approx_abs(RHF(charge=0)(water(False)).run().E, 1e-9)
+    assert rhf.irrep_labels[0][:5] == ["a1", "a1", "b2", "a1", "b1"]
