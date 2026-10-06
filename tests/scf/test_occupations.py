@@ -76,7 +76,7 @@ def test_core_and_open_shell_ordering(method):
         auxiliary_basis_set="def2-universal-jkfit",
         symmetry=True,
     )
-    hf = method(charge=0, ms=0.5, irrep_occupations={"ag": (1, 1), "b2u": (1, 0)})(
+    hf = method(charge=0, ms=0.5, irrep_occupations={"ag": 1, "b2u": (1, 0)})(
         system
     ).run()
     assert hf.irrep_labels[0][:2] == ["ag", "b2u"]
@@ -130,10 +130,16 @@ def test_invalid_constructor_options(options):
         RHF(charge=0, **options)
 
 
-@pytest.mark.parametrize("method", [ROHF, UHF, CUHF])
-def test_spin_pair_required(method):
-    with pytest.raises(ValueError, match="alpha, beta"):
-        method(charge=0, ms=0, irrep_occupations={"ag": 1})
+@pytest.mark.parametrize("method", [RHF, ROHF, UHF, CUHF])
+def test_integer_occupation_is_doubly_occupied(method):
+    # An integer means doubly occupied orbitals for every method.
+    options = {} if method is RHF else {"ms": 0}
+    as_integer = method(charge=0, irrep_occupations={"b1u": 1}, **options)(_h2()).run()
+    as_pair = method(charge=0, irrep_occupations={"b1u": (1, 1)}, **options)(
+        _h2()
+    ).run()
+    assert as_integer.E == pytest.approx(as_pair.E, abs=1e-12)
+    assert all(labels[0] == "b1u" for labels in as_integer.irrep_labels)
 
 
 @pytest.mark.parametrize(
@@ -144,6 +150,8 @@ def test_spin_pair_required(method):
         (RHF, dict(target_symmetry=8), "Unknown irrep"),
         (RHF, dict(irrep_occupations={"ag": 2}), "must sum"),
         (RHF, dict(irrep_occupations={"ag": 1, 0: 0}), "more than once"),
+        (RHF, dict(irrep_occupations={"ag": (1, 0), "b1u": (0, 1)}), "equal alpha"),
+        (UHF, dict(ms=0, irrep_occupations={"ag": (1,)}), "alpha, beta"),
         (
             UHF,
             dict(ms=0, target_symmetry="b1u", irrep_occupations={"ag": (1, 1)}),

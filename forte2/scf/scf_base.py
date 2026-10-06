@@ -43,10 +43,14 @@ class SCFBase(Method):
     die_if_not_converged : bool, optional, default=True
         Whether to raise an error if the SCF calculation does not converge.
     target_symmetry : str | int | None, optional
-        Total determinant irrep, specified by label or irrep index. Not supported by GHF.
+        Total determinant irrep, specified by label or irrep index. Closed-shell
+        determinants (RHF, and ROHF or CUHF with ms = 0) are always totally symmetric.
+        Not supported by GHF.
     irrep_occupations : dict | None, optional
-        Occupied spatial orbitals per irrep for RHF, or (alpha, beta) counts for
-        ROHF/UHF/CUHF. Unlisted irreps have zero occupation. Not supported by GHF.
+        Electrons per irrep, keyed by irrep label or index. An integer n means n doubly
+        occupied orbitals (n alpha and n beta electrons); an (alpha, beta) pair gives the
+        counts of each spin, which RHF requires to be equal. Unlisted irreps have zero
+        occupation. Not supported by GHF.
 
     Attributes
     ----------

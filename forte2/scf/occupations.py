@@ -11,6 +11,18 @@ def _count(value):
     return int(value)
 
 
+def _spin_counts(value):
+    """(alpha, beta) electrons of one irrep; an integer n means n doubly occupied orbitals."""
+    if isinstance(value, (tuple, list)):
+        if len(value) != 2:
+            raise ValueError(
+                "Irrep occupations must be integers or (alpha, beta) pairs."
+            )
+        return _count(value[0]), _count(value[1])
+    n = _count(value)
+    return n, n
+
+
 def validate_occupation_options(target_symmetry, occupations, mode):
     if mode is None:
         if target_symmetry is not None or occupations is not None:
@@ -31,15 +43,7 @@ def validate_occupation_options(target_symmetry, occupations, mode):
     for key, value in occupations.items():
         if isinstance(key, bool) or not isinstance(key, (str, Integral)):
             raise ValueError("Irrep keys must be labels or integer indices.")
-        if mode == "restricted":
-            _count(value)
-        else:
-            if not isinstance(value, (tuple, list)) or len(value) != 2:
-                raise ValueError(
-                    "Open-shell irrep occupations must be (alpha, beta) pairs."
-                )
-            for count in value:
-                _count(count)
+        _spin_counts(value)
 
 
 class OccupationPolicy:
@@ -85,7 +89,15 @@ class OccupationPolicy:
             if irrep in seen:
                 raise ValueError(f"Irrep {key!r} is specified more than once.")
             seen.add(irrep)
-            counts[:, irrep] = value
+            alpha, beta = _spin_counts(value)
+            if self.mode == "restricted":
+                if alpha != beta:
+                    raise ValueError(
+                        "RHF irrep occupations must have equal alpha and beta counts."
+                    )
+                counts[:, irrep] = alpha
+            else:
+                counts[:, irrep] = alpha, beta
         totals = tuple(counts.sum(axis=1))
         if totals != self.nelec:
             raise ValueError(
