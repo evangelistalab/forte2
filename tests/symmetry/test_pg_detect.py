@@ -37,3 +37,10 @@ def test_pg_detection_orients_cs_plane_as_xy():
     system = _detect("O 0 0 0; H 0.97 0 0; Cl -0.5 1.6 0")
     assert system.point_group == "CS"
     np.testing.assert_allclose(system.prin_atomic_positions[:, 2], 0, atol=1e-12)
+
+
+def test_pg_detection_honors_symmetry_tol():
+    # One H is 3e-5 angstrom (5.7e-5 bohr) off the C2v geometry.
+    water = "O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.58703"
+    assert _detect(water, symmetry_tol=1e-6).point_group == "CS"
+    assert _detect(water, symmetry_tol=1e-3).point_group == "C2V"

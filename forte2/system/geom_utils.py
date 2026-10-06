@@ -324,7 +324,10 @@ class GeometryHelper:
         if self.symmetry:
             com_atomic_positions = self.atomic_positions - self.center_of_mass[None, :]
             sym_detector = PGSymmetryDetector(
-                self.inertia_matrix, com_atomic_positions, self.atomic_charges
+                self.inertia_matrix,
+                com_atomic_positions,
+                self.atomic_charges,
+                tol=self.tol,
             )
             sym_detector.run()
             self.prinrot = sym_detector.prinrot
