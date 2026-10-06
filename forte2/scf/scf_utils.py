@@ -2,14 +2,14 @@ import numpy as np
 import scipy as sp
 
 from forte2 import integrals
-from forte2.system import System
 from forte2.system.build_basis import build_sap_potential_basis
 from forte2.helpers.matrix_functions import givens_rotation
 
 
-def minao_initial_guess(system, H):
+def sap_guess_hamiltonian(system, H):
     """
-    Generate a superposition of atomic potentials (SAP) initial guess for the SCF procedure
+    Return the superposition of atomic potentials (SAP) guess Hamiltonian.
+
     S. Lehtola, J. Chem. Theory Comput. 15, 1593-1604 (2019), arXiv:1810.11659.
     For details, see https://doi.org/10.1063/5.0004046
 
@@ -23,7 +23,7 @@ def minao_initial_guess(system, H):
     Returns
     -------
     NDArray
-        The initial MO guess for the SCF procedure.
+        The core Hamiltonian plus the SAP potential, whose orbitals are the initial guess.
     """
 
     # Convert the SAP potential coefficients to a normalized charge-density basis.
@@ -43,34 +43,7 @@ def minao_initial_guess(system, H):
     else:
         _SAP_V = SAP_V
 
-    # generate the SAP Hamiltonian and diagonalize it
-    Xorth = system.get_Xorth()
-    H_SAP = Xorth.T @ (H + _SAP_V) @ Xorth
-    _, C = np.linalg.eigh(H_SAP)
-
-    return Xorth @ C
-
-
-def core_initial_guess(system: System, H):
-    """
-    Generate an initial guess by diagonalizing the core Hamiltonian.
-
-    Parameters
-    ----------
-    system : forte2.System
-        The system object containing the atoms and basis set.
-    H : NDArray
-        The core Hamiltonian matrix.
-
-    Returns
-    -------
-    NDArray
-        The initial MO guess for the SCF procedure.
-    """
-    Xorth = system.get_Xorth()
-    Htilde = Xorth.T @ H @ Xorth
-    _, C = np.linalg.eigh(Htilde)
-    return Xorth @ C
+    return H + _SAP_V
 
 
 def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
