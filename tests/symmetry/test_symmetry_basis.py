@@ -4,8 +4,7 @@ import pytest
 from forte2 import CUHF, RHF, ROHF, UHF, System
 from forte2.lib import ints
 from forte2.symmetry import SymmetryBasis
-from forte2.symmetry.mo_sym_detect import get_symmetry_ops
-from forte2.symmetry.sym_utils import CHARACTER_TABLE, COTTON_LABELS
+from forte2.symmetry.sym_utils import CHARACTER_TABLE, COTTON_LABELS, get_symmetry_ops
 from forte2.system import BasisInfo
 
 

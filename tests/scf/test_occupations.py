@@ -8,7 +8,7 @@ from forte2.base_classes.rebuild import rebuild_method_chain, rebind_method_chai
 from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.lib import ints
 from forte2.scf.occupations import OccupationPolicy
-from forte2.symmetry.mo_sym_detect import get_symmetry_ops
+from forte2.symmetry.sym_utils import get_symmetry_ops
 from forte2.symmetry.sym_utils import CHARACTER_TABLE
 
 

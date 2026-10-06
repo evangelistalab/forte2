@@ -1,4 +1,3 @@
-from .mo_sym_detect import MOSymmetryDetector
 from .sph_harm_utils import (
     sph_real_to_complex,
     clebsh_gordan_spin_half,

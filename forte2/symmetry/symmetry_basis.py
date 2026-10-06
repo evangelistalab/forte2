@@ -2,8 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .mo_sym_detect import local_sign
-from .sym_utils import CHARACTER_TABLE, COTTON_LABELS, SYMMETRY_OPS
+from .sym_utils import CHARACTER_TABLE, COTTON_LABELS, SYMMETRY_OPS, local_sign
 
 # The geometry is exactly symmetric, so the AO representations are exact to roundoff.
 _AO_SYMMETRY_TOL = 1e-8

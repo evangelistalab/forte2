@@ -1,7 +1,7 @@
 import numpy as np
 
 from forte2 import System
-from forte2.symmetry.mo_sym_detect import get_symmetry_ops
+from forte2.symmetry.sym_utils import get_symmetry_ops
 
 
 def _detect(xyz, symmetry_tol=1e-4, unit="angstrom"):

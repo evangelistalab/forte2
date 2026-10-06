@@ -4,8 +4,7 @@ import numpy as np
 import scipy as sp
 
 from forte2.helpers import logger
-from .sym_utils import rotation_mat, equivalent_under_operation
-from .mo_sym_detect import get_symmetry_ops
+from .sym_utils import rotation_mat, equivalent_under_operation, get_symmetry_ops
 
 # Distinct symmetry axes are at least 180/n degrees apart for an n-fold axis, so
 # unit-vector estimates of an axis that agree to 0.01 rad describe the same axis.
