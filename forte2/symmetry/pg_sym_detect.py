@@ -219,7 +219,9 @@ class PGSymmetryDetector:
             c2_axes += self.find_c2_axes_through_atom()
             c2_axes += self.find_c2_axes_through_midpoint()
             unique_c2_axes = [z_axis]
-            for ax in c2_axes[1:]:
+            # c2_axes[0] goes last so that it only sets x when no other C2 axis is found,
+            # which keeps the established orientation of symmetric tops.
+            for ax in c2_axes[1:] + c2_axes[:1]:
                 if not any(_same_axis(ax, uax) for uax in unique_c2_axes):
                     unique_c2_axes.append(ax)
             if len(unique_c2_axes) == 1:

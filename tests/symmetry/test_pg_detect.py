@@ -59,3 +59,10 @@ def test_pg_detection_near_symmetric_benzene():
         for (el, x, y), d in zip(atoms, displacements)
     )
     assert _detect(benzene, unit="bohr").point_group == "D2H"
+
+
+def test_pg_detection_accidental_symmetric_top():
+    # Two equal moments of inertia make this water an accidental symmetric top whose
+    # only C2 axis is perpendicular to the unique axis.
+    water = "O 0 0 0; H 0 1.43 1.5174; H 0 -1.43 1.5174"
+    assert _detect(water, unit="bohr").point_group == "C2V"
