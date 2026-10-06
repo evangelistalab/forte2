@@ -38,6 +38,33 @@ def couples_irreps(M, irreps):
     return irrep_coupling(M, irreps) > _AO_SYMMETRY_TOL
 
 
+def eigh_by_irrep(M, irreps):
+    """
+    Diagonalize a Hermitian matrix within each irrep.
+
+    Parameters
+    ----------
+    M : NDArray
+        A Hermitian matrix in a basis of functions that each transform as one irrep.
+    irreps : ArrayLike
+        The irrep index of each basis function.
+
+    Returns
+    -------
+    tuple[NDArray, NDArray]
+        The eigenvalues and eigenvectors. The eigenvectors of each irrep occupy that
+        irrep's positions in ascending order of eigenvalue, so each keeps the irrep of
+        its position.
+    """
+    irreps = np.asarray(irreps)
+    values = np.empty(len(irreps))
+    U = np.zeros(M.shape, dtype=M.dtype)
+    for h in np.unique(irreps):
+        idx = np.flatnonzero(irreps == h)
+        values[idx], U[np.ix_(idx, idx)] = np.linalg.eigh(M[np.ix_(idx, idx)])
+    return values, U
+
+
 def ao_symmetry_operations(system, info):
     r"""
     Compute how AO coefficient vectors transform under each symmetry operation.

@@ -10,7 +10,7 @@ from forte2.base_classes import Method
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
 from forte2.data import ATOM_SYMBOL_TO_Z
-from forte2.symmetry.symmetry_basis import couples_irreps
+from forte2.symmetry.symmetry_basis import couples_irreps, eigh_by_irrep
 
 
 @dataclass
@@ -387,10 +387,10 @@ class AVAS(Method):
                 "The eigenvalues of the projected overlap matrix will be used to select the AVAS orbitals."
             )
             U = np.zeros((self.nmo, self.nmo), dtype=self.dtype)
-            s_docc, U[docc_sl, docc_sl] = _eigh_by_irrep(
+            s_docc, U[docc_sl, docc_sl] = eigh_by_irrep(
                 CpsC[docc_sl, docc_sl], irreps[docc_sl]
             )
-            s_uocc, U[uocc_sl, uocc_sl] = _eigh_by_irrep(
+            s_uocc, U[uocc_sl, uocc_sl] = eigh_by_irrep(
                 CpsC[uocc_sl, uocc_sl], irreps[uocc_sl]
             )
             sigma_type = "eigen"
@@ -721,20 +721,10 @@ class AVAS(Method):
         return atom_dirs
 
 
-def _eigh_by_irrep(M, irreps):
-    """Diagonalize M within each irrep; each eigenvector keeps the irrep of its position."""
-    values = np.empty(len(irreps))
-    U = np.zeros(M.shape, dtype=M.dtype)
-    for h in np.unique(irreps):
-        idx = np.flatnonzero(irreps == h)
-        values[idx], U[np.ix_(idx, idx)] = np.linalg.eigh(M[np.ix_(idx, idx)])
-    return values, U
-
-
 def _canonicalize_block(F, C, mos, irreps):
     """Diagonalize F within the orbitals mos by irrep, in ascending energy."""
     C_sub = C[:, mos]
     F_sub = C_sub.T.conj() @ F @ C_sub
-    energies, U = _eigh_by_irrep(F_sub, irreps[mos])
+    energies, U = eigh_by_irrep(F_sub, irreps[mos])
     order = np.argsort(energies, kind="stable")
     return (C_sub @ U)[:, order], irreps[mos][order]
