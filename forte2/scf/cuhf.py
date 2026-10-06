@@ -17,7 +17,9 @@ class CUHF(SCFBase):
     ms : float
         Spin projection. Must be a multiple of 0.5.
     guess_mix : bool, optional, default=False
-        If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if ms is 0.0.
+        If True and ms is 0.0, mixes the occupied and virtual orbitals with the smallest
+        energy gap that share an irrep, to try to break alpha-beta degeneracy. Without
+        symmetry, these are the HOMO and LUMO.
     """
 
     ms: float = None

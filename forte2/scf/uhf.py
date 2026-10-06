@@ -7,7 +7,7 @@ from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
 from .scf_base import SCFBase
-from .scf_utils import guess_mix
+from .scf_utils import guess_mix, guess_mix_pair
 
 
 @dataclass
@@ -20,7 +20,9 @@ class UHF(SCFBase):
     ms : float
         Spin projection. Must be a multiple of 0.5.
     guess_mix : bool, optional, default=False
-        If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if ms is 0.0.
+        If True and ms is 0.0, mixes the occupied and virtual orbitals with the smallest
+        energy gap that share an irrep, to try to break alpha-beta degeneracy. Without
+        symmetry, these are the HOMO and LUMO.
     """
 
     ms: float = None
@@ -85,7 +87,14 @@ class UHF(SCFBase):
         C = RHF._initial_guess(self, H, guess_type=guess_type)[0]
 
         if self.twicems == 0 and self.guess_mix:
-            return guess_mix(C, self.nel // 2 - 1)
+            pair = guess_mix_pair(self._guess_eps, self._guess_irreps, self.nel // 2)
+            if pair is not None:
+                logger.log_info1(f"Mixing orbitals {pair[0]} and {pair[1]}.")
+                return guess_mix(C, *pair)
+            logger.log_warning(
+                "guess_mix: no occupied and virtual orbitals share an irrep. "
+                "The initial guess is not mixed."
+            )
 
         return [C, C]
 

@@ -164,10 +164,12 @@ class SCFBase(Method):
     def _initial_symmetry_eigh(self, F):
         # Initial guesses use the same symmetry blocks as subsequent iterations.
         if self._symmetry_basis is not None:
-            eps, C, _ = self._symmetry_basis.eigh(F)
+            eps, C, irreps = self._symmetry_basis.eigh(F)
         else:
             eps, C = SCFBase._eigh(self, F)
+            irreps = np.zeros(len(eps), dtype=int)
         self._guess_eps = eps
+        self._guess_irreps = irreps
         return eps, C
 
     def _prepare_initial_occupations(self, H):
@@ -269,6 +271,7 @@ class SCFBase(Method):
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
         self.iter = 0
         self._guess_eps = None
+        self._guess_irreps = None
         if self.C is None:
             self.C = self._initial_guess(H, guess_type=self.guess_type)
         self._prepare_initial_occupations(H)

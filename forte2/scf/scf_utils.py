@@ -69,7 +69,41 @@ def core_initial_guess(system: System, H, diagonalizer):
     return diagonalizer(H)[1]
 
 
-def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
+def guess_mix_pair(eps, irreps, nocc):
+    """
+    Select the orbitals to mix for a broken-symmetry UHF guess.
+
+    Parameters
+    ----------
+    eps : NDArray
+        Orbital energies in ascending order.
+    irreps : NDArray
+        Irrep index of each orbital.
+    nocc : int
+        Number of occupied orbitals.
+
+    Returns
+    -------
+    tuple[int, int] | None
+        The occupied and virtual orbital with the smallest energy gap among pairs
+        that share an irrep, or None if no such pair exists. Without symmetry,
+        this is the HOMO and LUMO.
+    """
+    best = None
+    for irrep in np.unique(irreps):
+        occ = np.flatnonzero(irreps[:nocc] == irrep)
+        vir = nocc + np.flatnonzero(irreps[nocc:] == irrep)
+        if len(occ) and len(vir):
+            pair = (int(occ[-1]), int(vir[0]))
+            if (
+                best is None
+                or eps[pair[1]] - eps[pair[0]] < eps[best[1]] - eps[best[0]]
+            ):
+                best = pair
+    return best
+
+
+def guess_mix(C, occ_idx, vir_idx, mixing_parameter=np.pi / 4):
     """
     Induce the breaking of S^2 symmetry for UHF ms=0.0 calculations.
     This is helpful for obtaining proxies for open-shell singlets, for example.
@@ -78,8 +112,10 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     ----------
     C : NDArray
         The MO coefficients.
-    homo_idx : int
-        The index of the highest occupied molecular orbital (HOMO).
+    occ_idx : int
+        The index of the occupied orbital to mix.
+    vir_idx : int
+        The index of the virtual orbital to mix.
     mixing_parameter : float, optional
         The mixing parameter for the Givens rotation.
 
@@ -95,8 +131,8 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     """
     cosq = np.cos(mixing_parameter)
     sinq = np.sin(mixing_parameter)
-    Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
-    Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
+    Ca = givens_rotation(C, cosq, sinq, occ_idx, vir_idx)
+    Cb = givens_rotation(C, cosq, -sinq, occ_idx, vir_idx)
     return [Ca, Cb]
 
 

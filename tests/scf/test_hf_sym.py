@@ -1,7 +1,7 @@
 import pytest
 
 import forte2
-from forte2.scf import RHF, GHF
+from forte2.scf import RHF, UHF, GHF
 from forte2.helpers.comparisons import approx
 
 
@@ -566,3 +566,18 @@ def test_ghf_runs_in_c1():
 
     with pytest.raises(ValueError, match="only supported by"):
         GHF(charge=0, target_symmetry="a1")
+
+
+def test_uhf_guess_mix_with_symmetry():
+    # Stretched LiH breaks spin symmetry between orbitals of the same irrep (a1),
+    # so mixing a same-irrep pair reaches the C1 broken-symmetry solution.
+    system = forte2.System(
+        xyz="Li 0 0 0; H 0 0 4.0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="def2-universal-jkfit",
+        symmetry=True,
+    )
+    uhf = UHF(charge=0, ms=0, guess_mix=True)(system).run()
+    assert uhf.E == approx(-7.932395483955529)
+    assert uhf.S2 == approx(0.9784292338841001)
+    assert uhf.irrep_labels[0][:2] == ["a1", "a1"]
