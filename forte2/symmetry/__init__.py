@@ -7,3 +7,4 @@ from .sph_harm_utils import (
 )
 from .sym_utils import equivalent_under_operation, rotation_mat, reflection_mat
 from .pg_sym_detect import PGSymmetryDetector
+from .symmetry_basis import SymmetryBasis, ao_symmetry_operations
