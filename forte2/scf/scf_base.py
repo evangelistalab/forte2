@@ -339,6 +339,8 @@ class SCFBase(Method):
                 self.F = F_canon
                 self.E = Vnn + self._energy(H, F)
                 logger.log_info1(f"Final {self.method} Energy: {self.E:20.12f}")
+                AO_grad = self._build_ao_grad(S, F_canon)
+                logger.log_info1(f"Final ||AO grad||: {np.linalg.norm(AO_grad):.4e}")
                 self.converged = True
                 break
 
