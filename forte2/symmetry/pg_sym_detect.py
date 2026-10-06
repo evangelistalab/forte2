@@ -84,12 +84,15 @@ class PGSymmetryDetector:
         ndegen = (np.abs(self.moi[1:] - self.moi[:-1]) < self.tol).sum() + 1
 
         force_c1 = False
-        if ndegen == 1:
-            self.prinrot = self._find_principal_rotation_axes_asym_top()
-        elif ndegen == 2:
+        self.prinrot = None
+        if ndegen == 2:
             self.prinrot, force_c1 = self._find_principal_rotation_axes_sym_top()
-        else:
+        elif ndegen == 3:
             self.prinrot, force_c1 = self._find_principal_rotation_axes_sph_top()
+        if self.prinrot is None:
+            # Asymmetric top, or degenerate moments that no symmetry axes explain.
+            # The detected point group is validated against the atoms either way.
+            self.prinrot = self._find_principal_rotation_axes_asym_top()
 
         det = np.linalg.det(self.prinrot)
 
@@ -199,6 +202,7 @@ class PGSymmetryDetector:
                 # any x/y axis will lie in the horizontal mirror plane.
                 # For Cnv, we know the sigma_v plane must pass through
                 # symmetry equivalent atoms, so pick one and we're done.
+                x_axis = None
                 for equiv_set in self.equivalent_sets:
                     for i in equiv_set:
                         vec = self.com_atomic_positions[i]
@@ -209,6 +213,8 @@ class PGSymmetryDetector:
                         y_axis = np.cross(z_axis, x_axis)
                         break
                     break
+                if x_axis is None:
+                    return None, force_c1
             else:
                 # found at least one C2 axis orthogonal to the unique axis
                 # use the first one to define the x-axis
@@ -223,8 +229,8 @@ class PGSymmetryDetector:
         c2_axes = []
         c2_axes += self.find_c2_axes_through_atom()
         c2_axes += self.find_c2_axes_through_midpoint()
-        unique_c2_axes = [c2_axes[0]]
-        for ax in c2_axes[1:]:
+        unique_c2_axes = []
+        for ax in c2_axes:
             is_unique = True
             for uax in unique_c2_axes:
                 if _is_colinear(ax, uax, tol=self.tol):
@@ -236,11 +242,10 @@ class PGSymmetryDetector:
         nc2 = len(unique_c2_axes)
         if nc2 not in [3, 9, 15]:
             logger.log_warning(
-                f"_find_principal_rotation_axes_sph_top: Found {nc2} unique C2 axes, which is unexpected."
-                "Not reorienting. Check geometry, or relax tolerance."
+                f"_find_principal_rotation_axes_sph_top: Found {nc2} unique C2 axes, which is unexpected. "
+                "Using the principal axes of inertia. Check geometry, or relax tolerance."
             )
-            prinrot = np.eye(3)
-            force_c1 = True
+            return None, force_c1
         if nc2 == 3:
             # T/Td/Th, the C2 axes are the principal axes
             prinrot = np.array(unique_c2_axes)
@@ -250,10 +255,9 @@ class PGSymmetryDetector:
                 logger.log_warning(
                     f"_find_principal_rotation_axes_sph_top: Octahedral symmetry detected,"
                     f" but found {len(unique_c4_axes)} unique C4 axes, which is unexpected."
-                    " Not reorienting. Check geometry, or relax tolerance."
+                    " Using the principal axes of inertia. Check geometry, or relax tolerance."
                 )
-                prinrot = np.eye(3)
-                force_c1 = True
+                return None, force_c1
             else:
                 prinrot = np.array(unique_c4_axes)
         elif nc2 == 15:
@@ -364,8 +368,8 @@ class PGSymmetryDetector:
                 c4_axes.append(axis)
 
         # keep only unique axes
-        unique_c4_axes = [c4_axes[0]]
-        for ax in c4_axes[1:]:
+        unique_c4_axes = []
+        for ax in c4_axes:
             is_unique = True
             for uax in unique_c4_axes:
                 if _is_colinear(ax, uax, tol=self.tol):
