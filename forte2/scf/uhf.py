@@ -84,19 +84,19 @@ class UHF(SCFBase):
     def _initial_guess(self, H, guess_type="minao"):
         from .rhf import RHF
 
-        C = RHF._initial_guess(self, H, guess_type=guess_type)[0]
-
+        (eps,), (C,), (irreps,) = RHF._initial_guess(self, H, guess_type=guess_type)
+        Cs = [C, C]
         if self.twicems == 0 and self.guess_mix:
-            pair = guess_mix_pair(self._guess_eps, self._guess_irreps, self.nel // 2)
+            pair = guess_mix_pair(eps, irreps, self.nel // 2)
             if pair is not None:
                 logger.log_info1(f"Mixing orbitals {pair[0]} and {pair[1]}.")
-                return guess_mix(C, *pair)
-            logger.log_warning(
-                "guess_mix: no occupied and virtual orbitals share an irrep. "
-                "The initial guess is not mixed."
-            )
-
-        return [C, C]
+                Cs = guess_mix(C, *pair)
+            else:
+                logger.log_warning(
+                    "guess_mix: no occupied and virtual orbitals share an irrep. "
+                    "The initial guess is not mixed."
+                )
+        return [eps, eps], Cs, [irreps, irreps]
 
     def _build_ao_grad(self, S, F):
         AO_grad = np.hstack(

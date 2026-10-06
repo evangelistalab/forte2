@@ -153,7 +153,7 @@ class GHF(SCFBase):
         return [F[0] + self._current_level_shift * D_vir]
 
     def _initial_guess(self, H, guess_type="minao"):
-        C = RHF._initial_guess(self, H, guess_type)[0]
+        eps, (C,), irreps = RHF._initial_guess(self, H, guess_type)
         if self.guess_mix and self.ms_guess is not None:
             if self.twicems_guess == 0:
                 mo_a, mo_b = self._guess_ms(C)
@@ -168,7 +168,7 @@ class GHF(SCFBase):
             C = alpha_beta_mix(C)
         if self.break_complex_symmetry:
             C = break_complex_conjugation_symmetry(C)
-        return [C]
+        return eps, [C], irreps
 
     def _build_ao_grad(self, S, F):
         Daa, Dab, Dba, Dbb = self.D
@@ -183,20 +183,16 @@ class GHF(SCFBase):
         Xorth = self.Xorth_spinor if self.j_adapt else self.Xorth
         Ftilde = Xorth.conj().T @ F @ Xorth
         e, c = np.linalg.eigh(Ftilde)
-        return e, Xorth @ c
+        return e, Xorth @ c, np.zeros(len(e), dtype=int)
 
     def _diagonalize_fock(self, F):
         if self.j_adapt:
             F_spinor = self.Usph2j.conj().T @ F[0] @ self.Usph2j
-            eps, C = self._eigh(F_spinor)
+            eps, C, irreps = self._eigh(F_spinor)
             C = self.Usph2j @ C
         else:
-            eps, C = self._eigh(F[0])
-        return [eps], [C]
-
-    def _assign_orbital_symmetries(self):
-        self._orbital_irreps = [np.zeros(self.C[0].shape[1], dtype=int)]
-        super()._assign_orbital_symmetries()
+            eps, C, irreps = self._eigh(F[0])
+        return [eps], [C], [irreps]
 
     def _spin(self, S):
         """

@@ -6,7 +6,7 @@ from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
 from .scf_base import SCFBase
-from .scf_utils import minao_initial_guess, core_initial_guess
+from .scf_utils import sap_guess_hamiltonian
 
 
 @dataclass
@@ -50,13 +50,14 @@ class RHF(SCFBase):
     def _initial_guess(self, H, guess_type="minao"):
         match guess_type:
             case "minao":
-                C = minao_initial_guess(self.system, H, self._initial_symmetry_eigh)
+                H_guess = sap_guess_hamiltonian(self.system, H)
             case "hcore":
-                C = core_initial_guess(self.system, H, self._initial_symmetry_eigh)
+                H_guess = H
             case _:
                 raise RuntimeError(f"Unknown initial guess type: {guess_type}")
-
-        return [C]
+        # GHF borrows this method; its own _eigh expects j-adapted Fock matrices.
+        eps, C, irreps = SCFBase._eigh(self, H_guess)
+        return [eps], [C], [irreps]
 
     def _build_ao_grad(self, S, F):
         ao_grad = F[0] @ self.D[0] @ S - S @ self.D[0] @ F[0]

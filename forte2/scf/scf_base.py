@@ -135,13 +135,12 @@ class SCFBase(Method):
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
 
     def _eigh(self, F):
-        self._last_eigh_irreps = None
+        """Diagonalize F, by irrep when symmetry is used, returning energies, orbitals and irreps."""
         if self._symmetry_basis is not None:
-            eps, C, self._last_eigh_irreps = self._symmetry_basis.eigh(F)
-            return eps, C
+            return self._symmetry_basis.eigh(F)
         Ftilde = self.Xorth.T @ F @ self.Xorth
         e, c = np.linalg.eigh(Ftilde)
-        return e, self.Xorth @ c
+        return e, self.Xorth @ c, np.zeros(len(e), dtype=int)
 
     def _configure_occupation_constraints(self):
         validate_occupation_options(
@@ -161,38 +160,24 @@ class SCFBase(Method):
             self.irrep_occupations,
         )
 
-    def _initial_symmetry_eigh(self, F):
-        # Initial guesses use the same symmetry blocks as subsequent iterations.
-        if self._symmetry_basis is not None:
-            eps, C, irreps = self._symmetry_basis.eigh(F)
-        else:
-            eps, C = SCFBase._eigh(self, F)
-            irreps = np.zeros(len(eps), dtype=int)
-        self._guess_eps = eps
-        self._guess_irreps = irreps
-        return eps, C
-
-    def _prepare_initial_orbitals(self):
-        if self._guess_eps is not None:
+    def _initial_orbitals(self, H):
+        """Return the energies, orbitals and irreps the SCF starts from."""
+        if self.C is None:
             # Guesses built here are already symmetry-adapted and in aufbau order.
-            if self._occupation_policy is None:
-                return
-            eps = [self._guess_eps] * len(self.C)
-            irreps = [self._guess_irreps] * len(self.C)
+            eps, C, irreps = self._initial_guess(H, guess_type=self.guess_type)
         elif self._symmetry_basis is not None:
             # Symmetry-adapt a supplied guess, ranking orbitals by their occupation in it.
             adapted = [
                 self._symmetry_basis.adapt(C, -w)
                 for C, w in zip(self.C, self._guess_occupations())
             ]
-            eps, self.C, irreps = (list(x) for x in zip(*adapted))
+            eps, C, irreps = (list(x) for x in zip(*adapted))
         elif self._occupation_policy is not None:
-            eps = [-w for w in self._guess_occupations()]
+            eps, C = [-w for w in self._guess_occupations()], self.C
             irreps = [np.zeros(len(e), dtype=int) for e in eps]
         else:
-            return
-        self._orbital_irreps = irreps
-        self.eps, self.C = self._apply_occupation_constraints(eps, self.C)
+            return None, self.C, None
+        return self._apply_occupation_constraints(eps, C, irreps)
 
     def _guess_occupations(self):
         """Occupation numbers of a supplied guess, whose occupied orbitals come first."""
@@ -201,16 +186,16 @@ class SCFBase(Method):
             return [(index < self.na).astype(float) + (index < self.nb)]
         return [(index < n).astype(float) for n in (self.na, self.nb)]
 
-    def _apply_occupation_constraints(self, eps, C):
+    def _apply_occupation_constraints(self, eps, C, irreps):
+        """Reorder each orbital set so that the occupied orbitals come first."""
         if self._occupation_policy is None:
-            return eps, C
-        orders = self._occupation_policy.permutations(eps, self._orbital_irreps)
-        self._orbital_irreps = [
-            h[order] for h, order in zip(self._orbital_irreps, orders)
-        ]
-        return [e[order] for e, order in zip(eps, orders)], [
-            c[:, order] for c, order in zip(C, orders)
-        ]
+            return eps, C, irreps
+        orders = self._occupation_policy.permutations(eps, irreps)
+        return (
+            [e[order] for e, order in zip(eps, orders)],
+            [c[:, order] for c, order in zip(C, orders)],
+            [h[order] for h, order in zip(irreps, orders)],
+        )
 
     def _setup_orbital_symmetry(self, S, H):
         """Build an orthonormal symmetry basis once per SCF run."""
@@ -281,11 +266,7 @@ class SCFBase(Method):
         logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
         self.iter = 0
-        self._guess_eps = None
-        self._guess_irreps = None
-        if self.C is None:
-            self.C = self._initial_guess(H, guess_type=self.guess_type)
-        self._prepare_initial_orbitals()
+        self.eps, self.C, self._orbital_irreps = self._initial_orbitals(H)
         self.D = self._build_density_matrix()
         F, F_canon = self._build_fock(H, fock_builder, S)
         self.F = F_canon
@@ -307,7 +288,7 @@ class SCFBase(Method):
             F_canon = self._diis_update(diis, F_canon, AO_grad)
             F_canon = self._apply_level_shift(F_canon, S)
             # 2. Diagonalize the extrapolated Fock
-            self.eps, self.C = self._diagonalize_fock(F_canon)
+            self.eps, self.C, self._orbital_irreps = self._diagonalize_fock(F_canon)
             # 3. Build new density matrix
             self.D = self._build_density_matrix()
             # 4. Build the (non-extrapolated) Fock matrix
@@ -333,7 +314,7 @@ class SCFBase(Method):
                 logger.log_info1("=" * width)
                 logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
-                self.eps, self.C = self._diagonalize_fock(F_canon)
+                self.eps, self.C, self._orbital_irreps = self._diagonalize_fock(F_canon)
                 self.D = self._build_density_matrix()
                 F, F_canon = self._build_fock(H, fock_builder, S)
                 self.F = F_canon
@@ -391,24 +372,16 @@ class SCFBase(Method):
     def _build_density_matrix(self): ...
 
     @abstractmethod
-    def _initial_guess(self, H, guess_type="minao"): ...
+    def _initial_guess(self, H, guess_type="minao"):
+        """Return the guess energies, orbitals and irreps, one entry per orbital set."""
 
     @abstractmethod
     def _build_ao_grad(self, S, F): ...
 
     def _diagonalize_fock(self, F):
-        eps, C, irreps = [], [], []
-        for f in F:
-            e, c = self._eigh(f)
-            eps.append(e)
-            C.append(c)
-            irreps.append(
-                self._last_eigh_irreps
-                if self._last_eigh_irreps is not None
-                else np.zeros(len(e), dtype=int)
-            )
-        self._orbital_irreps = irreps
-        return self._apply_occupation_constraints(eps, C)
+        """Return the energies, orbitals and irreps of each Fock matrix, occupied first."""
+        eps, C, irreps = (list(x) for x in zip(*(self._eigh(f) for f in F)))
+        return self._apply_occupation_constraints(eps, C, irreps)
 
     @abstractmethod
     def _spin(self, S): ...
