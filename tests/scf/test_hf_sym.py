@@ -1,6 +1,11 @@
+import numpy as np
+import pytest
+
 import forte2
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
+from forte2.lib import ints
+from forte2.symmetry.sym_utils import CHARACTER_TABLE, get_symmetry_ops
 
 
 def test_rhf_h2o_c2v():
@@ -543,3 +548,28 @@ def test_rhf_n2_d2h():
                     raise AssertionError(
                         f"Symmetry assignment wrong beyond ag/b1g, b2g/b3g and b2u/b3u interchanges: {e1} != {e2}."
                     )
+
+
+@pytest.mark.parametrize(
+    "element,distance", [("N", 2.0), ("N", 3.0), ("C", 2.0), ("C", 3.0)]
+)
+def test_rhf_stretched_diatomic_irreps(element, distance):
+    system = forte2.System(
+        xyz=f"{element} 0 0 0; {element} 0 0 {distance}",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    scf = RHF(charge=0)(system).run()
+    assert system.point_group == "D2H"
+
+    # Each orbital must pick up the character of its irrep under every operation.
+    C = np.ascontiguousarray(scf.C[0])
+    characters = np.array([CHARACTER_TABLE["D2H"][l] for l in scf.irrep_labels[0]])
+    points = np.random.default_rng(265).uniform(-3, 3, (30, 3))
+    values = ints.orbitals_at_points(system.basis, points, C)
+    for j, R in enumerate(get_symmetry_ops("D2H").values()):
+        transformed = ints.orbitals_at_points(system.basis, points @ R.T, C)
+        np.testing.assert_allclose(
+            transformed, values * characters[:, j], atol=1e-9, rtol=0
+        )

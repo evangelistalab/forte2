@@ -163,7 +163,7 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 - `props`, `gradients`, `optimize` — 1e-properties/populations; DF-based analytic gradients plus
   `FDGradient`, which differentiates *any* rebuildable method's energy by finite differences (see
   "Rebuilding a chain at a new geometry" above); `GeometryOptimizer` drives either.
-- `state`, `symmetry` — `State`/`RelState`/`MOSpace`/state-averaging; point-group MO symmetry detection.
+- `state`, `symmetry` — `State`/`RelState`/`MOSpace`/state-averaging; point-group detection and symmetry-adapted orbital bases (`SymmetryBasis`).
 
 ## Environment And Build
 - Preferred environment setup:

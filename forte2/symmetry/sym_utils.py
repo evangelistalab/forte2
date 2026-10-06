@@ -153,3 +153,57 @@ def reflection_mat(plane):
     k = 3 - i - j  # the axis not in the plane (since {0,1,2})
     R[k, k] = -1.0
     return R
+
+
+def local_sign(l, m, op):
+    """
+    Return phase describing how the spherical harmonic Y_lm transforms under Abelian symmetry
+    operations `op`, which is one of [E, C2z, C2x, C2y, σ_xy, σ_xz, σ_yz].
+    """
+    ma = abs(m)
+    if op == "E":
+        return 1
+    if op == "i":
+        return (-1) ** l
+    if op == "C2z":
+        return (-1) ** ma
+    if op == "C2x":
+        if m == 0:
+            return (-1) ** l
+        return (-1) ** (l + ma) if m > 0 else (-1) ** (l + ma + 1)
+    if op == "C2y":
+        if m == 0:
+            return (-1) ** l
+        return (-1) ** l if m > 0 else (-1) ** (l + 1)
+    if op == "σ_xz":
+        return 1 if m >= 0 else -1
+    if op == "σ_yz":
+        if m == 0:
+            return 1
+        return (-1) ** ma if m > 0 else (-1) ** (ma + 1)
+    if op == "σ_xy":
+        return (-1) ** (l + ma)
+    raise ValueError(f"Unknown op {op}")
+
+
+def get_symmetry_ops(point_group):
+    """
+    Compute 3x3 matrix representations for the symmetry operators in `point_group`.
+    These representation perform reflections/rotations in the molecular principal frame.
+    """
+    symmetry_ops = {}
+
+    axes = {"x": 0, "y": 1, "z": 2}
+    I = np.eye(3)
+
+    ops = SYMMETRY_OPS[point_group]
+    for op in ops:
+        if op == "E":
+            symmetry_ops[op] = I
+        elif "C2" in op:
+            symmetry_ops[op] = rotation_mat(I[:, axes[op[-1]]], np.deg2rad(180.0))
+        elif op == "i":
+            symmetry_ops[op] = -I
+        elif "σ_" in op:
+            symmetry_ops[op] = reflection_mat((axes[op[-2]], axes[op[-1]]))
+    return symmetry_ops

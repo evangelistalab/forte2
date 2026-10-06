@@ -19,6 +19,7 @@ from forte2.x2c import X2CHelper
 from forte2.base_classes.params import X2CParams
 from forte2.jkbuilder import FockBuilder, FockBuilderOTF
 from .build_basis import build_basis, build_basis_from_dict
+from forte2.symmetry.symmetry_basis import SymmetryBasis
 from .geom_utils import (
     GeometryHelper,
     parse_geometry,
@@ -60,6 +61,7 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     symmetry : bool, optional, default=False
         Whether to automatically detect the largest Abelian point group symmetry of the molecule.
+        RHF, ROHF, UHF, and CUHF preserve this symmetry during Fock diagonalization.
         This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
     symmetry_tol : float, optional, default=1e-4
         The tolerance for detecting symmetry.
@@ -91,6 +93,8 @@ class System:
         A dictionary mapping atomic numbers to their numbers in the system.
     atom_to_center : dict[int : list[int]]
         A dictionary mapping atomic numbers to a list of (0-based) indices of atoms of that type in the system.
+    symmetry_basis : SymmetryBasis | None
+        The symmetry-adapted orbital basis of the point group, built on first use. None in C1.
     basis : ints.Basis
         The basis set for the system, built from the provided `basis_set`.
     auxiliary_basis : ints.Basis
@@ -196,6 +200,7 @@ class System:
         self.Xorth, _, info = canonical_orth(_S, self.overlap_ortho_rtol)
         print_metric_info(info)
         self.nmo = int(info["n_kept"])
+        self._symmetry_basis = None
         self.fock_builder = self._init_fock_builder()
         # The B tensors here are lazily evaluated, so no overhead if not used
 
@@ -482,6 +487,29 @@ class System:
             return block_diag_2x2(self.Xorth)
         else:
             return self.Xorth
+
+    @property
+    def symmetry_basis(self):
+        """
+        The symmetry-adapted orbital basis of the point group, built on first use.
+
+        Returns
+        -------
+        SymmetryBasis | None
+            The symmetry basis, or None if the point group is C1.
+        """
+        if self.point_group == "C1":
+            return None
+        if self._symmetry_basis is None:
+            # basis_utils imports System, so it cannot be imported at module level.
+            from .basis_utils import BasisInfo
+
+            # Spatial orbitals: the one-component overlap and orthogonalizer are used
+            # even after a two-component method has set two_component.
+            self._symmetry_basis = SymmetryBasis(
+                self, BasisInfo(self, self.basis), integrals.overlap(self), self.Xorth
+            )
+        return self._symmetry_basis
 
     def nuclear_dipole(self, origin=None, unit="debye"):
         """

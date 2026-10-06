@@ -198,6 +198,59 @@ def eigh_gen(A, B, rtol=1e-7, mode="canonical"):
     return e, X @ c, info
 
 
+def block_eigh(A, block_idx, atol=1e-8, rtol=1e-8, sort=False):
+    """
+    Diagonalize a Hermitian matrix whose blocks are not coupled to each other.
+
+    Parameters
+    ----------
+    A : NDArray
+        A Hermitian matrix.
+    block_idx : ArrayLike
+        The block each row and column of ``A`` belongs to.
+    atol : float, optional, default=1e-8
+        Absolute tolerance for elements that couple different blocks.
+    rtol : float, optional, default=1e-8
+        Tolerance for elements that couple different blocks, relative to the largest
+        element of ``A``.
+    sort : bool, optional, default=False
+        Whether to sort all eigenpairs by eigenvalue. Otherwise the eigenvectors of each
+        block occupy that block's positions, in ascending order of eigenvalue.
+
+    Returns
+    -------
+    eigvals : NDArray
+        The eigenvalues.
+    eigvecs : NDArray
+        The eigenvectors, as columns.
+    eigvec_blocks : NDArray
+        The block of each eigenvector.
+
+    Raises
+    ------
+    ValueError
+        If an element coupling different blocks exceeds ``atol + rtol * max(abs(A))``.
+        Smaller couplings are treated as zero.
+    """
+    block_idx = np.asarray(block_idx)
+    coupling = np.abs(A[block_idx[:, None] != block_idx[None, :]]).max(initial=0.0)
+    tol = atol + rtol * np.abs(A).max(initial=0.0)
+    if coupling > tol:
+        raise ValueError(
+            f"Elements coupling different blocks reach {coupling:.2e}, above the "
+            f"tolerance {tol:.2e}."
+        )
+    eigvals = np.empty(len(block_idx))
+    eigvecs = np.zeros(A.shape, dtype=A.dtype)
+    for block in np.unique(block_idx):
+        idx = np.flatnonzero(block_idx == block)
+        eigvals[idx], eigvecs[np.ix_(idx, idx)] = np.linalg.eigh(A[np.ix_(idx, idx)])
+    if not sort:
+        return eigvals, eigvecs, block_idx
+    order = np.argsort(eigvals, kind="stable")
+    return eigvals[order], eigvecs[:, order], block_idx[order]
+
+
 def givens_rotation(A, c, s, i, j, column=True):
     """
     Apply a Givens rotation to the matrix A.

@@ -6,6 +6,7 @@ import numpy as np
 from forte2.system import System, ModelSystem, BasisInfo
 from forte2.base_classes import Method, MO
 from forte2.helpers import logger, DIIS
+from forte2.symmetry.sym_utils import COTTON_LABELS
 
 
 @dataclass
@@ -111,9 +112,12 @@ class SCFBase(Method):
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
 
     def _eigh(self, F):
+        """Diagonalize F, by irrep when symmetry is used, returning energies, orbitals and irreps."""
+        if self._symmetry_basis is not None:
+            return self._symmetry_basis.eigh(F)
         Ftilde = self.Xorth.T @ F @ self.Xorth
         e, c = np.linalg.eigh(Ftilde)
-        return e, self.Xorth @ c
+        return e, self.Xorth @ c, np.zeros(len(e), dtype=int)
 
     def _scf_type(self):
         return type(self).__name__.upper()
@@ -150,6 +154,9 @@ class SCFBase(Method):
             self.basis_info = None
         else:
             self.basis_info = BasisInfo(self.system, self.system.basis)
+        # Two-component spinors cannot carry spatial irrep labels.
+        use_symmetry = not self.two_component and self.system.point_group != "C1"
+        self._symmetry_basis = self.system.symmetry_basis if use_symmetry else None
 
         logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF
@@ -165,8 +172,11 @@ class SCFBase(Method):
         logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
         self.iter = 0
+        self._orbital_irreps = None
         if self.C is None:
-            self.C = self._initial_guess(H, guess_type=self.guess_type)
+            self.eps, self.C, self._orbital_irreps = self._initial_guess(
+                H, guess_type=self.guess_type
+            )
         self.D = self._build_density_matrix()
         F, F_canon = self._build_fock(H, fock_builder, S)
         self.F = F_canon
@@ -188,7 +198,7 @@ class SCFBase(Method):
             F_canon = self._diis_update(diis, F_canon, AO_grad)
             F_canon = self._apply_level_shift(F_canon, S)
             # 2. Diagonalize the extrapolated Fock
-            self.eps, self.C = self._diagonalize_fock(F_canon)
+            self.eps, self.C, self._orbital_irreps = self._diagonalize_fock(F_canon)
             # 3. Build new density matrix
             self.D = self._build_density_matrix()
             # 4. Build the (non-extrapolated) Fock matrix
@@ -214,7 +224,7 @@ class SCFBase(Method):
                 logger.log_info1("=" * width)
                 logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
-                self.eps, self.C = self._diagonalize_fock(F_canon)
+                self.eps, self.C, self._orbital_irreps = self._diagonalize_fock(F_canon)
                 self.D = self._build_density_matrix()
                 F, F_canon = self._build_fock(H, fock_builder, S)
                 self.F = F_canon
@@ -243,9 +253,7 @@ class SCFBase(Method):
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
         self._post_process()
-        self.mos = MO(
-            self.C, self.two_component, self.irrep_labels, self.irrep_indices
-        )
+        self.mos = MO(self.C, self.two_component, self.irrep_labels, self.irrep_indices)
 
         self.executed = True
         return self
@@ -272,13 +280,16 @@ class SCFBase(Method):
     def _build_density_matrix(self): ...
 
     @abstractmethod
-    def _initial_guess(self, H, guess_type="minao"): ...
+    def _initial_guess(self, H, guess_type="minao"):
+        """Return the guess energies, orbitals and irreps, one entry per orbital set."""
 
     @abstractmethod
     def _build_ao_grad(self, S, F): ...
 
-    @abstractmethod
-    def _diagonalize_fock(self, F): ...
+    def _diagonalize_fock(self, F):
+        """Return the energies, orbitals and irreps of each Fock matrix."""
+        eps, C, irreps = (list(x) for x in zip(*(self._eigh(f) for f in F)))
+        return eps, C, irreps
 
     @abstractmethod
     def _spin(self, S): ...
@@ -295,8 +306,13 @@ class SCFBase(Method):
     @abstractmethod
     def _print_orbital_energies(self): ...
 
-    @abstractmethod
-    def _assign_orbital_symmetries(self): ...
+    def _assign_orbital_symmetries(self):
+        point_group = (
+            "C1" if self._symmetry_basis is None else self._symmetry_basis.point_group
+        )
+        names = {index: label for label, index in COTTON_LABELS[point_group].items()}
+        self.irrep_indices = [h.tolist() for h in self._orbital_irreps]
+        self.irrep_labels = [[names[index] for index in h] for h in self.irrep_indices]
 
     @abstractmethod
     def _apply_level_shift(self, F, S): ...
