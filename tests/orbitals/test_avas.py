@@ -13,6 +13,8 @@ from forte2 import (
     System,
 )
 from forte2.helpers.comparisons import approx
+from forte2.symmetry import SymmetryBasis
+from forte2.system import BasisInfo
 
 
 def test_avas_inputs():
@@ -512,3 +514,43 @@ def test_avas_zero_uocc2():
     mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E_avg == approx(-37.5906751187)
+
+
+def test_avas_keeps_symmetry_labels():
+    def n2(symmetry):
+        return System(
+            xyz="N 0 0 0; N 0 0 1.2",
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="cc-pvtz-jkfit",
+            symmetry=symmetry,
+        )
+
+    def casci(system):
+        avas = AVAS(
+            selection_method="separate",
+            num_active_docc=3,
+            num_active_uocc=3,
+            subspace=["N(2p)"],
+            diagonalize=True,
+        )(RHF(charge=0, e_tol=1e-12)(system))
+        ci = CI(CISolver(states=State(nel=14, multiplicity=1, ms=0.0)))(avas).run()
+        return avas, ci.E_ci[0]
+
+    # Labels that follow the AVAS rotations give the same CASCI energy as C1.
+    system = n2(True)
+    avas, energy = casci(system)
+    assert energy == approx(casci(n2(False))[1])
+    basis = SymmetryBasis.build(
+        system,
+        BasisInfo(system, system.basis),
+        system.ints_overlap(),
+        system.get_Xorth(),
+    )
+    assert avas.mos.point_group == "D2H"
+    assert basis.orbital_irreps(avas.mos.C[0]).tolist() == avas.mos.irrep_indices[0]
+
+    # A subspace on one of the two equivalent atoms breaks the symmetry.
+    one_atom = AVAS(subspace=["N1(2p)"], diagonalize=True)(RHF(charge=0)(n2(True)))
+    one_atom.run()
+    assert one_atom.mos.point_group == "C1"
+    assert set(one_atom.mos.irrep_labels[0]) == {"a"}

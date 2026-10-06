@@ -10,6 +10,7 @@ from forte2.base_classes import Method
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
 from forte2.data import ATOM_SYMBOL_TO_Z
+from forte2.symmetry.symmetry_basis import couples_irreps
 
 
 @dataclass
@@ -336,6 +337,18 @@ class AVAS(Method):
 
         CpsC = self.mos.C[0].T.conj() @ self.ao_projector @ self.mos.C[0]
 
+        # The AVAS rotations stay within each irrep, so every orbital keeps the irrep of
+        # its position, unless diagonalizing a projector that breaks the symmetry.
+        point_group = self.mos.point_group
+        irreps = np.asarray(self.mos.irrep_indices[0], dtype=int)
+        if self.diagonalize and couples_irreps(CpsC, irreps):
+            logger.log_warning(
+                f"The AVAS subspace breaks {point_group} symmetry, so the AVAS "
+                "orbitals are labeled in C1."
+            )
+            point_group = "C1"
+            irreps = np.zeros(self.nmo, dtype=int)
+
         logger.log_info1(
             "\nMOs with significant overlap with the subspace (> 1.00e-3):"
         )
@@ -374,13 +387,12 @@ class AVAS(Method):
                 "The eigenvalues of the projected overlap matrix will be used to select the AVAS orbitals."
             )
             U = np.zeros((self.nmo, self.nmo), dtype=self.dtype)
-            # smallest to largest eigenvalues for occupied
-            s_docc, Udocc = np.linalg.eigh(CpsC[docc_sl, docc_sl])
-            U[docc_sl, docc_sl] = Udocc
-            s_uocc, Uuocc = np.linalg.eigh(CpsC[uocc_sl, uocc_sl])
-            # largest to smallest eigenvalues for virtual
-            s_uocc = s_uocc[::-1]
-            U[uocc_sl, uocc_sl] = Uuocc[:, ::-1]
+            s_docc, U[docc_sl, docc_sl] = _eigh_by_irrep(
+                CpsC[docc_sl, docc_sl], irreps[docc_sl]
+            )
+            s_uocc, U[uocc_sl, uocc_sl] = _eigh_by_irrep(
+                CpsC[uocc_sl, uocc_sl], irreps[uocc_sl]
+            )
             sigma_type = "eigen"
         else:
             logger.log_info1(
@@ -538,10 +550,14 @@ class AVAS(Method):
         C_tilde = self.mos.C[0] @ U
         fock = self.parent_method.F[0]
         # separately canonicalize the Fock matrix blocks
-        C_inact_docc = self._canonicalize_block(fock, C_tilde, inact_docc)
-        C_inact_uocc = self._canonicalize_block(fock, C_tilde, inact_uocc)
-        C_act_docc = self._canonicalize_block(fock, C_tilde, act_docc)
-        C_act_uocc = self._canonicalize_block(fock, C_tilde, act_uocc)
+        C_inact_docc, h_inact_docc = _canonicalize_block(
+            fock, C_tilde, inact_docc, irreps
+        )
+        C_inact_uocc, h_inact_uocc = _canonicalize_block(
+            fock, C_tilde, inact_uocc, irreps
+        )
+        C_act_docc, h_act_docc = _canonicalize_block(fock, C_tilde, act_docc, irreps)
+        C_act_uocc, h_act_uocc = _canonicalize_block(fock, C_tilde, act_uocc, irreps)
 
         # fill the C matrix as follows:
         # [C_inact_docc, C_act_docc, !!C_socc!!, C_act_uocc, C_inact_uocc]
@@ -559,6 +575,14 @@ class AVAS(Method):
         self.mos.C[0][:, ad_sl] = C_act_docc
         self.mos.C[0][:, au_sl] = C_act_uocc
         self.mos.C[0][:, iu_sl] = C_inact_uocc
+        irreps[id_sl] = h_inact_docc
+        irreps[ad_sl] = h_act_docc
+        irreps[au_sl] = h_act_uocc
+        irreps[iu_sl] = h_inact_uocc
+        if point_group != self.mos.point_group:
+            self.mos.irrep_indices = [[0] * self.nmo for _ in self.mos.C]
+        self.mos.irrep_indices[0] = irreps.tolist()
+        self.mos.point_group = point_group
 
         logger.log_info1(
             "\nAO composition of final canonicalized active MOs prepared by AVAS:"
@@ -568,12 +592,6 @@ class AVAS(Method):
             list(range(ad_sl.start, au_sl.stop)),
             spinorbital=True,
         )
-
-    def _canonicalize_block(self, F, C, mos):
-        C_sub = C[:, mos]
-        F_sub = C_sub.T.conj() @ F @ C_sub
-        _, U_sub = np.linalg.eigh(F_sub)
-        return C_sub @ U_sub
 
     def _parse_subspace_pi_planes(self):
         """
@@ -701,3 +719,22 @@ class AVAS(Method):
         atom_dirs = {z_i: n / np.linalg.norm(n) for z_i, n in atom_dirs.items()}
 
         return atom_dirs
+
+
+def _eigh_by_irrep(M, irreps):
+    """Diagonalize M within each irrep; each eigenvector keeps the irrep of its position."""
+    values = np.empty(len(irreps))
+    U = np.zeros(M.shape, dtype=M.dtype)
+    for h in np.unique(irreps):
+        idx = np.flatnonzero(irreps == h)
+        values[idx], U[np.ix_(idx, idx)] = np.linalg.eigh(M[np.ix_(idx, idx)])
+    return values, U
+
+
+def _canonicalize_block(F, C, mos, irreps):
+    """Diagonalize F within the orbitals mos by irrep, in ascending energy."""
+    C_sub = C[:, mos]
+    F_sub = C_sub.T.conj() @ F @ C_sub
+    energies, U = _eigh_by_irrep(F_sub, irreps[mos])
+    order = np.argsort(energies, kind="stable")
+    return (C_sub @ U)[:, order], irreps[mos][order]

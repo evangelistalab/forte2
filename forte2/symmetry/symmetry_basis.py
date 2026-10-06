@@ -8,6 +8,36 @@ from .sym_utils import CHARACTER_TABLE, COTTON_LABELS, SYMMETRY_OPS, local_sign
 _AO_SYMMETRY_TOL = 1e-8
 
 
+def irrep_coupling(M, irreps):
+    """
+    Measure how strongly a matrix couples functions of different irreps.
+
+    Parameters
+    ----------
+    M : NDArray
+        A matrix in a basis of functions that each transform as one irrep.
+    irreps : ArrayLike
+        The irrep index of each basis function.
+
+    Returns
+    -------
+    float
+        The largest element of ``M`` between functions of different irreps, relative to
+        the largest element of ``M``.
+    """
+    irreps = np.asarray(irreps)
+    scale = np.abs(M).max(initial=0.0)
+    if scale == 0.0:
+        return 0.0
+    off_block = irreps[:, None] != irreps[None, :]
+    return np.abs(M[off_block]).max(initial=0.0) / scale
+
+
+def couples_irreps(M, irreps):
+    """Return whether ``M`` couples different irreps by more than roundoff."""
+    return irrep_coupling(M, irreps) > _AO_SYMMETRY_TOL
+
+
 def ao_symmetry_operations(system, info):
     r"""
     Compute how AO coefficient vectors transform under each symmetry operation.
@@ -151,9 +181,7 @@ class SymmetryBasis:
             If the largest coupling between different irreps, relative to the largest
             element of ``M`` in the symmetry basis, exceeds roundoff.
         """
-        M = self.vectors.conj().T @ M @ self.vectors
-        off_block = self.irreps[:, None] != self.irreps[None, :]
-        coupling = np.abs(M[off_block]).max(initial=0.0) / np.abs(M).max()
+        coupling = irrep_coupling(self.vectors.conj().T @ M @ self.vectors, self.irreps)
         if coupling > _AO_SYMMETRY_TOL:
             raise ValueError(
                 f"The {name} breaks {self.point_group} symmetry (relative coupling "
