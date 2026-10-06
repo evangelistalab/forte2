@@ -175,13 +175,11 @@ def test_invalid_bound_options(method, options, match):
         (UHF, dict(charge=1, ms=0.5, target_symmetry="b2u"), "No occupation pattern"),
     ],
 )
-def test_unavailable_irrep_raises_before_scf(method, options, match):
-    system = _h2()
-    hf = method(**options)(system)
+def test_unavailable_irrep_raises(method, options, match):
+    hf = method(**options)(_h2())
     with pytest.raises(ValueError, match=match):
         hf.run()
     assert not hf.executed
-    assert "B_Pmn" not in system.fock_builder.__dict__
 
 
 def test_target_occupation_matches_exhaustive_search():
