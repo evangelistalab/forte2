@@ -61,8 +61,7 @@ class SCFBase(Method):
     eps : list[NDArray]
         The orbital energies.
     orbital_point_group : str
-        Point group used for orbital labels and occupation constraints. Spin-orbit
-        GHF uses C1.
+        Point group used for orbital labels and occupation constraints. GHF uses C1.
     state_symmetry : str
         Total determinant irrep.
 
@@ -118,10 +117,7 @@ class SCFBase(Method):
         self._orbital_irreps = None
         self._occupation_policy = None
         self.state_symmetry = None
-        # Spatial irreps do not label spin-orbit coupled spinors.
-        self.orbital_point_group = (
-            "C1" if system.x2c_type == "so" else system.point_group
-        )
+        self.orbital_point_group = system.point_group
         self._validate_level_shift()
         self.called = True
         return self
@@ -208,7 +204,7 @@ class SCFBase(Method):
     def _setup_orbital_symmetry(self, S):
         """Build an orthonormal symmetry basis once per SCF run."""
         self._symmetry_basis = None
-        if not self.two_component and self.orbital_point_group != "C1":
+        if self.orbital_point_group != "C1":
             self._symmetry_basis = SymmetryBasis.build(
                 self.system, self.basis_info, S, self.Xorth, self.orbital_point_group
             )

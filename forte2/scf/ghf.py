@@ -5,7 +5,7 @@ import numpy as np
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from forte2.symmetry import real_sph_to_j_adapted, MOSymmetryDetector
+from forte2.symmetry import real_sph_to_j_adapted
 from forte2.helpers import canonical_orth
 from .scf_base import SCFBase
 from .rhf import RHF
@@ -72,6 +72,12 @@ class GHF(SCFBase):
             )
             self.nmo_spinor = info["n_kept"]
         self = super().__call__(system)
+        if system.point_group != "C1":
+            logger.log_warning(
+                f"GHF does not use point-group symmetry. Running in C1 instead of "
+                f"{system.point_group}."
+            )
+            self.orbital_point_group = "C1"
         self._parse_state()
         return self
 
@@ -189,21 +195,7 @@ class GHF(SCFBase):
         return [eps], [C]
 
     def _assign_orbital_symmetries(self):
-        # GHF does not constrain symmetry during the SCF. Labelling the occupied
-        # and virtual spinors separately keeps the determinant unchanged.
-        irreps = []
-        for block in (slice(None, self.nel), slice(self.nel, None)):
-            detector = MOSymmetryDetector(
-                self.system,
-                self.basis_info,
-                self._get_overlap(),
-                self.C[0][:, block],
-                self.eps[0][block],
-                point_group=self.orbital_point_group,
-            )
-            detector.run()
-            irreps.extend(detector.irrep_indices)
-        self._orbital_irreps = [np.array(irreps, dtype=int)]
+        self._orbital_irreps = [np.zeros(self.C[0].shape[1], dtype=int)]
         super()._assign_orbital_symmetries()
 
     def _spin(self, S):

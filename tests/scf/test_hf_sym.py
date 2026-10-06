@@ -547,27 +547,22 @@ def test_rhf_n2_d2h():
                     )
 
 
-def test_ghf_labels():
-    # GHF labels its converged spinors; spin-orbit spinors use C1.
-    def water(x2c=None):
+def test_ghf_runs_in_c1():
+    # GHF ignores the point group of a symmetric system and labels its spinors in C1.
+    def water():
         return forte2.System(
             xyz="O 0 0 0; H 0 0.76 0.59; H 0 -0.76 0.59",
             basis_set="sto-3g",
             auxiliary_basis_set="def2-universal-jkfit",
             symmetry=True,
-            x2c=x2c,
         )
 
     rhf = RHF(charge=0)(water()).run()
     ghf = GHF(charge=0)(water()).run()
+    assert ghf.system.point_group == "C2V"
+    assert ghf.orbital_point_group == "C1"
+    assert set(ghf.irrep_labels[0]) == {"a"}
     assert ghf.E == approx(rhf.E)
-    assert ghf.irrep_labels[0][::2] == rhf.irrep_labels[0]
-    assert ghf.irrep_labels[0][1::2] == rhf.irrep_labels[0]
-    assert ghf.state_symmetry == "a1"
-
-    so = GHF(charge=0)(water(forte2.X2CParams(x2c_type="so", x2c_model="1e"))).run()
-    assert so.orbital_point_group == "C1"
-    assert set(so.irrep_labels[0]) == {"a"}
 
     with pytest.raises(ValueError, match="only supported by"):
         GHF(charge=0, target_symmetry="a1")

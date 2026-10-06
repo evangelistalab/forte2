@@ -301,6 +301,4 @@ class MOSymmetryDetector:
                                     U[bas1.abs_idx, bas2.abs_idx] = sgn
                         break
             U_ops[op_label] = U
-        if self.C.shape[0] == 2 * self.system.nbf:
-            U_ops = {op: np.kron(np.eye(2), U) for op, U in U_ops.items()}
         return U_ops
