@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 import numpy as np
 
-from .scf_base import SCFBase
+from .scf_base import OneComponentSCF
+from .occupations import SpinStructure
 from .uhf import UHF
 
 
 @dataclass
-class CUHF(SCFBase):
+class CUHF(OneComponentSCF):
     """
     A class that runs constrained unrestricted Hartree-Fock calculations.
     Equivalent to ROHF but uses UHF machinery.
@@ -25,7 +26,7 @@ class CUHF(SCFBase):
     ms: float = None
     guess_mix: bool = False  # only used if ms == 0
 
-    _occupation_type = "constrained_unrestricted"
+    _spin_structure = SpinStructure(shared_orbitals=False, nested=True)
 
     _parse_state = UHF._parse_state
     _build_density_matrix = UHF._build_density_matrix

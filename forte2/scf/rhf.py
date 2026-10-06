@@ -5,17 +5,18 @@ from numpy.typing import NDArray
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from .scf_base import SCFBase
+from .scf_base import OneComponentSCF, SCFBase
+from .occupations import SpinStructure
 from .scf_utils import sap_guess_hamiltonian
 
 
 @dataclass
-class RHF(SCFBase):
+class RHF(OneComponentSCF):
     """
     A class that runs restricted Hartree-Fock calculations.
     """
 
-    _occupation_type = "restricted"
+    _spin_structure = SpinStructure(shared_orbitals=True, nested=True)
 
     def __post_init__(self):
         super().__post_init__()

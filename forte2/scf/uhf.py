@@ -6,12 +6,13 @@ from numpy.typing import NDArray
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from .scf_base import SCFBase
+from .scf_base import OneComponentSCF
+from .occupations import SpinStructure
 from .scf_utils import guess_mix, guess_mix_pair
 
 
 @dataclass
-class UHF(SCFBase):
+class UHF(OneComponentSCF):
     """
     A class that runs unrestricted Hartree-Fock calculations.
 
@@ -28,7 +29,7 @@ class UHF(SCFBase):
     ms: float = None
     guess_mix: bool = False  # only used if ms == 0
 
-    _occupation_type = "unrestricted"
+    _spin_structure = SpinStructure(shared_orbitals=False, nested=False)
 
     def __post_init__(self):
         super().__post_init__()

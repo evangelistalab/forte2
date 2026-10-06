@@ -568,7 +568,7 @@ def test_ghf_runs_in_c1():
     assert set(ghf.irrep_labels[0]) == {"a"}
     assert ghf.E == approx(rhf.E)
 
-    with pytest.raises(ValueError, match="only supported by"):
+    with pytest.raises(TypeError, match="target_symmetry"):
         GHF(charge=0, target_symmetry="a1")
 
 

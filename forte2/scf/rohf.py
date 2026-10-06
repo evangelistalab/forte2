@@ -5,13 +5,14 @@ import numpy as np
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from .scf_base import SCFBase
+from .scf_base import OneComponentSCF
+from .occupations import SpinStructure
 from .rhf import RHF
 from .uhf import UHF
 
 
 @dataclass
-class ROHF(SCFBase):
+class ROHF(OneComponentSCF):
     """
     A class that runs restricted open-shell Hartree-Fock calculations.
 
@@ -23,7 +24,7 @@ class ROHF(SCFBase):
 
     ms: float = None
 
-    _occupation_type = "restricted_open_shell"
+    _spin_structure = SpinStructure(shared_orbitals=True, nested=True)
 
     _parse_state = UHF._parse_state
     _initial_guess = RHF._initial_guess

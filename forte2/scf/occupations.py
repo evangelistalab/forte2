@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from numbers import Integral
 
 import numpy as np
@@ -23,14 +24,25 @@ def _spin_counts(value):
     return n, n
 
 
-def validate_occupation_options(target_symmetry, occupations, mode):
-    if mode is None:
-        if target_symmetry is not None or occupations is not None:
-            raise ValueError(
-                "target_symmetry and irrep_occupations are only supported by "
-                "RHF, ROHF, UHF, and CUHF."
-            )
-        return
+@dataclass(frozen=True)
+class SpinStructure:
+    """
+    How the alpha and beta electrons of a one-component SCF method occupy its orbitals.
+
+    Attributes
+    ----------
+    shared_orbitals : bool
+        Whether both spins occupy one set of spatial orbitals (RHF, ROHF).
+    nested : bool
+        Whether the minority-spin occupied orbitals lie within the majority-spin ones
+        (RHF, ROHF, CUHF).
+    """
+
+    shared_orbitals: bool
+    nested: bool
+
+
+def validate_occupation_options(target_symmetry, occupations):
     if target_symmetry is not None and (
         isinstance(target_symmetry, bool)
         or not isinstance(target_symmetry, (str, Integral))
@@ -49,32 +61,25 @@ def validate_occupation_options(target_symmetry, occupations, mode):
 class OccupationPolicy:
     """Select HF occupations by irrep, preserving electron counts and determinant symmetry."""
 
-    def __init__(self, mode, point_group, nelec, target_symmetry, occupations):
-        self.mode = mode
+    def __init__(self, structure, point_group, nelec, target_symmetry, occupations):
+        self.structure = structure
         self.point_group = point_group
         self.nelec = tuple(nelec)
         self.labels = COTTON_LABELS[point_group]
         self.nirrep = len(self.labels)
         self.target = None if target_symmetry is None else self._irrep(target_symmetry)
         self.counts = self._resolve_counts(occupations)
+        major = int(self.nelec[1] > self.nelec[0])
         if self.counts is not None:
-            if mode in ("restricted_open_shell", "constrained_unrestricted"):
-                major = int(nelec[1] > nelec[0])
-                if np.any(self.counts[1 - major] > self.counts[major]):
-                    raise ValueError(
-                        "Minority-spin occupations must be nested within majority-spin occupations."
-                    )
+            if structure.nested and np.any(self.counts[1 - major] > self.counts[major]):
+                raise ValueError(
+                    "Minority-spin occupations must be nested within majority-spin occupations."
+                )
             if self.target is not None and self._symmetry(self.counts) != self.target:
                 raise ValueError(
                     "irrep_occupations are incompatible with target_symmetry."
                 )
-        if self.target not in (None, 0) and (
-            mode == "restricted"
-            or (
-                mode in ("restricted_open_shell", "constrained_unrestricted")
-                and nelec[0] == nelec[1]
-            )
-        ):
+        if self.target not in (None, 0) and structure.nested and nelec[0] == nelec[1]:
             raise ValueError(
                 "A closed-shell restricted determinant is always totally symmetric."
             )
@@ -82,27 +87,19 @@ class OccupationPolicy:
     def _resolve_counts(self, occupations):
         if occupations is None:
             return None
-        counts = np.zeros((len(self.nelec), self.nirrep), dtype=int)
+        counts = np.zeros((2, self.nirrep), dtype=int)
         seen = set()
         for key, value in occupations.items():
             irrep = self._irrep(key)
             if irrep in seen:
                 raise ValueError(f"Irrep {key!r} is specified more than once.")
             seen.add(irrep)
-            alpha, beta = _spin_counts(value)
-            if self.mode == "restricted":
-                if alpha != beta:
-                    raise ValueError(
-                        "RHF irrep occupations must have equal alpha and beta counts."
-                    )
-                counts[:, irrep] = alpha
-            else:
-                counts[:, irrep] = alpha, beta
+            counts[:, irrep] = _spin_counts(value)
         totals = tuple(counts.sum(axis=1))
         if totals != self.nelec:
             raise ValueError(
-                f"irrep_occupations must sum to {self.nelec}, got {totals}. "
-                "Unlisted irreps have zero occupation."
+                f"irrep_occupations must sum to {self.nelec} (alpha, beta) electrons, "
+                f"got {totals}. Unlisted irreps have zero occupation."
             )
         return counts
 
@@ -128,16 +125,11 @@ class OccupationPolicy:
                 "An irrep occupation exceeds the available orbitals in that irrep."
             )
         # Resolve feasibility before the first density or expensive J/K build.
-        self.permutations(
-            [np.zeros(len(irreps))]
-            * (2 if self.mode in ("unrestricted", "constrained_unrestricted") else 1),
-            [irreps]
-            * (2 if self.mode in ("unrestricted", "constrained_unrestricted") else 1),
-        )
+        nsets = 1 if self.structure.shared_orbitals else 2
+        self.permutations([np.zeros(len(irreps))] * nsets, [irreps] * nsets)
 
     def _symmetry(self, counts):
-        if self.mode == "restricted":
-            return 0
+        """Determinant irrep: the product of the irreps holding an odd number of electrons."""
         symmetry = 0
         for irrep, count in enumerate(np.sum(counts, axis=0)):
             if count % 2:
@@ -145,46 +137,19 @@ class OccupationPolicy:
         return symmetry
 
     def permutations(self, eps, irreps):
+        """Return, for each orbital set, the order that puts the occupied orbitals first."""
         counts = self.counts
         if counts is None:
-            if self.mode == "restricted":
-                counts = np.array(
-                    [
-                        np.bincount(
-                            irreps[0][np.argsort(eps[0])[: self.nelec[0]]],
-                            minlength=self.nirrep,
-                        )
-                    ]
-                )
-            elif self.mode == "unrestricted":
-                spectra = [
-                    _occupation_spectrum(e, h, n, self.nirrep)
-                    for e, h, n in zip(eps, irreps, self.nelec)
-                ]
-                costs = (
-                    spectra[0][0] + spectra[1][0][np.arange(self.nirrep) ^ self.target]
-                )
-                symmetry_a = int(np.argmin(costs))
-                if not np.isfinite(costs[symmetry_a]):
-                    raise ValueError(
-                        "No occupation pattern can realize target_symmetry."
-                    )
-                selected = [
-                    spectra[0][1][symmetry_a],
-                    spectra[1][1][symmetry_a ^ self.target],
-                ]
-                counts = np.array(
-                    [
-                        np.bincount(h[idx], minlength=self.nirrep)
-                        for h, idx in zip(irreps, selected)
-                    ]
-                )
-            else:
+            if self.structure.nested:
                 counts = _nested_counts(
                     eps, irreps, self.nelec, self.nirrep, self.target
                 )
+            else:
+                counts = _unrestricted_counts(
+                    eps, irreps, self.nelec, self.nirrep, self.target
+                )
 
-        if self.mode == "restricted_open_shell":
+        if self.structure.shared_orbitals:
             major = int(self.nelec[1] > self.nelec[0])
             core, singly = [], []
             for irrep in range(self.nirrep):
@@ -194,12 +159,24 @@ class OccupationPolicy:
                 singly.extend(indices[ndocc:nocc])
             return [_partition_order(eps[0], core, singly)]
         return [
-            _partition_order(
-                e,
-                _occupied_indices(e, h, row),
-            )
+            _partition_order(e, _occupied_indices(e, h, row))
             for e, h, row in zip(eps, irreps, counts)
         ]
+
+
+def _unrestricted_counts(eps, irreps, nelec, nirrep, target):
+    """Choose the alpha and beta occupations jointly for the lowest orbital-energy sum."""
+    spectra = [
+        _occupation_spectrum(e, h, n, nirrep) for e, h, n in zip(eps, irreps, nelec)
+    ]
+    costs = spectra[0][0] + spectra[1][0][np.arange(nirrep) ^ target]
+    symmetry_a = int(np.argmin(costs))
+    if not np.isfinite(costs[symmetry_a]):
+        raise ValueError("No occupation pattern can realize target_symmetry.")
+    selected = [spectra[0][1][symmetry_a], spectra[1][1][symmetry_a ^ target]]
+    return np.array(
+        [np.bincount(h[idx], minlength=nirrep) for h, idx in zip(irreps, selected)]
+    )
 
 
 def _irrep_order(eps, irreps, irrep):

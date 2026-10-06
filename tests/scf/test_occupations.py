@@ -7,9 +7,11 @@ from forte2 import CUHF, RHF, ROHF, UHF, System
 from forte2.base_classes.rebuild import rebuild_method_chain, rebind_method_chain
 from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.lib import ints
-from forte2.scf.occupations import OccupationPolicy
+from forte2.scf.occupations import OccupationPolicy, SpinStructure
 from forte2.symmetry.sym_utils import get_symmetry_ops
 from forte2.symmetry.sym_utils import CHARACTER_TABLE
+
+UNRESTRICTED = SpinStructure(shared_orbitals=False, nested=False)
 
 
 def _h2(distance=1.5):
@@ -150,7 +152,7 @@ def test_integer_occupation_is_doubly_occupied(method):
         (RHF, dict(target_symmetry=8), "Unknown irrep"),
         (RHF, dict(irrep_occupations={"ag": 2}), "must sum"),
         (RHF, dict(irrep_occupations={"ag": 1, 0: 0}), "more than once"),
-        (RHF, dict(irrep_occupations={"ag": (1, 0), "b1u": (0, 1)}), "equal alpha"),
+        (RHF, dict(irrep_occupations={"ag": (1, 0), "b1u": (0, 1)}), "nested"),
         (UHF, dict(ms=0, irrep_occupations={"ag": (1,)}), "alpha, beta"),
         (
             UHF,
@@ -187,7 +189,7 @@ def test_target_occupation_matches_exhaustive_search():
     irreps = np.array([0, 1, 2, 3, 4, 5, 0])
     for target in range(8):
         # With no beta electrons, the alpha selection alone carries the target.
-        policy = OccupationPolicy("unrestricted", "D2H", (2, 0), target, None)
+        policy = OccupationPolicy(UNRESTRICTED, "D2H", (2, 0), target, None)
         order = policy.permutations([eps, eps], [irreps, irreps])[0]
         expected = min(
             eps[list(idx)].sum()
@@ -201,7 +203,7 @@ def test_uhf_target_is_chosen_jointly_for_both_spins():
     # Choosing the alpha Aufbau occupation first would miss the joint minimum.
     eps = [np.array([-5.0, -4.0]), np.array([-100.0, 100.0])]
     irreps = [np.array([0, 1]), np.array([0, 1])]
-    policy = OccupationPolicy("unrestricted", "C2", (1, 1), 1, None)
+    policy = OccupationPolicy(UNRESTRICTED, "C2", (1, 1), 1, None)
     orders = policy.permutations(eps, irreps)
     assert orders[0][0] == 1
     assert orders[1][0] == 0

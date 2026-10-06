@@ -42,15 +42,6 @@ class SCFBase(Method):
         If energy change is below this threshold, level shift is turned off.
     die_if_not_converged : bool, optional, default=True
         Whether to raise an error if the SCF calculation does not converge.
-    target_symmetry : str | int | None, optional
-        Total determinant irrep, specified by label or irrep index. Closed-shell
-        determinants (RHF, and ROHF or CUHF with ms = 0) are always totally symmetric.
-        Not supported by GHF.
-    irrep_occupations : dict | None, optional
-        Electrons per irrep, keyed by irrep label or index. An integer n means n doubly
-        occupied orbitals (n alpha and n beta electrons); an (alpha, beta) pair gives the
-        counts of each spin, which RHF requires to be equal. Unlisted irreps have zero
-        occupation. Not supported by GHF.
 
     Attributes
     ----------
@@ -87,19 +78,12 @@ class SCFBase(Method):
     level_shift: float = None
     level_shift_thresh: float = 1e-5
     die_if_not_converged: bool = True
-    target_symmetry: str | int | None = None
-    irrep_occupations: dict | None = None
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
 
-    _occupation_type = None
-
     def __post_init__(self):
         self.provides = {"system", "mos", "eps"}
-        validate_occupation_options(
-            self.target_symmetry, self.irrep_occupations, self._occupation_type
-        )
 
     def __call__(self, system):
         assert isinstance(
@@ -147,22 +131,7 @@ class SCFBase(Method):
         return e, self.Xorth @ c, np.zeros(len(e), dtype=int)
 
     def _configure_occupation_constraints(self):
-        validate_occupation_options(
-            self.target_symmetry, self.irrep_occupations, self._occupation_type
-        )
         self._occupation_policy = None
-        if self.target_symmetry is None and self.irrep_occupations is None:
-            return
-        nelec = (
-            (self.na,) if self._occupation_type == "restricted" else (self.na, self.nb)
-        )
-        self._occupation_policy = OccupationPolicy(
-            self._occupation_type,
-            self.orbital_point_group,
-            nelec,
-            self.target_symmetry,
-            self.irrep_occupations,
-        )
 
     def _initial_orbitals(self, H):
         """Return the energies, orbitals and irreps the SCF starts from."""
@@ -421,22 +390,18 @@ class SCFBase(Method):
         logger.log_info1(f"HF determinant symmetry: {self.state_symmetry}")
 
     def _assign_determinant_symmetry(self, names):
+        # The determinant irrep is the product of the irreps of all occupied spin orbitals.
+        if self.two_component:
+            occupied = [(self._orbital_irreps[0], self.nel)]
+        else:
+            last = len(self._orbital_irreps) - 1
+            occupied = [
+                (self._orbital_irreps[min(spin, last)], n)
+                for spin, n in enumerate((self.na, self.nb))
+            ]
         symmetry = 0
-        occupations = (
-            (self.nel,)
-            if self.two_component
-            else (
-                (self.na, self.nb)
-                if len(self._orbital_irreps) == 2
-                else (max(self.na, self.nb),)
-            )
-        )
-        for h, nocc in zip(self._orbital_irreps, occupations):
-            if len(self._orbital_irreps) == 1 and not self.two_component:
-                h = h[min(self.na, self.nb) : nocc]
-            else:
-                h = h[:nocc]
-            symmetry ^= int(np.bitwise_xor.reduce(h, initial=0))
+        for h, n in occupied:
+            symmetry ^= int(np.bitwise_xor.reduce(h[:n], initial=0))
         self.state_symmetry = names[symmetry]
 
     @abstractmethod
@@ -444,3 +409,45 @@ class SCFBase(Method):
 
     @abstractmethod
     def _print_ao_composition(self): ...
+
+
+@dataclass
+class OneComponentSCF(SCFBase):
+    """
+    Base class for SCF methods whose orbitals are spatial orbitals of one spin
+    (RHF, ROHF, UHF, and CUHF). These methods preserve the point group symmetry.
+
+    Parameters
+    ----------
+    target_symmetry : str | int | None, optional
+        Total determinant irrep, specified by label or irrep index. Closed-shell
+        determinants (RHF, and ROHF or CUHF with ms = 0) are always totally symmetric.
+    irrep_occupations : dict | None, optional
+        Electrons per irrep, keyed by irrep label or index. An integer n means n doubly
+        occupied orbitals (n alpha and n beta electrons); an (alpha, beta) pair gives the
+        counts of each spin, which RHF requires to be equal. Unlisted irreps have zero
+        occupation.
+    """
+
+    target_symmetry: str | int | None = None
+    irrep_occupations: dict | None = None
+
+    # How the alpha and beta electrons occupy the orbitals; set by each method.
+    _spin_structure = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        validate_occupation_options(self.target_symmetry, self.irrep_occupations)
+
+    def _configure_occupation_constraints(self):
+        validate_occupation_options(self.target_symmetry, self.irrep_occupations)
+        self._occupation_policy = None
+        if self.target_symmetry is None and self.irrep_occupations is None:
+            return
+        self._occupation_policy = OccupationPolicy(
+            self._spin_structure,
+            self.orbital_point_group,
+            (self.na, self.nb),
+            self.target_symmetry,
+            self.irrep_occupations,
+        )
