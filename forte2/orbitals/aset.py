@@ -12,6 +12,7 @@ from forte2.base_classes import Method
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 from forte2.orbitals.final_orbitals import FinalOrbitals
+from forte2.symmetry.symmetry_basis import couples_irreps, eigh_by_irrep
 
 
 @dataclass
@@ -291,12 +292,29 @@ class ASET(Method):
         # Split P_frag into occupied and virtual blocks
         P_frag_oo = P_frag[core, core]
         P_frag_vv = P_frag[virt, virt]
-        lo_vals, Uo = np.linalg.eigh(P_frag_oo)
-        lv_vals, Uv = np.linalg.eigh(P_frag_vv)
 
-        # resort the virtual eigenvalue/eigenvector pairs
+        # The rotations stay within each irrep, so every orbital keeps the irrep of
+        # its position, unless the fragment breaks the symmetry.
+        point_group = self.mos.point_group
+        irreps = np.asarray(self.mos.irrep_indices[0], dtype=int)
+        core_irreps, virt_irreps = irreps[core_inds], irreps[virt_inds]
+        if couples_irreps(P_frag_oo, core_irreps) or couples_irreps(
+            P_frag_vv, virt_irreps
+        ):
+            logger.log_warning(
+                f"The ASET fragment breaks {point_group} symmetry, so the ASET "
+                "orbitals are labeled in C1."
+            )
+            point_group = "C1"
+            irreps = np.zeros(self.nmo, dtype=int)
+            core_irreps, virt_irreps = irreps[core_inds], irreps[virt_inds]
+        lo_vals, Uo = eigh_by_irrep(P_frag_oo, core_irreps)
+        lv_vals, Uv = eigh_by_irrep(P_frag_vv, virt_irreps)
+
+        # resort the virtual eigenvalue/eigenvector pairs, and their irreps with them
         lv_vals = lv_vals[::-1]
         Uv = Uv[:, ::-1]
+        irreps[virt_inds] = virt_irreps[::-1]
 
         # Sort the eigenvalue/eigenvector pairs by eigenvalue in descending order
         occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
@@ -362,11 +380,19 @@ class ASET(Method):
         C_emb = C[:, emb_space.orig_to_contig].copy()
 
         # Semi-canonicalize according to the embedding space
-        semican = Semicanonicalizer(system=self.system, mo_space=emb_space)
+        semican = Semicanonicalizer(
+            system=self.system,
+            mo_space=emb_space,
+            irrep_indices=irreps[emb_space.orig_to_contig],
+        )
         semican.semi_canonicalize(g1=g1, C_contig=C_emb)
 
         # Replace the original orbitals with the semi-canonicalized ones in the original order
         self.mos.C[0] = semican.C_semican[:, emb_space.contig_to_orig].copy()
+        if point_group != self.mos.point_group:
+            self.mos.irrep_indices = [[0] * self.nmo for _ in self.mos.C]
+        self.mos.irrep_indices[0] = irreps.tolist()
+        self.mos.point_group = point_group
 
         return {
             "index_A_occ": index_A_occ,

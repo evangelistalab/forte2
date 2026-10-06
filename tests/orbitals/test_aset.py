@@ -20,6 +20,8 @@ from forte2.data.atom_data import EH_TO_WN
 from forte2.helpers.comparisons import approx, approx_abs
 from forte2.orbitals import mo_overlap
 from forte2.state import EmbeddingMOSpace
+from forte2.symmetry import SymmetryBasis
+from forte2.system import BasisInfo
 
 # Directory containing *this* file
 THIS_DIR = Path(__file__).resolve().parent
@@ -794,3 +796,39 @@ def test_aset_two_component_relativistic():
     e_aset, split_aset = s_only_aset_pt2()
     assert e_aset == approx(edsrg_aset)
     assert split_aset == approx_abs(esplit_dsrg_aset, 1e-2)
+
+
+def test_aset_keeps_symmetry_labels():
+    def li2(symmetry):
+        return System(
+            xyz="Li 0 0 0; Li 0 0 2.7",
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="def2-universal-jkfit",
+            symmetry=symmetry,
+        )
+
+    def embed(system, fragment):
+        ci_solver = CISolver(
+            State(nel=6, multiplicity=1, ms=0.0), core_orbitals=2, active_orbitals=2
+        )
+        mc = MCOptimizer(ci_solver)(RHF(charge=0)(system))
+        aset = ASET(fragment=fragment, cutoff_method="threshold", cutoff=0.1)(mc)
+        return aset, CI(ci_solver)(aset).run().E_ci[0]
+
+    # A fragment of both atoms keeps D2h, with labels that match the orbitals.
+    system = li2(True)
+    aset, energy = embed(system, ["Li1-2"])
+    assert energy == approx(embed(li2(False), ["Li1-2"])[1])
+    basis = SymmetryBasis.build(
+        system,
+        BasisInfo(system, system.basis),
+        system.ints_overlap(),
+        system.get_Xorth(),
+    )
+    assert aset.mos.point_group == "D2H"
+    assert basis.orbital_irreps(aset.mos.C[0]).tolist() == aset.mos.irrep_indices[0]
+
+    # A fragment of one of the two equivalent atoms breaks the symmetry.
+    aset, _ = embed(li2(True), ["Li1"])
+    assert aset.mos.point_group == "C1"
+    assert set(aset.mos.irrep_labels[0]) == {"a"}
