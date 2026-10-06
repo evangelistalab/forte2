@@ -208,7 +208,7 @@ class SCFBase(Method):
         self._symmetry_basis = None
         if self.orbital_point_group != "C1":
             self._symmetry_basis = SymmetryBasis.build(
-                self.system, self.basis_info, S, self.Xorth, self.orbital_point_group
+                self.system, self.basis_info, S, self.Xorth
             )
         if self._occupation_policy is not None:
             irreps = (

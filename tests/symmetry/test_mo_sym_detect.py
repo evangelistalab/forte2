@@ -5,7 +5,6 @@ import pytest
 
 from forte2 import CUHF, RHF, ROHF, UHF, System
 from forte2.symmetry import MOSymmetryDetector
-from forte2.symmetry.mo_sym_detect import get_symmetry_ops
 from forte2.symmetry.sym_utils import CHARACTER_TABLE, COTTON_LABELS, SYMMETRY_OPS
 from forte2.system import BasisInfo
 
@@ -153,9 +152,7 @@ def _assert_scf_symmetry(scf):
             C,
             scf.eps[spin],
         )
-        detector.U_ops = detector._build_U_matrices(
-            get_symmetry_ops(scf.system.point_group)
-        )
+        detector.U_ops = detector._build_U_matrices()
         labels = scf.mos.irrep_labels[spin]
         _assert_characters(detector, labels)
         assert scf.mos.irrep_indices[spin] == [

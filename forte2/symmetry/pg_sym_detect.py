@@ -80,6 +80,9 @@ class PGSymmetryDetector:
             self.prinrot = np.eye(3)
             self.prin_atomic_positions = self.com_atomic_positions
             self.pg_name = "D2H"
+            self.atom_permutations = {
+                op: np.zeros(1, dtype=int) for op in get_symmetry_ops(self.pg_name)
+            }
             self.symmetrization_displacement = 0.0
             return
 
@@ -132,14 +135,17 @@ class PGSymmetryDetector:
         positions = self.prin_atomic_positions
         symmetric = np.zeros_like(positions)
         ops = get_symmetry_ops(self.pg_name)
-        for R in ops.values():
+        self.atom_permutations = {}
+        for op, R in ops.items():
             images = positions @ R.T
+            permutation = np.empty(len(positions), dtype=int)
             for i, Z in enumerate(self.charges):
                 candidates = np.flatnonzero(self.charges == Z)
-                j = candidates[
+                permutation[i] = candidates[
                     np.argmin(np.linalg.norm(positions[candidates] - images[i], axis=1))
                 ]
-                symmetric[i] += R.T @ positions[j]
+                symmetric[i] += R.T @ positions[permutation[i]]
+            self.atom_permutations[op] = permutation
         symmetric /= len(ops)
         self.symmetrization_displacement = np.max(
             np.linalg.norm(symmetric - positions, axis=1)

@@ -1,6 +1,7 @@
 import numpy as np
 
 from forte2 import System
+from forte2.symmetry.mo_sym_detect import get_symmetry_ops
 
 
 def _detect(xyz, symmetry_tol=1e-4, unit="angstrom"):
@@ -58,7 +59,14 @@ def test_pg_detection_near_symmetric_benzene():
         f"{el} {x + d[0]:.12f} {y + d[1]:.12f} {d[2]:.12f}"
         for (el, x, y), d in zip(atoms, displacements)
     )
-    assert _detect(benzene, unit="bohr").point_group == "D2H"
+    system = _detect(benzene, unit="bohr")
+    assert system.point_group == "D2H"
+
+    # Each operation maps the symmetrized atoms exactly onto their stored partners.
+    positions = system.prin_atomic_positions
+    for op, R in get_symmetry_ops(system.point_group).items():
+        images = positions[system.atom_permutations[op]]
+        np.testing.assert_allclose(positions @ R.T, images, atol=1e-12)
 
 
 def test_pg_detection_accidental_symmetric_top():

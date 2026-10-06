@@ -333,6 +333,7 @@ class GeometryHelper:
             sym_detector.run()
             self.prinrot = sym_detector.prinrot
             self.point_group = sym_detector.pg_name
+            self.atom_permutations = sym_detector.atom_permutations
             logger.log_info1(f"Detected point group: {self.point_group}")
             self.prin_atomic_positions = sym_detector.prin_atomic_positions
             if sym_detector.symmetrization_displacement > 1e-10:
@@ -349,6 +350,7 @@ class GeometryHelper:
             self.prinrot = np.eye(3)
             self.prin_atomic_positions = self.atomic_positions.copy()
             self.point_group = "C1"
+            self.atom_permutations = {"E": np.arange(self.natoms)}
             logger.log_info1(
                 "Point group symmetry detection not performed. Running in C1 symmetry."
             )

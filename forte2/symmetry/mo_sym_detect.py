@@ -81,11 +81,10 @@ class MOSymmetryDetector:
     eps : ndarray
         MO energies, updated in place after symmetry projection.
     tol : float, optional, default=1e-6
-        Tolerance for matching atomic positions and symmetry representations.
-    point_group : str | None, optional
-        Point group to use instead of the system's, for example C1.
+        Tolerance on the symmetry of the MOs. Representation matrix elements below it
+        are treated as zero, and characters must match the character table to within it.
     U_ops : dict | None, optional
-        Precomputed AO symmetry matrices for the same system and point group.
+        Precomputed AO symmetry matrices for the same system.
 
     Attributes
     ----------
@@ -121,9 +120,7 @@ class MOSymmetryDetector:
     that are mixed together to obtain MOs that purely transform as irreps of the Abelian subgroup.
     """
 
-    def __init__(
-        self, system, info, S, C, eps, tol=1e-6, *, point_group=None, U_ops=None
-    ):
+    def __init__(self, system, info, S, C, eps, tol=1e-6, *, U_ops=None):
         self.system = system
         self.info = info
         self.S = S
@@ -131,7 +128,7 @@ class MOSymmetryDetector:
         self.eps = eps
         self.tol = tol
         self.two_component = self.system.two_component
-        self.point_group = point_group or self.system.point_group
+        self.point_group = self.system.point_group
         self.U_ops = U_ops
 
     def run(self):
@@ -139,14 +136,11 @@ class MOSymmetryDetector:
             self.labels = ["a" for _ in range(self.C.shape[1])]
             self.irrep_indices = [0 for _ in range(self.C.shape[1])]
         else:
-            # step 1: build symmetry transformation matrices
-            symmetry_ops = get_symmetry_ops(self.point_group)
-
-            # step 2: build U matrices (permutation * phase)
+            # step 1: build U matrices (permutation * phase)
             if self.U_ops is None:
-                self.U_ops = self._build_U_matrices(symmetry_ops)
+                self.U_ops = self._build_U_matrices()
 
-            # step 3: assign irrep labels
+            # step 2: assign irrep labels
             self.labels, chars = self._assign_irrep_labels()
 
             for i, c in enumerate(chars):
@@ -264,41 +258,27 @@ class MOSymmetryDetector:
         labels = [names[k] for k in best]
         return labels, chars
 
-    def _build_U_matrices(self, symmetry_operations):
+    def _build_U_matrices(self):
         r"""
         Compute the matrices :math:`U(g)_{\mu\nu}= \langle \mu | R(g) | \nu \rangle`
         that describes how the AO basis functions transform under each symmetry operation R(g).
-        This involves finding the symmetric partner atom for each basis function,
-        and then mutiplying that with a local phase describing how the spherical
+        Each basis function maps to the matching function on the partner atom given by
+        ``system.atom_permutations``, multiplied by a local phase describing how the spherical
         harmonic transforms under the symmetry operation.
         """
         U_ops = {}
-        for op_label, R in symmetry_operations.items():
+        for op_label, permutation in self.system.atom_permutations.items():
             U = np.zeros((self.system.nbf, self.system.nbf))
-            for i, a in enumerate(self.system.atoms):
-                v = (
-                    R @ self.system.prin_atomic_positions[i]
-                )  # apply symmetry operation in principal axis frame
-                # get basis fcns centered on atom a
-                basis_a = [bas for bas in self.info.basis_labels if bas.iatom == i]
-                for j, b in enumerate(self.system.atoms):
-                    if (a[0] == b[0]) and (
-                        np.linalg.norm(v - self.system.prin_atomic_positions[j])
-                        < self.tol
-                    ):
-                        # get basis fcns centered on atom b
-                        basis_b = [
-                            bas for bas in self.info.basis_labels if bas.iatom == j
-                        ]
-                        for bas1 in basis_a:
-                            sgn = local_sign(bas1.l, bas1.ml, op_label)
-                            for bas2 in basis_b:
-                                if (
-                                    bas1.n == bas2.n
-                                    and bas1.l == bas2.l
-                                    and bas1.ml == bas2.ml
-                                ):
-                                    U[bas1.abs_idx, bas2.abs_idx] = sgn
-                        break
+            for i, j in enumerate(permutation):
+                partner = {
+                    (bas.n, bas.l, bas.ml): bas.abs_idx
+                    for bas in self.info.basis_labels
+                    if bas.iatom == j
+                }
+                for bas in self.info.basis_labels:
+                    if bas.iatom == i:
+                        U[bas.abs_idx, partner[(bas.n, bas.l, bas.ml)]] = local_sign(
+                            bas.l, bas.ml, op_label
+                        )
             U_ops[op_label] = U
         return U_ops

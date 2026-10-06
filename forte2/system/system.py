@@ -94,6 +94,8 @@ class System:
         A dictionary mapping atomic numbers to their numbers in the system.
     atom_to_center : dict[int : list[int]]
         A dictionary mapping atomic numbers to a list of (0-based) indices of atoms of that type in the system.
+    atom_permutations : dict[str, NDArray]
+        For each symmetry operation of the point group, the index of the atom that each atom is mapped to.
     basis : ints.Basis
         The basis set for the system, built from the provided `basis_set`.
     auxiliary_basis : ints.Basis
@@ -328,6 +330,7 @@ class System:
         self.atom_to_center = self.geom_helper.atom_to_center
         self.prin_atomic_positions = self.geom_helper.prin_atomic_positions
         self.point_group = self.geom_helper.point_group
+        self.atom_permutations = self.geom_helper.atom_permutations
 
         logger.log_info1("Principal Atomic Positions (a.u.):")
         for i in range(self.natoms):

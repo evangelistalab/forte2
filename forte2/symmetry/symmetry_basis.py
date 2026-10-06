@@ -18,17 +18,15 @@ class SymmetryBasis:
     _S: np.ndarray
 
     @classmethod
-    def build(cls, system, info, S, X, point_group):
+    def build(cls, system, info, S, X):
         C = X.copy()
-        detector = MOSymmetryDetector(
-            system, info, S, C, np.zeros(C.shape[1]), point_group=point_group
-        )
+        detector = MOSymmetryDetector(system, info, S, C, np.zeros(C.shape[1]))
         detector.run()
         return cls(
             C,
             np.array(detector.irrep_indices),
             detector.U_ops or {},
-            point_group,
+            system.point_group,
             system,
             info,
             S,
@@ -43,7 +41,6 @@ class SymmetryBasis:
             self._S,
             C,
             eps,
-            point_group=self.point_group,
             U_ops=self.U_ops,
         )
         detector.run()
