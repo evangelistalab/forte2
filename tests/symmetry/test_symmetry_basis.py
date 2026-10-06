@@ -19,6 +19,7 @@ def _symmetry_basis(system):
 
 def _assert_scf_symmetry(scf):
     pg = scf.system.point_group
+    assert scf.mos.point_group == pg
     basis = _symmetry_basis(scf.system)
     points = np.random.default_rng(265).uniform(-3, 3, (30, 3))
     for spin, (C, labels) in enumerate(zip(scf.mos.C, scf.mos.irrep_labels)):

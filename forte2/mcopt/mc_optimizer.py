@@ -396,7 +396,7 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
                 nrr[:, idx] = False
 
         # zero out rotations between orbitals of different irreps
-        if self.system.point_group.upper() != "C1":
+        if self.mos.point_group != "C1":
             _irrid = self._final_orbital_irrep_indices()
             # equivalent to:
             # for i, j in range(nmo):

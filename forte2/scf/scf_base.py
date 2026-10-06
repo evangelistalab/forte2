@@ -318,7 +318,9 @@ class SCFBase(Method):
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
         self._post_process()
-        self.mos = MO(self.C, self.two_component, self.irrep_labels, self.irrep_indices)
+        self.mos = MO(
+            self.C, self.two_component, self.irrep_indices, self.orbital_point_group
+        )
 
         self.executed = True
         return self

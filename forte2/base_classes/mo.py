@@ -2,17 +2,30 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from forte2.symmetry.sym_utils import COTTON_LABELS
+
 
 @dataclass
 class MO:
     """
-    Class to hold molecular orbital coefficients and their associated irrep labels and indices.
+    Class to hold molecular orbital coefficients and the irrep of each orbital.
+
+    Parameters
+    ----------
+    C : list[NDArray]
+        The MO coefficients, one matrix per orbital set.
+    spinorbital : bool
+        Whether the orbitals are spinors.
+    irrep_indices : list[list[int]]
+        The irrep index of each orbital in each set, in the Cotton ordering of ``point_group``.
+    point_group : str, optional, default="C1"
+        The point group the irrep indices refer to.
     """
 
     C: list
     spinorbital: bool
-    irrep_labels: list
     irrep_indices: list
+    point_group: str = "C1"
 
     nmo: int = field(init=False)
     nbf: int = field(init=False)
@@ -40,28 +53,33 @@ class MO:
         if len(self.C) == 1 and not self.spinorbital:
             self.restricted = True
 
-        if len(self.irrep_labels) != len(self.C):
-            raise ValueError(
-                f"Length of irrep_labels ({len(self.irrep_labels)}) must match length of C ({len(self.C)})."
-            )
         if len(self.irrep_indices) != len(self.C):
             raise ValueError(
                 f"Length of irrep_indices ({len(self.irrep_indices)}) must match length of C ({len(self.C)})."
             )
-        for i, (labels, indices) in enumerate(
-            zip(self.irrep_labels, self.irrep_indices)
-        ):
-            if len(labels) != self.nmo or len(indices) != self.nmo:
+        nirrep = len(COTTON_LABELS[self.point_group])
+        for i, indices in enumerate(self.irrep_indices):
+            if len(indices) != self.nmo:
                 raise ValueError(
-                    f"Length of irrep_labels[{i}] and irrep_indices[{i}] must match number of MOs ({self.nmo}), but got {len(labels)} and {len(indices)}."
+                    f"Length of irrep_indices[{i}] must match number of MOs ({self.nmo}), but got {len(indices)}."
                 )
-            
+            if any(not 0 <= h < nirrep for h in indices):
+                raise ValueError(
+                    f"irrep_indices[{i}] contains indices outside the irreps of {self.point_group}."
+                )
+
+    @property
+    def irrep_labels(self):
+        """The irrep label of each orbital in each set."""
+        names = {h: label for label, h in COTTON_LABELS[self.point_group].items()}
+        return [[names[h] for h in indices] for indices in self.irrep_indices]
+
     @property
     def Ca(self):
         if self.spinorbital:
             raise ValueError("Ca is not defined for generalized MO objects.")
         return self.C[0]
-    
+
     @property
     def Cb(self):
         if self.spinorbital:
@@ -70,20 +88,19 @@ class MO:
             return self.C[0]
         else:
             return self.C[1]
-        
+
     @property
     def Cso(self):
         if not self.spinorbital:
             raise ValueError("Cso is only defined for generalized MO objects.")
         return self.C[0]
 
-
     def copy(self):
         return self.__class__(
             C=[arr.copy() for arr in self.C],
             spinorbital=self.spinorbital,
-            irrep_labels=[label.copy() for label in self.irrep_labels],
-            irrep_indices=[ind.copy() for ind in self.irrep_indices],
+            irrep_indices=[list(ind) for ind in self.irrep_indices],
+            point_group=self.point_group,
         )
 
     def to_spinorbital_basis(self, cmplx=True):
@@ -119,6 +136,6 @@ class MO:
         return self.__class__(
             C=[C_2c],
             spinorbital=True,
-            irrep_labels=list_spatial_to_spinor(self.irrep_labels),
             irrep_indices=list_spatial_to_spinor(self.irrep_indices),
+            point_group=self.point_group,
         )
