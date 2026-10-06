@@ -3,6 +3,7 @@ from numbers import Integral
 
 import numpy as np
 
+from forte2.helpers import logger
 from forte2.symmetry.sym_utils import COTTON_LABELS
 
 
@@ -83,6 +84,9 @@ class OccupationPolicy:
             raise ValueError(
                 "A closed-shell restricted determinant is always totally symmetric."
             )
+        # Occupation patterns chosen so far, used to detect oscillation.
+        self._visited = set()
+        self._current = None
 
     def _resolve_counts(self, occupations):
         if occupations is None:
@@ -125,8 +129,9 @@ class OccupationPolicy:
                 "An irrep occupation exceeds the available orbitals in that irrep."
             )
         # Resolve feasibility before the first density or expensive J/K build.
-        nsets = 1 if self.structure.shared_orbitals else 2
-        self.permutations([np.zeros(len(irreps))] * nsets, [irreps] * nsets)
+        if self.counts is None:
+            nsets = 1 if self.structure.shared_orbitals else 2
+            self._lowest_counts([np.zeros(len(irreps))] * nsets, [irreps] * nsets)
 
     def _symmetry(self, counts):
         """Determinant irrep: the product of the irreps holding an odd number of electrons."""
@@ -140,14 +145,8 @@ class OccupationPolicy:
         """Return, for each orbital set, the order that puts the occupied orbitals first."""
         counts = self.counts
         if counts is None:
-            if self.structure.nested:
-                counts = _nested_counts(
-                    eps, irreps, self.nelec, self.nirrep, self.target
-                )
-            else:
-                counts = _unrestricted_counts(
-                    eps, irreps, self.nelec, self.nirrep, self.target
-                )
+            counts = self._lowest_counts(eps, irreps)
+            self._freeze_if_cycling(counts)
 
         if self.structure.shared_orbitals:
             major = int(self.nelec[1] > self.nelec[0])
@@ -162,6 +161,32 @@ class OccupationPolicy:
             _partition_order(e, _occupied_indices(e, h, row))
             for e, h, row in zip(eps, irreps, counts)
         ]
+
+    def _lowest_counts(self, eps, irreps):
+        """Irrep counts with the lowest orbital-energy sum that realize target_symmetry."""
+        if self.structure.nested:
+            return _nested_counts(eps, irreps, self.nelec, self.nirrep, self.target)
+        return _unrestricted_counts(eps, irreps, self.nelec, self.nirrep, self.target)
+
+    def _freeze_if_cycling(self, counts):
+        """Fix the counts once the choice returns to a pattern it has already left."""
+        key = counts.tobytes()
+        if key == self._current:
+            return
+        if key in self._visited:
+            self.counts = counts
+            names = {index: label for label, index in self.labels.items()}
+            pattern = {
+                names[h]: (int(counts[0, h]), int(counts[1, h]))
+                for h in range(self.nirrep)
+                if counts[:, h].any()
+            }
+            logger.log_warning(
+                f"Irrep occupations are oscillating; fixing them to {pattern} "
+                "(alpha, beta). Set irrep_occupations to choose them explicitly."
+            )
+        self._visited.add(key)
+        self._current = key
 
 
 def _unrestricted_counts(eps, irreps, nelec, nirrep, target):

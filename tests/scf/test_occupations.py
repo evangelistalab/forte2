@@ -209,6 +209,20 @@ def test_uhf_target_is_chosen_jointly_for_both_spins():
     assert orders[1][0] == 0
 
 
+def test_oscillating_occupations_are_frozen():
+    # Alternating orbital energies make the lowest-energy pattern flip between the
+    # a and b irreps; returning to an earlier pattern fixes it.
+    a_lower = [np.array([-1.0, -0.9])] * 2
+    b_lower = [np.array([-0.9, -1.0])] * 2
+    irreps = [np.array([0, 1])] * 2
+    policy = OccupationPolicy(UNRESTRICTED, "C2", (1, 1), 0, None)
+    occupied = []
+    for eps in (a_lower, b_lower, a_lower, b_lower):
+        orders = policy.permutations(eps, irreps)
+        occupied.append([int(order[0]) for order in orders])
+    assert occupied == [[0, 0], [1, 1], [0, 0], [0, 0]]
+
+
 def test_rebuild_preserves_raw_symmetry_options():
     occupations = {"B1U": 1}
     hf = RHF(charge=0, target_symmetry="Ag", irrep_occupations=occupations)(_h2()).run()
