@@ -71,6 +71,7 @@ class PGSymmetryDetector:
             self.prinrot = np.eye(3)
             self.prin_atomic_positions = self.com_atomic_positions
             self.pg_name = "D2H"
+            self._symmetrize()
             return
 
         # compute principal moments of inertia. These are sorted in ascending order
@@ -108,6 +109,32 @@ class PGSymmetryDetector:
             self.pg_name = "C1"
         else:
             self.pg_name = self._detect_abelian_pg_symmetry()
+        self._symmetrize()
+
+    def _symmetrize(self):
+        """Average each atom over its images so that the geometry is exactly symmetric."""
+        positions = self.prin_atomic_positions
+        # symmetrized atomic positions
+        pos_sym = np.zeros_like(positions)
+        ops = get_symmetry_ops(self.pg_name)
+        self.atom_map = {}
+        for op, R in ops.items():
+            # positions after applying R to molecule
+            image_positions = positions @ R.T
+            image_atom = np.empty(len(positions), dtype=int)
+            for i, Z in enumerate(self.charges):
+                # for each atom, find its partner among atoms of the same type
+                candidates = np.flatnonzero(self.charges == Z)
+                # the image atom will have the shortest distance
+                distances = np.linalg.norm(
+                    positions[candidates] - image_positions[i], axis=1
+                )
+                image_atom[i] = candidates[np.argmin(distances)]
+                pos_sym[i] += R.T @ positions[image_atom[i]]
+            self.atom_map[op] = image_atom
+        pos_sym /= len(ops)
+        self.max_displacement = np.max(np.linalg.norm(pos_sym - positions, axis=1))
+        self.prin_atomic_positions = pos_sym
 
     def _detect_abelian_pg_symmetry(self):
         """

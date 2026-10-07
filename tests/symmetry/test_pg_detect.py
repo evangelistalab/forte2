@@ -27,8 +27,6 @@ OTTERBEIN_SLOW = {
     "126",
     "128",
 }
-# Symmetric only to about 1.1e-6 bohr, beyond the 1e-6 bohr matching tolerance.
-OTTERBEIN_NEAR_SYMMETRIC = {"44", "45", "51"}
 OTTERBEIN_SYMMETRY_TOL = {"31": 1e-5}
 
 
@@ -54,8 +52,6 @@ def test_pg_detection_ch4_with_zmat():
 
 def _otterbein_param(key):
     marks = [pytest.mark.slow] if key in OTTERBEIN_SLOW else []
-    if key in OTTERBEIN_NEAR_SYMMETRIC:
-        marks.append(pytest.mark.xfail(raises=RuntimeError, strict=True))
     return pytest.param(key, marks=marks, id=key)
 
 

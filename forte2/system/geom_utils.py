@@ -324,13 +324,22 @@ class GeometryHelper:
         if self.symmetry:
             com_atomic_positions = self.atomic_positions - self.center_of_mass[None, :]
             sym_detector = PGSymmetryDetector(
-                self.inertia_matrix, com_atomic_positions, self.atomic_charges
+                self.inertia_matrix,
+                com_atomic_positions,
+                self.atomic_charges,
+                tol=self.tol,
             )
             sym_detector.run()
             self.prinrot = sym_detector.prinrot
             self.point_group = sym_detector.pg_name
+            self.atom_map = sym_detector.atom_map
             logger.log_info1(f"Detected point group: {self.point_group}")
             self.prin_atomic_positions = sym_detector.prin_atomic_positions
+            if sym_detector.max_displacement > 1e-10:
+                logger.log_warning(
+                    f"Symmetrized the geometry to {self.point_group}; the largest atomic "
+                    f"displacement is {sym_detector.max_displacement:.2e} bohr."
+                )
 
             # Overwrite original inputted atomic positions with principal atomic positions
             self.atomic_positions = self.prin_atomic_positions.copy()
@@ -343,6 +352,7 @@ class GeometryHelper:
             self.prinrot = np.eye(3)
             self.prin_atomic_positions = self.atomic_positions.copy()
             self.point_group = "C1"
+            self.atom_map = {"E": np.arange(self.natoms)}
             logger.log_info1(
                 "Point group symmetry detection not performed. Running in C1 symmetry."
             )
