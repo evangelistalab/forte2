@@ -16,8 +16,8 @@ from forte2.helpers.comparisons import approx
 from forte2.base_classes import DavidsonLiuParams
 
 
-def test_block_natural_orbital_rotation_procrustes_gauge(monkeypatch):
-    """Align arbitrary degenerate eigenvectors to canonical-MO axes."""
+def test_block_natural_orbital_rotation_does_not_align_degenerate_space(monkeypatch):
+    """Fix eigenvector phases without aligning a degenerate eigenspace."""
     theta_occ = 0.37
     theta_vir = -0.61
     rotations = iter(
@@ -46,7 +46,10 @@ def test_block_natural_orbital_rotation_procrustes_gauge(monkeypatch):
 
     U, occupations = _block_natural_orbital_rotation(np.eye(4), nocc=2)
 
-    assert U == approx(np.eye(4))
+    assert not np.allclose(U, np.eye(4))
+    for block in (U[:2, :2], U[2:, 2:]):
+        pivots = np.argmax(np.abs(block), axis=0)
+        assert np.all(block[pivots, np.arange(2)] > 0.0)
     assert occupations == approx(np.array([1.5, 1.5, 0.2, 0.2]))
 
 

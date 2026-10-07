@@ -7,6 +7,7 @@ from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals
 from forte2.scf import RHF, ROHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.mp import RMP2, ROMP2, UMP2
+from forte2.props import rmp2_mpq_onthefly_no
 
 
 def assert_uhf_rdm_invariants(mp2, na, nb):
@@ -132,6 +133,27 @@ def test_rhf_mp2_1rdm_does_not_store_t2():
     assert mp2.E_total == approx(emp2)
     assert np.trace(g1) == approx(scf.na + scf.nb)
     assert_t2_not_stored(mp2)
+
+
+def test_rmp2_mutual_correlation_nos_preserve_irreps():
+    system = System(
+        xyz="F 0 0 0; H 0 0 2.2",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="angstrom",
+        symmetry=True,
+    )
+    rhf = RHF(charge=0)(system)
+    mp2 = RMP2(store_t2=False)(rhf)
+    mp2.run()
+    mpq = rmp2_mpq_onthefly_no(mp2, compute=True, mo_range=(0, 19))
+
+    irreps = np.asarray(rhf.mos.irrep_indices[0])
+    cross_irrep = irreps[:, None] != irreps[None, :]
+    np.testing.assert_allclose(mpq.U[cross_irrep], 0.0, atol=1.0e-14)
+    assert mpq.occs[2] == approx(mpq.occs[3])
+    assert irreps[2] != irreps[3]
+    assert mpq.M2[2, 8] == approx(mpq.M2[3, 9])
 
 
 def test_rhf_mp2_rdms_do_not_require_stored_t2():

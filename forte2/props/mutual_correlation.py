@@ -5,39 +5,46 @@ from forte2.helpers import logger
 import scipy as sp
 
 from forte2.lib import cpp_helpers
+from forte2.orbitals.orbital_blocks import OrbitalBlockBuilder
+from forte2.state import MOSpace
 
 
-def _block_natural_orbital_rotation(gamma1, nocc):
-    """Diagonalize occupied and virtual 1-RDM blocks independently.
+def _block_natural_orbital_rotation(gamma1, nocc, irrep_indices=None):
+    """Diagonalize occupied/virtual 1-RDM blocks, preserving irreps.
 
-    Within each occupation-degenerate manifold, choose the unitary rotation
-    closest to the corresponding canonical-MO coordinate axes.  This fixes
-    arbitrary eigenvector rotations and signs relative to the input canonical
-    orbitals without mixing the occupied and virtual spaces.
+    If orbital irreps are supplied, use the same block construction as Forte2's
+    semicanonicalizer and sort occupations only within each irrep.  Otherwise,
+    diagonalize the complete occupied and virtual blocks independently.  Fix
+    only the phase of each eigenvector; do not align degenerate subspaces to the
+    canonical-MO axes.
     """
     gamma1 = np.asarray(gamma1)
     gamma1 = 0.5 * (gamma1 + gamma1.T.conj())
     nmo = gamma1.shape[0]
 
     U = np.eye(nmo, dtype=gamma1.dtype)
-    occupations = np.empty(nmo)
-    for space in (slice(0, nocc), slice(nocc, nmo)):
-        values, vectors = np.linalg.eigh(gamma1[space, space])
+    occupations = np.real_if_close(np.diag(gamma1)).copy()
+    if irrep_indices is None:
+        blocks = (np.arange(nocc), np.arange(nocc, nmo))
+    else:
+        mo_space = MOSpace(nmo=nmo, core_orbitals=list(range(nocc)))
+        blocks = OrbitalBlockBuilder(mo_space, irrep_indices).blocks_for_spaces(
+            ("core", "virt")
+        )
+
+    for indices in blocks:
+        if indices.size == 0:
+            continue
+        values, vectors = np.linalg.eigh(gamma1[np.ix_(indices, indices)])
         order = np.argsort(values)[::-1]
         values, vectors = values[order], vectors[:, order]
 
-        breaks = np.flatnonzero(
-            ~np.isclose(values[1:], values[:-1], atol=1e-10, rtol=1e-8)
-        ) + 1
-        canonical_axes = np.eye(len(values), dtype=vectors.dtype)
-        for group in np.split(np.arange(len(values)), breaks):
-            left, _, right_h = np.linalg.svd(
-                vectors[:, group].conj().T @ canonical_axes[:, group]
-            )
-            vectors[:, group] = vectors[:, group] @ left @ right_h
+        pivots = np.argmax(np.abs(vectors), axis=0)
+        phases = vectors[pivots, np.arange(len(values))]
+        vectors *= (phases / np.abs(phases)).conj()
 
-        U[space, space] = vectors
-        occupations[space] = values.real
+        U[np.ix_(indices, indices)] = vectors
+        occupations[indices] = values.real
 
     return U, occupations
 
@@ -388,7 +395,9 @@ class RMP2MPQOnTheFly:
                 )
         else:
             self.U, _ = _block_natural_orbital_rotation(
-                self.Gamma1_mo, self.nocc
+                self.Gamma1_mo,
+                self.nocc,
+                self.mp2.mos.irrep_indices[0],
             )
 
         self.Gamma1_no = self.U.T.conj() @ self.Gamma1_mo @ self.U
