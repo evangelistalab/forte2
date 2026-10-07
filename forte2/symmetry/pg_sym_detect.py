@@ -4,7 +4,7 @@ import numpy as np
 import scipy as sp
 
 from forte2.helpers import logger
-from .sym_utils import rotation_mat, reflection_mat, equivalent_under_operation
+from .sym_utils import rotation_mat, equivalent_under_operation, get_symmetry_ops
 
 
 def _is_colinear(v1, v2, tol=1e-4):
@@ -50,7 +50,7 @@ class PGSymmetryDetector:
     If we find at least one C2 axis, we use that to define the x-axis in the orthogonal plane,
     and the y-axis is then determined by the right-hand rule.
     If not, we are in the C/S case, and we need to look for sigma_v planes. We know that
-    these must be through atoms, so we pick one and use that to define the x-axis.    
+    these must be through atoms, so we pick one and use that to define the x-axis.
 
     The spherical top case is the most complicated. To distinguish between T/O/I groups, we find all unique C2 axes.
     T groups have 3 unique C2 axes, O groups have 9, and I groups have 15.
@@ -111,80 +111,42 @@ class PGSymmetryDetector:
 
     def _detect_abelian_pg_symmetry(self):
         """
-        After determining the principal axes of rotation,
-        this method determine the largest Abelian point group symmetry of the molecule.
+        Find the largest Abelian point group whose operations each map every atom to
+        within tol of an atom of the same element. If the group only appears in a
+        nonstandard orientation (for example, a Cs mirror plane other than xy), the axes
+        are permuted cyclically into the standard one.
         """
-
-        # 1. Check for inversion center
-        # every atom must have a partner of the same type at -R
-        has_inversion = equivalent_under_operation(
-            self.prin_atomic_positions, self.charges, lambda R: -R, self.tol
-        )
-
-        # 2. Check for C2 axes
-        has_C2x = equivalent_under_operation(
-            self.prin_atomic_positions,
-            self.charges,
-            lambda R: rotation_mat((1, 0, 0), np.deg2rad(180.0)) @ R,
-            self.tol,
-        )
-        has_C2y = equivalent_under_operation(
-            self.prin_atomic_positions,
-            self.charges,
-            lambda R: rotation_mat((0, 1, 0), np.deg2rad(180.0)) @ R,
-            self.tol,
-        )
-        has_C2z = equivalent_under_operation(
-            self.prin_atomic_positions,
-            self.charges,
-            lambda R: rotation_mat((0, 0, 1), np.deg2rad(180.0)) @ R,
-            self.tol,
-        )
-        nC2 = sum([has_C2x, has_C2y, has_C2z])
-        assert nC2 in [0, 1, 3], f"Found {nC2} C2 axes, which is unexpected."
-
-        # 3. Check for mirror planes
-        has_Sxy = equivalent_under_operation(
-            self.prin_atomic_positions,
-            self.charges,
-            lambda R: reflection_mat((0, 1)) @ R,
-            self.tol,
-        )
-        has_Sxz = equivalent_under_operation(
-            self.prin_atomic_positions,
-            self.charges,
-            lambda R: reflection_mat((0, 2)) @ R,
-            self.tol,
-        )
-        has_Syz = equivalent_under_operation(
-            self.prin_atomic_positions,
-            self.charges,
-            lambda R: reflection_mat((1, 2)) @ R,
-            self.tol,
-        )
-        nSigma = sum([has_Sxy, has_Sxz, has_Syz])
-
-        # 4. Determine point group
-        # {(has_inversion, nC2, nSigma): pg_name}
-        pg_dict = {
-            (False, 0, 0): "C1",
-            (True, 0, 0): "CI",
-            (False, 1, 0): "C2",
-            (False, 0, 1): "CS",
-            (False, 3, 0): "D2",
-            (False, 1, 2): "C2V",
-            (True, 1, 1): "C2H",
-            (True, 3, 3): "D2H",
-        }
-        try:
-            pg = pg_dict[(has_inversion, nC2, nSigma)]
-        except KeyError:
-            logger.log_warning(
-                f"symmetry.py::detect_pg_symmetry: "
-                f"Could not determine point group for has_inversion={has_inversion}, nC2={nC2}, nSigma={nSigma}. Setting to C1."
+        # get all symmetry operations that leaves the molecule unchanged
+        sym_ops = [
+            R
+            for R in get_symmetry_ops("D2H").values()  # d2h contains all abelian ops
+            if equivalent_under_operation(
+                self.prin_atomic_positions, self.charges, lambda r, R=R: R @ r, self.tol
             )
-            pg = "C1"
-        return pg
+        ]
+
+        # if the molecule is aligned in a nonstandard way
+        # (e.g. Cs with yz molecular plane instead of xy)
+        # permute the axes to see if a nonstandard op can become standard
+        # this is done in descending sizes of groups
+        for pg in ("D2H", "D2", "C2V", "C2H", "C2", "CS", "CI"):
+            for shift in range(3):
+                # P is a permutation matrix that permutes the axes of symmetry ops
+                P = np.eye(3)[np.roll(np.arange(3), shift)]
+                # the ops of pg, expressed in the current permuted axes
+                pg_ops = [P.T @ R @ P for R in get_symmetry_ops(pg).values()]
+                n_found = 0
+                for R in pg_ops:
+                    for op in sym_ops:
+                        if np.allclose(R, op, atol=1e-12):
+                            n_found += 1
+                            break
+                if n_found == len(pg_ops):
+                    # we have found the largest abelian subgroup with this permutation
+                    self.prinrot = P @ self.prinrot
+                    self.prin_atomic_positions = self.prin_atomic_positions @ P.T
+                    return pg
+        return "C1"
 
     def _find_principal_rotation_axes_asym_top(self):
         axis_order = []

@@ -21,7 +21,7 @@ This document summarizes what is currently tested in Forte2 and what should be a
 | `orbitals` | AVAS/ASET/IAO/IBO, semicanonicalization, cube generation, GHF-equivalent orbital workflows | `tests/orbitals/test_avas.py`, `tests/orbitals/test_aset.py`, `tests/orbitals/test_iao.py`, `tests/orbitals/test_ibo.py`, `tests/orbitals/test_semican.py`, `tests/orbitals/test_cube.py` |
 | `sparse` | Sparse operators/states, commutators/products, exponential actions and derivatives | `tests/sparse/test_sparse_operator.py`, `tests/sparse/test_sparse_exp.py`, `tests/sparse/test_sq_operator.py` |
 | `state` | State and state-average validation | `tests/state/test_state.py`, `tests/state/test_state_average_info.py` |
-| `symmetry` | Point-group detection, MO irrep assignment checks, spherical-harmonic transforms, large Otterbein database checks | `tests/symmetry/test_pg_detect.py`, `tests/symmetry/test_sph_harm_utils.py`, `tests/symmetry/test_otterbein_sym_db.py` |
+| `symmetry` | Point-group detection, MO irrep assignment checks, spherical-harmonic transforms, large Otterbein database checks | `tests/symmetry/test_pg_detect.py`, `tests/symmetry/test_sph_harm_utils.py` |
 | `system` | Geometry parsing, basis assignment, units, ghost atoms, custom basis maps, core AO integral wrappers | `tests/system/test_system.py`, `tests/system/test_system_bse.py`, `tests/system/test_basis_utils.py` |
 | `props` | Dipoles/quadrupoles/mulliken and mutual-correlation properties | `tests/props/test_props.py`, `tests/props/test_mutcorr.py` |
 | `helpers` | Orthogonalization/invsqrt, Davidson-Liu, Cholesky helper, L-BFGS | `tests/helpers/test_ortho.py`, `tests/helpers/test_davidsonliu.py`, `tests/helpers/test_cholesky.py`, `tests/helpers/test_lbfgs.py` |
