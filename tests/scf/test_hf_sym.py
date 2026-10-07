@@ -2,8 +2,10 @@ import numpy as np
 import pytest
 
 import forte2
-from forte2.scf import RHF
+from forte2.scf import RHF, UHF
+from forte2.scf.scf_utils import guess_mix
 from forte2.helpers.comparisons import approx, approx_abs
+from forte2.integrals import emultipole1
 from forte2.lib import ints
 from forte2.symmetry.sym_utils import CHARACTER_TABLE, get_symmetry_ops
 
@@ -601,3 +603,83 @@ def test_rhf_symmetrizes_near_symmetric_geometry():
     rhf = RHF(charge=0)(system).run()
     assert rhf.E == approx_abs(RHF(charge=0)(water(symmetry=False)).run().E, 1e-9)
     assert rhf.irrep_labels[0][:5] == ["a1", "a1", "b2", "a1", "b1"]
+
+
+def _water():
+    return forte2.System(
+        xyz="O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.587",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+
+
+def test_rhf_rejects_symmetry_breaking_hamiltonian():
+
+    def hcore_field(self, comp):
+        mu = emultipole1(self.system)
+        return self.system.ints_hcore() + 1e-3 * mu[comp]
+
+    system_z = _water()
+    system_z.ints_hcore = lambda: hcore_field(comp=3)  # z direction, tot. sym.
+    scf_z = RHF(charge=0)(system_z)
+    scf_z.run()
+
+    with pytest.raises(ValueError, match="breaks C2V symmetry"):
+        system_x = _water()
+        system_x.ints_hcore = lambda: hcore_field(comp=1)  # x direction, b1
+        scf_x = RHF(charge=0)(system_x)
+        scf_x.run()
+
+
+def test_rhf_adapts_supplied_guess():
+    system = _water()
+    rhf = RHF(charge=0)(system).run()
+    homo, lumo = rhf.na - 1, rhf.na
+    assert rhf.irrep_labels[0][homo] != rhf.irrep_labels[0][lumo]
+    # Mixing the HOMO and LUMO, which have different irreps, breaks the symmetry.
+    C = guess_mix(rhf.C[0], homo, lumo, mixing_parameter=0.3)[0]
+
+    # Adapting by occupation recovers the occupied space of the symmetric solution.
+    occupations = 2.0 * (np.arange(C.shape[1]) < rhf.na)
+    adapted = system.symmetry_basis.adapt(C, occupations)
+    system.symmetry_basis.orbital_irreps(adapted)
+    occupied, reference = adapted[:, : rhf.na], rhf.C[0][:, : rhf.na]
+    np.testing.assert_allclose(
+        occupied @ occupied.T, reference @ reference.T, atol=1e-10
+    )
+
+    guess = RHF(charge=0)(system)
+    guess.C = [C]
+    guess.run()
+    assert guess.E == approx(rhf.E)
+    assert guess.irrep_labels[0] == rhf.irrep_labels[0]
+
+
+def test_uhf_guess_mix_with_symmetry():
+    def run(xyz, basis_set="cc-pvdz"):
+        system = forte2.System(
+            xyz=xyz,
+            basis_set=basis_set,
+            auxiliary_basis_set="def2-universal-jkfit",
+            symmetry=True,
+        )
+        return UHF(charge=0, ms=0, guess_mix=True)(system).run()
+
+    def assert_symmetric(uhf):
+        # Each spin's orbitals transform as the irreps they are labeled with.
+        basis = uhf.system.symmetry_basis
+        for C, indices in zip(uhf.C, uhf.irrep_indices):
+            assert basis.orbital_irreps(C).tolist() == indices
+
+    # Stretched LiH: the HOMO and LUMO are both a1, so they are mixed as in C1 and
+    # reach the same broken-symmetry solution.
+    uhf = run("Li 0 0 0; H 0 0 4.0")
+    assert uhf.E == approx(-7.932395483956)
+    assert uhf.S2 == approx(0.9784292339)
+    assert_symmetric(uhf)
+
+    # Stretched H2: the HOMO (ag) and LUMO (b1u) differ, so a same-irrep pair is mixed
+    # instead, or none in a minimal basis. Either way the orbitals stay symmetric.
+    for basis_set in ("cc-pvdz", "sto-3g"):
+        assert_symmetric(run("H 0 0 0; H 0 0 2.7", basis_set=basis_set))

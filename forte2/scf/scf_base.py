@@ -111,6 +111,13 @@ class SCFBase(Method):
             if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
 
+    def _guess_occupations(self):
+        """Occupations of a supplied guess, whose occupied orbitals come first."""
+        index = np.arange(self.C[0].shape[1])
+        if len(self.C) == 1:
+            return [(index < self.na).astype(float) + (index < self.nb)]
+        return [(index < n).astype(float) for n in (self.na, self.nb)]
+
     def _eigh(self, F):
         """Diagonalize F, by irrep when symmetry is used, returning energies, orbitals and irreps."""
         if self._symmetry_basis is not None:
@@ -177,6 +184,12 @@ class SCFBase(Method):
             self.eps, self.C, self._orbital_irreps = self._initial_guess(
                 H, guess_type=self.guess_type
             )
+        elif self._symmetry_basis is not None:
+            # A supplied guess may break the symmetry; keep its symmetric part.
+            self.C = [
+                self._symmetry_basis.adapt(C, n)
+                for C, n in zip(self.C, self._guess_occupations())
+            ]
         self.D = self._build_density_matrix()
         F, F_canon = self._build_fock(H, fock_builder, S)
         self.F = F_canon

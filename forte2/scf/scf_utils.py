@@ -46,7 +46,41 @@ def sap_guess_hamiltonian(system, H):
     return H + _SAP_V
 
 
-def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
+def smallest_gap_same_irrep(eps, irreps, nocc):
+    """
+    Find two orbitals that belong to the same irrep with the smallest gap.
+
+    Parameters
+    ----------
+    eps : NDArray
+        Orbital energies in ascending order.
+    irreps : NDArray
+        The irrep index of each orbital.
+    nocc : int
+        The number of occupied orbitals.
+
+    Returns
+    -------
+    tuple[int, int] | None
+        The HOMO and LUMO if they share an irrep. Otherwise, of the occupied and
+        virtual orbitals that share an irrep, the pair with the smallest energy gap, or
+        None if no such pair exists.
+    """
+    homo, lumo = nocc - 1, nocc
+    if irreps[homo] == irreps[lumo]:
+        return homo, lumo
+    best = None
+    for irrep in np.unique(irreps[:nocc]):
+        virtuals = nocc + np.flatnonzero(irreps[nocc:] == irrep)
+        if len(virtuals) == 0:
+            continue
+        pair = (int(np.flatnonzero(irreps[:nocc] == irrep)[-1]), int(virtuals[0]))
+        if best is None or eps[pair[1]] - eps[pair[0]] < eps[best[1]] - eps[best[0]]:
+            best = pair
+    return best
+
+
+def guess_mix(C, occ_idx, vir_idx, mixing_parameter=np.pi / 4):
     """
     Induce the breaking of S^2 symmetry for UHF ms=0.0 calculations.
     This is helpful for obtaining proxies for open-shell singlets, for example.
@@ -55,8 +89,10 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     ----------
     C : NDArray
         The MO coefficients.
-    homo_idx : int
-        The index of the highest occupied molecular orbital (HOMO).
+    occ_idx : int
+        The index of the occupied orbital to mix, usually the HOMO.
+    vir_idx : int
+        The index of the virtual orbital to mix, usually the LUMO.
     mixing_parameter : float, optional
         The mixing parameter for the Givens rotation.
 
@@ -72,8 +108,8 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     """
     cosq = np.cos(mixing_parameter)
     sinq = np.sin(mixing_parameter)
-    Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
-    Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
+    Ca = givens_rotation(C, cosq, sinq, occ_idx, vir_idx)
+    Cb = givens_rotation(C, cosq, -sinq, occ_idx, vir_idx)
     return [Ca, Cb]
 
 
