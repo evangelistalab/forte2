@@ -13,6 +13,7 @@ from forte2 import (
     System,
 )
 from forte2.helpers.comparisons import approx
+from forte2.symmetry.sym_utils import COTTON_LABELS
 
 
 def test_avas_inputs():
@@ -512,3 +513,41 @@ def test_avas_zero_uocc2():
     mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E_avg == approx(-37.5906751187)
+
+
+def test_avas_keeps_symmetry_labels():
+    def n2(symmetry):
+        return System(
+            xyz="N 0 0 0; N 0 0 1.2",
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="cc-pvtz-jkfit",
+            symmetry=symmetry,
+        )
+
+    def casci(system):
+        scf = RHF(charge=0, e_tol=1e-12)(system)
+        avas = AVAS(
+            selection_method="separate",
+            num_active_docc=3,
+            num_active_uocc=3,
+            subspace=["N(2p)"],
+            diagonalize=True,
+        )(scf)
+        ci_solver = CISolver(states=State(nel=14, multiplicity=1, ms=0.0))
+        ci = CI(ci_solver)(avas).run()
+        return avas, ci.E_ci[0]
+
+    # Labels that follow the AVAS rotations give the same CASCI energy as C1.
+    system = n2(symmetry=True)
+    avas, energy = casci(system)
+    assert energy == approx(casci(n2(symmetry=False))[1])
+    indices = avas.mos.irrep_indices[0]
+    # test that the irrep assignment logic in AVAS gives identical results to explicit assignment
+    assert system.symmetry_basis.orbital_irreps(avas.mos.C[0]).tolist() == indices
+    names = {h: label for label, h in COTTON_LABELS["D2H"].items()}
+    assert avas.mos.irrep_labels[0] == [names[h] for h in indices]
+
+    # A subspace on one of the two equivalent atoms breaks the symmetry.
+    one_atom = AVAS(subspace=["N1(2p)"], diagonalize=True)(RHF(charge=0)(n2(True)))
+    with pytest.raises(ValueError, match="AVAS subspace breaks D2H symmetry"):
+        one_atom.run()
