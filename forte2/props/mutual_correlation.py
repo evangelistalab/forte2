@@ -2,7 +2,7 @@ import numpy as np
 from typing import Any
 from numpy.typing import NDArray
 import scipy as sp
-
+from forte2.base_classes import ActiveSpaceDriver
 from forte2.lib import cpp_helpers
 
 
@@ -12,8 +12,8 @@ class MutualCorrelationAnalysis:
 
     Parameters
     ----------
-    solver : forte2 solver object of type ActiveSpaceSolver
-        The solver from which to extract the RDMs.
+    driver : forte2 driver object of type ActiveSpaceDriver 
+        The object from which to extract the RDMs. This should be a driver that owns a solver (`CI`, `MCOptimizer`).
     root : int, optional
         The root index for which to perform the analysis. Default is 0.
     sub_solver_index : int, optional
@@ -66,12 +66,16 @@ class MutualCorrelationAnalysis:
     - This implementation targets the non-relativistic case.
     """
 
-    def __init__(self, solver, root=0, sub_solver_index=0):
+    def __init__(self, driver, root=0, sub_solver_index=0):
         self.Q = None
 
-        self.active_mo_indices = solver.mo_space.active_indices[:]
+        # check that a driver is passed before attempting to extract properties
+        if not isinstance(driver, ActiveSpaceDriver):
+            raise TypeError("driver must be an ActiveSpaceDriver, for example, forte2.CI or forte2.MCOptimizer")
 
-        sub_solver = solver.ci_solver.sub_solvers[sub_solver_index]
+        self.active_mo_indices = driver.mo_space.active_indices[:]
+
+        sub_solver = driver.ci_solver.sub_solvers[sub_solver_index]
 
         # extract the spin-dependent 1-RDM  from the solver
         γa, γb = sub_solver.make_rdm(root, order=1, spin_type="sd")

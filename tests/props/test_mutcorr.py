@@ -2,7 +2,7 @@ from forte2 import CI, CISolver, RHF, State, System
 from forte2.props import MutualCorrelationAnalysis
 from forte2.helpers.comparisons import approx
 from forte2.base_classes import DavidsonLiuParams
-
+import numpy as np
 
 def test_mutual_correlation_h2_singlet():
     """Test mutual correlation analysis on H2 molecule in STO-6G basis at dissociation."""
@@ -15,13 +15,13 @@ def test_mutual_correlation_h2_singlet():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(
-        CISolver(
+     
+    ci = CI(CISolver(
             State(system=system, multiplicity=1, ms=0.0),
             active_orbitals=[0, 1],
             davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
-        )
-    )(rhf)
+        ))(rhf)
+    
     ci.run()
 
     mca = MutualCorrelationAnalysis(ci, root=0, sub_solver_index=0)
@@ -45,13 +45,12 @@ def test_mutual_correlation_h2_triplet_lowspin():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(
-        CISolver(
+    ci = CI(CISolver(
             State(system=system, multiplicity=3, ms=0.0),
             active_orbitals=[0, 1],
             davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
-        )
-    )(rhf)
+        ))(rhf)
+    
     ci.run()
 
     mca = MutualCorrelationAnalysis(ci, root=0, sub_solver_index=0)
@@ -75,13 +74,12 @@ def test_mutual_correlation_h2_triplet_highspin():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(
-        CISolver(
+    ci = CI(CISolver(
             State(system=system, multiplicity=3, ms=1.0),
             active_orbitals=[0, 1],
             davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
-        )
-    )(rhf)
+        ))(rhf)
+    
     ci.run()
 
     mca = MutualCorrelationAnalysis(ci, root=0, sub_solver_index=0)
@@ -105,13 +103,12 @@ def test_mutual_correlation_h2_orbopt():
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(
-        CISolver(
+    ci = CI(CISolver(
             State(system=system, multiplicity=1, ms=0.0),
             active_orbitals=list(range(10)),
             davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
-        )
-    )(rhf)
+        ))(rhf)
+    
     ci.run()
 
     mca = MutualCorrelationAnalysis(ci)
@@ -139,13 +136,12 @@ def test_mutual_correlation_h6():
     system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci = CI(
-        CISolver(
+    ci = CI(CISolver(
             State(system=system, multiplicity=1, ms=0.0),
             active_orbitals=list(range(6)),
             davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
-        )
-    )(rhf)
+        ))(rhf)
+    
     ci.run()
 
     mca = MutualCorrelationAnalysis(ci)
@@ -154,3 +150,25 @@ def test_mutual_correlation_h6():
 
     summary = mca.mutual_correlation_matrix_summary()
     assert float(summary.splitlines()[5].split()[-1]) == approx(0.562133)
+
+def test_driver_type_error():
+    import pytest
+
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 2.0
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci = CISolver(
+            State(system=system, multiplicity=1, ms=0.0),
+            active_orbitals=list(range(10)),
+            davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+    )
+
+    with pytest.raises(TypeError, match="driver must be an ActiveSpaceDriver"):
+        MutualCorrelationAnalysis(ci)
+
+
