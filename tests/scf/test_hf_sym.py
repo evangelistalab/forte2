@@ -3,7 +3,7 @@ import pytest
 
 import forte2
 from forte2.scf import RHF
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx, approx_abs
 from forte2.lib import ints
 from forte2.symmetry.sym_utils import CHARACTER_TABLE, get_symmetry_ops
 
@@ -573,3 +573,31 @@ def test_rhf_stretched_diatomic_irreps(element, distance):
         np.testing.assert_allclose(
             transformed, values * characters[:, j], atol=1e-9, rtol=0
         )
+
+
+def test_rhf_symmetrizes_near_symmetric_geometry():
+    # One H is 1e-5 angstrom (1.9e-5 bohr) off the C2v geometry.
+    def water(**kwargs):
+        return forte2.System(
+            xyz="O 0 0 0; H 0 0.76 0.59; H 0 -0.76 0.59001",
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="cc-pvtz-jkfit",
+            **kwargs,
+        )
+
+    # With symmetry_tol below the asymmetry, only the molecular plane remains.
+    assert water(symmetry=True, symmetry_tol=1e-6).point_group == "CS"
+
+    system = water(symmetry=True)
+    assert system.point_group == "C2V"
+    # Each operation maps the symmetrized atoms exactly onto their partners.
+    positions = system.prin_atomic_positions
+    for op, R in get_symmetry_ops("C2V").items():
+        np.testing.assert_allclose(
+            positions @ R.T, positions[system.atom_map[op]], atol=1e-12
+        )
+
+    # Symmetrization changes the energy only at second order in the displacement.
+    rhf = RHF(charge=0)(system).run()
+    assert rhf.E == approx_abs(RHF(charge=0)(water(symmetry=False)).run().E, 1e-9)
+    assert rhf.irrep_labels[0][:5] == ["a1", "a1", "b2", "a1", "b1"]

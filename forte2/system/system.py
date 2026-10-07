@@ -7,7 +7,12 @@ import json
 
 from forte2 import integrals
 from forte2.lib.ints import Basis
-from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
+from forte2.data import (
+    ANGSTROM_TO_BOHR,
+    DEBYE_TO_AU,
+    DEBYE_ANGSTROM_TO_AU,
+    Z_TO_ATOM_SYMBOL,
+)
 from forte2.helpers import (
     logger,
     invsqrt_matrix,
@@ -62,9 +67,11 @@ class System:
     symmetry : bool, optional, default=False
         Whether to automatically detect the largest Abelian point group symmetry of the molecule.
         RHF, ROHF, UHF, and CUHF preserve this symmetry during Fock diagonalization.
-        This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
+        This will center the molecule at its center of mass, reorient it along its principal axes of inertia,
+        and move each atom by at most ``symmetry_tol`` to make the geometry exactly symmetric.
     symmetry_tol : float, optional, default=1e-4
-        The tolerance for detecting symmetry.
+        A symmetry operation is accepted when it maps every atom to within this distance,
+        in bohr, of an atom of the same element.
     use_gaussian_charges : bool, optional, default=False
         Whether to use Gaussian nuclear charge distributions instead of point charges.
     jk_mem_thres_mb : float | None, optional, default=None
@@ -93,6 +100,8 @@ class System:
         A dictionary mapping atomic numbers to their numbers in the system.
     atom_to_center : dict[int : list[int]]
         A dictionary mapping atomic numbers to a list of (0-based) indices of atoms of that type in the system.
+    atom_map : dict[str, NDArray]
+        For each symmetry operation of the point group, the index of the atom that each atom is mapped to.
     symmetry_basis : SymmetryBasis | None
         The symmetry-adapted orbital basis of the point group, built on first use. None in C1.
     basis : ints.Basis
@@ -330,12 +339,15 @@ class System:
         self.atom_to_center = self.geom_helper.atom_to_center
         self.prin_atomic_positions = self.geom_helper.prin_atomic_positions
         self.point_group = self.geom_helper.point_group
+        self.atom_map = self.geom_helper.atom_map
 
-        logger.log_info1("Principal Atomic Positions (a.u.):")
-        for i in range(self.natoms):
-            logger.log_info1(
-                f"   {Z_TO_ATOM_SYMBOL[self.atoms[i][0]]}   {self.prin_atomic_positions[i, 0]:<.8f}   {self.prin_atomic_positions[i, 1]:<.8f}   {self.prin_atomic_positions[i, 2]:<.8f}"
+        logger.log_info1("Principal Atomic Positions (angstrom):")
+        for (Z, _), r in zip(self.atoms, self.prin_atomic_positions):
+            # rounding, then adding 0.0, prints tiny negative values as 0.0, not -0.0
+            coords = " ".join(
+                f"{round(x / ANGSTROM_TO_BOHR, 10) + 0.0:>16.10f}" for x in r
             )
+            logger.log_info1(f"   {Z_TO_ATOM_SYMBOL[Z]:<3}{coords}")
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.geom_helper)
