@@ -6,8 +6,9 @@ from numpy.typing import NDArray
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
+from forte2.symmetry.sym_utils import COTTON_LABELS
 from .scf_base import SCFBase
-from .scf_utils import guess_mix
+from .scf_utils import guess_mix, smallest_gap_same_irrep
 
 
 @dataclass
@@ -20,7 +21,10 @@ class UHF(SCFBase):
     ms : float
         Spin projection. Must be a multiple of 0.5.
     guess_mix : bool, optional, default=False
-        If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if ms is 0.0.
+        If True and ms is 0.0, mixes the HOMO and LUMO to break the alpha-beta
+        degeneracy. With point-group symmetry, if the HOMO and LUMO are in different
+        irreps, the occupied and virtual orbitals of one irrep with the smallest
+        energy gap are mixed instead, with a warning.
     """
 
     ms: float = None
@@ -82,8 +86,31 @@ class UHF(SCFBase):
         (eps,), (C,), (irreps,) = RHF._initial_guess(self, H, guess_type=guess_type)
         Cs = [C, C]
         if self.twicems == 0 and self.guess_mix:
-            Cs = guess_mix(C, self.nel // 2 - 1)
+            Cs = self._mix_guess(eps, C, irreps)
         return [eps, eps], Cs, [irreps, irreps]
+
+    def _mix_guess(self, eps, C, irreps):
+        homo, lumo = self.nel // 2 - 1, self.nel // 2
+        pair = smallest_gap_same_irrep(eps, irreps, self.nel // 2)
+        if pair == (homo, lumo):
+            return guess_mix(C, homo, lumo)
+        pg = self.system.point_group
+        names = {index: label for label, index in COTTON_LABELS[pg].items()}
+        if pair is None:
+            logger.log_warning(
+                f"guess_mix: no occupied and virtual orbitals share a {pg} irrep, so the "
+                "initial guess is not mixed. Run with symmetry=False to mix the HOMO and "
+                "LUMO."
+            )
+            return [C, C]
+        logger.log_warning(
+            f"guess_mix: the HOMO ({names[irreps[homo]]}) and LUMO "
+            f"({names[irreps[lumo]]}) are in different irreps, so mixing them would break "
+            f"{pg} symmetry. Mixing orbitals {pair[0]} ({names[irreps[pair[0]]]}) and "
+            f"{pair[1]} ({names[irreps[pair[1]]]}) instead. Run with symmetry=False to mix "
+            "the HOMO and LUMO."
+        )
+        return guess_mix(C, *pair)
 
     def _build_ao_grad(self, S, F):
         AO_grad = np.hstack(

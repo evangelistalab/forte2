@@ -138,14 +138,49 @@ class SymmetryBasis:
             If ``F`` couples different irreps by more than ``tol`` times its largest
             element.
         """
-        eps, c, irreps = block_eigh(
-            self.salcs.conj().T @ F @ self.salcs,
-            self.irreps,
-            atol=0.0,
-            rtol=self.tol,
-            sort=True,
-        )
+        try:
+            eps, c, irreps = block_eigh(
+                self.salcs.conj().T @ F @ self.salcs,
+                self.irreps,
+                atol=0.0,
+                rtol=self.tol,
+                sort=True,
+            )
+        except ValueError as e:
+            raise ValueError(
+                f"The operator breaks {self.point_group} symmetry, for example through an "
+                "external field that lowers the symmetry. Run with symmetry=False."
+            ) from e
         return eps, self.salcs @ c, irreps
+
+    def adapt(self, C, occupations):
+        """
+        Symmetry-adapt orbitals, keeping as much of their occupied space as possible.
+
+        The adapted orbitals are the natural orbitals of the totally symmetric part of the
+        density built from ``C`` and ``occupations``. Orbitals that already transform as
+        irreps keep the space spanned by each distinct occupation.
+
+        Parameters
+        ----------
+        C : NDArray
+            Orbital coefficients, one orbital per column.
+        occupations : NDArray
+            The occupation of each orbital.
+
+        Returns
+        -------
+        NDArray
+            The adapted orbitals, in order of decreasing occupation.
+        """
+        # the orbitals in the SALC basis
+        c = self.salcs.conj().T @ self.S @ C
+        D = (c * occupations) @ c.conj().T
+        # For an Abelian group, the totally symmetric part of an operator is its blocks
+        # within each irrep.
+        D[self.irreps[:, None] != self.irreps[None, :]] = 0.0
+        _, U, _ = block_eigh(-D, self.irreps, atol=0.0, rtol=0.0, sort=True)
+        return self.salcs @ U
 
     def orbital_irreps(self, C, tol=1e-6):
         """
