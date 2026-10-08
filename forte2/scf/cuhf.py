@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import warnings
+
 import numpy as np
 
 from .scf_base import SCFBase
@@ -11,6 +13,8 @@ class CUHF(SCFBase):
     A class that runs constrained unrestricted Hartree-Fock calculations.
     Equivalent to ROHF but uses UHF machinery.
     See J. Chem. Phys. 133, 141102 (2010) (10.1063/1.3503173)
+
+    CUHF is deprecated; use ROHF, which gives the same solution.
 
     Parameters
     ----------
@@ -44,6 +48,12 @@ class CUHF(SCFBase):
     def __post_init__(self):
         super().__post_init__()
         self.two_component = False
+        warnings.warn(
+            "CUHF is deprecated and will be removed in a future version; use ROHF, "
+            "which gives the same solution.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
 
     def __call__(self, system):
         system.two_component = False

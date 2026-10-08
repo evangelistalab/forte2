@@ -60,6 +60,7 @@ class UHF(SCFBase):
         assert (
             self.na >= 0 and self.nb >= 0
         ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
+        self._set_occupation_constraints()
 
     def _build_fock(self, H, fock_builder, S):
         (Ja, Jb), K = fock_builder.build_JK(
@@ -84,33 +85,23 @@ class UHF(SCFBase):
         from .rhf import RHF
 
         (eps,), (C,), (irreps,) = RHF._initial_guess(self, H, guess_type=guess_type)
-        Cs = [C, C]
-        if self.twicems == 0 and self.guess_mix:
-            Cs = self._mix_guess(eps, C, irreps)
-        return [eps, eps], Cs, [irreps, irreps]
+        return [eps, eps], [C, C], [irreps, irreps]
 
     def _mix_guess(self, eps, C, irreps):
-        homo, lumo = self.nel // 2 - 1, self.nel // 2
-        pair = smallest_gap_same_irrep(eps, irreps, self.nel // 2)
-        if pair == (homo, lumo):
-            return guess_mix(C, homo, lumo)
-        pg = self.system.point_group
-        names = {index: label for label, index in COTTON_LABELS[pg].items()}
-        if pair is None:
-            logger.log_warning(
-                f"guess_mix: no occupied and virtual orbitals share a {pg} irrep, so the "
-                "initial guess is not mixed. Run with symmetry=False to mix the HOMO and "
-                "LUMO."
+        if self.twicems != 0 or not self.guess_mix:
+            return C
+        # Each spin rotates its own frontier pair, in opposite directions.
+        mixed, messages = [], set()
+        for spin in (0, 1):
+            pair, message = _guess_mix_pair(
+                eps[spin], irreps[spin], self.na, self.system.point_group
             )
-            return [C, C]
-        logger.log_warning(
-            f"guess_mix: the HOMO ({names[irreps[homo]]}) and LUMO "
-            f"({names[irreps[lumo]]}) are in different irreps, so mixing them would break "
-            f"{pg} symmetry. Mixing orbitals {pair[0]} ({names[irreps[pair[0]]]}) and "
-            f"{pair[1]} ({names[irreps[pair[1]]]}) instead. Run with symmetry=False to mix "
-            "the HOMO and LUMO."
-        )
-        return guess_mix(C, *pair)
+            if message is not None:
+                messages.add(message)
+            mixed.append(C[spin] if pair is None else guess_mix(C[spin], *pair)[spin])
+        for message in messages:
+            logger.log_warning(message)
+        return mixed
 
     def _build_ao_grad(self, S, F):
         AO_grad = np.hstack(
@@ -250,3 +241,28 @@ class UHF(SCFBase):
         basis_info.print_ao_composition(
             self.C[1], list(range(self.na, min(self.na + 5, self.nmo)))
         )
+
+
+def _guess_mix_pair(eps, irreps, nocc, point_group):
+    """
+    Return the orbitals that guess_mix rotates, and a warning if they are not the HOMO
+    and LUMO.
+    """
+    homo, lumo = nocc - 1, nocc
+    pair = smallest_gap_same_irrep(eps, irreps, nocc)
+    if pair == (homo, lumo):
+        return pair, None
+    names = {index: label for label, index in COTTON_LABELS[point_group].items()}
+    if pair is None:
+        return None, (
+            f"guess_mix: no occupied and virtual orbitals share a {point_group} irrep, so "
+            "the initial guess is not mixed. Run with symmetry=False to mix the HOMO and "
+            "LUMO."
+        )
+    return pair, (
+        f"guess_mix: the HOMO ({names[irreps[homo]]}) and LUMO ({names[irreps[lumo]]}) "
+        f"are in different irreps, so mixing them would break {point_group} symmetry. "
+        f"Mixing orbitals {pair[0]} ({names[irreps[pair[0]]]}) and {pair[1]} "
+        f"({names[irreps[pair[1]]]}) instead. Run with symmetry=False to mix the HOMO "
+        "and LUMO."
+    )
