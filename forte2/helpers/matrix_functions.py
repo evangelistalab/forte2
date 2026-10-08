@@ -233,6 +233,9 @@ def block_eigh(A, block_idx, atol=1e-8, rtol=1e-8, sort=False):
         Smaller couplings are treated as zero.
     """
     block_idx = np.asarray(block_idx)
+    if len(set(block_idx)) == 1:
+        return *(np.linalg.eigh(A)), block_idx
+
     coupling = np.abs(A[block_idx[:, None] != block_idx[None, :]]).max(initial=0.0)
     tol = atol + rtol * np.abs(A).max(initial=0.0)
     if coupling > tol:

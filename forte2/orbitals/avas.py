@@ -6,6 +6,7 @@ from forte2.lib import ints
 from forte2.scf import RHF, ROHF, GHF
 from forte2.state import MOSpace
 from forte2.helpers import logger, invsqrt_matrix, block_diag_2x2
+from forte2.helpers.matrix_functions import block_eigh
 from forte2.base_classes import Method
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
@@ -335,6 +336,8 @@ class AVAS(Method):
         nuocc = self.parent_method.nuocc
 
         CpsC = self.mos.C[0].T.conj() @ self.ao_projector @ self.mos.C[0]
+        # irrep of each MO; all rotations below stay within irreps
+        irreps = np.array(self.mos.irrep_indices[0])
 
         logger.log_info1(
             "\nMOs with significant overlap with the subspace (> 1.00e-3):"
@@ -374,13 +377,27 @@ class AVAS(Method):
                 "The eigenvalues of the projected overlap matrix will be used to select the AVAS orbitals."
             )
             U = np.zeros((self.nmo, self.nmo), dtype=self.dtype)
-            # smallest to largest eigenvalues for occupied
-            s_docc, Udocc = np.linalg.eigh(CpsC[docc_sl, docc_sl])
+            try:
+                # smallest to largest eigenvalues for occupied
+                s_docc, Udocc, h_docc = self._eigh(
+                    CpsC[docc_sl, docc_sl], irreps[docc_sl]
+                )
+                s_uocc, Uuocc, h_uocc = self._eigh(
+                    CpsC[uocc_sl, uocc_sl], irreps[uocc_sl]
+                )
+            except ValueError as e:
+                # e.g. N2 with N1(2p) subspace breaks D2h symmetry
+                raise ValueError(
+                    f"The AVAS subspace breaks {self.system.point_group} symmetry. Use a "
+                    "subspace that the symmetry operations map onto itself, or run with "
+                    "symmetry=False."
+                ) from e
             U[docc_sl, docc_sl] = Udocc
-            s_uocc, Uuocc = np.linalg.eigh(CpsC[uocc_sl, uocc_sl])
+            irreps[docc_sl] = h_docc
             # largest to smallest eigenvalues for virtual
             s_uocc = s_uocc[::-1]
             U[uocc_sl, uocc_sl] = Uuocc[:, ::-1]
+            irreps[uocc_sl] = h_uocc[::-1]
             sigma_type = "eigen"
         else:
             logger.log_info1(
@@ -538,10 +555,18 @@ class AVAS(Method):
         C_tilde = self.mos.C[0] @ U
         fock = self.parent_method.F[0]
         # separately canonicalize the Fock matrix blocks
-        C_inact_docc = self._canonicalize_block(fock, C_tilde, inact_docc)
-        C_inact_uocc = self._canonicalize_block(fock, C_tilde, inact_uocc)
-        C_act_docc = self._canonicalize_block(fock, C_tilde, act_docc)
-        C_act_uocc = self._canonicalize_block(fock, C_tilde, act_uocc)
+        C_inact_docc, h_inact_docc = self._canonicalize_block(
+            fock, C_tilde, inact_docc, irreps
+        )
+        C_inact_uocc, h_inact_uocc = self._canonicalize_block(
+            fock, C_tilde, inact_uocc, irreps
+        )
+        C_act_docc, h_act_docc = self._canonicalize_block(
+            fock, C_tilde, act_docc, irreps
+        )
+        C_act_uocc, h_act_uocc = self._canonicalize_block(
+            fock, C_tilde, act_uocc, irreps
+        )
 
         # fill the C matrix as follows:
         # [C_inact_docc, C_act_docc, !!C_socc!!, C_act_uocc, C_inact_uocc]
@@ -560,6 +585,15 @@ class AVAS(Method):
         self.mos.C[0][:, au_sl] = C_act_uocc
         self.mos.C[0][:, iu_sl] = C_inact_uocc
 
+        # the irreps follow their orbitals; the singly occupied ones are unchanged
+        irreps[id_sl] = h_inact_docc
+        irreps[ad_sl] = h_act_docc
+        irreps[au_sl] = h_act_uocc
+        irreps[iu_sl] = h_inact_uocc
+        names = dict(zip(self.mos.irrep_indices[0], self.mos.irrep_labels[0]))
+        self.mos.irrep_indices[0] = irreps.tolist()
+        self.mos.irrep_labels[0] = [names[h] for h in irreps]
+
         logger.log_info1(
             "\nAO composition of final canonicalized active MOs prepared by AVAS:"
         )
@@ -569,11 +603,17 @@ class AVAS(Method):
             spinorbital=True,
         )
 
-    def _canonicalize_block(self, F, C, mos):
-        C_sub = C[:, mos]
+    def _canonicalize_block(self, F, C, mo_ids, irreps):
+        C_sub = C[:, mo_ids]
         F_sub = C_sub.T.conj() @ F @ C_sub
-        _, U_sub = np.linalg.eigh(F_sub)
-        return C_sub @ U_sub
+        _, U_sub, h_sub = self._eigh(F_sub, irreps[mo_ids])
+        return C_sub @ U_sub, h_sub
+
+    def _eigh(self, M, irreps):
+        """Diagonalize M within each irrep, in ascending order of eigenvalue."""
+        # Orbitals of more than one irrep come from the system's symmetry basis.
+        tol = getattr(self.system.symmetry_basis, "tol", 0.0)
+        return block_eigh(M, irreps, atol=0.0, rtol=tol, sort=True)
 
     def _parse_subspace_pi_planes(self):
         """
