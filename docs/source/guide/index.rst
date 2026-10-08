@@ -4,8 +4,9 @@ User guide
 .. toctree::
 
     basics
-    relativistic
     capabilities
+    relativistic
+    symmetry
     integrals
     rdms
     gradients

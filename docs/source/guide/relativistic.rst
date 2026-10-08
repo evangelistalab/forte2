@@ -67,7 +67,9 @@ Spin-orbit calculations
 -----------------------
 
 Spin-orbit X2C mixes the two spin components, so the orbitals are two-component spinors. Only GHF
-accepts a System with ``x2c_type="so"``; RHF, ROHF, UHF, and CUHF raise an error. The methods that
+accepts a System with ``x2c_type="so"``; RHF, ROHF, UHF, and CUHF raise an error. GHF doesn't use
+point-group symmetry: if the System has a point group, GHF logs a warning and runs in C\ :sub:`1`
+(see :doc:`symmetry`). The methods that
 follow GHF must be two-component: ``RelCISolver`` or ``RelSelectedCISolver`` in a ``CI`` or
 ``MCOptimizer``, and ``RelDSRG_MRPT2``. For example, the :sup:`3`\ P levels of the carbon atom with
 CASSCF and DSRG-MRPT2::

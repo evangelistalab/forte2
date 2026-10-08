@@ -6,9 +6,9 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
 
 * Support for density-fitted or Cholesky-decomposed integrals (no support for conventional, 4-index integrals)
 * Support for arbitrary model Hamiltonians
-* Support for utilizing molecular symmetry (largest Abelian subgroup) at the post-Hartree-Fock level
+* Support for molecular symmetry (the largest Abelian subgroup) in Hartree-Fock and post-Hartree-Fock methods, including irrep occupation constraints for Hartree-Fock (see :doc:`symmetry`)
 * Support for the finite (Gaussian-distributed) nuclear charge model [1]_
-* Scalar and vector relativistic Hamiltonians
+* Scalar and vector relativistic Hamiltonians (see :doc:`relativistic`)
   
   * Spin-free 1-electron exact two-component (sf-1eX2C) [2]_
   * Spin-orbit 1-electron exact two-component (so-1eX2C) [2]_
@@ -20,7 +20,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Restricted Hartree-Fock (RHF)
   * Restricted Open-Shell Hartree-Fock (ROHF)
   * Unrestricted Hartree-Fock (UHF)
-  * Constrained unrestricted Hartree-Fock (CUHF)
+  * Constrained unrestricted Hartree-Fock (CUHF), deprecated
   * Generalized Hartree-Fock (GHF)
 
 * A flexible configuration interaction (CI) module
@@ -42,7 +42,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Non-relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
   * Two-component relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
   
-* Nuclear gradients and geometry optimization
+* Nuclear gradients and geometry optimization (see :doc:`gradients`)
 
   * Density-fitted analytic gradients for RHF, UHF, GHF, and CASSCF/GASSCF, including single roots of state-averaged CASSCF
   * Finite-difference gradients of any method

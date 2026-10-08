@@ -110,9 +110,9 @@ Limitations
 
 Displaced geometries are built with
 :meth:`forte2.System.with_geometry`, so the system must be rebuildable:
-``symmetry=False`` (symmetry detection reorients the molecule, which would
-invalidate Cartesian displacements), a defined ``basis_set``, and not a
-``ModelSystem``.
+``symmetry=False`` (symmetry detection reorients the molecule and moves atoms to
+make it exactly symmetric, which would invalidate Cartesian displacements), a
+defined ``basis_set``, and not a ``ModelSystem``.
 
 Orbital projection also applies to two-component (relativistic) chains, provided
 the source and target share the same representation -- for example, a GHF root
