@@ -570,6 +570,7 @@ def compute_Am1y(A, y, ortho_rtol=None):
         The relative tolerance for orthogonalizing A.
         If supplied, a truncated eigendecomposition of A is used to compute the action of A^{-1},
         otherwise, a complete Cholesky decomposition is used.
+
     Returns
     -------
     NDArray
