@@ -59,6 +59,11 @@ class GHF(SCFBase):
     def __post_init__(self):
         super().__post_init__()
         self.two_component = True
+        if self.target_symmetry is not None or self.irrep_occupations is not None:
+            raise ValueError(
+                "GHF does not use point-group symmetry, so it does not support "
+                "target_symmetry or irrep_occupations."
+            )
 
     def __call__(self, system):
         system.two_component = True

@@ -53,11 +53,12 @@ def smallest_gap_same_irrep(eps, irreps, nocc):
     Parameters
     ----------
     eps : NDArray
-        Orbital energies in ascending order.
+        Orbital energies, in ascending order within the occupied orbitals and within
+        the virtual ones.
     irreps : NDArray
         The irrep index of each orbital.
     nocc : int
-        The number of occupied orbitals.
+        The number of occupied orbitals, which come first.
 
     Returns
     -------
