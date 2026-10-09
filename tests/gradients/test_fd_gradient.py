@@ -67,3 +67,17 @@ def test_fd_gradient_matches_analytic_casscf_gradient():
     numeric = fd.gradient()
 
     np.testing.assert_allclose(numeric, analytic, atol=1.0e-6)
+
+
+def test_fd_gradient_rejects_symmetry_when_attached():
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+        symmetry=True,
+    )
+    rhf = RHF(charge=0)(system)
+    with pytest.raises(NotImplementedError, match="FDGradient requires symmetry=False"):
+        FDGradient()(rhf)
+    assert not rhf.executed

@@ -82,7 +82,9 @@ downstream method takes a *driver* as its parent (DSRG asserts this) and reaches
 
 Two chain-specific behaviors to watch:
 - **MCSCF re-binds its `ci_solver`.** `MCOptimizer(ci_solver)(parent)` re-invokes the solver against
-  `parent` in `_startup`, then alternates orbital optimization (L-BFGS) with `ci_solver.run()`.
+  `parent` in `_startup`, then alternates orbital optimization (L-BFGS) with `ci_solver.run()`. Its
+  orbital steps are unitary, so `_startup` raises if the parent's orbitals aren't orthonormal in the
+  current AO basis; map orbitals from another geometry or basis with `transfer_orbitals` first.
 - **DSRG consumes a reference, not a basis.** `DSRGBase` takes the active-space integral triple
   `E` (frozen-core energy), `H` (one-electron), `V` (antisymmetrized two-electron) plus cumulants
   from `parent.ci_solver`, and semicanonicalizes internally in `get_integrals()`, so it imposes no
@@ -116,14 +118,17 @@ built on:
   array, a cache dict, ...) has to be rebuilt in that method's own `_startup()`, or a second `run()` on
   the same object corrupts silently or crashes outright — see `DSRGBase._startup()` resetting
   `relax_eigvals_history` for exactly this reason.
-- `project_scf_guess(source_method, method)` and `forte2/orbitals/orbital_overlap.py`
-  (`mo_overlap`/`project_orbitals`/`project_occupied_orbitals`) project occupied orbitals from a
-  converged method onto a rebuilt chain's SCF root as an initial guess, including across two-component
-  (GHF) chains. When checking whether source and target agree on representation, compare
-  `source_method.mos.spinorbital` (frozen when its `MO` was built) against the target's own
-  `two_component` attribute — never `System.two_component` directly: `RHF`/`UHF`/`GHF.__call__` all
-  mutate that flag in place on the (possibly shared) `System` object, so it can read stale for a method
-  that finished running earlier against the same `System`.
+- `snapshot_orbitals(method)` copies a chain's SCF-root orbitals into an `OrbitalSnapshot`, and
+  `seed_scf_guess(snapshot, method)` installs them on another chain's SCF root as its initial guess.
+  It refuses a snapshot from a different SCF class, which guarantees the same representation and
+  number of coefficient sets. The mapping is `forte2/orbitals/orbital_overlap.py::transfer_orbitals`:
+  if both systems carry the same shells on the same atoms, the coefficients carry over unchanged (the
+  AOs move with their atoms); otherwise they are projected through the cross-basis overlap. Either
+  way the result is Löwdin-orthonormalized, so no occupation numbers are needed. It reads only the
+  *target* system's `two_component` flag, which is current because the target root was just bound.
+  Never trust `System.two_component` for a method that finished running earlier:
+  `RHF`/`UHF`/`GHF.__call__` and `SpinorUpcaster.run()` mutate it in place on the (possibly shared)
+  `System` object.
 
 ### C++ / Python boundary
 - `forte2.lib` is the compiled nanobind module. C++ sources live **inline inside the package**
