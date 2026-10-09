@@ -17,7 +17,8 @@ def test_cuhf_singlet():
 
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
-    scf = CUHF(charge=0, ms=0)(system)
+    with pytest.warns(DeprecationWarning):
+        scf = CUHF(charge=0, ms=0)(system)
     scf.run()
     assert scf.E == approx(ecuhf)
     assert scf.S2 == approx(s2cuhf)

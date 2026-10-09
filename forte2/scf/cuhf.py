@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import warnings
+
 import numpy as np
 
 from .scf_base import SCFBase
@@ -12,12 +14,17 @@ class CUHF(SCFBase):
     Equivalent to ROHF but uses UHF machinery.
     See J. Chem. Phys. 133, 141102 (2010) (10.1063/1.3503173)
 
+    CUHF is deprecated; use ROHF, which gives the same solution.
+
     Parameters
     ----------
     ms : float
         Spin projection. Must be a multiple of 0.5.
     guess_mix : bool, optional, default=False
-        If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if ms is 0.0.
+        If True and ms is 0.0, mixes the HOMO and LUMO to break the alpha-beta
+        degeneracy. With point-group symmetry, if the HOMO and LUMO are in different
+        irreps, the occupied and virtual orbitals of one irrep with the smallest
+        energy gap are mixed instead, with a warning.
     """
 
     ms: float = None
@@ -26,6 +33,7 @@ class CUHF(SCFBase):
     _parse_state = UHF._parse_state
     _build_density_matrix = UHF._build_density_matrix
     _initial_guess = UHF._initial_guess
+    _mix_guess = UHF._mix_guess
     _build_ao_grad = UHF._build_ao_grad
     _spin = UHF._spin
     _energy = UHF._energy
@@ -40,6 +48,12 @@ class CUHF(SCFBase):
     def __post_init__(self):
         super().__post_init__()
         self.two_component = False
+        warnings.warn(
+            "CUHF is deprecated and will be removed in a future version; use ROHF, "
+            "which gives the same solution.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
 
     def __call__(self, system):
         system.two_component = False

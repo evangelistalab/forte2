@@ -2,8 +2,10 @@ import numpy as np
 import pytest
 
 import forte2
-from forte2.scf import RHF
+from forte2.scf import GHF, RHF, ROHF, UHF
+from forte2.scf.scf_utils import guess_mix
 from forte2.helpers.comparisons import approx, approx_abs
+from forte2.integrals import emultipole1
 from forte2.lib import ints
 from forte2.symmetry.sym_utils import CHARACTER_TABLE, get_symmetry_ops
 
@@ -601,3 +603,158 @@ def test_rhf_symmetrizes_near_symmetric_geometry():
     rhf = RHF(charge=0)(system).run()
     assert rhf.E == approx_abs(RHF(charge=0)(water(symmetry=False)).run().E, 1e-9)
     assert rhf.irrep_labels[0][:5] == ["a1", "a1", "b2", "a1", "b1"]
+
+
+def _water():
+    return forte2.System(
+        xyz="O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.587",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+
+
+def test_rhf_rejects_symmetry_breaking_hamiltonian():
+    def water_in_field(component):
+        system = _water()
+        H = system.ints_hcore() + 1e-3 * emultipole1(system)[component]
+        system.ints_hcore = lambda: H
+        return system
+
+    # A field along z, the C2 axis, is totally symmetric.
+    RHF(charge=0)(water_in_field(3)).run()
+    # A field along x, perpendicular to the molecular plane, transforms as b1.
+    with pytest.raises(ValueError, match="breaks C2V symmetry"):
+        RHF(charge=0)(water_in_field(1)).run()
+
+
+def test_rhf_adapts_supplied_guess():
+    system = _water()
+    rhf = RHF(charge=0)(system).run()
+    homo, lumo = rhf.na - 1, rhf.na
+    assert rhf.irrep_labels[0][homo] != rhf.irrep_labels[0][lumo]
+    # Mixing the HOMO and LUMO, which have different irreps, breaks the symmetry.
+    C = guess_mix(rhf.C[0], homo, lumo, mixing_parameter=0.3)[0]
+
+    # Adapting by occupation recovers the occupied space of the symmetric solution.
+    occupations = 2.0 * (np.arange(C.shape[1]) < rhf.na)
+    adapted = system.symmetry_basis.adapt(C, occupations)
+    system.symmetry_basis.orbital_irreps(adapted)
+    occupied, reference = adapted[:, : rhf.na], rhf.C[0][:, : rhf.na]
+    np.testing.assert_allclose(
+        occupied @ occupied.T, reference @ reference.T, atol=1e-10
+    )
+
+    guess = RHF(charge=0)(system)
+    guess.C = [C]
+    guess.run()
+    assert guess.E == approx(rhf.E)
+    assert guess.irrep_labels[0] == rhf.irrep_labels[0]
+
+
+def test_uhf_guess_mix_with_symmetry():
+    def run(xyz, basis_set="cc-pvdz"):
+        system = forte2.System(
+            xyz=xyz,
+            basis_set=basis_set,
+            auxiliary_basis_set="def2-universal-jkfit",
+            symmetry=True,
+        )
+        return UHF(charge=0, ms=0, guess_mix=True)(system).run()
+
+    def assert_symmetric(uhf):
+        # Each spin's orbitals transform as the irreps they are labeled with.
+        basis = uhf.system.symmetry_basis
+        for C, indices in zip(uhf.C, uhf.irrep_indices):
+            assert basis.orbital_irreps(C).tolist() == indices
+
+    # Stretched LiH: the HOMO and LUMO are both a1, so they are mixed as in C1 and
+    # reach the same broken-symmetry solution.
+    uhf = run("Li 0 0 0; H 0 0 4.0")
+    assert uhf.E == approx(-7.932395483956)
+    assert uhf.S2 == approx(0.9784292339)
+    assert_symmetric(uhf)
+
+    # Stretched H2: the HOMO (ag) and LUMO (b1u) differ, so a same-irrep pair is mixed
+    # instead, or none in a minimal basis. Either way the orbitals stay symmetric.
+    for basis_set in ("cc-pvdz", "sto-3g"):
+        assert_symmetric(run("H 0 0 0; H 0 0 2.7", basis_set=basis_set))
+
+
+@pytest.mark.parametrize(
+    "method, e_a1",
+    [(ROHF, -75.5438697705), (UHF, -75.5471570925)],
+)
+def test_scf_occupation_constraints(method, e_a1):
+    # H2O+: aufbau gives the 2B1 ground state, and 2A1 has the hole in 3a1 instead.
+    def cation(**kwargs):
+        return method(charge=1, ms=0.5, **kwargs)(_water()).run()
+
+    ground = cation()
+    target = cation(target_symmetry="a1")
+    # also test support for mixed irrep specification
+    counts = cation(irrep_occupations={"a1": (3, 2), 2: 2, "B2": 2})
+    assert ground.determinant_symmetry == "b1"
+    assert target.determinant_symmetry == counts.determinant_symmetry == "a1"
+    assert target.E == approx(e_a1)
+    assert counts.E == approx(e_a1)
+    assert ground.E < e_a1
+
+
+def test_scf_occupation_constraint_errors():
+    water = _water()
+    # RHF cannot have a target of non-totally symmetric irrep
+    with pytest.raises(ValueError, match="totally symmetric"):
+        RHF(charge=0, target_symmetry="b1")(water)
+    # target_symmetry is not consistent with irrep_occupations
+    with pytest.raises(ValueError, match="target_symmetry"):
+        ROHF(
+            charge=1,
+            ms=0.5,
+            target_symmetry="a1",
+            irrep_occupations={"a1": 6, "b1": (1, 0), "b2": 2},
+        )(water)
+    # wrong number of electrons
+    with pytest.raises(ValueError, match="electrons"):
+        UHF(charge=1, ms=0.5, irrep_occupations={"a1": 6, "b2": 2})(water)
+    # unknown irrep label
+    with pytest.raises(ValueError, match="Unknown irrep"):
+        RHF(charge=0, irrep_occupations={"e": 10})(water)
+    # GHF does not support symmetry
+    with pytest.raises(ValueError, match="GHF"):
+        GHF(charge=0, target_symmetry="a1")
+    # In cc-pVDZ, water has only two a2 orbitals.
+    with pytest.raises(
+        ValueError, match=r"a2 \(3 alpha and 3 beta electrons, 2 orbitals\)"
+    ):
+        RHF(charge=0, irrep_occupations={"a1": 4, "a2": 6})(water)
+    # user is trying to specify low-spin ROHF, i.e., ROHF must have unpair spins all a or b
+    with pytest.raises(ValueError, match=r"b1 \(0 alpha, 1 beta\)"):
+        ROHF(
+            charge=1,
+            ms=0.5,
+            irrep_occupations={"a1": (3, 2), "b1": (0, 1), "b2": (2, 1)},
+        )(water)
+    # If integers are given as constraint, they must be even
+    with pytest.raises(ValueError, match="odd number of electrons"):
+        ROHF(charge=1, ms=0.5, irrep_occupations={"a1": 6, "b1": 1, "b2": 2})
+
+
+def test_rohf_c2_sym():
+    # we want the triplet Sigma_g^- solution (descends to B1g in D2h)
+    # at around equilibrium ROHF sometimes converges to a higher B1u solution without constraints
+    # at stretched bond lengths B1g is usually obtainable without constraints
+    system = forte2.System(
+        xyz="C 0 0 0; C 0 0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    scf = ROHF(
+        charge=0,
+        ms=1.0,
+        irrep_occupations={"ag": 6, "b1u": 4, "b2u": (1, 0), "b3u": (1, 0)},
+    )(system)
+    scf.run()
+    assert scf.E == approx(-75.460179559403)
+    assert scf.determinant_symmetry == "b1g"

@@ -6,7 +6,8 @@ import numpy as np
 from forte2.system import System, ModelSystem, BasisInfo
 from forte2.base_classes import Method, MO
 from forte2.helpers import logger, DIIS
-from forte2.symmetry.sym_utils import COTTON_LABELS
+from forte2.symmetry.sym_utils import COTTON_LABELS, irrep_product
+from .occupations import OccupationConstraints, validate_occupation_options
 
 
 @dataclass
@@ -40,6 +41,19 @@ class SCFBase(Method):
         If energy change is below this threshold, level shift is turned off.
     die_if_not_converged : bool, optional, default=True
         Whether to raise an error if the SCF calculation does not converge.
+    target_symmetry : str | int | None, optional
+        The irrep of the HF determinant, by label or index. In each iteration, the
+        occupied orbitals are those with the lowest energy sum among determinants of
+        this irrep. RHF determinants, and ROHF determinants with ms = 0, are always
+        totally symmetric. Unavailable for GHF.
+    irrep_occupations : dict | None, optional
+        {irrep label or index : number of electrons in irrep}
+        Integers specify the irrep's total number of electrons,
+        split equally between the spins, so it must be even.
+        An (alpha, beta) pair gives the electrons of each spin. Every electron
+        must be assigned, and irreps that are not listed are empty.
+        If target_symmetry is also given, the occupations be consistent with it.
+        Unavailable for GHF. Example: {"a1": 4, 1: (0,1)} is a valid C2v ms=-0.5 ROHF constraint.
 
     Attributes
     ----------
@@ -53,6 +67,8 @@ class SCFBase(Method):
         The Fock matrices.
     eps : list[NDArray]
         The orbital energies.
+    determinant_symmetry : str
+        The irrep of the converged HF determinant.
 
     Raises
     ------
@@ -72,12 +88,15 @@ class SCFBase(Method):
     level_shift: float = None
     level_shift_thresh: float = 1e-5
     die_if_not_converged: bool = True
+    target_symmetry: str | int | None = None
+    irrep_occupations: dict | None = None
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
 
     def __post_init__(self):
         self.provides = {"system", "mos", "eps"}
+        validate_occupation_options(self.target_symmetry, self.irrep_occupations)
 
     def __call__(self, system):
         assert isinstance(
@@ -94,6 +113,7 @@ class SCFBase(Method):
             )
 
         self.C = None
+        self._occupations = None
         self.Xorth = self.system.get_Xorth()
         self._validate_level_shift()
         self.called = True
@@ -110,6 +130,50 @@ class SCFBase(Method):
                 self.level_shift = (self.level_shift, self.level_shift)
             if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
+
+    def _set_occupation_constraints(self):
+        """Resolve target_symmetry and irrep_occupations, once na and nb are known."""
+        if self.target_symmetry is None and self.irrep_occupations is None:
+            self._occupations = None
+            return
+        self._occupations = OccupationConstraints(
+            self.method in ("RHF", "ROHF"),
+            self.system.point_group,
+            (self.na, self.nb),
+            self.target_symmetry,
+            self.irrep_occupations,
+        )
+        # Builds the system's symmetry basis, which run() would build anyway.
+        if self.system.point_group != "C1":
+            irreps = self.system.symmetry_basis.irreps
+        else:
+            irreps = np.zeros(self.system.nmo, dtype=int)
+        self._occupations.check_capacity(irreps)
+
+    def _occupy(self, eps, C, irreps):
+        """
+        Reorder each orbital set so that its occupied orbitals come first.
+        This allows the density to be built with aufbau rules.
+        """
+        if self._occupations is None:
+            return eps, C, irreps
+        orders = self._occupations.order(eps, irreps)
+        return (
+            [e[order] for e, order in zip(eps, orders)],
+            [c[:, order] for c, order in zip(C, orders)],
+            [h[order] for h, order in zip(irreps, orders)],
+        )
+
+    def _mix_guess(self, eps, C, irreps):
+        """Return the initial guess orbitals, modified to break spin symmetry if requested."""
+        return C
+
+    def _guess_occupations(self):
+        """Occupations of a supplied guess, whose occupied orbitals come first."""
+        index = np.arange(self.C[0].shape[1])
+        if len(self.C) == 1:
+            return [(index < self.na).astype(float) + (index < self.nb)]
+        return [(index < n).astype(float) for n in (self.na, self.nb)]
 
     def _eigh(self, F):
         """Diagonalize F, by irrep when symmetry is used, returning energies, orbitals and irreps."""
@@ -174,9 +238,17 @@ class SCFBase(Method):
         self.iter = 0
         self._orbital_irreps = None
         if self.C is None:
-            self.eps, self.C, self._orbital_irreps = self._initial_guess(
-                H, guess_type=self.guess_type
+            eps, C, irreps = self._occupy(
+                *self._initial_guess(H, guess_type=self.guess_type)
             )
+            self.eps, self._orbital_irreps = eps, irreps
+            self.C = self._mix_guess(eps, C, irreps)
+        elif self._symmetry_basis is not None:
+            # A supplied guess may break the symmetry; keep its symmetric part.
+            self.C = [
+                self._symmetry_basis.adapt(C, n)
+                for C, n in zip(self.C, self._guess_occupations())
+            ]
         self.D = self._build_density_matrix()
         F, F_canon = self._build_fock(H, fock_builder, S)
         self.F = F_canon
@@ -287,9 +359,9 @@ class SCFBase(Method):
     def _build_ao_grad(self, S, F): ...
 
     def _diagonalize_fock(self, F):
-        """Return the energies, orbitals and irreps of each Fock matrix."""
+        """Return the energies, orbitals and irreps of each Fock matrix, occupied first."""
         eps, C, irreps = (list(x) for x in zip(*(self._eigh(f) for f in F)))
-        return eps, C, irreps
+        return self._occupy(eps, C, irreps)
 
     @abstractmethod
     def _spin(self, S): ...
@@ -313,6 +385,17 @@ class SCFBase(Method):
         names = {index: label for label, index in COTTON_LABELS[point_group].items()}
         self.irrep_indices = [h.tolist() for h in self._orbital_irreps]
         self.irrep_labels = [[names[index] for index in h] for h in self.irrep_indices]
+        if self.two_component:
+            occupied = [self._orbital_irreps[0][: self.nel]]
+        else:
+            # The last orbital set is the beta one, or the only one if both spins share it.
+            occupied = [
+                self._orbital_irreps[0][: self.na],
+                self._orbital_irreps[-1][: self.nb],
+            ]
+        # A determinant transforms as the product of its occupied spin orbitals' irreps.
+        self.determinant_symmetry = names[irrep_product(np.concatenate(occupied))]
+        logger.log_info1(f"HF determinant symmetry: {self.determinant_symmetry}")
 
     @abstractmethod
     def _apply_level_shift(self, F, S): ...

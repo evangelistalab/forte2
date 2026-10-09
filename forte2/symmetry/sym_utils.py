@@ -1,3 +1,5 @@
+from numbers import Integral
+
 import numpy as np
 
 SYMMETRY_OPS = {
@@ -207,3 +209,68 @@ def get_symmetry_ops(point_group):
         elif "σ_" in op:
             symmetry_ops[op] = reflection_mat((axes[op[-2]], axes[op[-1]]))
     return symmetry_ops
+
+
+def get_irrep_index(pg, value):
+    """
+    Return the Cotton index of an irrep given by its label or index.
+
+    Parameters
+    ----------
+    pg : str
+        The Abelian point group.
+    value : str | int
+        The irrep's label, in any case, or its Cotton index.
+
+    Returns
+    -------
+    int
+        The irrep's Cotton index.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not an irrep of ``pg``.
+    """
+    labels = COTTON_LABELS[pg]
+    if isinstance(value, str) and value.strip().lower() in labels:
+        return labels[value.strip().lower()]
+    is_index = isinstance(value, Integral) and not isinstance(value, bool)
+    if is_index and 0 <= value < len(labels):
+        return int(value)
+    raise ValueError(
+        f"Unknown irrep {value!r} for {pg}. The irreps are {list(labels)}."
+    )
+
+
+def irrep_product(irreps):
+    """
+    Return the direct product of irreps of an Abelian point group.
+
+    Parameters
+    ----------
+    irreps : ArrayLike
+        The Cotton indices of the irreps.
+
+    Returns
+    -------
+    int
+        The Cotton index of their product. An empty product is totally symmetric.
+
+    Raises
+    ------
+    ValueError
+        If an irrep is not an integer from 0 to 7.
+    """
+    irreps = np.asarray(irreps)
+    if irreps.size == 0:
+        return 0
+    if not np.issubdtype(irreps.dtype, np.integer):
+        raise ValueError(f"Irreps must be integers, but got {irreps.dtype} values.")
+    bad = irreps[(irreps < 0) | (irreps > 7)]
+    if bad.size:
+        raise ValueError(
+            f"Irreps must be Cotton indices from 0 to 7, but got {bad.tolist()}."
+        )
+    # In Cotton order, the product of irreps i and j has index i ^ j.
+    return int(np.bitwise_xor.reduce(irreps))
