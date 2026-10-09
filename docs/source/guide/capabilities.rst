@@ -6,9 +6,9 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
 
 * Support for density-fitted or Cholesky-decomposed integrals (no support for conventional, 4-index integrals)
 * Support for arbitrary model Hamiltonians
-* Support for utilizing molecular symmetry (largest Abelian subgroup) at the post-Hartree-Fock level
+* Support for molecular symmetry (the largest Abelian subgroup) in Hartree-Fock and post-Hartree-Fock methods, including irrep occupation constraints for Hartree-Fock (see :doc:`symmetry`)
 * Support for the finite (Gaussian-distributed) nuclear charge model [1]_
-* Scalar and vector relativistic Hamiltonians
+* Scalar and vector relativistic Hamiltonians (see :doc:`relativistic`)
   
   * Spin-free 1-electron exact two-component (sf-1eX2C) [2]_
   * Spin-orbit 1-electron exact two-component (so-1eX2C) [2]_
@@ -20,7 +20,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Restricted Hartree-Fock (RHF)
   * Restricted Open-Shell Hartree-Fock (ROHF)
   * Unrestricted Hartree-Fock (UHF)
-  * Constrained unrestricted Hartree-Fock (CUHF)
+  * Constrained unrestricted Hartree-Fock (CUHF), deprecated
   * Generalized Hartree-Fock (GHF)
 
 * A flexible configuration interaction (CI) module
@@ -29,6 +29,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Support for generalized active spaces (GAS) / occupation-restricted multiple active spaces (ORMAS)
   * Two-component CI for relativistic Hamiltonians
   * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
+  * Overlaps between one- or two-component CI wavefunctions that differ in orbitals, geometry, or basis set [10]_ [11]_
   
 * Multi-configuration self-consistent field (MCSCF) methods
   
@@ -38,9 +39,15 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
 
 * Multi-reference driven similarity renormalization group (MR-DSRG) methods
   
-  * Non-relativistic DSRG-MRPT2 with reference relaxation and state-averaging [7]_
+  * Non-relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
   * Two-component relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
   
+* Nuclear gradients and geometry optimization (see :doc:`gradients`)
+
+  * Density-fitted analytic gradients for RHF, UHF, GHF, and CASSCF/GASSCF, including single roots of state-averaged CASSCF
+  * Finite-difference gradients of any method
+  * Geometry optimization with either kind of gradient
+
 * Various orbital manipulation routines
   
   * Zeroth order active space embedding theory (ASET(0)) [5]_
@@ -60,3 +67,5 @@ References
 .. [7] Holmes, A. A.; Umrigar, C. J.; Sharma, S. Excited States Using Semistochastic Heat-Bath Configuration Interaction. J. Chem. Phys. 2017, 147 (16), 164111. https://doi.org/10.1063/1.4998614.
 .. [8] Li, C.; Evangelista, F. A. Multireference Driven Similarity Renormalization Group: A Second-Order Perturbative Analysis. J. Chem. Theory Comput. 2015, 11 (5), 2097-2108. https://doi.org/10.1021/acs.jctc.5b00134.
 .. [9] Surjuse, K. A.; Valeev, E. F. SAP-X2C: Optimally-Simple Two-Component Relativistic Hamiltonian with Size-Intensive Picture Change. J. Chem. Theory Comput. 2026, 22 (7), 3443-3452. https://doi.org/10.1021/acs.jctc.6c00032.
+.. [10] Plasser, F.; Ruckenbauer, M.; Mai, S.; Oppel, M.; Marquetand, P.; González, L. Efficient and Flexible Computation of Many-Electron Wave Function Overlaps. J. Chem. Theory Comput. 2016, 12 (3), 1207-1219. https://doi.org/10.1021/acs.jctc.5b01148.
+.. [11] Malmqvist, P. Å. Calculation of Transition Density Matrices by Nonunitary Orbital Transformations. Int. J. Quantum Chem. 1986, 30 (4), 479-494. https://doi.org/10.1002/qua.560300404.

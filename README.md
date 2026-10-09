@@ -12,7 +12,7 @@
 Forte2 is a standalone, open-source suite of quantum chemistry methods, with a focus on multi-reference and relativistic methods.
 
 **Code authors**: [Evangelista Lab](https://evangelistalab.org/index.html)  
-**Documentation**: [Read the Docs](http://forte2.readthedocs.io/en/latest/)
+**Documentation**: [Read the Docs](https://forte2.readthedocs.io/en/latest/)
 
 > [!WARNING]
 > Forte2 is currently in pre-release development.
@@ -56,6 +56,9 @@ pytest
 
 ## Quickstart
 
+> [!TIP]
+> **Experimental:** To build an input without writing code, try the [Forte2 input builder](https://brianz98.github.io/forte2-builder/), where you can browse template inputs or build your own by interactively connecting methods into a chain. It will be validated, and a Python script will be generated for you.
+
 Forte2 adheres to a functional composition workflow, where users build a final object by applying a sequence of methods to a `System` object. For example, a typical workflow might look like:
 
 ```python
@@ -70,7 +73,7 @@ system = forte2.System(
     auxiliary_basis_set="cc-pVTZ-JKFIT",
 )
 
-rhf = forte2.RHF(charge=0, econv=1e-12)(system)
+rhf = forte2.RHF(charge=0, e_tol=1e-12)(system)
 avas = forte2.AVAS(
     selection_method="separate",
     subspace=["N(2p)"],
@@ -78,16 +81,19 @@ avas = forte2.AVAS(
     num_active_uocc=3,
 )(rhf)
 ci_solver = forte2.CISolver(
-    states=[forte2.State(nel=14, multiplicity=1, ms=0.0),
-            forte2.State(nel=14, multiplicity=3, ms=0.0)],
+    states=[
+        forte2.State(nel=14, multiplicity=1, ms=0.0),
+        forte2.State(nel=14, multiplicity=3, ms=0.0),
+    ],
+    nroots=[1, 1],
 )
 mcscf = forte2.MCOptimizer(ci_solver=ci_solver)(avas)
 
-pt = forte2.DSRG_MRPT2(s=0.5)(mcscf)
+pt = forte2.DSRG_MRPT2(flow_param=0.5)(mcscf)
 
 pt.run()
 ```
-This sets up a state-averaged driven similarity renormalization group second-order multi-reference perturbation theory (DSRG-MRPT2) calculation on the nitrogen molecule, using the cc-pvDZ basis set and the cc-pVTZ-JKFIT auxiliary basis set, with an initial active space most resembling the 6 nitrogen 2p orbitals, automatically selected by the AVAS procedure.
+This sets up a state-averaged driven similarity renormalization group second-order multi-reference perturbation theory (DSRG-MRPT2) calculation on the nitrogen molecule, using the cc-pVDZ basis set and the cc-pVTZ-JKFIT auxiliary basis set, with an initial active space most resembling the 6 nitrogen 2p orbitals, automatically selected by the AVAS procedure.
 
 ## Obtaining integrals
 
@@ -99,7 +105,7 @@ import forte2
 system = forte2.System(
     xyz="C 0 0 0; N 0 0 1.4",
     basis_set="cc-pvdz",
-    auxiliary_basis_set="cc-pvdz-jkfit",
+    auxiliary_basis_set="cc-pvtz-jkfit",
 )
 
 S = forte2.integrals.overlap(system)
@@ -116,30 +122,30 @@ Forte2 is under active development, with an emphasis on multi-reference and rela
 Current capabilities include (non-exhaustive, see also the [Capabilities](https://forte2.readthedocs.io/en/latest/guide/capabilities.html) section of the user guide for more details):
 
 - All methods use density-fitted or Cholesky-decomposed two-electron integrals
-- Non-relativistic and relativistic SCF (RHF, ROHF, UHF, CUHF, GHF)
-- CI methods including spin-adapted CI, GAS/ORMAS, and relativistic CI
-- Heat-bath CI (HCI)
+- Non-relativistic and relativistic SCF (RHF, ROHF, UHF, GHF, and CUHF, which is deprecated in favor of ROHF)
+- CI methods including spin-adapted CI, GAS/ORMAS, relativistic CI, and overlaps between CI wavefunctions
+- Heat-bath CI (HBCI)
 - MCSCF methods (CAS/GAS/ORMAS), with state averaging, and relativistic variants thereof
 - AVAS active-space selection (one- and two-component workflows)
 - DSRG-MRPT2 (non-relativistic and relativistic)
+- Analytic nuclear gradients (RHF, UHF, GHF, CASSCF/GASSCF), finite-difference gradients of any method, and geometry optimization
 - Orbital analysis/manipulation tools (ASET, IAO, IBO, cube generation)
 
 For detailed method documentation and theory references, see:
-- [User Guide](http://forte2.readthedocs.io/en/latest/guide/index.html)
-- [API Reference](http://forte2.readthedocs.io/en/latest/modules.html)
+- [User Guide](https://forte2.readthedocs.io/en/latest/guide/index.html)
+- [API Reference](https://forte2.readthedocs.io/en/latest/autoapi/index.html)
 
 ## Parallelism
 
 Forte2 automatically detects the number of threads to use for some parallel sections that are not already parallelized by e.g. BLAS.
 The effective count is printed at `import forte2`.
 
-The envioronment variable `FORTE_NUM_THREADS_OVERRIDE` will be used if set. 
-Otherwise, the smallest among the number of logical CPU counts, `OMP_NUM_THREADS`,`OMP_THREAD_LIMIT`, and `SLURM_CPUS_PER_TASK` will be used if set.
-Note that the logical CPU count includes e.g., hyperthreads.
-
+If the environment variable `FORTE_NUM_THREADS_OVERRIDE` is set, Forte2 uses that count.
+Otherwise, it uses the smallest of the logical CPU count, the CPU affinity mask, and `OMP_NUM_THREADS`, `OMP_THREAD_LIMIT`, and `SLURM_CPUS_PER_TASK` where they are set.
+The logical CPU count includes hyperthreads.
 
 ## Contributing
 
 We welcome contributions of all kinds, including bug reports, feature requests, documentation improvements, and code contributions.
 
-For code contributions, see notes on coding style and docstring standards in the [Contributor Guide](http://forte2.readthedocs.io/en/latest/contributor.html).
+For code contributions, see notes on coding style and docstring standards in the [Contributor Guide](https://forte2.readthedocs.io/en/latest/contributor.html).

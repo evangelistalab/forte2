@@ -12,7 +12,7 @@ Analytic gradients
 ------------------
 
 Density-fitted analytic gradients are available for RHF, UHF, GHF, and
-state-specific CASSCF/GASSCF::
+CASSCF/GASSCF::
 
     rhf = forte2.RHF(charge=0)(system).run()
     g = rhf.gradient()
@@ -20,6 +20,11 @@ state-specific CASSCF/GASSCF::
 They require an auxiliary basis (there is no conventional four-index path) and
 raise ``NotImplementedError`` for combinations that are not supported, rather
 than silently returning something approximate.
+
+For a state-averaged CASSCF wavefunction, ``gradient(root=...)`` returns the
+gradient of one root. This needs a one-component wavefunction and
+``final_orbitals="original"`` on the ``MCOptimizer``.
+``forte2.GeometryOptimizer(root=...)`` optimizes the geometry of that root.
 
 Finite-difference gradients
 ---------------------------
@@ -148,21 +153,27 @@ than merely noisy.
 Multiple roots
 ~~~~~~~~~~~~~~
 
-Methods that report several energies require ``root`` to select the one to
-differentiate::
+Methods that report several energies, such as a CI solver, require ``root``
+to select the one to differentiate::
 
     fd = forte2.FDGradient(root=1)(ci_solver)
 
 Omitting it raises rather than silently differentiating the lowest root.
+
+A driver (``CI`` or ``MCOptimizer``) reports its state-averaged energy as ``E``
+and the energy of each root in ``E_ci``. To differentiate one root, pass
+``energy_accessor``::
+
+    fd = forte2.FDGradient(energy_accessor=lambda mc: mc.E_ci[1])(mc)
 
 Limitations
 ~~~~~~~~~~~
 
 Displaced geometries are built with
 :meth:`forte2.System.with_geometry`, so the system must be rebuildable:
-``symmetry=False`` (symmetry detection reorients the molecule, which would
-invalidate Cartesian displacements), a defined ``basis_set``, and not a
-``ModelSystem``.
+``symmetry=False`` (symmetry detection reorients the molecule and moves atoms to
+make it exactly symmetric, which would invalidate Cartesian displacements), a
+defined ``basis_set``, and not a ``ModelSystem``.
 
 Numerical differentiation on its own
 ------------------------------------
