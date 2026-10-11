@@ -80,8 +80,8 @@ def test_sap_opvop_high_l():
 
 
 @pytest.mark.skipif(not integrals.LIBCINT_AVAILABLE, reason="Libcint is not available")
-def test_sap_x2c_high_l_preserves_density_norm(monkeypatch):
-    """SAP-X2C preserves its unnormalized density on the Libcint fallback."""
+def test_sap_x2c_preserves_density_norm_libcint(monkeypatch):
+    """SAP-X2C preserves its unnormalized density with the Libcint backend."""
     original_cint_coulomb_3c = integrals.cint_coulomb_3c
     preserve_density_norm_calls = []
 
@@ -96,9 +96,9 @@ def test_sap_x2c_high_l_preserves_density_norm(monkeypatch):
         basis_set=str(THIS_DIR / "high_l_x2c.json"),
         minao_basis_set=None,
         x2c=X2CParams(x2c_type="sf", x2c_model="sap"),
+        integral_backend="libcint",
     )
 
-    assert system.x2c_helper.xbasis.max_l > ints.libint2_max_am
     assert preserve_density_norm_calls == [True]
 
     hcore = system.ints_hcore()
@@ -112,12 +112,12 @@ def test_sap_x2c_high_l_preserves_density_norm(monkeypatch):
     sap_basis = build_sap_potential_basis("sap_grasp_large", system.geom_helper)
     V_ss = np.einsum(
         "Pmn->mn",
-        integrals.coulomb_3c(system, sap_basis, s_basis),
+        ints.coulomb_3c(sap_basis, s_basis, s_basis),
         optimize=True,
     )
     assert system.x2c_helper.V_e[0, 0] == pytest.approx(V_ss[0, 0], abs=1.0e-12)
 
-    W_ss = integrals.coulomb_3c_opVop(system, sap_basis, s_basis)
+    W_ss = ints.coulomb_3c_opVop(sap_basis, s_basis, s_basis)
     for W_component, W_ss_component in zip(system.x2c_helper.W_e, W_ss):
         assert W_component[0, 0] == pytest.approx(W_ss_component[0, 0], abs=1.0e-12)
     assert np.linalg.norm(system.x2c_helper.V_e) == pytest.approx(
