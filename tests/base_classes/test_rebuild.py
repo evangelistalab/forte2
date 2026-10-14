@@ -5,7 +5,6 @@ import pytest
 
 from forte2 import (
     CISolver,
-    CUHF,
     GHF,
     MCOptimizer,
     RHF,
@@ -173,7 +172,6 @@ def test_rebuild_preserves_a_user_provided_mo_space_override():
         pytest.param(_ghf, id="ghf"),
         pytest.param(_triplet(ROHF), id="rohf"),
         pytest.param(_triplet(UHF), id="uhf"),
-        pytest.param(_triplet(CUHF), id="cuhf"),
     ],
 )
 def test_seeded_chain_converges_to_the_same_energy_as_an_unseeded_one(builder):

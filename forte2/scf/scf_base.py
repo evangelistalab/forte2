@@ -52,7 +52,7 @@ class SCFBase(Method):
         split equally between the spins, so it must be even.
         An (alpha, beta) pair gives the electrons of each spin. Every electron
         must be assigned, and irreps that are not listed are empty.
-        If target_symmetry is also given, the occupations be consistent with it.
+        If target_symmetry is also given, the occupations must be consistent with it.
         Unavailable for GHF. Example: {"a1": 4, 1: (0,1)} is a valid C2v ms=-0.5 ROHF constraint.
 
     Attributes
@@ -274,7 +274,7 @@ class SCFBase(Method):
             # 3. Build new density matrix
             self.D = self._build_density_matrix()
             # 4. Build the (non-extrapolated) Fock matrix
-            # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
+            # (there is a slot for canonicalized F to accommodate ROHF - admittedly weird for RHF/UHF)
             F, F_canon = self._build_fock(H, fock_builder, S)
             self.F = F_canon
             # 5. Compute new HF energy from the non-extrapolated Fock matrix

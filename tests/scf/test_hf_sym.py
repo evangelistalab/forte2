@@ -740,7 +740,26 @@ def test_scf_occupation_constraint_errors():
         ROHF(charge=1, ms=0.5, irrep_occupations={"a1": 6, "b1": 1, "b2": 2})
 
 
-def test_rohf_c2_sym():
+def test_rhf_c2_occ():
+    system = forte2.System(
+        xyz="C 0 0 0; C 0 0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    scf = RHF(
+        charge=0,
+        irrep_occupations={"ag": 6, "b1u": 4, "b3u": 2},
+    )(system)
+    scf.run()
+    labels = scf.irrep_labels[0][:6]
+    assert labels.count("ag") == 3
+    assert labels.count("b1u") == 2
+    assert labels.count("b3u") == 1
+    assert scf.E == approx(-75.396617088849)
+
+
+def test_rohf_c2_occ():
     # we want the triplet Sigma_g^- solution (descends to B1g in D2h)
     # at around equilibrium ROHF sometimes converges to a higher B1u solution without constraints
     # at stretched bond lengths B1g is usually obtainable without constraints
@@ -757,4 +776,51 @@ def test_rohf_c2_sym():
     )(system)
     scf.run()
     assert scf.E == approx(-75.460179559403)
+    assert scf.determinant_symmetry == "b1g"
+
+
+def test_rohf_c2_target():
+    system = forte2.System(
+        xyz="C 0 0 0; C 0 0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    scf = ROHF(
+        charge=0,
+        ms=1.0,
+        target_symmetry="b1g",
+    )(system)
+    scf.run()
+    assert scf.E == approx(-75.460179559403)
+    assert scf.determinant_symmetry == "b1g"
+
+
+def test_uhf_c2_occ():
+    system = forte2.System(
+        xyz="C 0 0 0; C 0 0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    scf = UHF(
+        charge=0,
+        ms=1.0,
+        irrep_occupations={"ag": 6, "b1u": 4, "b2u": (1, 0), "b3u": (1, 0)},
+    )(system)
+    scf.run()
+    assert scf.E == approx(-75.463228776761)
+    assert scf.determinant_symmetry == "b1g"
+
+
+def test_uhf_c2_target():
+    system = forte2.System(
+        xyz="C 0 0 0; C 0 0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    scf = UHF(charge=0, ms=1.0, target_symmetry="b1g")(system)
+    scf.run()
+    assert scf.E == approx(-75.463228776761)
     assert scf.determinant_symmetry == "b1g"
