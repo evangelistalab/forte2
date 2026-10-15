@@ -9,6 +9,7 @@ import numpy as np
 from forte2.lib.ints import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
+from .autoaux_basis import autoaux_electron_shells
 
 try:
     import basis_set_exchange as bse
@@ -120,6 +121,11 @@ def build_basis(
             1. If the basis set name ends with ``.json``, it is treated as a local JSON file path.
             2. If a JSON file with the basis set name exists in the ``forte2/data/basis`` directory, it is used.
             3. If neither of the above is found, Basis Set Exchange is used (if available).
+
+        If a basis set name ends with ``-autoaux``, for example ``"cc-pvtz-autoaux"``,
+        an AutoAux auxiliary basis (Stoychev, Auer, and Neese, 2017) is generated from
+        the orbital basis set named before the suffix, which is loaded from the sources
+        listed here.
 
         For example, a basis set assignment dictionary can look like::
 
@@ -375,10 +381,12 @@ def _load_basis(basis_name, Z):
     """
     Load the basis set data for a given atomic number.
 
-    This can be from three sources:
+    This can be from four sources:
     1. A local JSON file specified by `basis_name` (if it ends with .json)
     2. A JSON file supplied in the `forte2/data/basis` directory
-    3. Basis Set Exchange (if available)
+    3. AutoAux generation (if it ends with -autoaux) from the orbital basis set named
+       before the suffix, itself loaded from one of the other sources
+    4. Basis Set Exchange (if available)
 
     Parameters
     ----------
@@ -404,9 +412,11 @@ def _load_basis(basis_name, Z):
             ), f"Element {Z} not found in basis set {basis_name}."
             res = bfile["elements"][str(Z)]["electron_shells"]
     elif resources.is_resource("forte2.data.basis", f"{basis_name}.json"):
-        with resources.files("forte2.data.basis").joinpath(f"{basis_name}.json").open(
-            "r"
-        ) as f:
+        with (
+            resources.files("forte2.data.basis")
+            .joinpath(f"{basis_name}.json")
+            .open("r") as f
+        ):
             bfile = json.load(f)
             # check if the atomic number is in the basis set
             assert (
@@ -414,21 +424,11 @@ def _load_basis(basis_name, Z):
             ), f"Element {Z} not found in basis set {basis_name}."
             res = bfile["elements"][str(Z)]["electron_shells"]
     elif basis_name.endswith("-autoaux"):
-        assert (
-            BSE_AVAILABLE
-        ), f"[forte2] AutoAux basis requested, but basis_set_exchange is not available."
+        orbital_basis_name = basis_name.removesuffix("-autoaux")
         logger.log_info1(
-            f"[forte2] Generating AutoAux basis for element Z={Z} using Basis Set Exchange."
+            f"[forte2] Generating AutoAux basis for element Z={Z} from {orbital_basis_name}."
         )
-        try:
-            bse_basis = bse.get_basis(
-                basis_name.replace("-autoaux", ""), elements=Z, get_aux=1
-            )
-        except KeyError:
-            raise RuntimeError(
-                f"[forte2] Basis Set Exchange could not generate AutoAux basis for element Z={Z} with basis set {basis_name.replace('-autoaux', '')}!"
-            )
-        res = bse_basis["elements"][str(Z)]["electron_shells"]
+        res = autoaux_electron_shells(Z, _load_basis(orbital_basis_name, Z))
     else:
         assert (
             BSE_AVAILABLE
