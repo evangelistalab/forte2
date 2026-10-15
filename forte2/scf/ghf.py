@@ -289,7 +289,7 @@ class GHF(SCFBase):
             # send a PR if you want this changed
             return
         basis_info = BasisInfo(self.system, self.system.basis)
-        if self.system.x2c_type == "so":
+        if self.system.x2c.x2c_type == "so":
             logger.log_info1("\nSpinor Composition of MOs (HOMO-6 to HOMO):")
             if not hasattr(self, "Usph2j"):
                 ua, ub = real_sph_to_j_adapted(self.system.basis)

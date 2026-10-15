@@ -107,7 +107,7 @@ class SCFBase(Method):
         self.nel = self.system.Zsum - self.charge
         assert self.nel >= 0, "Number of electrons must be non-negative."
 
-        if self.method != "GHF" and self.system.x2c_type == "so":
+        if self.method != "GHF" and self.system.x2c.x2c_type == "so":
             raise ValueError(
                 "SO-X2C is only available for GHF. Use SF-X2C for RHF/UHF."
             )

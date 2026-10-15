@@ -28,6 +28,15 @@ def test_invalid_x2c_option(option):
         System(xyz="H 0 0 0", basis_set="sto-3g", minao_basis_set=None, x2c=option)
 
 
+def test_x2c_defaults_to_no_x2c():
+    for kwargs in ({}, {"x2c": None}):
+        system = System(
+            xyz="H 0 0 0", basis_set="sto-3g", minao_basis_set=None, **kwargs
+        )
+        assert system.x2c == X2CParams()
+        assert system.x2c.x2c_type is None and not system.two_component
+
+
 def test_save_load_roundtrips_x2c_params(tmp_path):
     filename = tmp_path / "x2c_system"
     system = System(
@@ -40,9 +49,9 @@ def test_save_load_roundtrips_x2c_params(tmp_path):
 
     loaded = System.load(filename)
     assert isinstance(loaded.x2c, X2CParams)
-    assert loaded.x2c_type == "so"
-    assert loaded.x2c_model == "1e"
-    assert loaded.snso_type == "dcb"
+    assert loaded.x2c.x2c_type == "so"
+    assert loaded.x2c.x2c_model == "1e"
+    assert loaded.x2c.snso_type == "dcb"
 
 
 def test_system():

@@ -163,7 +163,7 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 - `determinant` / `sparse` — determinant & bit-string representations, Slater rules, `SparseOperator`/`SparseState`.
 - `mcopt` — MCSCF/CASSCF/GASSCF optimizer, exposed as `forte2.MCOptimizer` (not `MCSCF`).
 - `dsrg` — DSRG-MRPT2 and its relativistic variant.
-- `x2c` — exact two-component relativistic transform (`sf` scalar, `so` spin-orbit); gated by `System.x2c_type`.
+- `x2c` — exact two-component relativistic transform (`sf` scalar, `so` spin-orbit); gated by `System.x2c.x2c_type` (`System.x2c` is always an `X2CParams`; `X2CParams()` means no X2C).
 - `orbitals` — AVAS, ASET embedding, IAO/IBO, semicanonicalizer, cube generation, `SpinorUpcaster`.
 - `props`, `gradients`, `optimize` — 1e-properties/populations; DF-based analytic gradients plus
   `FDGradient`, which differentiates *any* rebuildable method's energy by finite differences (see

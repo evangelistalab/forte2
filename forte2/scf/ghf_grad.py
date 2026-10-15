@@ -27,12 +27,12 @@ def _compute_ghf_gradient(ghf) -> NDArray:
     )
     W1 = W_spinor[:nbf, :nbf] + W_spinor[nbf:, nbf:]
 
-    if ghf.system.x2c_type is None:
+    if ghf.system.x2c.x2c_type is None:
         # Scalar AO derivative integrals are real and spin diagonal. Their
         # contraction depends only on the real parts of the spin traces.
         return compute_gradient(ghf.system, D1.real, W1.real, W2, W3)
 
-    if ghf.system.x2c_type == "sf":
+    if ghf.system.x2c.x2c_type == "sf":
         x2c_density = D1
     else:
         x2c_density = Cocc @ Cocc.conj().T

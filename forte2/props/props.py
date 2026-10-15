@@ -46,9 +46,9 @@ def get_1e_property(
         ), f"g1 shape {g1.shape[0]} does not match the number of basis functions, {system.nbf} in the system."
 
     if skip_picture_change is None:
-        skip_picture_change = system.skip_picture_change
+        skip_picture_change = system.x2c.skip_picture_change
 
-    if system.x2c_type in ["sf", "so"] and not skip_picture_change:
+    if system.x2c.x2c_type in ["sf", "so"] and not skip_picture_change:
         do_picture_change = True
     else:
         do_picture_change = False

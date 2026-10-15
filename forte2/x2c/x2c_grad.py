@@ -5,8 +5,6 @@ from forte2 import integrals
 from forte2.lib import ints
 from forte2.helpers import block_diag_2x2, i_sigma_dot
 
-from .x2c import LIGHT_SPEED
-
 
 def _hermitize(matrix):
     return 0.5 * (matrix + matrix.conj().T)
@@ -64,7 +62,7 @@ class _X2CAdjoint:
         self.large_pinv = scipy.linalg.pinv(self.positive[:north])
         self.X = self.positive[north:] @ self.large_pinv
         self.renorm_metric = (
-            S + (0.5 / LIGHT_SPEED**2) * self.X.conj().T @ self.T @ self.X
+            S + (0.5 / helper.light_speed**2) * self.X.conj().T @ self.T @ self.X
         )
         (
             self.R,
@@ -134,8 +132,8 @@ class _X2CAdjoint:
             R_bar,
         )
 
-        metric_factor = 0.5 / LIGHT_SPEED**2
-        w_factor = 0.25 / LIGHT_SPEED**2
+        metric_factor = 0.5 / helper.light_speed**2
+        w_factor = 0.25 / helper.light_speed**2
         T_bar = metric_factor * self.X @ renorm_bar @ self.X.conj().T
         X_bar = 2.0 * metric_factor * self.T @ self.X @ renorm_bar
 

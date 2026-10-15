@@ -369,7 +369,7 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
             return
         basis_info = BasisInfo(self.system, self.system.basis)
         if getattr(self.system, "two_component", False):
-            if getattr(self.system, "x2c_type", None) == "so":
+            if self.system.x2c.x2c_type == "so":
                 if not hasattr(self, "Usph2j"):
                     ua, ub = real_sph_to_j_adapted(self.system.basis)
                     self.Usph2j = np.vstack((ua, ub))
