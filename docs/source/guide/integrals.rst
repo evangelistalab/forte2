@@ -1,11 +1,10 @@
 Obtaining integrals
 ===================
 
-Forte2 uses the `Libint2 <https://github.com/evaleev/libint>`_ integral engine. 
-It provides a straightforward way of accessing atomic integrals through its API. 
-You can obtain the integrals for a given molecular system by first specifying a molecular system and using the ``forte2.lib.ints`` module.
-Almost all operators supported by Libint2 (see `Libint2 documentation <https://github.com/evaleev/libint/wiki/using-modern-CPlusPlus-API#create-an-integral-engine>`_) are available.
-Forte2 also provides an interface with `libcint <https://github.com/sunqm/libcint>`_, with a templated API that supports easy addition of new integral types. Currently, only a small subset (mainly two-center integrals) of libcint integrals are imported, but more can be easily added as needed.
+Forte2 computes atomic integrals with the `Libint2 <https://github.com/evaleev/libint>`_ integral engine and, when Forte2 is built with libcint (the default), with `libcint <https://github.com/sunqm/libcint>`_.
+Almost all operators supported by Libint2 (see the `Libint2 documentation <https://github.com/evaleev/libint/wiki/using-modern-CPlusPlus-API#create-an-integral-engine>`_) are available.
+libcint provides the one-electron integrals and the two- and three-center Coulomb integrals, including spinor variants for relativistic calculations.
+The ``integral_backend`` option of ``System`` selects the engine. The default, ``"auto"``, uses Libint2 up to the highest angular momentum it supports and libcint above that.
 Here are some examples of how to obtain the most common integrals. First one needs to set up the molecular system::
 
     import forte2
@@ -15,7 +14,7 @@ Here are some examples of how to obtain the most common integrals. First one nee
         xyz="""C 0 0 0
         N 0 0 1.4""",
         basis_set={"C": "cc-pvdz", "N": "cc-pvtz"},
-        auxiliary_basis_set="cc-pvdz-jkfit",
+        auxiliary_basis_set="cc-pvtz-jkfit",
         minao_basis_set="ano-r0",
     )
 
@@ -39,7 +38,7 @@ Getting integrals through ``forte2.lib.ints`` can be achieved as follows::
 
     # dipole integrals (ordered x,y,z)
     # the zeroth element is the overlap
-    dipole = forte2.lib.ints.emultipole1(system.basis, system.atoms)[1:]
+    dipole = forte2.lib.ints.emultipole1(system.basis)[1:]
 
     # 4-center-2-electron integrals
     eri = forte2.lib.ints.coulomb_4c(system.basis)
@@ -71,4 +70,4 @@ Equivalently, getting integrals through ``forte2.integrals`` can be achieved as 
     # 3-center-2-electron integrals (for density-fitting)
     B = forte2.integrals.coulomb_3c(system)
 
-As shown above, the ``forte2.integrals`` module automatically supplies sensibly default basis sets and geometry information from the ``system`` object, making it more convenient to use in many cases.
+As shown above, the ``forte2.integrals`` module automatically supplies sensible default basis sets and geometry information from the ``system`` object, making it more convenient to use in many cases.
