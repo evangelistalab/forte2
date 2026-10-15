@@ -66,7 +66,7 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     symmetry : bool, optional, default=False
         Whether to automatically detect the largest Abelian point group symmetry of the molecule.
-        RHF, ROHF, UHF, and CUHF preserve this symmetry during Fock diagonalization.
+        RHF, ROHF, and UHF preserve this symmetry during Fock diagonalization.
         This will center the molecule at its center of mass, reorient it along its principal axes of inertia,
         and move each atom by at most ``symmetry_tol`` to make the geometry exactly symmetric.
     symmetry_tol : float, optional, default=1e-4

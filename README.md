@@ -116,7 +116,7 @@ Forte2 is under active development, with an emphasis on multi-reference and rela
 Current capabilities include (non-exhaustive, see also the [Capabilities](https://forte2.readthedocs.io/en/latest/guide/capabilities.html) section of the user guide for more details):
 
 - All methods use density-fitted or Cholesky-decomposed two-electron integrals
-- Non-relativistic and relativistic SCF (RHF, ROHF, UHF, CUHF, GHF)
+- Non-relativistic and relativistic SCF (RHF, ROHF, UHF, GHF)
 - CI methods including spin-adapted CI, GAS/ORMAS, and relativistic CI
 - Heat-bath CI (HCI)
 - MCSCF methods (CAS/GAS/ORMAS), with state averaging, and relativistic variants thereof

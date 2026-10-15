@@ -20,7 +20,6 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Restricted Hartree-Fock (RHF)
   * Restricted Open-Shell Hartree-Fock (ROHF)
   * Unrestricted Hartree-Fock (UHF)
-  * Constrained unrestricted Hartree-Fock (CUHF)
   * Generalized Hartree-Fock (GHF)
 
 * A flexible configuration interaction (CI) module

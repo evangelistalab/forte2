@@ -30,6 +30,7 @@ class RHF(SCFBase):
         assert self.nel % 2 == 0, "RHF requires an even number of electrons."
         self.ms = 0
         self.na = self.nb = self.nel // 2
+        self._set_occupation_constraints()
 
     def _build_fock(self, H, fock_builder, S):
         J, K = fock_builder.build_JK([self.C[0][:, : self.na]])
