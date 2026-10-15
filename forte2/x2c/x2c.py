@@ -12,7 +12,6 @@ from forte2.helpers import (
 )
 from forte2.system.build_basis import build_sap_potential_basis, decontract_basis
 
-LIGHT_SPEED = 137.03599917697
 SAP_BASIS_NAME = "sap_grasp_large"
 ROW_Z_START = np.array([1, 3, 11, 19, 37, 55, 87])
 
@@ -44,7 +43,7 @@ class X2CHelper:
     Implementation follows the general algorithm of J. Chem. Phys. 135, 084114 (2011),
     but adopts some numerical tricks from J. Chem. Phys. 131, 031104 (2009), especially
     for the spin-orbit case. See also PySCF's x2c module for reference. When
-    ``system.x2c_model == "sap"``, the decoupling
+    ``system.x2c.x2c_model == "sap"``, the decoupling
     transformation follows the SAP-X2C
     Hamiltonian of Surjuse and Valeev, J. Chem. Theory Comput. 22, 3443--3452 (2026),
     https://doi.org/10.1021/acs.jctc.6c00032.
@@ -53,9 +52,10 @@ class X2CHelper:
     def __init__(self, system):
         self.system = system
         self.overlap_ortho_rtol = system.overlap_ortho_rtol
-        self.x2c_type = system.x2c_type
-        self.x2c_model = system.x2c_model
-        self.snso_type = system.snso_type
+        self.x2c_type = system.x2c.x2c_type
+        self.x2c_model = system.x2c.x2c_model
+        self.snso_type = system.x2c.snso_type
+        self.light_speed = system.x2c.light_speed
 
         logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
@@ -166,14 +166,13 @@ class X2CHelper:
 
         return compute_hcore_gradient(self, density)
 
-    @staticmethod
-    def _build_nesc_matrix(T, V, W, X):
+    def _build_nesc_matrix(self, T, V, W, X):
         return (
             T @ X
             + X.conj().T @ T
             - X.conj().T @ T @ X
             + V
-            + (0.25 / LIGHT_SPEED**2) * X.conj().T @ W @ X
+            + (0.25 / self.light_speed**2) * X.conj().T @ W @ X
         )
 
     def _get_projection_matrix(self):
@@ -225,11 +224,11 @@ class X2CHelper:
         D = np.zeros((north * 2,) * 2, dtype=dtype)
         M = np.zeros((north * 2,) * 2, dtype=dtype)
         D[:north, :north] = V
-        D[north:, north:] = (0.25 / LIGHT_SPEED**2) * W - T
+        D[north:, north:] = (0.25 / self.light_speed**2) * W - T
         D[:north, north:] = T
         D[north:, :north] = T
         M[:north, :north] = S
-        M[north:, north:] = (0.5 / LIGHT_SPEED**2) * T
+        M[north:, north:] = (0.5 / self.light_speed**2) * T
         return scipy.linalg.eigh(D, M)
 
     def _get_decoupling_matrix(self, c_dirac):
@@ -243,7 +242,7 @@ class X2CHelper:
         This implementation follows eqs 26-34 of J. Chem. Phys. 131, 031104 (2009),
         which avoids doing matrix inversions and leads to a more numerically stable transformation.
         """
-        S_tilde = S + (0.5 / LIGHT_SPEED**2) * self.X.conj().T @ T @ self.X
+        S_tilde = S + (0.5 / self.light_speed**2) * self.X.conj().T @ T @ self.X
         # S is guaranteed to be identity in the orthonormal basis
         # so we just need to compute the inverse square root of S_tilde
         # the tolerance used here isn't self.overlap_ortho_rtol because we're already in the
