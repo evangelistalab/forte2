@@ -186,7 +186,10 @@ def test_gasscf_nos():
     """
 
     system = System(
-        xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
+        xyz=xyz,
+        basis_set="cc-pVTZ",
+        auxiliary_basis_set="def2-universal-jkfit",
+        symmetry=True,
     )
 
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
@@ -197,7 +200,11 @@ def test_gasscf_nos():
         active_orbitals=[[2, 3, 4], [5, 6]],
     )
     mc = MCOptimizer(
-        ci_solver, e_tol=1e-7, g_tol=1e-6, maxiter=100, final_orbitals="natural"
+        ci_solver,
+        e_tol=1e-7,
+        g_tol=1e-6,
+        maxiter=100,
+        final_orbitals="natural",
     )(rhf)
     mc.run()
 

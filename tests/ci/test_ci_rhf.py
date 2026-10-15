@@ -349,6 +349,7 @@ def test_ci_semicanonical_noncontiguous_mo_space():
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
+        symmetry=True,
     )
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     mo_space = _lih_noncontiguous_mo_space(system)

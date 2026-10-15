@@ -158,8 +158,9 @@ def _split_rotation(U, blocks, two_component):
     the real case, the signs of P make each block of R proper, since an
     improper rotation has no real logarithm.
     """
-    P = np.zeros_like(U)
-    log_R = np.zeros_like(U)
+    dtype = complex if two_component else float
+    P = np.zeros(U.shape, dtype=dtype)
+    log_R = np.zeros(U.shape, dtype=dtype)
     for block in blocks:
         if len(block) == 0:
             continue

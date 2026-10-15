@@ -43,7 +43,7 @@ def make_final_orbitals(
     irrep_indices: ArrayLike,
     C_contig: NDArray,
     g1_act: NDArray,
-) -> NDArray:
+) -> tuple[NDArray, NDArray]:
     """
     Build the requested final orbitals, in contiguous MO-space ordering.
 
@@ -72,8 +72,10 @@ def make_final_orbitals(
 
     Returns
     -------
-    NDArray
+    C_final : NDArray
         The transformed coefficient matrix, still in contiguous ordering.
+    Uactv : NDArray
+        The active-space rotation, C_final[:, actv] = C_contig[:, actv] @ Uactv.
     """
     if mode not in ("semicanonical", "natural"):
         raise ValueError(
@@ -93,13 +95,15 @@ def make_final_orbitals(
     )
     semi.semi_canonicalize(g1=g1_act, C_contig=C_contig)
     C_final = semi.C_semican.copy()
+    Uactv = semi.Uactv.copy()
 
     if mode == "natural":
         natural_orbital = NaturalOrbitals(mo_space, irrep_indices=irrep_indices)
         natural_orbital.make_natural_orbitals(g1_act=g1_act, C_contig=C_final)
         C_final = natural_orbital.C_natural.copy()
+        Uactv = natural_orbital.Uactv.copy()
 
-    return C_final
+    return C_final, Uactv
 
 
 def check_final_orbital_energy_invariance(
@@ -143,23 +147,23 @@ def check_final_orbital_energy_invariance(
         If ``hard_fail`` is True and the energies differ by more than ``10 * tol``.
     """
     max_root_de = np.max(np.abs(np.asarray(old_E) - np.asarray(new_E)))
-    avg_de = np.abs(old_E_avg - new_E_avg)
+    avg_de = old_E_avg - new_E_avg
     max_de = max(max_root_de, avg_de)
 
     threshold = tol * 10.0 if hard_fail else tol
     if max_de <= threshold:
         logger.log_info1(
             f"\nAfter producing the final orbitals, the CI solver converged to\n"
-            f"within threshold {threshold}: max(abs(E_i - E_new_i)) = {max_root_de:.4e},\n"
-            f"abs(E_avg - E_avg_new) = {avg_de:.4e}.\n"
+            f"within threshold {threshold}: max(abs(E_i - E_new_i)) = {max_root_de:.4e} Eh,\n"
+            f"E_avg - E_avg_new = {avg_de:.4e} Eh.\n"
         )
         return
 
     if hard_fail:
         logger.log_warning(
             f"After producing the final orbitals, the CI solver converged to "
-            f"different solutions: max(abs(E_i - E_new_i)) = {max_root_de:.4e}, "
-            f"abs(E_avg - E_avg_new) = {avg_de:.4e}."
+            f"different solutions: max(abs(E_i - E_new_i)) = {max_root_de:.4e} Eh, "
+            f"E_avg - E_avg_new = {avg_de:.4e} Eh."
         )
         logger.log_warning(hard_fail_hint)
         raise RuntimeError(
@@ -169,5 +173,5 @@ def check_final_orbital_energy_invariance(
     else:
         logger.log_warning(
             "The active-space solver is not invariant to final orbital "
-            f"rotations; the final-basis energies changed by up to {max_de:.4e}."
+            f"rotations; the final-basis energies changed by up to {max_de:.4e} Eh."
         )
