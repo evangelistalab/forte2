@@ -1132,7 +1132,7 @@ class SelectedCISolver(CIBase):
             right_helper, left_root_in_state, right_root_in_state
         )
 
-    def reset_eigensolver(self):
+    def reset_eigensolver(self, guesses=None):
         # sCI eigensolver gets reset every iteration anyway
         pass
 

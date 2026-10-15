@@ -57,7 +57,10 @@ def test_casscf_hf_smaller_active():
 
 
 @pytest.mark.parametrize("final_orbitals", ["semicanonical", "natural"])
-def test_mcoptimizer_final_orbitals_wrong_root(final_orbitals):
+def test_mcoptimizer_final_orbitals_keeps_roots(final_orbitals):
+    # energies with final_orbitals="original"
+    eci = [-100.0536853175, -99.7556761538, -99.7775238494]
+
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
@@ -84,5 +87,5 @@ def test_mcoptimizer_final_orbitals_wrong_root(final_orbitals):
         ),
     )
     mc = MCOptimizer(ci_solver, final_orbitals=final_orbitals)(rhf)
-    with pytest.raises(Exception, match="converged to different roots."):
-        mc.run()
+    mc.run()
+    assert mc.E_ci == approx(eci)

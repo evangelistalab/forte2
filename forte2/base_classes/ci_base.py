@@ -320,16 +320,24 @@ class CIBase(ActiveSpaceSolver):
         for ci_solver in self.sub_solvers:
             ci_solver.set_ints(scalar, oei, tei)
 
-    def reset_eigensolver(self):
+    def reset_eigensolver(self, guesses=None):
         """
         Reset the eigensolver for each sub-solver.
 
         This forces a re-initialization of the eigensolver in the next run, and
-        also forces re-computation of the guess vectors. Useful whenever the
-        integrals have changed (e.g. after semi-canonicalization).
+        replaces its guess vectors. Useful whenever the integrals have changed
+        (e.g. after semi-canonicalization).
+
+        Parameters
+        ----------
+        guesses : list[NDArray], optional
+            Guess vectors for each sub-solver, shape ``(basis_size, nguess)``.
+            If None, each sub-solver builds its guess from the diagonal of the
+            Hamiltonian.
         """
-        for ci_solver in self.sub_solvers:
-            ci_solver.reset_eigensolver()
+        for i, ci_solver in enumerate(self.sub_solvers):
+            guess = guesses[i] if guesses is not None else None
+            ci_solver.reset_eigensolver(guess)
 
     def get_convergence_status(self):
         """

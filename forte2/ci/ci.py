@@ -77,6 +77,7 @@ class _CISingleStateSolver:
 
     ### Non-init attributes
     rebuild_guess: bool = field(default=True, init=False)
+    guess: NDArray | None = field(default=None, init=False)
     executed: bool = field(default=False, init=False)
 
     ### These will be overridden by _RelCISingleStateSolver
@@ -283,7 +284,10 @@ class _CISingleStateSolver:
         # 5. (Re-)build the guess vectors if requested.
         # This is always done on the first run at least, but can be forced again by e.g. reset_eigensolver.
         if self.rebuild_guess:
-            self._build_guess_vectors(Hdiag)
+            if self.guess is not None:
+                self.eigensolver.add_guesses(self.guess)
+            else:
+                self._build_guess_vectors(Hdiag)
             self.rebuild_guess = False
 
         self.eigensolver.add_sigma_builder(self._make_sigma_builder())
@@ -653,8 +657,18 @@ class _CISingleStateSolver:
 
         return top_dets_per_root
 
-    def reset_eigensolver(self):
+    def reset_eigensolver(self, guess=None):
+        """
+        Drop the eigensolver so the next run rebuilds it.
+
+        Parameters
+        ----------
+        guess : NDArray, optional
+            Guess vectors for the next run, shape ``(basis_size, nguess)``. If
+            None, the guess is built from the diagonal of the Hamiltonian.
+        """
         self.eigensolver = None
+        self.guess = guess
         self.rebuild_guess = True
 
 
