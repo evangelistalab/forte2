@@ -1,5 +1,9 @@
+import numpy as np
+
 from forte2 import GHF, System, UHF, X2CParams
+from forte2.data.atom_data import LIGHT_SPEED
 from forte2.helpers.comparisons import approx
+from forte2.scf.scf_base import SCFBase
 
 
 def test_equivalence_to_rhf():
@@ -119,3 +123,48 @@ def test_equivalence_to_uhf():
     scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)
+
+
+def test_ghf_guess_independent_of_degenerate_eigenbasis(monkeypatch):
+    """
+    The Kramers pairs of the SO-X2C guess are degenerate, so the eigensolver may return
+    any rotation within each pair. Under strong spin-orbit coupling, the open-shell GHF
+    has several solutions that differ only in the direction of the spin, so the guess
+    must not depend on that rotation.
+    """
+    xyz = """
+    O 0 0 0
+    H 0 0 1.5
+    H 0 1.4 0"""
+
+    def make_system():
+        return System(
+            xyz=xyz,
+            basis_set="sto-3g",
+            auxiliary_basis_set="def2-universal-JKFIT",
+            unit="bohr",
+            x2c=X2CParams(x2c_type="so", x2c_model="1e", light_speed=LIGHT_SPEED / 10),
+            minao_basis_set=None,
+        )
+
+    options = dict(charge=1, ms_guess=0.5, e_tol=1.0e-10, d_tol=1.0e-6)
+    reference = GHF(**options)(make_system())
+    reference.run()
+
+    rng = np.random.default_rng(0)
+    eigh = SCFBase._eigh
+
+    def eigh_with_rotated_pairs(self, F):
+        eps, C, irreps = eigh(self, F)
+        for i in range(0, len(eps), 2):
+            Z = rng.normal(size=(2, 2)) + 1j * rng.normal(size=(2, 2))
+            C[:, i : i + 2] = C[:, i : i + 2] @ np.linalg.qr(Z)[0]
+        return eps, C, irreps
+
+    # GHF diagonalizes its Fock matrix with its own _eigh, so only the guess is rotated.
+    monkeypatch.setattr(SCFBase, "_eigh", eigh_with_rotated_pairs)
+    rotated = GHF(**options)(make_system())
+    rotated.run()
+
+    assert rotated.E == approx(reference.E)
+    assert rotated.S2 == approx(reference.S2)
