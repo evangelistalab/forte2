@@ -16,6 +16,11 @@ Hamiltonian. To use it, pass an :class:`forte2.X2CParams` instance to the ``x2c`
     A screened nuclear spin-orbit scaling of the spin-orbit terms: ``"boettger"``, ``"dc"``,
     ``"dcb"``, or ``"row-dependent"``. Valid only with ``x2c_type="so"`` and ``x2c_model="1e"``.
 
+``light_speed`` 
+    The speed of light in atomic units (default ``forte2.data.LIGHT_SPEED``, CODATA 2022). 
+    Relativistic effects, including spin-orbit coupling, scale as ``1 / light_speed**2``, so lowering it enlarges them and raising it approaches the nonrelativistic limit; energies and analytic gradients use the same value.
+
+
 Forte2 solves the X2C decoupling in the decontracted basis and projects the result onto the basis
 set you choose. Basis sets contracted for nonrelativistic calculations describe relativistic core
 orbitals poorly, so the examples on this page decontract them with the ``decon-`` prefix.

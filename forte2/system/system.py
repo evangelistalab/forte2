@@ -49,10 +49,10 @@ class System:
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
-    x2c : X2CParams | None, optional, default=None
-        The X2C Hamiltonian to use, specified as an :class:`X2CParams` instance
-        (see its documentation for the available ``x2c_type``, ``x2c_model``, and
-        ``snso_type`` options). If None, no X2C transformation is applied.
+    x2c : X2CParams, optional, default=X2CParams()
+        The X2C Hamiltonian to use (see :class:`X2CParams` for the options). The
+        default, with ``x2c_type=None``, applies no X2C transformation; None is
+        accepted and means the same.
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     overlap_ortho_rtol : float, optional, default=1e-8
@@ -129,7 +129,7 @@ class System:
     # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
-    x2c: X2CParams | None = None
+    x2c: X2CParams = field(default_factory=X2CParams)
     unit: Literal["angstrom", "bohr"] = "angstrom"
     overlap_ortho_rtol: float = 1e-8
     df_ortho_rtol: float | None = None
@@ -173,7 +173,9 @@ class System:
             raise ValueError("cholesky_tol must be non-negative.")
         if self.symmetry_tol < 0:
             raise ValueError("symmetry_tol must be non-negative.")
-        if self.x2c is not None and not isinstance(self.x2c, X2CParams):
+        if self.x2c is None:
+            self.x2c = X2CParams()
+        if not isinstance(self.x2c, X2CParams):
             raise ValueError(
                 f"x2c must be an X2CParams instance or None, but got {type(self.x2c)}."
             )
@@ -182,21 +184,6 @@ class System:
             raise ValueError(
                 f"Invalid integral_backend: {self.integral_backend}. Must be one of {_valid_backends}."
             )
-
-    @property
-    def x2c_type(self):
-        """Spin structure from :attr:`x2c` (``"sf"``, ``"so"``, or None)."""
-        return self.x2c.x2c_type if self.x2c is not None else None
-
-    @property
-    def x2c_model(self):
-        """Decoupling model from :attr:`x2c` (``"1e"``, ``"sap"``, or None)."""
-        return self.x2c.x2c_model if self.x2c is not None else None
-
-    @property
-    def snso_type(self):
-        """SNSO scaling from :attr:`x2c`, or None when not requested."""
-        return self.x2c.snso_type if self.x2c is not None else None
 
     def _common_init(self, skip_basis_init=False, atoms=None):
         self._init_geometry(atoms=atoms)
@@ -275,8 +262,7 @@ class System:
         d["auxiliary_basis_set"] = None
         d["minao_basis_set"] = None
         # json.dump can't serialize an X2CParams instance; store its fields as a dict.
-        if self.x2c is not None:
-            d["x2c"] = asdict(self.x2c)
+        d["x2c"] = asdict(self.x2c)
 
         res = {"init_args": d}
         res["basis_data"] = self.basis.serialize()
@@ -408,15 +394,11 @@ class System:
         self.nminao = self.minao_basis.size if self.minao_basis else None
 
     def _init_x2c(self):
-        if self.x2c_type is not None:
-            assert self.x2c_type in [
-                "sf",
-                "so",
-            ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
+        if self.x2c.x2c_type is not None:
             self.x2c_helper = X2CHelper(self)
         else:
             self.x2c_helper = None
-        if self.x2c_type == "so":
+        if self.x2c.x2c_type == "so":
             self.two_component = True
 
     def _init_fock_builder(self):
@@ -476,13 +458,13 @@ class System:
         NDArray
             Core Hamiltonian integrals matrix.
         """
-        if self.x2c_type in ["sf", "so"]:
+        if self.x2c.x2c_type is not None:
             H = self.x2c_helper.hcore_x2c()
         else:
             T = integrals.kinetic(self)
             V = integrals.nuclear(self)
             H = T + V
-        if self.x2c_type in [None, "sf"] and self.two_component:
+        if self.x2c.x2c_type != "so" and self.two_component:
             H = block_diag_2x2(H)
         return H
 
@@ -594,7 +576,7 @@ class ModelSystem:
 
     def __post_init__(self):
         self.Zsum = 0  # total nuclear charge, here set to zero, so charge can be set to -nel later
-        self.x2c_type = None
+        self.x2c = X2CParams()
         self.nuclear_repulsion = 0.0
         self.nbf = self.hcore.shape[0]
         self.nmo = self.nbf
