@@ -153,6 +153,48 @@ def guess_mix_ghf(C, ha, hb, la, lb, mixing_parameter=np.pi / 4):
     return C
 
 
+def sz_adapt_degenerate_orbitals(eps, C, S, degeneracy_tol=1.0e-8):
+    """
+    Rotate each degenerate set of two-component orbitals onto eigenfunctions of S_z.
+
+    An eigensolver returns an arbitrary basis within a degenerate eigenspace, and this
+    choice differs between LAPACK implementations. Diagonalizing S_z within each
+    eigenspace fixes the basis, up to phases, independently of the eigensolver.
+
+    Parameters
+    ----------
+    eps : NDArray
+        The orbital energies, in ascending order.
+    C : NDArray
+        The two-component MO coefficients, with the alpha AO block above the beta block.
+    S : NDArray
+        The one-component AO overlap matrix.
+    degeneracy_tol : float, optional
+        The largest orbital energy gap within a degenerate set.
+
+    Returns
+    -------
+    NDArray
+        The rotated MO coefficients. Each degenerate set is ordered as pairs of
+        opposite S_z, starting with the largest S_z.
+    """
+    nbf = S.shape[0]
+    C = C.copy()
+    bounds = np.flatnonzero(np.diff(eps) > degeneracy_tol) + 1
+    for block in np.split(np.arange(len(eps)), bounds):
+        if len(block) < 2:
+            continue
+        Ca = C[:nbf, block]
+        Cb = C[nbf:, block]
+        # 2 < i | S_z | j > for i,j in a degenerate set
+        _, U = np.linalg.eigh(Ca.conj().T @ S @ Ca - Cb.conj().T @ S @ Cb)
+        # Interleave the largest and smallest S_z so each +S_z orbital is followed by a -S_z one
+        n = len(block)
+        order = np.stack((np.arange(n)[::-1], np.arange(n)), axis=1).ravel()[:n]
+        C[:, block] = C[:, block] @ U[:, order]
+    return C
+
+
 def alpha_beta_mix(C, mixing_parameter=0.1):
     """
     Induce the breaking of S_z symmetry for GHF calculations.

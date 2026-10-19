@@ -9,7 +9,12 @@ from forte2.symmetry import real_sph_to_j_adapted
 from forte2.helpers import canonical_orth
 from .scf_base import SCFBase
 from .rhf import RHF
-from .scf_utils import guess_mix_ghf, alpha_beta_mix, break_complex_conjugation_symmetry
+from .scf_utils import (
+    guess_mix_ghf,
+    alpha_beta_mix,
+    break_complex_conjugation_symmetry,
+    sz_adapt_degenerate_orbitals,
+)
 
 
 @dataclass
@@ -158,6 +163,10 @@ class GHF(SCFBase):
 
     def _initial_guess(self, H, guess_type="minao"):
         eps, (C,), irreps = RHF._initial_guess(self, H, guess_type)
+        # The guess Hamiltonian is time-reversal symmetric, so its spinors come in
+        # degenerate Kramers pairs, which the eigensolver mixes arbitrarily.
+        S = self.system.ints_overlap()[: self.nbf, : self.nbf]
+        C = sz_adapt_degenerate_orbitals(eps[0], C, S)
         if self.guess_mix and self.ms_guess is not None:
             if self.twicems_guess == 0:
                 mo_a, mo_b = self._guess_ms(C)
@@ -289,7 +298,7 @@ class GHF(SCFBase):
             # send a PR if you want this changed
             return
         basis_info = BasisInfo(self.system, self.system.basis)
-        if self.system.x2c_type == "so":
+        if self.system.x2c.x2c_type == "so":
             logger.log_info1("\nSpinor Composition of MOs (HOMO-6 to HOMO):")
             if not hasattr(self, "Usph2j"):
                 ua, ub = real_sph_to_j_adapted(self.system.basis)

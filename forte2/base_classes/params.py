@@ -2,6 +2,9 @@ from dataclasses import dataclass, field, fields
 from abc import ABC
 from typing import Literal, get_args, get_type_hints, get_origin
 
+import numpy as np
+
+from forte2.data.atom_data import LIGHT_SPEED
 from forte2.lib.det import Determinant
 
 
@@ -56,6 +59,7 @@ class ParamsBase(ABC):
 class X2CParams(ParamsBase):
     """
     Parameters for the exact two-component (X2C) relativistic Hamiltonian.
+    ``X2CParams()`` (all defaults) means no X2C transformation.
 
     Parameters
     ----------
@@ -64,8 +68,9 @@ class X2CParams(ParamsBase):
             - None
             - "sf": Spin-free (scalar) X2C.
             - "so": Spin-orbit (two-component) X2C.
-    x2c_model : str, optional, default="1e"
-        The decoupling model used to build the X2C Hamiltonian. Options are:
+    x2c_model : str | None, optional, default=None
+        The decoupling model used to build the X2C Hamiltonian; "1e" if
+        ``x2c_type`` is set and this is left as None. Options are:
             - None
             - "1e": One-electron X2C (bare-nucleus decoupling).
             - "sap": Superposition of atomic potentials X2C.
@@ -81,21 +86,35 @@ class X2CParams(ParamsBase):
     skip_picture_change : bool, optional, default=False
         If True, evaluate one-electron property operators without the picture change
         correction. Individual property calls can override this.
+    light_speed : float, optional, default=LIGHT_SPEED
+        The speed of light in atomic units used by the X2C transformation and its
+        gradient. Scalar-relativistic and spin-orbit effects scale as
+        ``1 / light_speed**2``, so changing it tunes their strength; the
+        nonrelativistic limit is ``light_speed -> inf``. The SNSO factors are not
+        rescaled with it.
     """
 
     x2c_type: Literal[None, "sf", "so"] = None
-    x2c_model: Literal[None, "1e", "sap"] = "1e"
+    x2c_model: Literal[None, "1e", "sap"] = None
     snso_type: Literal[None, "boettger", "dc", "dcb", "row-dependent"] = None
     skip_picture_change: bool = False
+    light_speed: float = LIGHT_SPEED
 
     def __post_init__(self):
         super().__post_init__()
 
-        if self.x2c_type == None and (self.x2c_model or self.snso_type):
+        if self.x2c_type is None and (self.x2c_model or self.snso_type):
             raise ValueError("x2c_model and snso_type must be None if x2c_type is None")
 
-        if self.x2c_type is not None and self.x2c_model == None:
-            raise ValueError("x2c_model must be set if x2c_type isn't None")
+        if self.x2c_type is not None and self.x2c_model is None:
+            self.x2c_model = "1e"
+
+        if not (np.isfinite(self.light_speed) and self.light_speed > 0):
+            raise ValueError(
+                f"light_speed must be positive and finite, but got {self.light_speed}."
+            )
+        if self.x2c_type is None and self.light_speed != LIGHT_SPEED:
+            raise ValueError("light_speed only affects X2C; set x2c_type as well.")
 
         # SNSO scaling only makes sense for so, 1e.
         if self.snso_type is not None and not (
