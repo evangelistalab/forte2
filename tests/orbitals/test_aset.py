@@ -15,6 +15,7 @@ from forte2 import (
     System,
     X2CParams,
 )
+from forte2.base_classes import DavidsonLiuParams
 from forte2.dsrg import DSRG_MRPT2, RelDSRG_MRPT2
 from forte2.data.atom_data import EH_TO_WN
 from forte2.helpers.comparisons import approx, approx_abs
@@ -288,10 +289,12 @@ def test_aset_4():
     )
 
     rhf = RHF(charge=0, e_tol=1e-10)(system)
+    # tight r_tol so that the CI vectors don't limit the precision of the orbitals
     ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=10,
         active_orbitals=4,
+        davidson_liu_params=DavidsonLiuParams(r_tol=1e-10),
     )
     mc = MCOptimizer(
         ci_solver,

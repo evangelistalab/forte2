@@ -87,6 +87,7 @@ class ActiveSpaceDriver:
             check_final_orbital_energy_invariance,
             make_final_orbitals,
         )
+        from forte2.orbitals.ci_rotation import rotate_ci_vectors
 
         # the solver shares this driver's MO object, so it sees the new orbitals
         self.ci_solver.mos = self.mos
@@ -94,16 +95,13 @@ class ActiveSpaceDriver:
         if self.final_orbitals not in ("semicanonical", "natural"):
             return
 
-        irrep_indices = np.asarray(self.mos.irrep_indices[0], dtype=int)[
-            self.mo_space.orig_to_contig
-        ]
-        C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
-        C_final = make_final_orbitals(
+        contig = self.mos.permute(self.mo_space.orig_to_contig)
+        C_final, Uactv = make_final_orbitals(
             self.final_orbitals,
             system=self.system,
             mo_space=self.mo_space,
-            irrep_indices=irrep_indices,
-            C_contig=C_contig,
+            irrep_indices=np.asarray(contig.irrep_indices[0], dtype=int),
+            C_contig=contig.C[0],
             g1_act=self.make_average_rdm(1),
         )
         # undo the contiguous ordering
@@ -116,9 +114,11 @@ class ActiveSpaceDriver:
         # orbital step: new integrals, then a plain run of the solver
         ints = self.ci_solver.make_active_space_ints()
         self.ci_solver.set_ints(ints.E, ints.H, ints.V)
-        # reset_eigensolver() drops the DavidsonLiuSolver, so the rerun rebuilds it
-        # from davidson_liu_params (including its maxiter).
-        self.ci_solver.reset_eigensolver()
+        guesses = None
+        if self.ci_solver.orbital_rotation_invariant:
+            # rotated vectors are the converged solution in the new basis
+            guesses = rotate_ci_vectors(self.ci_solver, Uactv)
+        self.ci_solver.reset_eigensolver(guesses=guesses)
         self.ci_solver.run()
         self._copy_solver_results()
 

@@ -108,8 +108,8 @@ class DSRGBase(Method):
         self.pv = slice(self.nact, self.nact + self.nvirt)
 
         self.mos = self.parent_method.mos.copy()
-        perm = self.mo_space.orig_to_contig
-        self._C = self.mos.C[0][:, perm].copy()
+        contig = self.mos.permute(self.mo_space.orig_to_contig)
+        self._C = contig.C[0]
 
         self.ci_solver = self.parent_method.ci_solver
         self.E_core_orig = self.ci_solver.sub_solvers[0].ints.E
@@ -119,9 +119,7 @@ class DSRGBase(Method):
         self.semicanonicalizer = Semicanonicalizer(
             system=self.system,
             mo_space=self.mo_space,
-            irrep_indices=np.array(self.mos.irrep_indices[0])[
-                self.mo_space.orig_to_contig
-            ],
+            irrep_indices=np.array(contig.irrep_indices[0]),
             mix_active=False,
             # do not mix correlated core and frozen core orbitals after MCSCF
             mix_inactive=False,

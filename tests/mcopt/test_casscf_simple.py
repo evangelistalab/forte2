@@ -150,6 +150,7 @@ def test_casscf_water_nos():
         basis_set="cc-pvdz",
         auxiliary_basis_set="def2-universal-jkfit",
         unit="angstrom",
+        symmetry=True,
     )
 
     rhf = RHF(charge=0, e_tol=1e-10, d_tol=1e-5)(system)

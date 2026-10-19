@@ -116,8 +116,8 @@ def test_ci_overlap_noncontiguous_spaces_and_different_bases(algorithm):
         rhf = RHF(charge=0, e_tol=1e-12)(_water(1.0, basis_set=basis_set))
         rhf.run()
         # column j of the permuted orbitals is original orbital order[j]
-        order = order + list(range(len(order), rhf.mos.C[0].shape[1]))
-        rhf.mos.C[0] = rhf.mos.C[0][:, order]
+        order = order + list(range(len(order), rhf.mos.nmo))
+        rhf.mos = rhf.mos.permute(order)
         position = {orbital: j for j, orbital in enumerate(order)}
         ci_solver = CISolver(
             State(nel=10, multiplicity=1, ms=0.0),
@@ -297,7 +297,7 @@ def test_ci_overlap_algorithms_agree():
         system = _water(scale)
         rhf = RHF(charge=0, e_tol=1e-12)(system)
         rhf.run()
-        rhf.mos.C[0][:, :7] = rhf.mos.C[0][:, order]
+        rhf.mos = rhf.mos.permute(order + list(range(7, rhf.mos.nmo)))
         ci_solver = CISolver(
             State(nel=10, multiplicity=1, ms=0.0),
             core_orbitals=[0, 1, 2],
@@ -324,7 +324,7 @@ def test_ci_overlap_two_component_algorithms_agree():
         system = _water(scale, x2c=x2c)
         ghf = GHF(charge=0, e_tol=1e-12)(system)
         ghf.run()
-        ghf.mos.C[0][:, :14] = ghf.mos.C[0][:, order]
+        ghf.mos = ghf.mos.permute(order + list(range(14, ghf.mos.nmo)))
         ci_solver = RelCISolver(
             nel=10,
             core_orbitals=list(range(6)),
