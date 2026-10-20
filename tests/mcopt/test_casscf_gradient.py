@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import CISolver, MCOptimizer, RHF, State, System, X2CParams
-from forte2.gradients import FDGradient
+from forte2.gradients import FiniteDifference
 from forte2.integrals import LIBCINT_AVAILABLE
 from tests.gradient_test_utils import xyz_string
 
@@ -100,7 +100,7 @@ def test_casscf_gradient_h2_full_active_finite_difference_and_translation():
 
     casscf = _casscf(symbols, coordinates, active_orbitals=2)
     analytical = casscf.gradient()
-    fd = FDGradient()(casscf)
+    fd = FiniteDifference()(casscf)
     numerical = fd.gradient()
 
     assert analytical == pytest.approx(numerical, abs=1.0e-7)
@@ -115,7 +115,7 @@ def test_casscf_gradient_lih_core_active_selected_finite_difference():
 
     casscf = _casscf(symbols, coordinates, **kwargs)
     analytical = casscf.gradient()
-    fd = FDGradient()(casscf)
+    fd = FiniteDifference()(casscf)
     numerical = fd.gradient()
 
     assert analytical == pytest.approx(numerical, abs=1.0e-7)
@@ -135,7 +135,7 @@ def test_gasscf_gradient_h2_two_gas_finite_difference_and_translation():
 
     gasscf = _gasscf_h2(symbols, coordinates)
     analytical = gasscf.gradient()
-    fd = FDGradient()(gasscf)
+    fd = FiniteDifference()(gasscf)
     numerical = fd.gradient()
 
     assert analytical == pytest.approx(numerical, abs=1.0e-7)
@@ -164,7 +164,7 @@ def test_gasscf_gradient_n2_three_gas_selected_finite_difference():
     assert mc.ci_solver.sub_solvers[0].state.gas_max == [4, 4, 2]
     assert len(mc.ci_solver.sub_solvers[0].ci_strings.gas_occupations) > 1
 
-    fd = FDGradient()(mc)
+    fd = FiniteDifference()(mc)
     numerical = fd.gradient()
 
     assert analytical == pytest.approx(numerical, abs=1.0e-6)
@@ -353,7 +353,7 @@ def test_casscf_gradient_gaussian_nuclear_charges_finite_difference():
     )(rhf)
 
     analytical = mc.gradient()
-    fd = FDGradient()(mc)
+    fd = FiniteDifference()(mc)
     numerical = fd.gradient()
 
     assert analytical == pytest.approx(numerical, abs=1.0e-8)
@@ -384,7 +384,7 @@ def test_sf_x2c_casscf_gradient_finite_difference():
     )(rhf)
 
     analytical = mc.gradient()
-    fd = FDGradient()(mc)
+    fd = FiniteDifference()(mc)
     numerical = fd.gradient()
 
     assert analytical == pytest.approx(numerical, abs=1.0e-8)
