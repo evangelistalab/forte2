@@ -384,3 +384,46 @@ def test_rel_ci_spin2_spin_free_limit():
     )
     ci.run()
     assert not hasattr(ci.ci_solver, "spin2")
+
+
+@pytest.mark.parametrize("x2c_type", ["so", "sf"])
+def test_rel_ci_spin2_picture_change(x2c_type):
+    r"""Picture change corrects the spin matrices but leaves the one-electron value exact.
+
+    A single electron has :math:`\langle S^2 \rangle = 3/4` whatever the relativistic
+    treatment, and no two-body contribution, so a heavy one-electron ion pins down the
+    same-electron part of the picture-changed operator. The correction to the spin
+    matrices themselves is large for Br, which the comparison against the untransformed
+    matrices checks. The sf case exercises the spin-free path, where the decoupling
+    matrices carry no spin structure and each spatial block is transformed on its own.
+    """
+    from forte2.ci.rel_ci_utils import spin_matrices
+
+    system = System(
+        xyz="Br 0 0 0",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e"),
+    )
+    scf = GHF(charge=34, ms_guess=0.5)(system)
+    ci = CI(RelCISolver(nel=1, active_orbitals=4, nroots=1))(scf)
+    ci.run()
+
+    assert ci.ci_solver.spin2[0] == approx(0.75)
+
+    C = ci.mos.C[0][:, ci.ci_solver.core_indices + ci.ci_solver.active_indices]
+    S_z, _, _, S2_1e = spin_matrices(system, C)
+    S_z_raw, _, _, S2_1e_raw = spin_matrices(system, C, skip_picture_change=True)
+    # s_z picks up a sizeable correction, the same-electron term of S^2 none at all
+    assert np.abs(S_z - S_z_raw).max() > 1e-3
+    assert np.abs(S2_1e - S2_1e_raw).max() == approx(0.0)
+
+    # the same escape hatch, set once on the system instead of per call
+    system_nopc = System(
+        xyz="Br 0 0 0",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e", skip_picture_change=True),
+    )
+    GHF(charge=34, ms_guess=0.5)(system_nopc).run()
+    assert np.abs(spin_matrices(system_nopc, C)[0] - S_z_raw).max() == approx(0.0)

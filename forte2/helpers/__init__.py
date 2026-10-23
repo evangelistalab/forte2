@@ -10,6 +10,7 @@ from .matrix_functions import (
     real_orthogonal_logm,
     i_sigma_dot,
     split_unitary,
+    sigma_dot,
 )
 from .diis import DIIS
 from . import logger  # setup logging configuration
