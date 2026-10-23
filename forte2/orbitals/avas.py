@@ -32,6 +32,9 @@ class AVAS(Method):
         - "total": Selects a total number of active orbitals. Must define `num_active`.
     diagonalize : bool, optional, default=True
         Whether to diagonalize the occupied and virtual space overlap matrices.
+    cas : tuple | str | None, optional, default=None
+        A direct specification of the CAS as a tuple of (x, y) specifying a CAS space of x electrons in y orbitals (or spinors in cas of GHF reference).
+        If specified, the tuple is parsed and the "separate" selection backend will be used, if selection_method is specified, it'll be ignored.
     sigma : float, optional, default=0.98
         Cumulative cutoff for the eigenvalues of the overlap matrix, controlling the size of the active space.
     cutoff : float, optional, default=1.0
@@ -65,12 +68,13 @@ class AVAS(Method):
     subspace_pi_planes: list = None
     selection_method: str = "cumulative"
     diagonalize: bool = True
+    cas: tuple | None = None
     sigma: float = 0.98
     cutoff: float = 1.0
     evals_threshold: float = 1.0e-6
-    num_active: int = 0
     num_active_docc: int = 0
     num_active_uocc: int = 0
+    num_active: int = 0
 
     executed: bool = field(init=False, default=False)
 
@@ -137,6 +141,53 @@ class AVAS(Method):
             "total",
         ], f"Invalid selection method: {self.selection_method}"
 
+        # parse smart CAS specification first
+        if self.cas is not None:
+            if not isinstance(self.cas, tuple):
+                raise TypeError(
+                    f"type of 'cas' must be a tuple of ints, got {type(self.cas)} instead!"
+                )
+            if len(self.cas) != 2:
+                raise ValueError(
+                    f"'cas' must be a tuple of (nel, norb), got {self.cas} instead!"
+                )
+            if not all(isinstance(x, int) for x in self.cas):
+                raise TypeError(
+                    f"'cas' must be a tuple of ints, got {self.cas} instead!"
+                )
+            self.selection_method = "separate"
+            _nel, _nactv = self.cas
+            if isinstance(self.parent_method, GHF):
+                if _nel < 0 or _nel > _nactv:
+                    raise ValueError(
+                        f"cas={self.cas} cannot place {_nel} electrons in {_nactv} spinors!"
+                    )
+                self.num_active_docc = _nel
+                self.num_active_uocc = _nactv - _nel
+            else:  # RHF or ROHF
+                _socc_error = ""
+                if isinstance(self.parent_method, ROHF):
+                    # abs takes care of negative ms
+                    _nsocc = abs(round(2 * self.parent_method.ms))
+                    _nel -= _nsocc
+                    _nactv -= _nsocc
+                    _socc_error = f" outside the {_nsocc} singly occupied orbitals"
+                if _nel % 2 != 0:
+                    raise ValueError(
+                        f"cas={self.cas} has an odd number of electrons ({_nel}){_socc_error}, "
+                        "which cannot doubly occupy orbitals!"
+                    )
+                if _nel < 0 or _nel > 2 * _nactv:
+                    raise ValueError(
+                        f"cas={self.cas} cannot place {_nel} electrons in {_nactv} orbitals{_socc_error}!"
+                    )
+                self.num_active_docc = _nel // 2
+                self.num_active_uocc = _nactv - self.num_active_docc
+            logger.log_info1(
+                f"AVAS: converted cas={self.cas} into num_active_docc={self.num_active_docc}, "
+                f"num_active_uocc={self.num_active_uocc}"
+            )
+
         if self.selection_method == "cumulative":
             assert (
                 self.sigma >= 0.0 and self.sigma <= 1.0 + 1e-10
@@ -153,9 +204,16 @@ class AVAS(Method):
             assert (
                 self.num_active_uocc >= 0
             ), "Number of active unoccupied orbitals cannot be negative."
+            if isinstance(self.parent_method, GHF):
+                nocc = self.parent_method.nel
+            else:
+                nocc = min(self.parent_method.na, self.parent_method.nb)
+            assert (
+                self.num_active_docc <= nocc
+            ), f"num_active_docc={self.num_active_docc} exceeds the {nocc} occupied orbitals of the reference."
             if isinstance(self.parent_method, ROHF):
                 nactv = (
-                    round(2 * self.parent_method.ms)
+                    abs(round(2 * self.parent_method.ms))
                     + self.num_active_docc
                     + self.num_active_uocc
                 )
@@ -500,6 +558,10 @@ class AVAS(Method):
         inact_uocc = np.array(inact_uocc, dtype=int)
         act_docc = np.array(act_docc, dtype=int)
         act_uocc = np.array(act_uocc, dtype=int)
+        if nsocc == 0 and (len(act_docc) == 0 or len(act_uocc) == 0):
+            logger.log_warning(
+                f"selection_method {self.selection_method} has selected an empty active space with {len(act_docc)} doubly occupied orbitals and {len(act_uocc)} unoccupied orbitals."
+            )
 
         logger.log_info1(
             f"\nSum of {sigma_type}values of selected orbitals:\t{s_act_sum:.6f}"
