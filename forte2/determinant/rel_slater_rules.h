@@ -47,18 +47,19 @@ class RelSlaterRules {
     /// @brief Compute the energy of a determinant
     /// @param det The determinant for which to compute the energy.
     /// @return The energy of the determinant.
-    double energy(const Determinant& det) const;
+    double energy(const SpinorDeterminant& det) const;
 
     /// @brief Compute the energies of a vector of determinants
     /// @param dets The vector of determinants for which to compute the energies.
     /// @return A vector containing the energies of the determinants.
-    np_vector energies(const std::vector<Determinant>& dets) const;
+    np_vector energies(const std::vector<SpinorDeterminant>& dets) const;
 
     /// @brief Compute the matrix element of the Hamiltonian between two determinants
     /// @param lhs The left-hand side determinant.
     /// @param rhs The right-hand side determinant.
     /// @return The matrix element of the Hamiltonian between the two determinants.
-    std::complex<double> slater_rules(const Determinant& lhs, const Determinant& rhs) const;
+    std::complex<double> slater_rules(const SpinorDeterminant& lhs,
+                                      const SpinorDeterminant& rhs) const;
 
   private:
     /// @brief Number of spin(or)-orbitals

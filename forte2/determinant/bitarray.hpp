@@ -573,6 +573,12 @@ template <size_t N> class BitArray {
     /// @param n the orbital index
     /// @return the fermionic sign
     double slater_sign(size_t n) const {
+        if constexpr (N == 128) {
+            if (n < bits_per_word) {
+                return ui64_sign(words_[0], n);
+            }
+            return ui64_bit_parity(words_[0]) * ui64_sign(words_[1], n - bits_per_word);
+        }
         // Optimized version for 64 bits (skips counting the bits in the previous words)
         if (n < bits_per_word) {
             return ui64_sign(words_[0], n);
@@ -654,6 +660,29 @@ template <size_t N> class BitArray {
             double sign = ui64_sign_reverse(words_[word_m], whichbit(m)) *
                           ui64_sign(words_[word_n], whichbit(n));
             return (count % 2 == 0) ? sign : -sign;
+        }
+    }
+
+    /// @brief Return the fermionic sign of a^+_a a^+_b a_j a_i applied to this BitArray.
+    /// @param i the first occupied bit index
+    /// @param j the second occupied bit index
+    /// @param a the first unoccupied bit index
+    /// @param b the second unoccupied bit index
+    /// @return the fermionic sign, assuming i, j, a, and b are distinct
+    double double_excitation_sign(size_t i, size_t j, size_t a, size_t b) const {
+        if ((((i < a) && (j < a) && (i < b) && (j < b)) == true) ||
+            (((i < a) || (j < a) || (i < b) || (j < b)) == false)) {
+            if ((i < j) ^ (a < b)) {
+                return (-1.0 * slater_sign(i, j) * slater_sign(a, b));
+            } else {
+                return (slater_sign(i, j) * slater_sign(a, b));
+            }
+        } else {
+            if ((i < j) ^ (a < b)) {
+                return (-1.0 * slater_sign(i, b) * slater_sign(j, a));
+            } else {
+                return (slater_sign(i, a) * slater_sign(j, b));
+            }
         }
     }
 
