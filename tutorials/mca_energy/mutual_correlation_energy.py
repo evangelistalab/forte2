@@ -27,8 +27,8 @@ def _spin_dependent_rdms(ci, root=0):
     
     ci_solver = ci.sub_solvers[0]
 
-    a1, b1 = ci_solver.make_sd_1rdm(root)
-    aa_pair, ab2, bb_pair = ci_solver.make_sd_2rdm(root)
+    a1, b1 = ci_solver.make_rdm(root, order=1, spin_type="sd")
+    aa_pair, ab2, bb_pair = ci_solver.make_rdm(root, order=2, spin_type="sd")
 
     aa2 = forte2.lib.cpp_helpers.packed_tensor4_to_tensor4(aa_pair)
     bb2 = forte2.lib.cpp_helpers.packed_tensor4_to_tensor4(bb_pair)
@@ -77,7 +77,7 @@ def fragment_correlation_energy_enumerated(
 
     ints = forte2.jkbuilder.RestrictedMOIntegrals(
         system=ci.system,
-        C=ci.C[0],
+        C=ci.mos.C[0],
         orbitals=frag_orbs,
         core_orbitals=list(core_orbitals),
     )
@@ -161,7 +161,7 @@ def fragment_decomposition_energy_enumerated(
 
     ints = forte2.jkbuilder.RestrictedMOIntegrals(
         system=ci.system,
-        C=ci.C[0],
+        C=ci.mos.C[0],
         orbitals=all_fragment_orbs,
         core_orbitals=list(core_orbitals),
     )

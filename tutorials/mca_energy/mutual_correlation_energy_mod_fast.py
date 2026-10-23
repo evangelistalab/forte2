@@ -118,10 +118,10 @@ class MutualCorrelationEnergyAnalysis:
                 )
 
         self.total_correlation = (
-            sum(self.M1.values())
-            + sum(self.M2.values())
-            + sum(self.M3.values())
-            + sum(self.M4.values())
+           # sum(self.M1.values())
+             sum(self.M2.values())
+           # + sum(self.M3.values())
+           # + sum(self.M4.values())
         )
 
     @property
@@ -180,7 +180,7 @@ class MutualCorrelationEnergyAnalysis:
     ):
 
         lines = [
-            f"Total Correlation Energy (Sum of the 2-Cumulant Terms): {self.total_correlation:16.10f}",
+            f"Total M2 Correlation Energy : {self.total_correlation:16.10f}",
             "",
             f"M2 Terms (|value| > {print_threshold:.1e})",
             "------------------------------------------",
@@ -274,13 +274,13 @@ def _analysis_basis(ci, root=0, nat_orbs=False):
     gamma1 = _spin_summed_1rdm(ci, root=root)
     if not nat_orbs:
         return {
-            "C": ci.C[0],
+            "C": ci.mos.C[0],
             "gamma1": gamma1,
             "occupations": None,
             "orbital_rotation": None,
         }
 
-    C = np.array(ci.C[0], copy=True)
+    C = np.array(ci.mos.C[0], copy=True)
 
     active_indices = list(ci.mo_space.active_indices)
 
@@ -322,7 +322,7 @@ def _transform_2tensor(tensor, orbital_rotation):
 
 def _spin_summed_1rdm(ci, root=0):
     ci_solver = ci.sub_solvers[0]
-    a1, b1 = ci_solver.make_sd_1rdm(root)
+    a1, b1 = ci_solver.make_rdm(root, spin_type="sd", order=1)
     return a1 + b1
 
 def _hashable_value(value):
@@ -433,8 +433,8 @@ def _spin_summed_2cumulant(ci, root=0, orbital_rotation=None):
     ci_solver = ci.sub_solvers[0]
 
     if orbital_rotation is not None:
-            gamma1 = _transform_1rdm(ci_solver.make_sf_1rdm(root), orbital_rotation)
-            gamma2 = _transform_2tensor(ci_solver.make_sf_2rdm(root), orbital_rotation)
+            gamma1 = _transform_1rdm(ci_solver.make_rdm(root, order=1, spin_type="sf"), orbital_rotation)
+            gamma2 = _transform_2tensor(ci_solver.make_rdm(root, order=2, spin_type="sf"), orbital_rotation)
             spin_summed_cumulant = gamma2-np.einsum("pr,qs->pqrs", gamma1, gamma1) +0.5*np.einsum("ps,qr->pqrs", gamma1,gamma1)
             return spin_summed_cumulant
 
@@ -442,8 +442,8 @@ def _spin_summed_2cumulant(ci, root=0, orbital_rotation=None):
     if cache_key in _CUMULANT_CACHE:
         return _CUMULANT_CACHE[cache_key]
 
-    gamma1 = ci_solver.make_sf_1rdm(root)
-    gamma2 = ci_solver.make_sf_2rdm(root)
+    gamma1 = ci_solver.make_rdm(root, order=1, spin_type="sf")
+    gamma2 = ci_solver.make_rdm(root, order=2, spin_type="sf")
 
     spin_summed_cumulant = gamma2 -np.einsum("pr,qs->pqrs", gamma1, gamma1) +0.5*np.einsum("ps,qr->pqrs", gamma1,gamma1)
     _CUMULANT_CACHE[cache_key] = spin_summed_cumulant
@@ -526,7 +526,7 @@ def fragment_correlation_energy_enumerated(
             )
         
     if C is None:
-        C = ci.C[0]    
+        C = ci.mos.C[0]    
     
     #One-electron terms contribute only to body_order 1 or 2. Two-electron terms
     #can contribute to body_order 1, 2, 3, or 4.
