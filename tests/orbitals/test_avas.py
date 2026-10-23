@@ -11,6 +11,7 @@ from forte2 import (
     RelCISolver,
     State,
     System,
+    X2CParams,
 )
 from forte2.helpers.comparisons import approx
 from forte2.symmetry.sym_utils import COTTON_LABELS
@@ -73,6 +74,43 @@ def test_avas_inputs():
             sigma=1.2,
             subspace=["N(2p)"],
         )(rhf)
+
+    # raise on malformed cas
+    for cas in [[6, 6], (6, 6, 1), (6.0, 6)]:
+        with pytest.raises(Exception):
+            avas = AVAS(subspace=["N(2p)"], cas=cas)(rhf)
+
+    # raise on odd electron count or too many electrons for the orbitals
+    for cas in [(5, 6), (8, 3), (-2, 3)]:
+        with pytest.raises(Exception):
+            avas = AVAS(subspace=["N(2p)"], cas=cas)(rhf)
+
+    # same checks after removing the singly occupied orbitals
+    rohf = ROHF(charge=0, ms=1.0, e_tol=1e-12)(system)
+    for cas in [(5, 6), (6, 3), (0, 3)]:
+        with pytest.raises(Exception):
+            avas = AVAS(subspace=["N(2p)"], cas=cas)(rohf)
+
+    # one electron per spinor: more electrons than spinors
+    ghf = GHF(charge=0, e_tol=1e-12)(system)
+    with pytest.raises(Exception):
+        avas = AVAS(subspace=["N(2p)"], cas=(7, 6))(ghf)
+
+    # raise if more active occupied orbitals are requested than the reference has
+    with pytest.raises(Exception):
+        avas = AVAS(
+            subspace=["N(2p)"],
+            selection_method="separate",
+            num_active_docc=8,
+            num_active_uocc=2,
+        )(rhf)
+    for scf, cas in [(rhf, (16, 10)), (rohf, (16, 10)), (ghf, (16, 18))]:
+        with pytest.raises(Exception):
+            avas = AVAS(subspace=["N(2p)"], cas=cas)(scf)
+
+    # don't raise if every occupied orbital is active
+    for scf, cas in [(rhf, (14, 10)), (rohf, (14, 10)), (ghf, (14, 18))]:
+        avas = AVAS(subspace=["N(2p)"], cas=cas)(scf)
 
 
 def test_avas_subspace():
@@ -548,6 +586,71 @@ def test_avas_keeps_symmetry_labels():
     assert avas.mos.irrep_labels[0] == [names[h] for h in indices]
 
     # A subspace on one of the two equivalent atoms breaks the symmetry.
-    one_atom = AVAS(subspace=["N1(2p)"], diagonalize=True)(RHF(charge=0)(n2(True)))
+    one_atom = AVAS(
+        subspace=["N1(2p)"],
+        diagonalize=True,
+        selection_method="cumulative",
+    )(RHF(charge=0)(n2(True)))
     with pytest.raises(ValueError, match="AVAS subspace breaks D2H symmetry"):
         one_atom.run()
+
+
+def test_avas_cas_specification_rohf():
+    # from num_active_docc=2, num_active_uocc=3
+    eref = -108.42593367486047
+
+    sys = System(
+        xyz="N 0 0 0; N 0 0 1",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+    )
+    scf = ROHF(charge=1, ms=-0.5)(sys)
+    avas = AVAS(
+        subspace=["N(2p)"],
+        cas=(5, 6),
+    )(scf)
+    ci_solver = CISolver(states=State(nel=scf.nel, multiplicity=2, ms=0.5))
+    ci = CI(ci_solver)(avas)
+    ci.run()
+    assert ci.E_ci[0] == approx(eref)
+
+
+def test_avas_cas_specification_rhf():
+    # from num_active_docc=4, num_active_uocc=2
+    eref = -109.01279230660653
+
+    sys = System(
+        xyz="N 0 0 0; N 0 0 1",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+    )
+    scf = RHF(charge=0)(sys)
+    avas = AVAS(
+        subspace=["N(2s)", "N(2p)"],
+        cas=(8, 6),
+    )(scf)
+    ci_solver = CISolver(states=State(nel=scf.nel, multiplicity=1, ms=0.0))
+    ci = CI(ci_solver)(avas)
+    ci.run()
+    assert ci.E_ci[0] == approx(eref)
+
+
+def test_avas_cas_specification_ghf():
+    # from num_active_docc=8, num_active_uocc=4
+    eref = -113.49718153801523
+
+    sys = System(
+        xyz="N 0 0 0; N 0 0 1",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        x2c=X2CParams(x2c_type="so", snso_type="boettger", light_speed=10.0),
+    )
+    scf = GHF(charge=0)(sys)
+    avas = AVAS(
+        subspace=["N(2s)", "N(2p)"],
+        cas=(8, 12),
+    )(scf)
+    ci_solver = RelCISolver(nel=scf.nel)
+    ci = CI(ci_solver)(avas)
+    ci.run()
+    assert ci.E_ci[0] == approx(eref)
