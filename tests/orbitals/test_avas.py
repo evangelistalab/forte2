@@ -85,6 +85,10 @@ def test_avas_inputs():
         with pytest.raises(Exception):
             avas = AVAS(subspace=["N(2p)"], cas=cas)(rhf)
 
+    # more virtuals than available
+    with pytest.raises(Exception):
+        avas = AVAS(subspace=["N(2p)"], cas=(6, 25))(rhf)
+
     # same checks after removing the singly occupied orbitals
     rohf = ROHF(charge=0, ms=1.0, e_tol=1e-12)(system)
     for cas in [(5, 6), (6, 3), (0, 3)]:
@@ -186,7 +190,7 @@ def test_avas_total_num_active_too_large():
     )
     rhf = RHF(charge=0, e_tol=1e-11)(system)
     rhf.run()
-    with pytest.raises(ValueError, match="exceeds the number"):
+    with pytest.raises(Exception, match="must not exceed"):
         AVAS(selection_method="total", num_active=999, subspace=["N(2p)"])(rhf).run()
 
 

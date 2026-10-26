@@ -141,6 +141,19 @@ class AVAS(Method):
             "total",
         ], f"Invalid selection method: {self.selection_method}"
 
+        nmo = self.parent_method.system.nmo
+        if isinstance(self.parent_method, (RHF, ROHF)):
+            ndocc = min(self.parent_method.na, self.parent_method.nb)
+            nuocc = nmo - ndocc
+            nsocc = 0
+            if isinstance(self.parent_method, ROHF):
+                nsocc = abs(round(2 * self.parent_method.ms))
+        else:  # GHF
+            nmo *= 2
+            ndocc = self.parent_method.nel
+            nuocc = nmo - ndocc
+            nsocc = 0
+
         # parse smart CAS specification first
         if self.cas is not None:
             if not isinstance(self.cas, tuple):
@@ -167,11 +180,9 @@ class AVAS(Method):
             else:  # RHF or ROHF
                 _socc_error = ""
                 if isinstance(self.parent_method, ROHF):
-                    # abs takes care of negative ms
-                    _nsocc = abs(round(2 * self.parent_method.ms))
-                    _nel -= _nsocc
-                    _nactv -= _nsocc
-                    _socc_error = f" outside the {_nsocc} singly occupied orbitals"
+                    _nel -= nsocc
+                    _nactv -= nsocc
+                    _socc_error = f" outside the {nsocc} singly occupied orbitals"
                 if _nel % 2 != 0:
                     raise ValueError(
                         f"cas={self.cas} has an odd number of electrons ({_nel}){_socc_error}, "
@@ -204,19 +215,17 @@ class AVAS(Method):
             assert (
                 self.num_active_uocc >= 0
             ), "Number of active unoccupied orbitals cannot be negative."
-            if isinstance(self.parent_method, GHF):
-                nocc = self.parent_method.nel
-            else:
-                nocc = min(self.parent_method.na, self.parent_method.nb)
-            assert (
-                self.num_active_docc <= nocc
-            ), f"num_active_docc={self.num_active_docc} exceeds the {nocc} occupied orbitals of the reference."
-            if isinstance(self.parent_method, ROHF):
-                nactv = (
-                    abs(round(2 * self.parent_method.ms))
-                    + self.num_active_docc
-                    + self.num_active_uocc
+
+            if self.num_active_docc > ndocc:
+                raise ValueError(
+                    f"num_active_docc={self.num_active_docc} exceeds the {ndocc} occupied orbitals of the reference."
                 )
+            if self.num_active_uocc > nuocc:
+                raise ValueError(
+                    f"num_active_uocc={self.num_active_uocc} exceeds the {nuocc} occupied orbitals of the reference."
+                )
+            if isinstance(self.parent_method, ROHF):
+                nactv = nsocc + self.num_active_docc + self.num_active_uocc
                 assert (
                     nactv > 0
                 ), f"ROHF reference given, but num_active_docc + num_active_uocc + ms * 2 = {nactv}, at least one active orbital must be selected."
@@ -227,6 +236,9 @@ class AVAS(Method):
                 ), f"Number of active orbitals must be positive, got {nactv}."
         elif self.selection_method == "total":
             assert self.num_active > 0, "Number of active orbitals must be positive."
+            assert (
+                self.num_active <= nmo
+            ), "Number of active orbitals must not exceed total number of MOs"
 
     def _parse_subspace(self, ss_str):
         # get rid of leading and trailing whitespaces
