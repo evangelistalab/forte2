@@ -147,6 +147,16 @@ class DavidsonLiuParams(ParamsBase):
         The energy convergence threshold for the solver.
     r_tol : float, optional, default=1e-6
         The residual convergence threshold for the solver.
+    follow_roots : bool, optional, default=False
+        If True, from the second iteration on, each root is the subspace eigenvector with the
+        largest overlap with that root's vector from the previous iteration, instead of the
+        eigenvector next in energy order (or in distance from the energy shift). This keeps an
+        interior root on the state its guess started on when other eigenvalues lie closer to
+        the shift.
+    energy_window : float, optional, default=None
+        If set, only subspace eigenvalues within this distance of the energy shift can become
+        roots, which keeps an interior root from collapsing onto distant states such as the
+        ground state. Requires an energy shift.
     """
 
     guess_per_root: int = 2
@@ -156,9 +166,15 @@ class DavidsonLiuParams(ParamsBase):
     maxiter: int = 100
     e_tol: float = 1e-12
     r_tol: float = 1e-6
+    follow_roots: bool = False
+    energy_window: float = None
 
     def __post_init__(self):
         super().__post_init__()
+        if self.energy_window is not None and self.energy_window <= 0:
+            raise ValueError(
+                f"Davidson-Liu solver: energy_window ({self.energy_window}) must be positive."
+            )
         if self.collapse_per_root < 1:
             raise ValueError(
                 f"Davidson-Liu solver: collapse_per_root ({self.collapse_per_root}) must be greater than or equal to 1."

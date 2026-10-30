@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
@@ -408,3 +409,53 @@ def test_dl_shift():
     P_ref = ref_vecs[:, :nroot] @ ref_vecs[:, :nroot].T
     diff_norm = np.linalg.norm(P_solver - P_ref)
     assert diff_norm < 1e-5, f"Eigenvector subspaces differ (norm {diff_norm:.2e})"
+
+
+def test_dl_follow_roots():
+    """An interior root whose neighbour lies closer to the energy shift than the root itself.
+
+    Selecting by distance from the shift converges on the neighbour; following the guess by
+    overlap converges on the state the guess started on.
+    """
+    rng = np.random.default_rng(7)
+    size = 400
+    H = np.diag(0.1 * np.arange(size))
+    C = rng.normal(scale=0.02, size=(size, size))
+    H += 0.5 * (C + C.T)
+    ref_vals, ref_vecs = np.linalg.eigh(H)
+    k = 200
+    shift = ref_vals[k] + 0.7 * (ref_vals[k + 1] - ref_vals[k])
+
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = H @ basis_block
+
+    def solve(**params):
+        solver = DavidsonLiuSolver(
+            size=size,
+            nroot=1,
+            davidson_liu_params=DavidsonLiuParams(
+                collapse_per_root=4, basis_per_root=8, r_tol=1e-6, **params
+            ),
+            energy_shift=shift,
+        )
+        solver.add_h_diag(np.diag(H))
+        solver.add_sigma_builder(sigma_builder)
+        # unit vector k is close to eigenvector k
+        solver.add_guesses(np.eye(size)[:, [k]])
+        evals, evecs = solver.solve()
+        assert solver.converged
+        return evals[0], evecs[:, 0]
+
+    e, _ = solve()
+    assert e == approx(ref_vals[k + 1])
+
+    e, v = solve(follow_roots=True, energy_window=1.0)
+    assert e == approx(ref_vals[k])
+    assert abs(ref_vecs[:, k] @ v) == approx(1.0)
+
+    with pytest.raises(ValueError):
+        DavidsonLiuParams(energy_window=0.0)
+    with pytest.raises(ValueError):
+        DavidsonLiuSolver(
+            size=size, nroot=1, davidson_liu_params=DavidsonLiuParams(energy_window=1.0)
+        )

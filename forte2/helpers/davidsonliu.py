@@ -56,6 +56,9 @@ class DavidsonLiuSolver:
         self.e_tol = self.davidson_liu_params.e_tol
         # convergence tolerance for residuals
         self.r_tol = self.davidson_liu_params.r_tol
+        # root selection
+        self.follow_roots = self.davidson_liu_params.follow_roots
+        self.energy_window = self.davidson_liu_params.energy_window
         # sanity checks
         if self.size <= 0:
             raise ValueError(
@@ -63,6 +66,10 @@ class DavidsonLiuSolver:
             )
         if self.nroot <= 0:
             raise ValueError("Davidson-Liu solver called with zero roots.")
+        if self.energy_window is not None and self.energy_shift is None:
+            raise ValueError(
+                "Davidson-Liu solver: energy_window requires an energy_shift."
+            )
 
         assert np.issubdtype(self.dtype, np.floating) or np.issubdtype(
             self.dtype, np.complexfloating
@@ -223,6 +230,8 @@ class DavidsonLiuSolver:
 
         self.iter = 0
         self.converged = False
+        # coefficients, in the current basis, of the roots selected in the previous iteration
+        self._followed = None
 
         table = AsciiTable(
             columns=["Iter", "⟨E⟩", "max(ΔE)", "max(r)", "basis", "time (s)", "note"],
@@ -259,11 +268,10 @@ class DavidsonLiuSolver:
             Gm = 0.5 * (Gm + Gm.T.conj())  # Hermitize
             lam, alpha = eigh(Gm)
 
-            # sort eigenpair around user-specified shift
-            if self.energy_shift is not None:
-                idx = np.argsort(np.abs(lam - self.energy_shift))
-                lam = lam[idx]
-                alpha = alpha[:, idx]
+            # put the roots to converge first
+            idx, note = self._select_roots(lam, alpha)
+            lam = lam[idx]
+            alpha = alpha[:, idx]
 
             self.lam[: self.basis_size] = lam
             self.alpha[: self.basis_size, : self.basis_size] = alpha
@@ -271,6 +279,8 @@ class DavidsonLiuSolver:
             # 4. residuals for first nroot
             ar = alpha[:, : self.nroot]  # (basis_size, nroot)
             lamr = lam[: self.nroot]  # (nroot,)
+            if self.follow_roots:
+                self._followed = ar.copy()
 
             # build residual vectors
             Balpha = Bblk @ ar  # (size, nroot)
@@ -310,6 +320,11 @@ class DavidsonLiuSolver:
             # 5. collapse if we cannot add more vectors
             if self.basis_size + self.nroot > self.max_subspace_size:
                 self._collapse(alpha)
+                if self.follow_roots:
+                    # the roots are the first nroot collapsed basis vectors
+                    self._followed = np.eye(
+                        self.basis_size, self.nroot, dtype=self.dtype
+                    )
 
             # 6. add correction vectors
             # 6a. orthogonalize residuals against current basis
@@ -336,10 +351,11 @@ class DavidsonLiuSolver:
             )
             self.basis_size += added
             # if we couldn't add enough, fill with random orthogonal vectors
-            msg = ""
+            msg = note
             if r_delta is not None:
                 if r_delta.max() > 1e-9:
-                    msg += f"r leakage {r_delta.max():.2e}"
+                    sep = ", " if msg else ""
+                    msg += f"{sep}r leakage {r_delta.max():.2e}"
 
             if added < to_add:
                 missing = to_add - added
@@ -388,6 +404,47 @@ class DavidsonLiuSolver:
         self.sigma_size = 0
         self._executed = True
         return lamr, evecs
+
+    def _select_roots(self, lam, alpha):
+        """
+        Order the subspace eigenpairs so that the first nroot are the roots to converge.
+
+        The candidates are ordered by energy, or by distance from the energy shift, and those
+        outside the energy window go last. With follow_roots, root i is then the candidate with
+        the largest overlap with root i of the previous iteration.
+
+        Returns
+        -------
+        tuple[NDArray, str]
+            The order of the eigenpairs, and a note for the iteration table.
+        """
+        if self.energy_shift is None:
+            order = np.arange(len(lam))
+        else:
+            order = np.argsort(np.abs(lam - self.energy_shift), kind="stable")
+        ncand = len(order)
+        if self.energy_window is not None:
+            inside = np.abs(lam[order] - self.energy_shift) <= self.energy_window
+            # without enough eigenvalues in the window, fall back to all of them
+            if inside.sum() >= self.nroot:
+                order = np.concatenate([order[inside], order[~inside]])
+                ncand = int(inside.sum())
+        if self._followed is None:
+            return order, ""
+
+        followed = np.zeros((len(lam), self.nroot), dtype=self.dtype)
+        followed[: self._followed.shape[0]] = self._followed
+        overlap = np.abs(alpha.T.conj() @ followed)
+        picked = []
+        for i in range(self.nroot):
+            cand = [j for j in order[:ncand] if j not in picked]
+            picked.append(max(cand, key=lambda j: overlap[j, i]))
+        rest = [j for j in order if j not in picked]
+        note = ""
+        if picked != list(order[: self.nroot]):
+            smallest = min(overlap[j, i] for i, j in enumerate(picked))
+            note = f"followed (overlap {smallest:.3f})"
+        return np.array(picked + rest), note
 
     def _collapse(self, alpha):
         """
@@ -515,4 +572,10 @@ class DavidsonLiuSolver:
             logger.log(
                 f"  Target eigenval shift:    {self.energy_shift}", self.log_level
             )
+        if self.energy_window is not None:
+            logger.log(
+                f"  Energy window:            {self.energy_window}", self.log_level
+            )
+        if self.follow_roots:
+            logger.log("  Root following:           on", self.log_level)
         logger.log(f"  Maximum iterations:       {self.maxiter}\n", self.log_level)
