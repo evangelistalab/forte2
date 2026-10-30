@@ -32,7 +32,7 @@ class ActiveSpaceDriver:
         from forte2.helpers import logger
 
         self._register_parent_method(parent_method)
-        self.ci_solver.log_level = logger.VERBOSITY_DEBUG
+        self.ci_solver.log_level = logger.get_verbosity_level()
         self.ci_solver.die_if_not_converged = self.die_if_not_converged
         return self
 
