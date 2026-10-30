@@ -95,6 +95,10 @@ def test_avas_inputs():
         with pytest.raises(Exception):
             avas = AVAS(subspace=["N(2p)"], cas=cas)(rohf)
 
+    # more virtuals than available, ROHF
+    with pytest.raises(Exception):
+        avas = AVAS(subspace=["N(2p)"], cas=(6, 25))(rohf)
+
     # one electron per spinor: more electrons than spinors
     ghf = GHF(charge=0, e_tol=1e-12)(system)
     with pytest.raises(Exception):

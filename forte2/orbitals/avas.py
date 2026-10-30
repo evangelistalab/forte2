@@ -68,7 +68,7 @@ class AVAS(Method):
     subspace_pi_planes: list = None
     selection_method: str = "cumulative"
     diagonalize: bool = True
-    cas: tuple | None = None
+    cas: tuple[int, int] | None = None
     sigma: float = 0.98
     cutoff: float = 1.0
     evals_threshold: float = 1.0e-6
@@ -144,10 +144,10 @@ class AVAS(Method):
         nmo = self.parent_method.system.nmo
         if isinstance(self.parent_method, (RHF, ROHF)):
             ndocc = min(self.parent_method.na, self.parent_method.nb)
-            nuocc = nmo - ndocc
             nsocc = 0
             if isinstance(self.parent_method, ROHF):
                 nsocc = abs(round(2 * self.parent_method.ms))
+            nuocc = nmo - ndocc - nsocc
         else:  # GHF
             nmo *= 2
             ndocc = self.parent_method.nel
