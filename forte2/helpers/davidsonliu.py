@@ -59,6 +59,7 @@ class DavidsonLiuSolver:
         # root selection
         self.follow_roots = self.davidson_liu_params.follow_roots
         self.energy_window = self.davidson_liu_params.energy_window
+        self.precondition_floor = self.davidson_liu_params.precondition_floor
         # sanity checks
         if self.size <= 0:
             raise ValueError(
@@ -297,6 +298,9 @@ class DavidsonLiuSolver:
 
             # precondition
             denom = lamr[np.newaxis, :] - self.h_diag[:, np.newaxis]
+            if self.precondition_floor is not None:
+                small = np.abs(denom) < self.precondition_floor
+                denom[small] = np.copysign(self.precondition_floor, denom[small])
             mask = np.abs(denom) > self.preconditioner_denom_threshold
             # vectorize division only where denom is not too small, setting others to 0
             R[~mask] = 0.0
@@ -578,4 +582,8 @@ class DavidsonLiuSolver:
             )
         if self.follow_roots:
             logger.log("  Root following:           on", self.log_level)
+        if self.precondition_floor is not None:
+            logger.log(
+                f"  Preconditioner floor:     {self.precondition_floor}", self.log_level
+            )
         logger.log(f"  Maximum iterations:       {self.maxiter}\n", self.log_level)

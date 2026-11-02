@@ -157,6 +157,11 @@ class DavidsonLiuParams(ParamsBase):
         If set, only subspace eigenvalues within this distance of the energy shift can become
         roots, which keeps an interior root from collapsing onto distant states such as the
         ground state. Requires an energy shift.
+    precondition_floor : float, optional, default=None
+        If set, the preconditioner divides the residual by lambda - H_ii only after raising its
+        magnitude to at least this value, keeping its sign. For an interior root, some diagonal
+        elements lie within a tiny distance of the root's eigenvalue; without a floor the
+        correction vector is dominated by those few elements.
     """
 
     guess_per_root: int = 2
@@ -168,12 +173,18 @@ class DavidsonLiuParams(ParamsBase):
     r_tol: float = 1e-6
     follow_roots: bool = False
     energy_window: float = None
+    precondition_floor: float = None
 
     def __post_init__(self):
         super().__post_init__()
         if self.energy_window is not None and self.energy_window <= 0:
             raise ValueError(
                 f"Davidson-Liu solver: energy_window ({self.energy_window}) must be positive."
+            )
+        if self.precondition_floor is not None and self.precondition_floor <= 0:
+            raise ValueError(
+                f"Davidson-Liu solver: precondition_floor ({self.precondition_floor}) must be "
+                "positive."
             )
         if self.collapse_per_root < 1:
             raise ValueError(

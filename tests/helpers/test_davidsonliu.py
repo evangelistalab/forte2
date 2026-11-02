@@ -453,8 +453,15 @@ def test_dl_follow_roots():
     assert e == approx(ref_vals[k])
     assert abs(ref_vecs[:, k] @ v) == approx(1.0)
 
+    # the floor changes the correction vectors, not the root they converge to
+    e, v = solve(follow_roots=True, energy_window=1.0, precondition_floor=0.5)
+    assert e == approx(ref_vals[k])
+    assert abs(ref_vecs[:, k] @ v) == approx(1.0)
+
     with pytest.raises(ValueError):
         DavidsonLiuParams(energy_window=0.0)
+    with pytest.raises(ValueError):
+        DavidsonLiuParams(precondition_floor=0.0)
     with pytest.raises(ValueError):
         DavidsonLiuSolver(
             size=size, nroot=1, davidson_liu_params=DavidsonLiuParams(energy_window=1.0)
