@@ -450,6 +450,13 @@ class DavidsonLiuSolver:
         n_new = A_new.shape[1]
         max_cycles = 10
 
+        # vector discarding is decided based on orthonormality instead of size
+        normv = norm(v)
+        # guard true division by zero only
+        if normv == 0.0:
+            return False, v
+        v /= normv
+
         for cycle in range(max_cycles):
             # orthogonalize against existing basis
             for i in range(n_existing):
