@@ -3,7 +3,7 @@ import numpy as np
 from forte2 import integrals
 from forte2.data import DEBYE_TO_AU, ANGSTROM_TO_BOHR
 from forte2.helpers import logger
-from forte2.helpers.matrix_functions import block_diag_2x2
+from forte2.helpers.linalg import block_diag_2x2
 
 
 def get_1e_property(

@@ -56,6 +56,13 @@ CISpinAdapter::CISpinAdapter(int twoS, int twoMs, int norb)
     : twoS_(twoS), twoMs_(twoMs), norb_(norb), N_ncsf_(norb + 1, 0),
       N_to_det_occupations_(norb + 1), N_to_overlaps_(norb + 1), N_to_noverlaps_(norb + 1) {}
 
+std::pair<size_t, size_t> CISpinAdapter::configuration_csf_range(const Determinant& det) const {
+    if (auto it = conf_index_.find(Configuration(det)); it != conf_index_.end()) {
+        return conf_to_csfs_range_[it->second];
+    }
+    return {0, 0};
+}
+
 size_t CISpinAdapter::nconf() const { return confs_.size(); }
 
 size_t CISpinAdapter::ncsf() const { return ncsf_; }
@@ -158,6 +165,11 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
 
     // store the configurations in a vector for easy access
     confs_ = std::vector<Configuration>(unique_confs.begin(), unique_confs.end());
+    conf_index_.clear();
+    conf_index_.reserve(confs_.size());
+    for (size_t i = 0; i < confs_.size(); i++) {
+        conf_index_[confs_[i]] = i;
+    }
 
     // count the configurations with the same number of unpaired electrons (N)
     for (const auto& conf : confs_) {

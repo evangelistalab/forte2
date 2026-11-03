@@ -60,21 +60,21 @@ def test_rel_sci_h2():
 
 
 def test_rel_sci_pinned_only_guess():
-    """Relativistic selected CI must support an initial guess built purely from pinned_guess_dets
-    (test_sci_pinned_only_guess's counterpart): _initial_guess previously left
-    guess_hdiag/nguess_dets unbound when guess_dets was empty."""
+    """Relativistic selected CI must support an initial guess built purely from
+    pinned_guess_dets (test_sci_pinned_only_guess's counterpart): _initial_guess previously
+    left guess_hdiag/nguess_dets unbound when guess_dets was empty."""
     conv = _h2_ghf_upcast()
 
     sci = CI(
         RelSelectedCISolver(
             nel=2,
             active_orbitals=4,
+            guess_dets=[],
+            pinned_guess_dets=[Determinant("aa00")],
             sci_params=SelectedCIParams(
                 selection_algorithm="hbci",
                 var_threshold=1e-12,
                 pt2_threshold=0.0,
-                guess_dets=[],
-                pinned_guess_dets=[Determinant("aa00")],
             ),
         )
     )(conv)

@@ -74,6 +74,12 @@ class CISpinAdapter {
     /// @return a pair containing the start and end indices of the CSFs
     const std::vector<std::pair<size_t, size_t>>& conf_to_csfs_range() const;
 
+    /// @brief Return the range of CSFs that belong to the configuration of a determinant
+    /// @param det the determinant
+    /// @return the start and (exclusive) end indices of the CSFs, an empty range if the
+    /// configuration has no CSF of the target spin
+    std::pair<size_t, size_t> configuration_csf_range(const Determinant& det) const;
+
     /// @brief Return the number of configurations
     size_t nconf() const;
 
@@ -192,6 +198,8 @@ class CISpinAdapter {
 
     /// @brief Electron configurations
     std::vector<Configuration> confs_;
+    /// @brief The index of each configuration in confs_
+    ankerl::unordered_dense::map<Configuration, size_t, Configuration::Hash> conf_index_;
 
     /// @brief The logging level for the class
     int log_level_ = 3;

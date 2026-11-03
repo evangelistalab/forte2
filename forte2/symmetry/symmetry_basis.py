@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2.helpers.matrix_functions import block_eigh
+from forte2.helpers.linalg import block_eigh
 from .sym_utils import CHARACTER_TABLE, COTTON_LABELS, SYMMETRY_OPS, local_sign
 
 

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.linalg import logm
 from scipy.optimize import linear_sum_assignment
 
-from forte2.helpers.matrix_functions import real_orthogonal_logm, split_unitary
+from forte2.helpers.linalg import real_orthogonal_logm, split_unitary
 
 from .orbital_blocks import OrbitalBlockBuilder
 
