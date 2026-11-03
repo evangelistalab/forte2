@@ -445,9 +445,13 @@ class _CISingleStateSolver:
                     Hguess[j, i] = np.conj(Hij)
 
         # Diagonalize the Hamiltonian to get the initial guess vectors
-        _, evecs_guess = np.linalg.eigh(Hguess)
+        evals_guess, evecs_guess = np.linalg.eigh(Hguess)
+        if self.ci_params.energy_shift is not None:
+            # take the eigenvectors nearest the shift rather than the lowest
+            order = np.argsort(np.abs(evals_guess - self.ci_params.energy_shift))
+            evecs_guess = evecs_guess[:, order]
 
-        # Select the lowest eigenvalues and their corresponding eigenvectors
+        # Select the first eigenvectors in that order
         guess_mat = np.zeros((self.basis_size, self.num_guess_states), dtype=self.dtype)
         for i in range(self.num_guess_states):
             guess = evecs_guess[:, i]
