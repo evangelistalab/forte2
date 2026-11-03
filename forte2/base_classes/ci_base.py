@@ -7,6 +7,7 @@ import numpy as np
 
 from .active_space_solver import ActiveSpaceSolver, RelActiveSpaceSolver
 from forte2.helpers import logger
+from forte2.lib.det import Determinant
 
 
 @dataclass
@@ -28,6 +29,9 @@ class CIBase(ActiveSpaceSolver):
     """
 
     log_level: int = logger.VERBOSITY_DEBUG
+    ci_vector_guess: list[list[tuple[Determinant, float | complex]]] | None = None
+    guess_dets: None | list[Determinant] | list[list[Determinant] | None] = None
+    pinned_guess_dets: None | list[Determinant] | list[list[Determinant] | None] = None
 
     ### Non-init attributes
     first_run: bool = field(default=True, init=False)
@@ -46,6 +50,123 @@ class CIBase(ActiveSpaceSolver):
     _rdm_cross_state_orders: ClassVar[tuple[int, ...] | None] = None
     _cumulant_orders: ClassVar[tuple[int, ...] | None] = None
     _cumulant_spin_types: ClassVar[tuple[str, ...] | None] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.ci_vector_guess is not None and (
+            self.guess_dets is not None or self.pinned_guess_dets is not None
+        ):
+            raise ValueError(
+                f"{type(self).__name__}: ci_vector_guess cannot be combined with "
+                "guess_dets or pinned_guess_dets."
+            )
+        self._ci_vector_guess_per_state = self._process_ci_vector_guess()
+        self._guess_dets_per_state = self._process_guess_dets("guess_dets")
+        self._pinned_guess_dets_per_state = self._process_guess_dets(
+            "pinned_guess_dets"
+        )
+
+    def _process_ci_vector_guess(self):
+        """
+        Check ``ci_vector_guess`` and arrange it by state.
+
+        Returns one entry per state: None if there is no ``ci_vector_guess``, and
+        otherwise a list of (absolute root, {Determinant: coefficient}) tuples, one for
+        each root of the state.
+        """
+        if self.ci_vector_guess is None:
+            return [None] * self.ncis
+        name = type(self).__name__
+        if not isinstance(self.ci_vector_guess, (list, tuple)):
+            raise TypeError(
+                f"{name}: ci_vector_guess must be a list with one entry per root."
+            )
+        nroots = self.sa_info.nroots_sum
+        if len(self.ci_vector_guess) != nroots:
+            raise ValueError(
+                f"{name}: ci_vector_guess has {len(self.ci_vector_guess)} entries for "
+                f"{nroots} roots. It needs exactly one guess per root."
+            )
+        per_state = [[] for _ in range(self.ncis)]
+        for root, guess in enumerate(self.ci_vector_guess):
+            if guess is None:
+                raise ValueError(
+                    f"{name}: ci_vector_guess[{root}] is None. Give a guess for every root."
+                )
+            state, _ = self.sa_info.absolute_root_map[root]
+            per_state[state].append((root, self._parse_guess(root, guess)))
+        return per_state
+
+    def _process_guess_dets(self, option):
+        """
+        Check a guess determinants option and arrange it by state.
+
+        Returns one entry per state: None, or a list of Determinants.
+        """
+        value = getattr(self, option)
+        if value is None:
+            return [None] * self.ncis
+        name = type(self).__name__
+        per_state_error = TypeError(
+            f"{name}: {option} must be a list of Determinants or, with one entry per "
+            "state, a list of lists of Determinants or None."
+        )
+        # any iterable of Determinants works, e.g. CIStrings.make_determinants()
+        dets = _as_det_list(value)
+        if self.ncis == 1 and dets is not None:
+            return [dets]
+        if isinstance(value, Determinant) or isinstance(value, str):
+            raise per_state_error
+        try:
+            entries = list(value)
+        except TypeError:
+            raise per_state_error from None
+        if len(entries) != self.ncis:
+            raise ValueError(
+                f"{name}: {option} has {len(entries)} entries for {self.ncis} states. "
+                "It needs one entry per state."
+            )
+        per_state = []
+        for basis in entries:
+            dets = None if basis is None else _as_det_list(basis)
+            if basis is not None and dets is None:
+                raise per_state_error
+            per_state.append(dets)
+        return per_state
+
+    def _parse_guess(self, root, guess):
+        """Convert the guess for ``root`` to a {Determinant: coefficient} dict."""
+        name = type(self).__name__
+        wrong_type = TypeError(
+            f"{name}: the guess for root {root} must be a list of "
+            "(Determinant, coefficient) pairs."
+        )
+        if not isinstance(guess, (list, tuple)):
+            raise wrong_type
+        is_complex = np.issubdtype(self._ss_solver_cls.dtype, np.complexfloating)
+        det_coeffs = {}
+        for pair in guess:
+            if not (
+                isinstance(pair, (list, tuple))
+                and len(pair) == 2
+                and isinstance(pair[0], Determinant)
+            ):
+                raise wrong_type
+            det, coefficient = pair
+            if det in det_coeffs:
+                raise ValueError(
+                    f"{name}: the guess for root {root} lists the determinant "
+                    f"{_det_label(det)} twice (duplicate)."
+                )
+            if not is_complex and np.imag(coefficient) != 0.0:
+                raise ValueError(
+                    f"{name}: the guess for root {root} has the imaginary coefficient "
+                    f"{coefficient}, but {name} is real."
+                )
+            det_coeffs[det] = coefficient if is_complex else float(np.real(coefficient))
+        if not any(det_coeffs.values()):
+            raise ValueError(f"{name}: the guess for root {root} is zero.")
+        return det_coeffs
 
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
@@ -269,6 +390,9 @@ class CIBase(ActiveSpaceSolver):
                     "state": state,
                     "nroot": self.sa_info.nroots[i],
                     "active_orbsym": active_orbsym,
+                    "ci_vector_guess": self._ci_vector_guess_per_state[i],
+                    "guess_dets": self._guess_dets_per_state[i],
+                    "pinned_guess_dets": self._pinned_guess_dets_per_state[i],
                 }
             )
             kwargs.update(self._extra_worker_kwargs(i, state))
@@ -553,3 +677,19 @@ class RelCIBase(RelActiveSpaceSolver, CIBase):
             raise ValueError(
                 "RelCISolver requires a two-component system. Please use a parent method that can provide a two-component wavefunction."
             )
+
+
+def _det_label(det):
+    """The determinant string without its trailing empty orbitals."""
+    return repr(det)[:-1].rstrip("0") + ">"
+
+
+def _as_det_list(value):
+    """value as a list of Determinants, or None if it is not an iterable of them."""
+    if isinstance(value, (Determinant, str)):
+        return None
+    try:
+        dets = list(value)
+    except TypeError:
+        return None
+    return dets if all(isinstance(d, Determinant) for d in dets) else None

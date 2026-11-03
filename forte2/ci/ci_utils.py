@@ -5,6 +5,7 @@ import numpy as np
 from forte2.lib.ci_helpers import CIStrings
 from forte2.state import MOSpace, StateAverageInfo
 from forte2.helpers import logger
+from forte2.helpers.linalg import orthonormalize_vector
 from forte2.data import EH_TO_EV
 
 
@@ -68,6 +69,37 @@ def normalize_spin_type(spin_type):
         caller reports it against the spin types it actually supports.
     """
     return SPIN_TYPE_ALIASES.get(spin_type, spin_type)
+
+
+def orthonormalize_guesses(guesses):
+    """
+    Orthonormalize guess vectors in order.
+
+    Parameters
+    ----------
+    guesses : list[tuple[int, NDArray]]
+        (absolute root, normalized vector) pairs.
+
+    Returns
+    -------
+    NDArray
+        The orthonormal guess vectors as columns.
+
+    Raises
+    ------
+    ValueError
+        If a guess is linearly dependent on the guesses before it.
+    """
+    basis = np.zeros((len(guesses[0][1]), 0), dtype=guesses[0][1].dtype)
+    for root, vec in guesses:
+        orthonormal, vec = orthonormalize_vector(vec, [basis])
+        if not orthonormal:
+            raise ValueError(
+                f"The guess for root {root} is linearly dependent on the guesses for "
+                "the roots before it."
+            )
+        basis = np.column_stack([basis, vec])
+    return basis
 
 
 def validate_single_state_rdm(

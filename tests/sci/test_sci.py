@@ -58,12 +58,12 @@ def test_sci_pinned_only_guess():
         SelectedCISolver(
             states=State(nel=4, multiplicity=1, ms=0.0),
             active_orbitals=list(range(4)),
+            guess_dets=[],
+            pinned_guess_dets=[Determinant("22")],
             sci_params=SelectedCIParams(
                 selection_algorithm="hbci",
                 var_threshold=1e-12,
                 pt2_threshold=0.0,
-                guess_dets=[],
-                pinned_guess_dets=[Determinant("22")],
                 num_batches_per_thread=16,
             ),
         )
@@ -195,7 +195,7 @@ def test_sci_h6_multistate_spin_penalty():
 
 
 @pytest.mark.slow
-def test_sci_ne_core_ionized():
+def test_sci_ne_core_ionized_single_determinant_guess():
     """Test SelectedCI on a core-ionized state."""
     xyz = f"""
     Ne 0.0 0.0 0.0
@@ -208,12 +208,12 @@ def test_sci_ne_core_ionized():
         SelectedCISolver(
             states=State(nel=9, multiplicity=2, ms=0.5),
             active_orbitals=list(range(14)),
+            guess_dets=[Determinant("a2222")],
             sci_params=SelectedCIParams(
                 selection_algorithm="hbci",
                 var_threshold=1e-5,
                 pt2_threshold=0.0,
                 do_spin_penalty=True,
-                guess_dets=[Determinant("a2222")],
                 num_batches_per_thread=16,
             ),
             nroots=1,
@@ -222,40 +222,6 @@ def test_sci_ne_core_ionized():
 
     sci.run()
     assert sci.E_ci[0] == pytest.approx(-96.60170826050286, abs=5e-7)
-
-
-@pytest.mark.skip(reason="Could not reproduce with FCI with energy_shift")
-def test_sci_ne_core_excited():
-    """Test SelectedCI on a core-excited state."""
-    xyz = """
-    Ne 0.0 0.0 0.0
-    """
-
-    system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
-
-    rhf = RHF(charge=0, e_tol=1e-10)(system)
-
-    sci = CI(
-        SelectedCISolver(
-            states=State(nel=10, multiplicity=1, ms=0.0),
-            active_orbitals=list(range(12)),
-            sci_params=SelectedCIParams(
-                selection_algorithm="hbci_ref",
-                var_threshold=3e-4,
-                pt2_threshold=0.0,
-                guess_dets=[Determinant("a2222b"), Determinant("b2222a")],
-                do_spin_penalty=True,
-                screening_criterion="hbci",
-                num_batches_per_thread=16,
-            ),
-            nroots=1,
-            die_if_not_converged=False,
-        )
-    )(rhf)
-
-    sci.run()
-
-    assert sci.E_ci[0] == approx(-95.67969625695353)
 
 
 def test_sci_exact_algorithm():
@@ -573,11 +539,11 @@ def test_sci_make_rdms():
         SelectedCISolver(
             states=State(nel=4, multiplicity=1, ms=0.0),
             active_orbitals=list(range(4)),
+            guess_dets=[Determinant("22")],
             sci_params=SelectedCIParams(
                 selection_algorithm="hbci",
                 var_threshold=1e-12,
                 pt2_threshold=0.0,
-                guess_dets=[Determinant("22")],
             ),
         )
     )(rhf)
@@ -729,11 +695,11 @@ def test_sci_water_core_excited():
         SelectedCISolver(
             states=State(nel=10, multiplicity=1, ms=0.0),
             active_orbitals=list(range(13)),
+            guess_dets=guess_dets,
             sci_params=SelectedCIParams(
                 selection_algorithm="hbci",
                 var_threshold=1e-5,
                 pt2_threshold=1e-10,
-                guess_dets=guess_dets,
                 do_spin_penalty=True,
                 screening_criterion="hbci",
                 # do not allow the core orbital occupation to change from the guess determinants
@@ -787,11 +753,11 @@ def test_sci_water_core_excited_with_gasscf_orbs():
         SelectedCISolver(
             states=State(nel=10, multiplicity=1, ms=0.0),
             active_orbitals=list(range(13)),
+            guess_dets=guess_dets,
             sci_params=SelectedCIParams(
                 selection_algorithm="hbci",
                 var_threshold=1e-5,
                 pt2_threshold=1e-10,
-                guess_dets=guess_dets,
                 do_spin_penalty=True,
                 screening_criterion="hbci",
                 # do not allow the core orbital occupation to change from the guess determinants
@@ -925,12 +891,7 @@ def test_sci_1tdm_water_core_excited_and_gs():
         Determinant("02222ab"),
         Determinant("02222ba"),
     ]
-    gas_params = gs_params.copy(
-        guess_dets=gas_guess_dets,
-        frozen_annihilation=[0],
-        frozen_creation=[0],
-        pinned_guess_dets=pinned_guess_dets,
-    )
+    gas_params = gs_params.copy(frozen_annihilation=[0], frozen_creation=[0])
     # the defaul ndets_per_guess is too small, causing convergence onto a higher root.
     gas_ci_params = gs_ci_params.copy(ndets_per_guess=50)
 
@@ -944,6 +905,8 @@ def test_sci_1tdm_water_core_excited_and_gs():
             sci_params=[gas_params, gs_params],
             davidson_liu_params=[gas_ci_params, gs_ci_params],
             nroots=[1, 1],
+            guess_dets=[gas_guess_dets, None],
+            pinned_guess_dets=[pinned_guess_dets, None],
         ),
         do_transition_dipole=True,
     )(rhf)
@@ -968,14 +931,8 @@ def _lih_rhf_tight():
 
 
 def test_sci_per_state_params_are_not_shared():
-    """A single SelectedCIParams shared by several states must be copied per state.
-
-    ``_initial_guess`` rebinds ``sci_params.guess_dets``; when one object was
-    aliased across states, state 1 inherited state 0's guess determinants and
-    validated them against its own electron count. With states of differing
-    alpha/beta counts that raised
-    "Guess determinant ... has 1 alpha electrons, expected 2".
-    """
+    """A single SelectedCIParams shared by several states must be copied per state, and each
+    state must build its guess determinants for its own electron count."""
     _, rhf = _lih_rhf_tight()
     sci = CI(
         SelectedCISolver(
@@ -1000,7 +957,7 @@ def test_sci_per_state_params_are_not_shared():
         sci.ci_solver.sub_solvers[1].davidson_liu_params
     )
     for solver, (na, nb) in zip(sci.ci_solver.sub_solvers, [(1, 1), (2, 0)]):
-        for d in solver.sci_params.guess_dets:
+        for d in solver.guess_determinants:
             assert (d.count_alpha(), d.count_beta()) == (na, nb)
 
 

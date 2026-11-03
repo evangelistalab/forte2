@@ -635,3 +635,54 @@ def split_unitary(U):
     # U = M R => R = M^+ U
     R = M.conj().T @ U
     return M, R
+
+
+def orthonormalize_vector(v, bases, discard_tol=1e-8, ortho_tol=1e-12, max_cycles=3):
+    """
+    Orthonormalize a vector against the orthonormal columns of one or more bases, by
+    classical Gram-Schmidt with reorthogonalization. Two passes normally reach working
+    precision.
+
+    Parameters
+    ----------
+    v : NDArray
+        The vector to orthonormalize. It is not modified.
+    bases : list[NDArray]
+        Matrices with orthonormal columns, of shape ``(len(v), k)``. ``k`` can be zero.
+    discard_tol : float, optional, default=1e-8
+        The norm below which the part of the normalized vector outside the bases counts
+        as linearly dependent.
+    ortho_tol : float, optional, default=1e-12
+        The largest overlap with a basis column, and deviation of the norm from 1, that
+        counts as orthonormal.
+    max_cycles : int, optional, default=3
+        The maximum number of Gram-Schmidt passes.
+
+    Returns
+    -------
+    tuple[bool, NDArray]
+        Whether the vector was orthonormalized, and the vector. The vector is
+        orthonormal to the bases only if the first element is True; it is False for a
+        zero or linearly dependent vector, or if ``max_cycles`` passes are not enough.
+    """
+    bases = [Q for Q in bases if Q.shape[1] > 0]
+    v_norm = np.linalg.norm(v)
+    if v_norm == 0.0:
+        return False, v
+    v = v / v_norm
+    # early return if nothing to orthonormalize against
+    if not bases:
+        return True, v
+
+    # multiple passes to ensure numerical stability
+    for _ in range(max_cycles):
+        for Q in bases:
+            v = v - Q @ (Q.conj().T @ v)
+        v_norm = np.linalg.norm(v)
+        if v_norm < discard_tol:
+            return False, v
+        v = v / v_norm
+        max_overlap = max((np.abs(Q.conj().T @ v).max() for Q in bases), default=0.0)
+        if max_overlap < ortho_tol and abs(np.vdot(v, v) - 1.0) < ortho_tol:
+            return True, v
+    return False, v

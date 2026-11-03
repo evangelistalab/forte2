@@ -5,6 +5,7 @@ import numpy as np
 from numpy.linalg import eigh, qr, norm
 
 from forte2.helpers import logger
+from forte2.helpers.linalg import orthonormalize_vector
 from forte2.helpers.table import AsciiTable
 from forte2.base_classes.params import DavidsonLiuParams
 
@@ -427,71 +428,19 @@ class DavidsonLiuSolver:
 
         added = 0
         for j in range(n_cand):
-            v0 = B_candidates[:, j].copy()
+            v0 = B_candidates[:, j]
             slots_filled = A_slots[:, :added]
-            success, vnew = self._add_row_and_orthonormalize(
-                A_existing, slots_filled, v0
+            success, vnew = orthonormalize_vector(
+                v0,
+                [A_existing, slots_filled],
+                discard_tol=self.schmidt_discard_threshold,
+                ortho_tol=self.schmidt_orthogonality_threshold,
             )
             if success:
                 A_slots[:, added] = vnew
                 added += 1
 
         return added
-
-    def _add_row_and_orthonormalize(
-        self, A_existing: np.ndarray, A_new: np.ndarray, v: np.ndarray
-    ) -> tuple[bool, np.ndarray]:
-        """
-        Attempt to orthonormalize vector v against the existing basis A_existing
-        and any already accepted vectors in A_new (columns). Returns (success, v),
-        where v is normalized if success is True.
-        """
-        n_existing = A_existing.shape[1]
-        n_new = A_new.shape[1]
-        max_cycles = 10
-
-        # vector discarding is decided based on orthonormality instead of size
-        normv = norm(v)
-        # guard true division by zero only
-        if normv == 0.0:
-            return False, v
-        v /= normv
-
-        for cycle in range(max_cycles):
-            # orthogonalize against existing basis
-            for i in range(n_existing):
-                ai = A_existing[:, i]
-                v -= np.dot(ai.conj(), v) * ai
-            # orthogonalize against new vectors
-            for i in range(n_new):
-                si = A_new[:, i]
-                v -= np.dot(si.conj(), v) * si
-
-            # compute norm and discard if too small
-            normv = norm(v)
-            if normv < self.schmidt_discard_threshold:
-                return False, v
-
-            # normalize
-            v /= normv
-
-            # compute maximum overlap
-            max_overlap = 0.0
-            if n_existing > 0:
-                max_overlap = np.abs(A_existing.T.conj() @ v).max()
-            if n_new > 0:
-                max_overlap = max(max_overlap, np.abs(A_new.T.conj() @ v).max())
-
-            # check normalization and orthogonality
-            norm2 = np.dot(v.conj(), v)
-            if (
-                max_overlap < self.schmidt_orthogonality_threshold
-                and abs(norm2 - 1.0) < self.schmidt_orthogonality_threshold
-            ):
-                return True, v
-
-        # failed to orthonormalize within max_cycles
-        return False, v
 
     def orthonormality_check(
         self, b: np.ndarray, msg: str = "Orthonormality check failed."

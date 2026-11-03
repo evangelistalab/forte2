@@ -145,6 +145,14 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
                 f"RDMs for root {root} validated successfully.\n", self.log_level
             )
 
+    def _det_C_to_basis_C(self, det_vec):
+        # no-op, this is for the nonrel CI hook, where det-to-CSF conversion is needed
+        return det_vec
+
+    def _basis_indices(self, dets, owner):
+        # set automatically throws away repeated determinants
+        return np.array(sorted(set(self._det_indices(dets, owner))), dtype=int)
+
     def csf_C_to_det_C(self, csf_vec):
         raise NotImplementedError(
             "There is no CSF basis in the two-component (spinor) case; the CI "
@@ -222,6 +230,23 @@ class RelCISolver(RelCIBase):
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
+    ci_vector_guess : list[list[tuple[Determinant, float | complex]]], optional
+        Initial CI vectors, one per root in absolute root order.
+        Each guess is normalized.
+        The Davidson-Liu solver starts from these vectors, so ``guess_per_root`` and ``ndets_per_guess`` don't apply.
+        This option is incompatible with ``guess_dets`` or ``pinned_guess_dets``.
+        ``ci_algorithm="exact"`` ignores it.
+    guess_dets : list, optional
+        The candidate determinants for the guess space: a list of ``Determinant``
+        objects if there is one state, or one entry per state, each a list or None. If
+        None, for the whole option or for one state, every determinant is a candidate.
+        The candidates are narrowed by diagonal energy, or by distance from
+        ``ci_params.energy_shift``, to at most ``ndets_per_guess * guess_per_root *
+        nroot``. The guess vectors are the lowest ``guess_per_root * nroot``
+        eigenvectors of the Hamiltonian in that space.
+    pinned_guess_dets : list, optional
+        Determinants that always join the guess space, without the narrowing, in the
+        same per-state format as ``guess_dets``.
     """
 
     orbital_rotation_invariant: ClassVar[bool] = True

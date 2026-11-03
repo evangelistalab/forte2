@@ -8,7 +8,7 @@ import forte2
 from forte2 import integrals
 from forte2.lib import ints
 from forte2.helpers import logger
-from forte2.helpers.matrix_functions import (
+from forte2.helpers.linalg import (
     cholesky_wrapper,
     invsqrt_matrix,
     print_metric_info,

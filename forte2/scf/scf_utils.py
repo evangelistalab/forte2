@@ -3,7 +3,7 @@ import scipy as sp
 
 from forte2 import integrals
 from forte2.system.build_basis import build_sap_potential_basis
-from forte2.helpers.matrix_functions import givens_rotation
+from forte2.helpers.linalg import givens_rotation
 
 
 def sap_guess_hamiltonian(system, H):
