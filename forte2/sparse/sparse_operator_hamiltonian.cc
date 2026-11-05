@@ -2,6 +2,20 @@
 
 namespace forte2 {
 
+namespace {
+/// @return a^+(cre) a(ann) acting on SparseState keys that hold spinor p in bit p
+SQOperatorString spinor_operator(std::initializer_list<size_t> cre,
+                                 std::initializer_list<size_t> ann) {
+    auto cre_bits = Determinant::zero();
+    auto ann_bits = Determinant::zero();
+    for (auto p : cre)
+        cre_bits.set_bit(p, true);
+    for (auto p : ann)
+        ann_bits.set_bit(p, true);
+    return SQOperatorString(cre_bits, ann_bits);
+}
+} // namespace
+
 SparseOperator sparse_operator_hamiltonian(double scalar_energy, np_matrix one_electron_integrals,
                                            np_tensor4 two_electron_integrals,
                                            double screen_thresh) {
@@ -63,6 +77,11 @@ SparseOperator sparse_operator_hamiltonian(double scalar_energy,
         throw std::runtime_error("One-electron and two-electron integrals must be square matrices "
                                  "of the same size.");
     }
+    if (nspinor > Determinant::size()) {
+        throw std::runtime_error("sparse_operator_hamiltonian: " + std::to_string(nspinor) +
+                                 " spinors exceed the determinant capacity of " +
+                                 std::to_string(Determinant::size()) + ".");
+    }
     SparseOperator H;
     auto oei_view = one_electron_integrals.view();
     auto tei_view = two_electron_integrals.view();
@@ -71,7 +90,7 @@ SparseOperator sparse_operator_hamiltonian(double scalar_energy,
     for (size_t p = 0; p < nspinor; p++) {
         for (size_t q = 0; q < nspinor; q++) {
             if (auto hpq = oei_view(p, q); std::abs(hpq) > screen_thresh) {
-                H.add(SQOperatorString({p}, {}, {q}, {}), hpq);
+                H.add(spinor_operator({p}, {q}), hpq);
             }
         }
     }
@@ -81,7 +100,7 @@ SparseOperator sparse_operator_hamiltonian(double scalar_energy,
                 for (size_t s = r + 1; s < nspinor; s++) {
                     if (auto vpqrs = tei_view(p, q, r, s) - tei_view(p, q, s, r);
                         std::abs(vpqrs) > screen_thresh) {
-                        H.add(SQOperatorString({p, q}, {}, {s, r}, {}), vpqrs);
+                        H.add(spinor_operator({p, q}, {s, r}), vpqrs);
                     }
                 }
             }

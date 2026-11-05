@@ -162,10 +162,11 @@ class _Wavefunction:
         actv = range(self.nactv)
         occupations = []
         for d in self.solver.dets:
-            alpha = docc + [self.ndocc + p for p in actv if d.na(p)]
             if self.two_component:
+                alpha = docc + [self.ndocc + p for p in actv if d.get(p)]
                 beta = []
             else:
+                alpha = docc + [self.ndocc + p for p in actv if d.na(p)]
                 beta = docc + [self.ndocc + p for p in actv if d.nb(p)]
             occupations.append((alpha, beta))
         return occupations

@@ -15,7 +15,13 @@ namespace forte2 {
 /// @param i The index of the occupied orbital
 /// @param a The index of the virtual orbital
 /// @return The new string with the single excitation
-std::pair<String, double> create_single_excitation(const String& str, size_t i, size_t a);
+template <typename StringT>
+std::pair<StringT, double> create_single_excitation(const StringT& str, size_t i, size_t a) {
+    StringT new_str = str;
+    double sign = new_str.destroy(i);
+    sign *= new_str.create(a);
+    return {new_str, sign};
+}
 
 /// @brief Create a double excitation from orbitals i,j to orbitals a,b
 /// @param str The original string
@@ -24,8 +30,16 @@ std::pair<String, double> create_single_excitation(const String& str, size_t i, 
 /// @param a The index of the first virtual orbital
 /// @param b The index of the second virtual orbital
 /// @return The new string with the double excitation
-std::pair<String, double> create_double_excitation(const String& str, size_t i, size_t j, size_t a,
-                                                   size_t b);
+template <typename StringT>
+std::pair<StringT, double> create_double_excitation(const StringT& str, size_t i, size_t j,
+                                                    size_t a, size_t b) {
+    StringT new_str = str;
+    double sign = new_str.destroy(i);
+    sign *= new_str.destroy(j);
+    sign *= new_str.create(b);
+    sign *= new_str.create(a);
+    return {new_str, sign};
+}
 
 /// @brief Create a single excitation from orbital i to orbital a using the fast creation and
 ///        destruction methods that assume the excitation is valid (i is occupied and a is virtual)
@@ -33,7 +47,14 @@ std::pair<String, double> create_double_excitation(const String& str, size_t i, 
 /// @param i The index of the occupied orbital
 /// @param a The index of the virtual orbital
 /// @return The new string with the single excitation
-std::pair<String, double> create_single_excitation_unchecked(const String& str, size_t i, size_t a);
+template <typename StringT>
+std::pair<StringT, double> create_single_excitation_unchecked(const StringT& str, size_t i,
+                                                              size_t a) {
+    StringT new_str = str;
+    double sign = new_str.destroy_unchecked(i);
+    sign *= new_str.create_unchecked(a);
+    return {new_str, sign};
+}
 
 /// @brief Create a double excitation from orbitals i,j to orbitals a,b using the fast creation and
 ///        destruction methods that assume the excitation is valid (i,j are occupied and a,b are
@@ -44,8 +65,16 @@ std::pair<String, double> create_single_excitation_unchecked(const String& str, 
 /// @param a The index of the first virtual orbital
 /// @param b The index of the second virtual orbital
 /// @return The new string with the double excitation
-std::pair<String, double> create_double_excitation_unchecked(const String& str, size_t i, size_t j,
-                                                             size_t a, size_t b);
+template <typename StringT>
+std::pair<StringT, double> create_double_excitation_unchecked(const StringT& str, size_t i,
+                                                              size_t j, size_t a, size_t b) {
+    StringT new_str = str;
+    double sign = new_str.destroy_unchecked(i);
+    sign *= new_str.destroy_unchecked(j);
+    sign *= new_str.create_unchecked(b);
+    sign *= new_str.create_unchecked(a);
+    return {new_str, sign};
+}
 
 /// @brief Create a single excitation from alpha orbital i to alpha orbital a
 /// @param det The original determinant

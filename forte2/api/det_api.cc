@@ -18,6 +18,7 @@ namespace forte2 {
 
 namespace {
 void export_determinant_api(nb::module_& m);
+void export_spinor_determinant_api(nb::module_& m);
 void export_configuration_api(nb::module_& m);
 void export_determinant_helpers_api(nb::module_& m);
 void export_slater_rules_api(nb::module_& m);
@@ -29,6 +30,8 @@ void export_det_api(nb::module_& m) {
 
     export_determinant_api(sub_m);
 
+    export_spinor_determinant_api(sub_m);
+
     export_configuration_api(sub_m);
 
     export_determinant_helpers_api(sub_m);
@@ -39,6 +42,14 @@ void export_det_api(nb::module_& m) {
 }
 
 namespace {
+void check_spinor_bounds(size_t n) {
+    if (n >= SpinorDeterminant::size()) {
+        throw std::out_of_range("Spinor index " + std::to_string(n) +
+                                " is out of range for SpinorDeterminant with capacity " +
+                                std::to_string(SpinorDeterminant::size()) + ".");
+    }
+}
+
 void export_determinant_api(nb::module_& sub_m) {
     nb::class_<Determinant>(sub_m, "Determinant")
         .def(nb::init<const Determinant&>())
@@ -196,6 +207,104 @@ void export_determinant_api(nb::module_& sub_m) {
                 return d.slater_sign_reverse(n);
             },
             "Get the sign of the Slater determinant");
+}
+
+void export_spinor_determinant_api(nb::module_& sub_m) {
+    nb::class_<SpinorDeterminant>(sub_m, "SpinorDeterminant")
+        .def(nb::init<const SpinorDeterminant&>())
+        .def(
+            "__init__",
+            [](SpinorDeterminant* d, const std::string& occ) {
+                if (occ.size() > SpinorDeterminant::size()) {
+                    throw std::invalid_argument("SpinorDeterminant string must be at most " +
+                                                std::to_string(SpinorDeterminant::size()) +
+                                                " characters long.");
+                }
+                new (d) SpinorDeterminant(SpinorDeterminant::zero());
+                for (size_t p = 0; p < occ.size(); ++p) {
+                    if (occ[p] == '1') {
+                        d->set_bit(p, true);
+                    } else if (occ[p] != '0') {
+                        throw std::invalid_argument("SpinorDeterminant: invalid character in |" +
+                                                    occ + "> (all characters must be 0 or 1)");
+                    }
+                }
+            },
+            "occ"_a,
+            "Build a spinor determinant from a string of 0s and 1s (character p is spinor p)")
+        .def_static("zero", &SpinorDeterminant::zero,
+                    "Create a spinor determinant with no electrons")
+        .def_prop_ro_static(
+            "maxnspinor", [](nb::object /* self */) { return SpinorDeterminant::size(); },
+            "The maximum number of spinors")
+        .def(
+            "__eq__", [](const SpinorDeterminant& a, const SpinorDeterminant& b) { return a == b; },
+            "Check if two spinor determinants are equal")
+        .def(
+            "__lt__", [](const SpinorDeterminant& a, const SpinorDeterminant& b) { return a < b; },
+            "Check if a spinor determinant is less than another")
+        .def(
+            "__hash__", [](const SpinorDeterminant& d) { return SpinorDeterminant::Hash{}(d); },
+            "Get the hash of the spinor determinant")
+        .def(
+            "__repr__",
+            [](const SpinorDeterminant& d) {
+                return d.str(d.count() > 0 ? d.find_last_one() + 1 : 0);
+            },
+            "Occupation string up to the last occupied spinor")
+        .def(
+            "get",
+            [](const SpinorDeterminant& d, size_t p) {
+                check_spinor_bounds(p);
+                return d.get_bit(p);
+            },
+            "p"_a, "Is spinor p occupied?")
+        .def(
+            "set",
+            [](SpinorDeterminant& d, size_t p, bool value) {
+                check_spinor_bounds(p);
+                d.set_bit(p, value);
+            },
+            "p"_a, "value"_a, "Set the occupation of spinor p")
+        .def(
+            "create",
+            [](SpinorDeterminant& d, size_t p) {
+                check_spinor_bounds(p);
+                return d.create(p);
+            },
+            "p"_a, "Apply a creation operator on spinor p and return the sign, or 0 if occupied")
+        .def(
+            "destroy",
+            [](SpinorDeterminant& d, size_t p) {
+                check_spinor_bounds(p);
+                return d.destroy(p);
+            },
+            "p"_a, "Apply an annihilation operator on spinor p and return the sign, or 0 if empty")
+        .def(
+            "slater_sign",
+            [](const SpinorDeterminant& d, size_t p) {
+                check_spinor_bounds(p);
+                return d.slater_sign(p);
+            },
+            "p"_a, "Parity sign of the occupied spinors below p")
+        .def(
+            "count", [](const SpinorDeterminant& d) { return d.count(); },
+            "Count the number of electrons")
+        .def(
+            "str",
+            [](const SpinorDeterminant& d, size_t n) {
+                if (n > 0) {
+                    check_spinor_bounds(n - 1);
+                }
+                return d.str(n);
+            },
+            "n"_a = SpinorDeterminant::size(), "Occupation string of the first n spinors")
+        .def(
+            "to_determinant", [](const SpinorDeterminant& d) { return to_determinant(d); },
+            "The same bits as a Determinant, for use as a SparseState key")
+        .def_static(
+            "from_determinant", [](const Determinant& d) { return from_determinant(d); }, "d"_a,
+            "The SparseState key d as a spinor determinant");
 }
 
 void export_configuration_api(nb::module_& sub_m) {
