@@ -3,7 +3,7 @@ import pytest
 
 from forte2 import CI, GHF, MOSpace, RHF, RelCISolver, SpinorUpcaster, System, X2CParams
 from forte2.base_classes import CIParams
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx, approx_abs
 from forte2 import CI
 
 
@@ -315,3 +315,82 @@ def test_rel_ci_24_spinors_matches_exact():
         + 0.5 * np.einsum("ijkl,ijkl", rdm2, solver.ints.V)
     )
     assert rdm_energy.real == approx(-1.165336729106)
+
+
+def test_rel_ci_spin2_single_determinant():
+    """A one-determinant 2c CI reproduces the SCF spin expectation values."""
+    system = System(
+        xyz="C 0 0 0", basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT"
+    )
+    scf = GHF(charge=0, ms_guess=1.0)(system)
+    ci = CI(RelCISolver(nel=6, core_orbitals=5, active_orbitals=1))(scf)
+    ci.run()
+    assert scf.S2 == approx(2.0063122057820237)
+    assert ci.ci_solver.spin2[0] == approx(scf.S2)
+    assert ci.ci_solver.spin_vector[0] == approx([0.0, 0.0, 1.0])
+
+
+def test_rel_ci_spin2_spin_free_limit():
+    """Without spin-orbit coupling the 2c roots are exact spin eigenstates."""
+    system = System(
+        xyz="""
+        H 0.0 0.0 0.0
+        H 0.0 0.0 2.0
+        """,
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    scf = RHF(charge=0, e_tol=1e-12)(system)
+    conv = SpinorUpcaster(apply_random_phase=True)(scf)
+    ci = CI(RelCISolver(nel=2, active_orbitals=4, nroots=6))(conv)
+    ci.run()
+
+    # two electrons in two spatial orbitals: three singlets and one triplet
+    assert np.sort(ci.ci_solver.spin2) == approx([0.0, 0.0, 0.0, 2.0, 2.0, 2.0])
+
+    ci = CI(RelCISolver(nel=2, active_orbitals=4, nroots=6), do_compute_spin2=False)(
+        conv
+    )
+    ci.run()
+    assert not hasattr(ci.ci_solver, "spin2")
+
+
+@pytest.mark.parametrize("x2c_type", ["so", "sf"])
+def test_rel_ci_spin2_picture_change(x2c_type):
+    r"""Picture change corrects the spin matrices but leaves the one-electron value exact.
+
+    A single electron has :math:`\langle S^2 \rangle = 3/4` whatever the relativistic
+    treatment. The correction to the spin matrices themselves is large for Br, which the
+    comparison against the untransformed matrices checks. The sf case exercises the
+    spin-free path, where the decoupling matrices carry no spin structure and each spatial
+    block is transformed on its own.
+    """
+    from forte2.ci.rel_ci_utils import spin_matrices
+
+    system = System(
+        xyz="Br 0 0 0",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e"),
+    )
+    scf = GHF(charge=34, ms_guess=0.5)(system)
+    ci = CI(RelCISolver(nel=1, active_orbitals=4, nroots=1))(scf)
+    ci.run()
+
+    assert ci.ci_solver.spin2[0] == approx(0.75)
+
+    C = ci.mos.C[0][:, ci.ci_solver.core_indices + ci.ci_solver.active_indices]
+    S_z = spin_matrices(system, C)[0]
+    S_z_raw = spin_matrices(system, C, skip_picture_change=True)[0]
+    assert np.abs(S_z - S_z_raw).max() > 1e-3
+
+    # the same escape hatch, set once on the system instead of per call
+    system_nopc = System(
+        xyz="Br 0 0 0",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e", skip_picture_change=True),
+    )
+    GHF(charge=34, ms_guess=0.5)(system_nopc).run()
+    assert np.abs(spin_matrices(system_nopc, C)[0] - S_z_raw).max() == approx(0.0)

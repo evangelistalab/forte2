@@ -1,4 +1,4 @@
-import numpy as np
+import pytest
 
 from forte2 import GHF, MCOptimizer, RHF, RelCISolver, SpinorUpcaster, System, X2CParams
 from forte2.helpers.comparisons import approx
@@ -178,3 +178,25 @@ def test_rel_casscf_br():
     mc = MCOptimizer(ci_solver)(scf)
     mc.run()
     assert mc.E == approx(-2597.067904096615)
+
+
+def test_rel_casscf_spin2():
+    system = System(
+        xyz="""
+        O 0.0 0.0 0.0
+        H 0.0 0.0 1.1
+        """,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
+    )
+    scf = GHF(charge=0, ms_guess=0.5, e_tol=1e-11)(system)
+    ci_solver = RelCISolver(
+        nel=9,
+        core_orbitals=2,
+        active_orbitals=10,
+        nroots=4,
+    )
+    mc = MCOptimizer(ci_solver)(scf)
+    mc.run()
+    assert mc.spin2 == pytest.approx([0.753865, 0.753865, 0.753859, 0.753859], abs=1e-4)
