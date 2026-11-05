@@ -145,15 +145,16 @@ double evaluate_criterion(double delta, double v, ScreeningCriterion criterion) 
 }
 
 void SelectedCIHelper::update_hbci_ints() {
-    // Precompute sorted lists of two-electron integrals for each (p, q) pair
-    // (p,q) -> [|<pq||rs>^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
+    // Precompute sorted lists of two-electron integrals for each (p, q) pair with p < q
+    // (p,q) -> [|<pq||rs>^2/(ep+eq-er-es)|, r, s), ...] with r < s, sorted in descending order.
+    // <pq||rs> is antisymmetric in r and s, and the same-spin doubles use only p < q and r < s.
     va_sorted_.resize(norb_ * norb_);
     for (size_t p{0}; p < norb_; ++p) {
-        for (size_t q{0}; q < norb_; ++q) {
+        for (size_t q{p + 1}; q < norb_; ++q) {
             std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
-            v_list.reserve(norb_ * norb_);
+            v_list.reserve(norb_ * (norb_ - 1) / 2);
             for (size_t r{0}; r < norb_; ++r) {
-                for (size_t s{0}; s < norb_; ++s) {
+                for (size_t s{r + 1}; s < norb_; ++s) {
                     const double delta = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
                     const double v = Va(p, q, r, s);
                     const double val = evaluate_criterion(delta, v, screening_criterion_);
