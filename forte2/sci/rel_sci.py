@@ -35,8 +35,9 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
             self.ints.V,
             self.log_level,
             self.sci_params.screening_criterion,
-            self.sci_params.frozen_creation,
-            self.sci_params.frozen_annihilation,
+            self.gas_size,
+            self.gas_min,
+            self.gas_max,
         )
 
     def _update_sci_helper_ints(self):
@@ -119,7 +120,7 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
             d0 = Determinant.zero()
             for i in range(nel_active):
                 d0.set_na(i, True)
-            return [d0]
+            return self._automatic_guess_in_gas_space([d0])
 
         # spinors are singly occupied, so the occupation window is measured in spinors
         nocc = nel_active - window_occ
@@ -148,7 +149,7 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
             ci_strings = CIStrings(
                 nel_active, 0, 0, [[0] * nocc, [0] * nactv], [nocc], [nocc]
             )
-        return ci_strings.make_determinants()
+        return self._automatic_guess_in_gas_space(ci_strings.make_determinants())
 
     def _check_guess_dets(self, guess_dets):
         for d in guess_dets:
@@ -163,6 +164,11 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
                 raise ValueError(
                     f"Guess determinant {d.str(self.norb)} has {na} electrons, expected "
                     f"{self.state.nel - self.ncore}."
+                )
+            if not self._in_gas_space(d):
+                raise ValueError(
+                    f"Guess determinant {d.str(self.norb)} violates the GAS occupation "
+                    f"limits of {self.state}."
                 )
 
     def _test_rdms(self):

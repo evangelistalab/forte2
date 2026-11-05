@@ -60,11 +60,7 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
 
         // single alpha excitations
         for (const auto& i : aocc_span) {
-            if (!annihilation_allowed(i))
-                continue;
             for (const auto& a : avir_span) {
-                if (!creation_allowed(a))
-                    continue;
                 const std::complex<double> integral = singles_coupling_a(i, a, det);
                 const double criterion = std::abs(integral * max_abs_c);
 
@@ -72,6 +68,8 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
                     continue;
 
                 const auto [new_det, sign] = create_single_a_excitation(det, i, a);
+                if (!in_gas_space(new_det))
+                    continue;
                 const std::complex<double> coupling = sign * std::conj(integral);
 
                 if (criterion > var_threshold) {
@@ -85,16 +83,12 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
 
         // double alpha-alpha excitations
         for (const auto& i : aocc_span) {
-            if (!annihilation_allowed(i))
-                continue;
             for (const auto& j : aocc_span) {
-                if (i >= j || !annihilation_allowed(j))
+                if (i >= j)
                     continue;
                 for (const auto& a : avir_span) {
-                    if (!creation_allowed(a))
-                        continue;
                     for (const auto& b : avir_span) {
-                        if (a >= b || !creation_allowed(b))
+                        if (a >= b)
                             continue;
 
                         const std::complex<double> integral = Va(i, j, a, b);
@@ -103,6 +97,8 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
                             continue;
 
                         const auto [new_det, sign] = create_double_aa_excitation(det, i, j, a, b);
+                        if (!in_gas_space(new_det))
+                            continue;
                         const std::complex<double> coupling = sign * std::conj(integral);
 
                         if (criterion > var_threshold) {
@@ -315,6 +311,8 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
                           std::complex<double> coupling, double criterion) {
         if (criterion <= pt2_threshold)
             return;
+        if (!in_gas_space(det))
+            return;
         // if the determinant is already in the variational space, skip it
         if (existing_dets.count(det))
             return;
@@ -338,7 +336,7 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
         }
     };
 
-    // norb_mask is used to compute the allowed virtual creation indices
+    // norb_mask is used to compute the virtual orbitals
     String norb_mask = String::zero();
     norb_mask.fill_up_to(norb_);
 
@@ -368,13 +366,9 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
             continue;
 
         // find the occupied and virtual orbitals for the current alpha string
-        auto a_str_annihilation_masked = a_str & ~frozen_annihilation_mask_;
-        // noa is the number of occupied alpha orbitals that we are allowed to annihilate from
         size_t noa, nva;
-        a_str_annihilation_masked.find_set_bits(aocc, noa);
-        auto a_str_creation_masked = (~a_str & norb_mask) & ~frozen_creation_mask_;
-        // nva is the number of virtual alpha orbitals that we are allowed to create into
-        a_str_creation_masked.find_set_bits(avir, nva);
+        a_str.find_set_bits(aocc, noa);
+        (~a_str & norb_mask).find_set_bits(avir, nva);
 
         // spans are more convenient for range-based for loops below
         std::span<size_t> aocc_span(aocc.data(), noa);
@@ -390,6 +384,10 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
                     continue;
                 }
                 new_det.set_alpha_string(new_a_str);
+                // singles_coupling_a is expensive, so drop determinants outside the GAS space
+                // first
+                if (!in_gas_space(new_det))
+                    continue;
                 const std::complex<double> integral = singles_coupling_a(i, a, new_det);
                 accumulate(new_det, c_det, sign * std::conj(integral),
                            std::abs(integral * abs_c_max_det));

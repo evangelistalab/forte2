@@ -292,7 +292,7 @@ class RelCISigmaBuilder:
         """Compute the spin-orbital three-electron reduced density matrix"""
 
 class SelectedCIHelper:
-    def __init__(self, norb: int, dets: DeterminantVector, c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3, screening_criterion: str = 'hbci', frozen_creation: Sequence[int] = [], frozen_annihilation: Sequence[int] = []) -> None:
+    def __init__(self, norb: int, dets: DeterminantVector, c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3, screening_criterion: str = 'hbci', gas_size: Sequence[int] = [], gas_min: Sequence[int] = [], gas_max: Sequence[int] = []) -> None:
         """
         Initialize the SelectedCIHelper with the number of orbitals, initial determinants, energy, Hamiltonian, and integrals
         """
@@ -318,12 +318,6 @@ class SelectedCIHelper:
 
     def set_energies(self, e: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
         """Set the energies of the roots"""
-
-    def set_frozen_creation(self, frozen_creation: Sequence[int]) -> None:
-        """Set orbitals excluded from creation in selection"""
-
-    def set_frozen_annihilation(self, frozen_annihilation: Sequence[int]) -> None:
-        """Set orbitals excluded from annihilation in selection"""
 
     def set_screening_criterion(self, criterion: str) -> None:
         """Set the screening criterion for selection ('hbci' or 'ehbci')"""
@@ -421,7 +415,7 @@ class SelectedCIHelper:
         """Return the total selection time"""
 
 class RelSelectedCIHelper:
-    def __init__(self, norb: int, dets: DeterminantVector, c: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, screening_criterion: str = 'hbci', frozen_creation: Sequence[int] = [], frozen_annihilation: Sequence[int] = []) -> None:
+    def __init__(self, norb: int, dets: DeterminantVector, c: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, screening_criterion: str = 'hbci', gas_size: Sequence[int] = [], gas_min: Sequence[int] = [], gas_max: Sequence[int] = []) -> None:
         """
         Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, energy, complex Hamiltonian, and complex integrals
         """
@@ -449,12 +443,6 @@ class RelSelectedCIHelper:
 
     def set_energies(self, e: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
         """Set the energies of the roots"""
-
-    def set_frozen_creation(self, frozen_creation: Sequence[int]) -> None:
-        """Set orbitals excluded from creation in selection"""
-
-    def set_frozen_annihilation(self, frozen_annihilation: Sequence[int]) -> None:
-        """Set orbitals excluded from annihilation in selection"""
 
     def set_screening_criterion(self, criterion: str) -> None:
         """Set the screening criterion for selection (only 'hbci' is supported)"""

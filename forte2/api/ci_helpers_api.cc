@@ -210,10 +210,10 @@ void export_sci_helper_api(nb::module_& sub_m) {
     nb::class_<SelectedCIHelper>(sub_m, "SelectedCIHelper")
         .def(nb::init<size_t, const std::vector<Determinant>&, np_matrix&, double, np_matrix&,
                       np_tensor4&, int, const std::string&, const std::vector<size_t>&,
-                      const std::vector<size_t>&>(),
+                      const std::vector<int>&, const std::vector<int>&>(),
              "norb"_a, "dets"_a, "c"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
-             "screening_criterion"_a = "hbci", "frozen_creation"_a = std::vector<size_t>{},
-             "frozen_annihilation"_a = std::vector<size_t>{},
+             "screening_criterion"_a = "hbci", "gas_size"_a = std::vector<size_t>{},
+             "gas_min"_a = std::vector<int>{}, "gas_max"_a = std::vector<int>{},
              "Initialize the SelectedCIHelper with the number of orbitals, initial determinants, "
              "energy, Hamiltonian, and integrals")
         .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
@@ -227,10 +227,6 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Set the number of batches each thread will process in parallel sections")
         .def("set_energies", &SelectedCIHelper::set_energies, "e"_a,
              "Set the energies of the roots")
-        .def("set_frozen_creation", &SelectedCIHelper::set_frozen_creation, "frozen_creation"_a,
-             "Set orbitals excluded from creation in selection")
-        .def("set_frozen_annihilation", &SelectedCIHelper::set_frozen_annihilation,
-             "frozen_annihilation"_a, "Set orbitals excluded from annihilation in selection")
         .def("set_screening_criterion", &SelectedCIHelper::set_screening_criterion, "criterion"_a,
              "Set the screening criterion for selection ('hbci' or 'ehbci')")
         .def("set_energy_correction", &SelectedCIHelper::set_energy_correction, "correction"_a,
@@ -293,10 +289,11 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
     nb::class_<RelSelectedCIHelper>(sub_m, "RelSelectedCIHelper")
         .def(nb::init<size_t, const std::vector<Determinant>&, np_matrix_complex&, double,
                       np_matrix_complex&, np_tensor4_complex&, int, const std::string&,
-                      const std::vector<size_t>&, const std::vector<size_t>&>(),
+                      const std::vector<size_t>&, const std::vector<int>&,
+                      const std::vector<int>&>(),
              "norb"_a, "dets"_a, "c"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
-             "screening_criterion"_a = "hbci", "frozen_creation"_a = std::vector<size_t>{},
-             "frozen_annihilation"_a = std::vector<size_t>{},
+             "screening_criterion"_a = "hbci", "gas_size"_a = std::vector<size_t>{},
+             "gas_min"_a = std::vector<int>{}, "gas_max"_a = std::vector<int>{},
              "Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, "
              "energy, complex Hamiltonian, and complex integrals")
         .def("set_Hamiltonian", &RelSelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
@@ -312,10 +309,6 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "Set the number of batches each thread will process in parallel sections")
         .def("set_energies", &RelSelectedCIHelper::set_energies, "e"_a,
              "Set the energies of the roots")
-        .def("set_frozen_creation", &RelSelectedCIHelper::set_frozen_creation, "frozen_creation"_a,
-             "Set orbitals excluded from creation in selection")
-        .def("set_frozen_annihilation", &RelSelectedCIHelper::set_frozen_annihilation,
-             "frozen_annihilation"_a, "Set orbitals excluded from annihilation in selection")
         .def("set_screening_criterion", &RelSelectedCIHelper::set_screening_criterion,
              "criterion"_a, "Set the screening criterion for selection (only 'hbci' is supported)")
         .def("set_energy_correction", &RelSelectedCIHelper::set_energy_correction, "correction"_a,

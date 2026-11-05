@@ -357,6 +357,18 @@ The guess options work as in CI, with two differences:
 - The solver starts from ``nroot`` vectors, not ``guess_per_root * nroot``. With
   ``ci_vector_guess``, the determinants of the guesses make up the initial space.
 
+With a GAS active space, the selection and the perturbative correction include only the
+determinants within the occupation limits of the state, so selected CI converges to GASCI. The
+guess determinants must satisfy the limits, and the automatic guess keeps only the candidates that
+do. For example, for the lowest core-excited triplet of Ne, with at most one electron in 1s::
+
+    sci_solver = forte2.SelectedCISolver(
+        states=forte2.State(nel=10, multiplicity=3, ms=1.0, gas_max=[1]),
+        active_orbitals=[[0], list(range(1, 14))],
+        guess_dets=[Determinant("a2222a")],
+        sci_params=SelectedCIParams(var_threshold=1e-5),
+    )
+
 Relativistic solvers
 --------------------
 
