@@ -103,6 +103,7 @@ class _SelectedCISingleStateSolver:
         self.norb = self.mo_space.nactv
         self.ncore = self.mo_space.ncore + self.mo_space.nfrozen_core
         self.ngas = self.mo_space.ngas
+        self.gas_size = [len(orbitals) for orbitals in self.mo_space.active_orbitals]
         self.gas_min = self.state.gas_min
         self.gas_max = self.state.gas_max
         self.eigensolver = None
@@ -123,8 +124,9 @@ class _SelectedCISingleStateSolver:
             self.ints.V,
             self.log_level,
             self.sci_params.screening_criterion,
-            self.sci_params.frozen_creation,
-            self.sci_params.frozen_annihilation,
+            self.gas_size,
+            self.gas_min,
+            self.gas_max,
         )
 
     def _compute_spin2(self):
@@ -474,7 +476,7 @@ class _SelectedCISingleStateSolver:
                 d0.set_na(i, True)
             for i in range(nb_active):
                 d0.set_nb(i, True)
-            return [d0]
+            return self._automatic_guess_in_gas_space([d0])
 
         nocc = nel_active // 2 - window_occ
         if nocc < 0:
@@ -511,7 +513,29 @@ class _SelectedCISingleStateSolver:
                 [noccel],
                 [noccel],
             )
-        return ci_strings.make_determinants()
+        return self._automatic_guess_in_gas_space(ci_strings.make_determinants())
+
+    def _automatic_guess_in_gas_space(self, dets):
+        """Keep the automatic guess determinants that satisfy the GAS occupation limits."""
+        dets = [d for d in dets if self._in_gas_space(d)]
+        if not dets:
+            raise ValueError(
+                f"No automatic guess determinant satisfies the GAS occupation limits of "
+                f"{self.state}. Give guess_dets."
+            )
+        return dets
+
+    def _in_gas_space(self, d):
+        """Whether a determinant satisfies the GAS occupation limits of the state."""
+        first = 0
+        for g, size in enumerate(self.gas_size):
+            n = sum(d.na(i) + d.nb(i) for i in range(first, first + size))
+            if g < len(self.gas_min) and n < self.gas_min[g]:
+                return False
+            if g < len(self.gas_max) and n > self.gas_max[g]:
+                return False
+            first += size
+        return True
 
     def _initial_determinants(self, slater_rules):
         """
@@ -649,6 +673,10 @@ class _SelectedCISingleStateSolver:
             if nb + self.ncore != self.state.nb:
                 raise ValueError(
                     f"Guess determinant {d.str(self.norb)} has {nb} beta electrons, expected {self.state.nb - self.ncore}."
+                )
+            if not self._in_gas_space(d):
+                raise ValueError(
+                    f"Guess determinant {d.str(self.norb)} violates the GAS occupation limits of {self.state}."
                 )
 
     def _compute_hdiag(self):

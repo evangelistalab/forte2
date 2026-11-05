@@ -235,12 +235,6 @@ class SelectedCIParams(ParamsBase):
         to override it.
     do_spin_penalty: bool, optional, default=True
         Whether to apply a spin penalty to the Hamiltonian to enforce correct spin symmetry.
-    frozen_creation: list[int], optional
-        A list of orbital indices for which creation operators are frozen (i.e., not allowed to be occupied in the selected determinants).
-        This is used to enforce certain symmetries or to exclude certain orbitals from the selection process.
-    frozen_annihilation: list[int], optional
-        A list of orbital indices for which annihilation operators are frozen (i.e., not allowed to be unoccupied in the selected determinants).
-        This is used to enforce certain symmetries or to exclude certain orbitals from the selection process.
     screening_criterion: str, optional, default="hbci"
         The criterion used to screen determinants during selection. Options are "hbci" and "ehbci".
     energy_correction: str, optional, default="pt2"
@@ -273,8 +267,6 @@ class SelectedCIParams(ParamsBase):
     ci_algorithm: Literal["iterative", "exact"] = "iterative"
     num_batches_per_thread: int = 4
     do_spin_penalty: bool = True
-    frozen_creation: list[int] = field(default_factory=list)
-    frozen_annihilation: list[int] = field(default_factory=list)
     screening_criterion: Literal["hbci", "ehbci"] = "hbci"
     energy_correction: Literal["variational", "pt2"] = "pt2"
     energy_shift: float = None

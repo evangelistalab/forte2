@@ -89,11 +89,7 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         std::span<size_t> bvir_span(bvir.data(), nvb);
 
         for (const auto& i : aocc_span) {
-            if (!annihilation_allowed(i))
-                continue;
             for (const auto& a : avir_span) {
-                if (!creation_allowed(a))
-                    continue;
                 // const double integral = h_[i * norb_ + a];
                 const double integral = slater_rules_.singles_coupling_a(i, a, det);
                 const double criterion = std::fabs(integral * max_abs_c);
@@ -102,6 +98,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                     continue;
 
                 const auto [new_det, sign] = create_single_a_excitation(det, i, a);
+                if (!in_gas_space(new_det))
+                    continue;
 
                 if (criterion > var_threshold) {
                     promoted.insert(new_det);
@@ -113,11 +111,7 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         }
 
         for (const auto& i : bocc_span) {
-            if (!annihilation_allowed(i))
-                continue;
             for (const auto& a : bvir_span) {
-                if (!creation_allowed(a))
-                    continue;
                 // const double integral =
                 //     slater_rules_.singles_coupling(i, a, bocc, aocc); // h_[i * norb_ + a];
                 const double integral = slater_rules_.singles_coupling_b(i, a, det);
@@ -126,6 +120,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                     continue;
 
                 const auto [new_det, sign] = create_single_b_excitation(det, i, a);
+                if (!in_gas_space(new_det))
+                    continue;
 
                 if (criterion > var_threshold) {
                     promoted.insert(new_det);
@@ -137,16 +133,12 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         }
 
         for (const auto& i : aocc_span) {
-            if (!annihilation_allowed(i))
-                continue;
             for (const auto& j : aocc_span) {
-                if (i >= j || !annihilation_allowed(j))
+                if (i >= j)
                     continue;
                 for (const auto& a : avir_span) {
-                    if (!creation_allowed(a))
-                        continue;
                     for (const auto& b : avir_span) {
-                        if (a >= b || !creation_allowed(b))
+                        if (a >= b)
                             continue;
 
                         const double integral = Va(i, j, a, b);
@@ -155,6 +147,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                             continue;
 
                         const auto [new_det, sign] = create_double_aa_excitation(det, i, j, a, b);
+                        if (!in_gas_space(new_det))
+                            continue;
 
                         if (criterion > var_threshold) {
                             promoted.insert(new_det);
@@ -168,16 +162,12 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         }
 
         for (const auto& i : bocc_span) {
-            if (!annihilation_allowed(i))
-                continue;
             for (const auto& j : bocc_span) {
-                if (i >= j || !annihilation_allowed(j))
+                if (i >= j)
                     continue;
                 for (const auto& a : bvir_span) {
-                    if (!creation_allowed(a))
-                        continue;
                     for (const auto& b : bvir_span) {
-                        if (a >= b || !creation_allowed(b))
+                        if (a >= b)
                             continue;
                         const double integral = Va(i, j, a, b);
                         const double criterion = std::fabs(integral * max_abs_c);
@@ -185,6 +175,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                             continue;
 
                         const auto [new_det, sign] = create_double_bb_excitation(det, i, j, a, b);
+                        if (!in_gas_space(new_det))
+                            continue;
 
                         if (criterion > var_threshold) {
                             promoted.insert(new_det);
@@ -198,23 +190,17 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         }
 
         for (const auto& i : aocc_span) {
-            if (!annihilation_allowed(i))
-                continue;
             for (const auto& j : bocc_span) {
-                if (!annihilation_allowed(j))
-                    continue;
                 for (const auto& a : avir_span) {
-                    if (!creation_allowed(a))
-                        continue;
                     for (const auto& b : bvir_span) {
-                        if (!creation_allowed(b))
-                            continue;
                         const double integral = V(i, j, a, b);
                         const double criterion = std::fabs(integral * max_abs_c);
                         if (criterion <= pt2_threshold)
                             continue;
 
                         const auto [new_det, sign] = create_double_ab_excitation(det, i, j, a, b);
+                        if (!in_gas_space(new_det))
+                            continue;
 
                         if (criterion > var_threshold) {
                             promoted.insert(new_det);
@@ -430,6 +416,8 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
                           double criterion) {
         if (criterion <= pt2_threshold)
             return;
+        if (!in_gas_space(det))
+            return;
         // if the determinant is already in the variational space, skip it
         if (existing_dets.count(det))
             return;
@@ -453,7 +441,7 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
         }
     };
 
-    // norb_mask is used to compute the allowed virtual creation indices
+    // norb_mask is used to compute the virtual orbitals
     String norb_mask = String::zero();
     norb_mask.fill_up_to(norb_);
 
@@ -484,12 +472,8 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
             continue;
 
         // find the occupied and virtual orbitals for the current alpha string
-        auto a_str_annihilation_masked = a_str & ~frozen_annihilation_mask_;
-        // noa is the number of occupied alpha orbitals that we are allowed to annihilate from
-        a_str_annihilation_masked.find_set_bits(aocc, noa);
-        auto a_str_creation_masked = (~a_str & norb_mask) & ~frozen_creation_mask_;
-        // nva is the number of virtual alpha orbitals that we are allowed to create into
-        a_str_creation_masked.find_set_bits(avir, nva);
+        a_str.find_set_bits(aocc, noa);
+        (~a_str & norb_mask).find_set_bits(avir, nva);
 
         // spans are more convenient for range-based for loops below
         std::span<size_t> aocc_span(aocc.data(), noa);
@@ -513,6 +497,8 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
                         continue;
                     const auto& [b_str_idx, det_index] = second_string_to_det_index[k];
                     new_det.set_beta_string(ab_list_.sorted_second_string(b_str_idx));
+                    if (!in_gas_space(new_det))
+                        continue;
                     // singles_coupling_a can be expensive to compute
                     // a possible replacement here is h(i, a)
                     const double integral = slater_rules_.singles_coupling_a(i, a, new_det);
@@ -595,7 +581,7 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
         }
 
         // beta excitations
-        
+
         // All beta excitations with a shared a_str share a batch
         if (batch_of(a_str, num_batches) != batch_id)
             continue;
@@ -606,24 +592,24 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
                 continue;
             const auto& [b_str_idx, det_index] = second_string_to_det_index[k];
             const String& b_str = ab_list_.sorted_second_string(b_str_idx);
-            auto b_str_annihilation_masked = b_str & ~frozen_annihilation_mask_;
-            b_str_annihilation_masked.find_set_bits(bocc, nob);
-            auto b_str_creation_masked = (~b_str & norb_mask) & ~frozen_creation_mask_;
-            b_str_creation_masked.find_set_bits(bvir, nvb);
+            b_str.find_set_bits(bocc, nob);
+            (~b_str & norb_mask).find_set_bits(bvir, nvb);
             std::span<size_t> bocc_span(bocc.data(), nob);
             std::span<size_t> bvir_span(bvir.data(), nvb);
 
             // single beta excitations
             for (const auto& i : bocc_span) {
                 for (const auto& a : bvir_span) {
-                    new_det.set_beta_string(
-                        b_str); // push the current beta string to compute coupling
+                    auto [new_b_str, sign] = create_single_excitation_unchecked(b_str, i, a);
+                    new_det.set_beta_string(new_b_str);
+                    // singles_coupling_b is expensive, so drop determinants outside the GAS space
+                    // first. The coupling is the same on either side of the excitation.
+                    if (!in_gas_space(new_det))
+                        continue;
                     const double integral = slater_rules_.singles_coupling_b(i, a, new_det);
                     const double criterion = std::fabs(integral * abs_c_max[k]);
                     if (criterion <= pt2_threshold)
                         continue;
-                    auto [new_b_str, sign] = create_single_excitation_unchecked(b_str, i, a);
-                    new_det.set_beta_string(new_b_str); // push the new beta string
                     accumulate(new_det, c_block + k * nroots_, sign * integral, criterion);
                 }
             }
