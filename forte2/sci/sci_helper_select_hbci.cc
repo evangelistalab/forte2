@@ -519,7 +519,7 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
                     if (std::fabs(coupling * abs_c_max_block) <= pt2_threshold)
                         break;
 
-                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b))
+                    if (a_str.get_bit(a) or a_str.get_bit(b))
                         continue;
 
                     auto [new_a_str, sign] = create_double_excitation_unchecked(a_str, i, j, a, b);
@@ -625,7 +625,7 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
                         if (criterion <= pt2_threshold)
                             break;
 
-                        if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b))
+                        if (b_str.get_bit(a) or b_str.get_bit(b))
                             continue;
 
                         auto [new_b_str, sign] =

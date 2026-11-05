@@ -406,7 +406,7 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
                     if (std::fabs(key * abs_c_max_det) <= pt2_threshold)
                         break;
 
-                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b))
+                    if (a_str.get_bit(a) or a_str.get_bit(b))
                         continue;
 
                     auto [new_a_str, sign] = create_double_excitation_unchecked(a_str, i, j, a, b);
