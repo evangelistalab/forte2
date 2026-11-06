@@ -221,6 +221,10 @@ class SelectedCIParams(ParamsBase):
         If True, compute the perturbative correction in every selection cycle. If False,
         compute it only in the final cycle, which runs whether or not the selection
         converges.
+    do_gas_restriction_pt2: bool, optional, default=False
+        If True, also compute the PT2 correction from the determinants outside the GAS
+        occupation limits of the state, which estimates the energy without the limits. It's
+        computed in the same cycles as the rest of the PT2 correction.
     selection_algorithm: str, optional, default="hbci"
         The algorithm used for selecting determinants. Options are "hbci" and "hbci_ref".
     guess_occ_window: int, optional, default=2
@@ -268,6 +272,7 @@ class SelectedCIParams(ParamsBase):
     var_threshold: float = 5e-4
     pt2_threshold: float = 1e-8
     do_pt2_every_iter: bool = False
+    do_gas_restriction_pt2: bool = False
     selection_algorithm: Literal["hbci", "hbci_ref"] = "hbci"
     guess_occ_window: int = 2
     guess_vir_window: int = 2

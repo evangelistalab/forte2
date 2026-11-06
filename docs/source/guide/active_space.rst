@@ -369,6 +369,13 @@ do. For example, for the lowest core-excited triplet of Ne, with at most one ele
         sci_params=SelectedCIParams(var_threshold=1e-5),
     )
 
+To estimate the energy without the occupation limits, set ``do_gas_restriction_pt2=True`` in
+``SelectedCIParams``. The solver then also computes ``E_gas_pt2``, the second-order correction
+from the determinants outside the limits, and ``E_tot + E_gas_pt2`` estimates the energy of the
+state in the full active space. The estimate is reliable when the state lies in a gap of the full
+spectrum. When it lies among other states of the full space, as many core-excited states do,
+some terms of the correction can be large.
+
 Relativistic solvers
 --------------------
 

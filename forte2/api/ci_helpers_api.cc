@@ -235,9 +235,10 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "strength"_a = 0.5,
              "Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength")
         .def("select_hbci_ref", &SelectedCIHelper::select_hbci_ref, "var_threshold"_a,
-             "pt2_threshold"_a, "Perform HBCI selection with the given threshold")
+             "pt2_threshold"_a, "gas_pt2"_a = false,
+             "Perform HBCI selection with the given threshold")
         .def("select_hbci", &SelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
-             "Perform HBCI selection with the given thresholds")
+             "gas_pt2"_a = false, "Perform HBCI selection with the given thresholds")
         .def("compute_spin2", &SelectedCIHelper::compute_spin2,
              "Compute the expectation value of S^2 for each root and return as a list")
         .def("a_1rdm", &SelectedCIHelper::compute_a_1rdm, "left_root"_a, "right_root"_a,
@@ -274,6 +275,9 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Return the variational part of the Epstein-Nesbet second-order energy correction")
         .def("ept2_pt", &SelectedCIHelper::ept2_pt,
              "Return the perturbative part of the Epstein-Nesbet second-order energy correction")
+        .def("ept2_gas", &SelectedCIHelper::ept2_gas,
+             "Return the Epstein-Nesbet second-order energy correction from the determinants "
+             "outside the GAS occupation limits")
         .def("num_new_dets_var", &SelectedCIHelper::num_new_dets_var,
              "Return the number of new variational determinants added in the last selection")
         .def("num_new_dets_pt2", &SelectedCIHelper::num_new_dets_pt2,
@@ -317,9 +321,10 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "strength"_a = 0.5,
              "Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength")
         .def("select_hbci_ref", &RelSelectedCIHelper::select_hbci_ref, "var_threshold"_a,
-             "pt2_threshold"_a, "Perform HBCI selection with the reference implementation")
+             "pt2_threshold"_a, "gas_pt2"_a = false,
+             "Perform HBCI selection with the reference implementation")
         .def("select_hbci", &RelSelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
-             "Perform HBCI selection with the batched implementation")
+             "gas_pt2"_a = false, "Perform HBCI selection with the batched implementation")
         .def("so_1rdm", &RelSelectedCIHelper::compute_so_1rdm, "left_root"_a, "right_root"_a,
              "Compute the complex spin-orbital 1-RDM (or transition 1-RDM) between two roots")
         .def("so_2rdm", &RelSelectedCIHelper::compute_so_2rdm, "left_root"_a, "right_root"_a,
@@ -335,6 +340,9 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "Return the variational part of the Epstein-Nesbet second-order energy correction")
         .def("ept2_pt", &RelSelectedCIHelper::ept2_pt,
              "Return the perturbative part of the Epstein-Nesbet second-order energy correction")
+        .def("ept2_gas", &RelSelectedCIHelper::ept2_gas,
+             "Return the Epstein-Nesbet second-order energy correction from the determinants "
+             "outside the GAS occupation limits")
         .def("num_new_dets_var", &RelSelectedCIHelper::num_new_dets_var,
              "Return the number of new variational determinants added in the last selection")
         .def("num_new_dets_pt2", &RelSelectedCIHelper::num_new_dets_pt2,

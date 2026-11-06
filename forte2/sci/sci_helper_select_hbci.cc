@@ -48,7 +48,7 @@ void SelectedCIHelper::update_orbital_energies() {
     }
 }
 
-void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshold) {
+void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshold, bool gas_pt2) {
     compute_det_energies();
     prepare_strings();
 
@@ -98,10 +98,11 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                     continue;
 
                 const auto [new_det, sign] = create_single_a_excitation(det, i, a);
-                if (!in_gas_space(new_det))
+                const bool inside = in_gas_space(new_det);
+                if (!inside && !gas_pt2)
                     continue;
 
-                if (criterion > var_threshold) {
+                if (inside && criterion > var_threshold) {
                     promoted.insert(new_det);
                 }
                 for (size_t r{0}; r < nroots_; ++r) {
@@ -120,10 +121,11 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                     continue;
 
                 const auto [new_det, sign] = create_single_b_excitation(det, i, a);
-                if (!in_gas_space(new_det))
+                const bool inside = in_gas_space(new_det);
+                if (!inside && !gas_pt2)
                     continue;
 
-                if (criterion > var_threshold) {
+                if (inside && criterion > var_threshold) {
                     promoted.insert(new_det);
                 }
                 for (size_t r{0}; r < nroots_; ++r) {
@@ -147,10 +149,11 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                             continue;
 
                         const auto [new_det, sign] = create_double_aa_excitation(det, i, j, a, b);
-                        if (!in_gas_space(new_det))
+                        const bool inside = in_gas_space(new_det);
+                        if (!inside && !gas_pt2)
                             continue;
 
-                        if (criterion > var_threshold) {
+                        if (inside && criterion > var_threshold) {
                             promoted.insert(new_det);
                         }
                         for (size_t r{0}; r < nroots_; ++r) {
@@ -175,10 +178,11 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                             continue;
 
                         const auto [new_det, sign] = create_double_bb_excitation(det, i, j, a, b);
-                        if (!in_gas_space(new_det))
+                        const bool inside = in_gas_space(new_det);
+                        if (!inside && !gas_pt2)
                             continue;
 
-                        if (criterion > var_threshold) {
+                        if (inside && criterion > var_threshold) {
                             promoted.insert(new_det);
                         }
                         for (size_t r{0}; r < nroots_; ++r) {
@@ -199,10 +203,11 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                             continue;
 
                         const auto [new_det, sign] = create_double_ab_excitation(det, i, j, a, b);
-                        if (!in_gas_space(new_det))
+                        const bool inside = in_gas_space(new_det);
+                        if (!inside && !gas_pt2)
                             continue;
 
-                        if (criterion > var_threshold) {
+                        if (inside && criterion > var_threshold) {
                             promoted.insert(new_det);
                         }
                         for (size_t r{0}; r < nroots_; ++r) {
@@ -231,21 +236,34 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
     for (size_t r{0}; r < nroots_; ++r) {
         double var = 0.0;
         double pt = 0.0;
+        double gas = 0.0;
         for (const auto& [det, val] : map[r]) {
             const double delta = root_energies_[r] - slater_rules_.energy(det);
-            (promoted.count(det) ? var : pt) += compute_delta_ept2(delta, val);
+            const double ept2 = compute_delta_ept2(delta, val);
+            if (!in_gas_space(det)) {
+                gas += ept2;
+            } else {
+                (promoted.count(det) ? var : pt) += ept2;
+            }
         }
         ept2_var_[r] = var;
         ept2_pt_[r] = pt;
+        ept2_gas_[r] = gas;
     }
+
+    // number of new determinants added this cycle (root 0 defines the variational space)
+    num_new_dets_var_ = promoted.size();
+    num_new_dets_pt2_ = map[0].size() - promoted.size();
 
     c_.resize(dets_.size() * nroots_, 0.0);
 
     compute_det_energies();
     prepare_strings();
+
+    selection_time_ = selection_timer.elapsed_seconds();
 }
 
-void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
+void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold, bool gas_pt2) {
     local_timer selection_timer;
 
     // The sorted integral lists only changes over iterations if the eHBCI criterion
@@ -265,6 +283,7 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
     std::vector<std::vector<Determinant>> thread_new_dets(num_threads);
     std::vector<std::vector<double>> local_ept2_var(num_threads, std::vector<double>(nroots_, 0.0));
     std::vector<std::vector<double>> local_ept2_pt(num_threads, std::vector<double>(nroots_, 0.0));
+    std::vector<std::vector<double>> local_ept2_gas(num_threads, std::vector<double>(nroots_, 0.0));
     std::vector<std::vector<std::tuple<size_t, size_t, double>>> thread_log_data(num_threads);
 
     DetSet existing_dets(dets_.begin(), dets_.end());
@@ -284,19 +303,20 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
 
             local_timer batch_timer;
 
-            select_hbci_batch(s, var_threshold, pt2_threshold, num_batches, batch_id,
+            select_hbci_batch(s, var_threshold, pt2_threshold, gas_pt2, num_batches, batch_id,
                               existing_dets);
 
             // Each determinant carries its complete coupling to the variational wave function and
-            // is attributed to exactly one of the two contributions, so no filtering between them
-            // is needed. Determinants already in the variational space were skipped during
+            // is attributed to exactly one of the three contributions, so no filtering between
+            // them is needed. Determinants already in the variational space were skipped during
             // generation.
             new_dets_local.clear();
             size_t num_pt_dets = 0;
             for (const auto& [det, idx] : s.map) {
                 const double energy = slater_rules_.energy(det);
-                auto& target = s.promoted[idx / nroots_] ? local_ept2_var[thread_id]
-                                                         : local_ept2_pt[thread_id];
+                auto& target = !in_gas_space(det)          ? local_ept2_gas[thread_id]
+                               : s.promoted[idx / nroots_] ? local_ept2_var[thread_id]
+                                                           : local_ept2_pt[thread_id];
                 for (size_t r{0}; r < nroots_; ++r) {
                     target[r] += compute_delta_ept2(root_energies_[r] - energy, s.coeffs[idx + r]);
                 }
@@ -328,9 +348,11 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
     for (size_t r{0}; r < nroots_; ++r) {
         ept2_var_[r] = 0.0;
         ept2_pt_[r] = 0.0;
+        ept2_gas_[r] = 0.0;
         for (size_t t = 0; t < num_threads; ++t) {
             ept2_var_[r] += local_ept2_var[t][r];
             ept2_pt_[r] += local_ept2_pt[t][r];
+            ept2_gas_[r] += local_ept2_gas[t][r];
         }
     }
 
@@ -380,8 +402,8 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
 }
 
 void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_threshold,
-                                         double pt2_threshold, size_t num_batches, size_t batch_id,
-                                         const DetSet& existing_dets) {
+                                         double pt2_threshold, bool gas_pt2, size_t num_batches,
+                                         size_t batch_id, const DetSet& existing_dets) {
     auto& map = s.map;
     auto& coeffs = s.coeffs;
     auto& promoted = s.promoted;
@@ -416,11 +438,14 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
                           double criterion) {
         if (criterion <= pt2_threshold)
             return;
-        if (!in_gas_space(det))
+        // determinants outside the GAS occupation limits enter only the GAS PT2 correction
+        const bool inside = in_gas_space(det);
+        if (!inside && !gas_pt2)
             return;
         // if the determinant is already in the variational space, skip it
         if (existing_dets.count(det))
             return;
+        const bool promote = inside && criterion > var_threshold;
         // A determinant can be reached by several parents. Every contribution to <det|H|Psi> has
         // to be summed before that sum is squared, so all of them accumulate into one entry of
         // coeffs regardless of which side of var_threshold the individual connection falls on.
@@ -431,12 +456,12 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
         if (emplaced) {
             for (size_t r{0}; r < nroots_; ++r)
                 coeffs.push_back(coupling * c_parent[r]);
-            promoted.push_back(criterion > var_threshold ? 1 : 0);
+            promoted.push_back(promote ? 1 : 0);
         } else {
             const size_t idx = it->second;
             for (size_t r{0}; r < nroots_; ++r)
                 coeffs[idx + r] += coupling * c_parent[r];
-            if (criterion > var_threshold)
+            if (promote)
                 promoted[idx / nroots_] = 1;
         }
     };
@@ -497,7 +522,7 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
                         continue;
                     const auto& [b_str_idx, det_index] = second_string_to_det_index[k];
                     new_det.set_beta_string(ab_list_.sorted_second_string(b_str_idx));
-                    if (!in_gas_space(new_det))
+                    if (!gas_pt2 && !in_gas_space(new_det))
                         continue;
                     // singles_coupling_a can be expensive to compute
                     // a possible replacement here is h(i, a)
@@ -604,7 +629,7 @@ void SelectedCIHelper::select_hbci_batch(SelectHbciScratch& s, double var_thresh
                     new_det.set_beta_string(new_b_str);
                     // singles_coupling_b is expensive, so drop determinants outside the GAS space
                     // first. The coupling is the same on either side of the excitation.
-                    if (!in_gas_space(new_det))
+                    if (!gas_pt2 && !in_gas_space(new_det))
                         continue;
                     const double integral = slater_rules_.singles_coupling_b(i, a, new_det);
                     const double criterion = std::fabs(integral * abs_c_max[k]);
