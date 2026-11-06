@@ -26,6 +26,7 @@ SelectedCIHelper::SelectedCIHelper(size_t norb, const std::vector<Determinant>& 
     root_energies_.resize(nroots_, 0.0);
     ept2_var_.resize(nroots_, 0.0);
     ept2_pt_.resize(nroots_, 0.0);
+    ept2_gas_.resize(nroots_, 0.0);
 
     na_ = dets_[0].count_alpha();
     nb_ = dets_[0].count_beta();

@@ -7,7 +7,7 @@ from forte2.lib.sparse_ops import SparseState
 from forte2.lib.det import Determinant
 from forte2.lib.ci_helpers import CIStrings, SelectedCIHelper
 from forte2.ci import CI
-from forte2.scf import RHF
+from forte2.scf import RHF, ROHF
 from forte2 import CI
 from forte2.sci.sci import _SelectedCISingleStateSolver
 from forte2.helpers.comparisons import approx
@@ -226,7 +226,10 @@ def test_sci_ne_core_ionized_single_determinant_guess():
 
 @pytest.mark.slow
 def test_sci_ne_core_excited():
-    """Selected CI on the lowest Ne core-excited triplet."""
+    """
+    Selected CI on the lowest Ne core-excited triplet, with the ENPT2 estimate of the
+    energy without the GAS restriction.
+    """
     e_gasci = -95.7282434726
     xyz = """
     Ne 0.0 0.0 0.0
@@ -244,13 +247,54 @@ def test_sci_ne_core_excited():
             pt2_threshold=0.0,
             do_spin_penalty=True,
             screening_criterion="hbci",
+            do_gas_restriction_pt2=True,
         ),
         nroots=1,
     )
     sci = CI(sci_solver)(rhf)
     sci.run()
 
+    # the GAS restriction PT2 leaves the energy in the GAS space unchanged
     assert sci_solver.E_tot[0] == pytest.approx(e_gasci, abs=1e-6)
+    assert sci_solver.E_gas_pt2[0] != 0.0
+
+
+@pytest.mark.parametrize("selection_algorithm", ["hbci", "hbci_ref"])
+def test_sci_o_core_excited_gas_restriction_pt2(selection_algorithm):
+    """
+    Selected CI on the O atom 1s -> 2p core-excited 3B1u state, with at most one electron in
+    1s. The state lies in a gap, so the full CI interior root exists (test_fci_o_core_exc_triplet).
+    Selected CI matches GASCI, and the GAS restriction PT2 recovers the full CI energy to 1.5e-5
+    of the 6.7e-4 shift.
+    """
+    e_gasci = -55.4204153857
+    e_fci = -55.4197469054
+    system = System(
+        xyz="O 0 0 0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    rohf = ROHF(charge=0, ms=1.0, e_tol=1e-10)(system)
+    sci_solver = SelectedCISolver(
+        states=State(nel=8, multiplicity=3, ms=1.0, symmetry=5, gas_max=[1]),
+        active_orbitals=[[0], list(range(1, system.nbf))],
+        guess_dets=[Determinant("a2a22")],
+        sci_params=SelectedCIParams(
+            selection_algorithm=selection_algorithm,
+            var_threshold=1e-5,
+            pt2_threshold=0.0,
+            do_gas_restriction_pt2=True,
+        ),
+    )
+    sci = CI(sci_solver)(rohf)
+    sci.run()
+
+    assert sci_solver.E_tot[0] == pytest.approx(e_gasci, abs=1e-6)
+    assert sci_solver.E_gas_pt2[0] == pytest.approx(6.542203e-4, abs=1e-8)
+    assert sci_solver.E_tot[0] + sci_solver.E_gas_pt2[0] == pytest.approx(
+        e_fci, abs=2e-5
+    )
 
 
 def test_sci_exact_algorithm():

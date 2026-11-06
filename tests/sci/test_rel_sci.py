@@ -228,6 +228,7 @@ def test_rel_sci_gas_core_hole(selection_algorithm):
                 selection_algorithm=selection_algorithm,
                 var_threshold=1e-12,
                 pt2_threshold=0.0,
+                do_gas_restriction_pt2=True,
             ),
         )
     )(conv)
@@ -236,6 +237,8 @@ def test_rel_sci_gas_core_hole(selection_algorithm):
     assert gasci.E_ci[3] == approx(-55.819535370117)
     for root in range(4):
         assert sci.E_ci[root] == approx(gasci.E_ci[root])
+    # the triplet roots are degenerate, so only the singlet has a unique correction
+    assert sci.ci_solver.E_gas_pt2[3] == pytest.approx(3.152095e-5, abs=1e-10)
 
 
 def test_rel_sci_hf_ghf_transition_rdms():

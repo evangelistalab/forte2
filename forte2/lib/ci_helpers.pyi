@@ -332,10 +332,10 @@ class SelectedCIHelper:
         Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength
         """
 
-    def select_hbci_ref(self, var_threshold: float, pt2_threshold: float) -> None:
+    def select_hbci_ref(self, var_threshold: float, pt2_threshold: float, gas_pt2: bool = False) -> None:
         """Perform HBCI selection with the given threshold"""
 
-    def select_hbci(self, var_threshold: float, pt2_threshold: float) -> None:
+    def select_hbci(self, var_threshold: float, pt2_threshold: float, gas_pt2: bool = False) -> None:
         """Perform HBCI selection with the given thresholds"""
 
     def compute_spin2(self) -> list[float]:
@@ -401,6 +401,11 @@ class SelectedCIHelper:
         Return the perturbative part of the Epstein-Nesbet second-order energy correction
         """
 
+    def ept2_gas(self) -> list[float]:
+        """
+        Return the Epstein-Nesbet second-order energy correction from the determinants outside the GAS occupation limits
+        """
+
     def num_new_dets_var(self) -> int:
         """
         Return the number of new variational determinants added in the last selection
@@ -457,10 +462,10 @@ class RelSelectedCIHelper:
         Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength
         """
 
-    def select_hbci_ref(self, var_threshold: float, pt2_threshold: float) -> None:
+    def select_hbci_ref(self, var_threshold: float, pt2_threshold: float, gas_pt2: bool = False) -> None:
         """Perform HBCI selection with the reference implementation"""
 
-    def select_hbci(self, var_threshold: float, pt2_threshold: float) -> None:
+    def select_hbci(self, var_threshold: float, pt2_threshold: float, gas_pt2: bool = False) -> None:
         """Perform HBCI selection with the batched implementation"""
 
     def so_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
@@ -493,6 +498,11 @@ class RelSelectedCIHelper:
     def ept2_pt(self) -> list[float]:
         """
         Return the perturbative part of the Epstein-Nesbet second-order energy correction
+        """
+
+    def ept2_gas(self) -> list[float]:
+        """
+        Return the Epstein-Nesbet second-order energy correction from the determinants outside the GAS occupation limits
         """
 
     def num_new_dets_var(self) -> int:

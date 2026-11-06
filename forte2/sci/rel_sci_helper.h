@@ -115,6 +115,10 @@ class RelSelectedCIHelper {
     /// @return The PT2 energy contributions of the roots due to the determinants excluded
     const std::vector<double>& ept2_pt() const { return ept2_pt_; }
 
+    /// @return The PT2 energy contributions of the roots due to the determinants outside the GAS
+    /// occupation limits
+    const std::vector<double>& ept2_gas() const { return ept2_gas_; }
+
     /// @return The number of determinants in the variational space
     const size_t num_dets_var() const { return dets_.size(); }
 
@@ -128,10 +132,14 @@ class RelSelectedCIHelper {
     double selection_time() const { return selection_time_; }
 
     /// @brief Perform HBCI selection with a reference implementation
-    void select_hbci_ref(double var_threshold, double pt2_threshold);
+    /// @param gas_pt2 Whether to compute the PT2 contributions of the determinants outside the GAS
+    ///        occupation limits
+    void select_hbci_ref(double var_threshold, double pt2_threshold, bool gas_pt2 = false);
 
     /// @brief Perform HBCI selection with an optimized batch implementation
-    void select_hbci(double var_threshold, double pt2_threshold);
+    /// @param gas_pt2 Whether to compute the PT2 contributions of the determinants outside the GAS
+    ///        occupation limits
+    void select_hbci(double var_threshold, double pt2_threshold, bool gas_pt2 = false);
 
     /// @brief Compute the diagonal of the Hamiltonian matrix (real, since H is Hermitian)
     np_vector Hdiag() const;
@@ -204,13 +212,16 @@ class RelSelectedCIHelper {
     /// space. Must not be negative.
     /// @param pt2_threshold Connections whose criterion does not exceed this are discarded. Must
     /// not be negative.
+    /// @param gas_pt2 Whether to keep the determinants outside the GAS occupation limits. They are
+    /// never promoted.
     /// @param num_batches The total number of batches
     /// @param batch_id The batch index to process
     /// @param existing_dets The set of determinants already in the variational space to skip
     /// @note Batch membership is decided by the external determinant alone, so every parent
     /// that reaches a given determinant is guaranteed to be visited in the same batch
     void select_hbci_batch(RelSelectHbciScratch& s, double var_threshold, double pt2_threshold,
-                           size_t num_batches, size_t batch_id, const DetSet& existing_dets);
+                           bool gas_pt2, size_t num_batches, size_t batch_id,
+                           const DetSet& existing_dets);
 
     // == Class Private Variables ==
 
@@ -325,6 +336,9 @@ class RelSelectedCIHelper {
     std::vector<double> ept2_var_;
     /// @brief The perturbative energy contributions due to the determinants excluded
     std::vector<double> ept2_pt_;
+    /// @brief The perturbative energy contributions due to the determinants outside the GAS
+    /// occupation limits
+    std::vector<double> ept2_gas_;
 
     /// @brief The number of new variational / PT2 determinants added in the last selection step
     size_t num_new_dets_var_ = 0;
