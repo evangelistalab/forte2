@@ -10,8 +10,9 @@ RelSelectedCIHelper::RelSelectedCIHelper(size_t norb, const std::vector<Determin
                                          np_matrix_complex& c, double E, np_matrix_complex& H,
                                          np_tensor4_complex& V, int log_level,
                                          const std::string& screening_criterion,
-                                         const std::vector<size_t>& frozen_creation,
-                                         const std::vector<size_t>& frozen_annihilation)
+                                         const std::vector<size_t>& gas_size,
+                                         const std::vector<int>& gas_min,
+                                         const std::vector<int>& gas_max)
     : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), E_(E),
       slater_rules_(static_cast<int>(norb), E, H, V), c_guess_(c), dets_(dets) {
     log_level_ = log_level;
@@ -20,13 +21,13 @@ RelSelectedCIHelper::RelSelectedCIHelper(size_t norb, const std::vector<Determin
     }
 
     set_screening_criterion(screening_criterion);
-    set_frozen_creation(frozen_creation);
-    set_frozen_annihilation(frozen_annihilation);
+    set_gas_limits(gas_size, gas_min, gas_max);
     set_Hamiltonian(E, H, V);
     set_c(c);
     root_energies_.resize(nroots_, 0.0);
     ept2_var_.resize(nroots_, 0.0);
     ept2_pt_.resize(nroots_, 0.0);
+    ept2_gas_.resize(nroots_, 0.0);
 
     na_ = dets_[0].count_alpha();
     nb_ = dets_[0].count_beta();
@@ -116,41 +117,45 @@ void RelSelectedCIHelper::set_Hamiltonian(std::optional<double> E,
     }
 }
 
-void RelSelectedCIHelper::set_frozen_creation(const std::vector<size_t>& frozen_creation) {
-    frozen_creation_mask_.clear();
-    for (auto i : frozen_creation) {
-        if (i >= norb_) {
-            throw std::runtime_error("Frozen creation orbital index is out of range.");
+void RelSelectedCIHelper::set_gas_limits(const std::vector<size_t>& gas_size,
+                                         const std::vector<int>& gas_min,
+                                         const std::vector<int>& gas_max) {
+    size_t first = 0;
+    for (size_t g{0}; g < gas_size.size(); ++g) {
+        // each spinor holds at most one electron
+        const size_t capacity = gas_size[g];
+        const size_t nmin = g < gas_min.size() ? std::max(gas_min[g], 0) : 0;
+        const size_t nmax = g < gas_max.size() ? std::max(gas_max[g], 0) : capacity;
+        // keep only the spaces whose limits exclude some occupation
+        if (nmin > 0 || nmax < capacity) {
+            Determinant mask = Determinant::zero();
+            for (size_t i{first}; i < first + gas_size[g]; ++i) {
+                mask.set_na(i, true);
+            }
+            gas_masks_.push_back(mask);
+            gas_min_.push_back(nmin);
+            gas_max_.push_back(nmax);
         }
-        frozen_creation_mask_.set_bit(i, true);
+        first += gas_size[g];
     }
-}
-
-void RelSelectedCIHelper::set_frozen_annihilation(const std::vector<size_t>& frozen_annihilation) {
-    frozen_annihilation_mask_.clear();
-    for (auto i : frozen_annihilation) {
-        if (i >= norb_) {
-            throw std::runtime_error("Frozen annihilation orbital index is out of range.");
-        }
-        frozen_annihilation_mask_.set_bit(i, true);
+    if (first != 0 && first != norb_) {
+        throw std::runtime_error("The GAS sizes must add up to the number of spinors.");
     }
 }
 
 void RelSelectedCIHelper::update_hbci_ints() {
-    // Precompute, for each occupied pair (p, q), a list of (criterion_key, <pq||rs>, r, s) sorted
-    // in descending order by the (real) key. Only the double alpha-alpha excitation class uses
-    // these lists (the beta / alpha-beta lists of the real helper are not needed when nb == 0).
+    // Precompute, for each occupied pair (p, q) with p < q, a list of (criterion_key, <pq||rs>, r,
+    // s) with r < s, sorted in descending order by the (real) key. <pq||rs> is antisymmetric in r
+    // and s, and the doubles use only p < q and r < s. Only the double alpha-alpha excitation
+    // class uses these lists (the beta / alpha-beta lists of the real helper are not needed when
+    // nb == 0).
     va_sorted_.resize(norb_ * norb_);
     for (size_t p{0}; p < norb_; ++p) {
-        for (size_t q{0}; q < norb_; ++q) {
+        for (size_t q{p + 1}; q < norb_; ++q) {
             std::vector<std::tuple<double, std::complex<double>, u_int32_t, u_int32_t>> v_list;
-            v_list.reserve(norb_ * norb_);
+            v_list.reserve(norb_ * (norb_ - 1) / 2);
             for (size_t r{0}; r < norb_; ++r) {
-                if (!creation_allowed(r))
-                    continue;
-                for (size_t s{0}; s < norb_; ++s) {
-                    if (!creation_allowed(s))
-                        continue;
+                for (size_t s{r + 1}; s < norb_; ++s) {
                     const std::complex<double> v = Va(p, q, r, s);
                     // Plain HBCI uses |V| as the screening key. (eHBCI, which would fold in the
                     // energy denominator, is not supported in the two-component helper.)

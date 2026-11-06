@@ -103,6 +103,7 @@ class _SelectedCISingleStateSolver:
         self.norb = self.mo_space.nactv
         self.ncore = self.mo_space.ncore + self.mo_space.nfrozen_core
         self.ngas = self.mo_space.ngas
+        self.gas_size = [len(orbitals) for orbitals in self.mo_space.active_orbitals]
         self.gas_min = self.state.gas_min
         self.gas_max = self.state.gas_max
         self.eigensolver = None
@@ -123,8 +124,9 @@ class _SelectedCISingleStateSolver:
             self.ints.V,
             self.log_level,
             self.sci_params.screening_criterion,
-            self.sci_params.frozen_creation,
-            self.sci_params.frozen_annihilation,
+            self.gas_size,
+            self.gas_min,
+            self.gas_max,
         )
 
     def _compute_spin2(self):
@@ -171,7 +173,17 @@ class _SelectedCISingleStateSolver:
             self.sci_params.pt2_regularizer_strength,
         )
 
-        old_energy = 0.0
+        # optionally skip pt2 by setting pt2_threshold to the variational threshold
+        do_pt2 = self.sci_params.do_pt2_every_iter
+        do_gas_pt2 = self.sci_params.do_gas_restriction_pt2
+        cycle_pt2_threshold = (
+            self.sci_params.pt2_threshold
+            if do_pt2
+            else max(self.sci_params.var_threshold, self.sci_params.pt2_threshold)
+        )
+
+        converged = False
+        old_evals = None
         for cycle in range(self.sci_params.maxcycle):
             logger.log(f"\n{'=' * 67}", self.log_level)
             logger.log(f"Selected CI Cycle {cycle + 1}", self.log_level)
@@ -183,21 +195,26 @@ class _SelectedCISingleStateSolver:
             logger.log(
                 f"  var_threshold = {self.sci_params.var_threshold}", self.log_level
             )
-            logger.log(
-                f"  pt2_threshold = {self.sci_params.pt2_threshold}", self.log_level
-            )
+            if do_pt2:
+                logger.log(
+                    f"  pt2_threshold = {self.sci_params.pt2_threshold}", self.log_level
+                )
+            else:
+                logger.log("  PT2 correction in the final cycle only", self.log_level)
 
             old_ndets = self.sci_helper.ndets()
 
             if self.sci_params.selection_algorithm.lower() == "hbci_ref":
                 self.sci_helper.select_hbci_ref(
                     var_threshold=self.sci_params.var_threshold,
-                    pt2_threshold=self.sci_params.pt2_threshold,
+                    pt2_threshold=cycle_pt2_threshold,
+                    gas_pt2=do_pt2 and do_gas_pt2,
                 )
             elif self.sci_params.selection_algorithm.lower() == "hbci":
                 self.sci_helper.select_hbci(
                     var_threshold=self.sci_params.var_threshold,
-                    pt2_threshold=self.sci_params.pt2_threshold,
+                    pt2_threshold=cycle_pt2_threshold,
+                    gas_pt2=do_pt2 and do_gas_pt2,
                 )
             else:
                 raise ValueError(
@@ -208,12 +225,15 @@ class _SelectedCISingleStateSolver:
             self.e_var = np.array(self.sci_helper.energies())
             # These are the expectation values of S^2 for each root computed from the CI vectors
             self.spin2_var = np.array(self._compute_spin2())
-            # These are the PT2 corrections due to the new variational determinants added in this cycle
-            self.ept2_var = np.array(self.sci_helper.ept2_var())
-            # These are the PT2 corrections due to the new perturbative determinants added in this cycle
-            self.ept2_pt = np.array(self.sci_helper.ept2_pt())
-            # These are the total energies of each root including the new variational and perturbative contributions
-            self.e_tot = self.e_var + self.ept2_var + self.ept2_pt
+            if do_pt2:
+                # These are the PT2 corrections due to the new variational determinants added in this cycle
+                self.ept2_var = np.array(self.sci_helper.ept2_var())
+                # These are the PT2 corrections due to the new perturbative determinants added in this cycle
+                self.ept2_pt = np.array(self.sci_helper.ept2_pt())
+                # These are the total energies of each root including the new variational and perturbative contributions
+                self.e_tot = self.e_var + self.ept2_var + self.ept2_pt
+                # These are the PT2 corrections due to the determinants outside the GAS occupation limits
+                self.ept2_gas = np.array(self.sci_helper.ept2_gas())
 
             summary = "\nSummary of selection:"
             summary += f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
@@ -223,34 +243,43 @@ class _SelectedCISingleStateSolver:
             summary += (
                 f"\n  {'Total variational determinants:':<40}{self.sci_helper.ndets()}"
             )
-            summary += f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
+            if do_pt2:
+                summary += f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
             summary += (
                 f"\n  {'Selection time:':<40}{self.sci_helper.selection_time():.3f} s\n"
             )
             logger.log(summary, self.log_level)
 
-            table = AsciiTable(
-                columns=[
-                    "Root",
-                    "E (CI) [Eh]",
-                    "S^2 (CI)",
-                    "E (CI) + E (PT2) [Eh]",
-                ],
-                formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}"],
-            )
+            columns = ["Root", "E (CI) [Eh]", "S^2 (CI)"]
+            formats = ["{:>4}", "{:>20.12f}", "{:>6.3f}"]
+            if do_pt2:
+                columns.append("E (CI) + E (PT2) [Eh]")
+                formats.append("{:>20.12f}")
+            if do_pt2 and do_gas_pt2:
+                columns.append("E (GAS PT2) [Eh]")
+                formats.append("{:>20.12f}")
+            table = AsciiTable(columns=columns, formats=formats)
 
             logger.log(table.header(), self.log_level)
             for r in range(self.nroot):
+                row = [r, self.e_var[r], self.spin2_var[r]]
+                if do_pt2:
+                    row.append(self.e_tot[r])
+                if do_pt2 and do_gas_pt2:
+                    row.append(self.ept2_gas[r])
+                logger.log(table.row(*row), self.log_level)
+            logger.log(table.footer(), self.log_level)
+
+            # After the first cycle, the CI vectors are eigenvectors of the current space, so a
+            # selection that adds nothing ends the cycles without another diagonalization.
+            space_unchanged = self.sci_helper.num_new_dets_var() == 0
+            if cycle > 0 and space_unchanged:
                 logger.log(
-                    table.row(
-                        r,
-                        self.e_var[r],
-                        self.spin2_var[r],
-                        self.e_tot[r],
-                    ),
+                    f"Selected CI converged in {cycle + 1} cycles: no determinants added.",
                     self.log_level,
                 )
-            logger.log(table.footer(), self.log_level)
+                converged = True
+                break
 
             self.ndet = self.sci_helper.ndets()
             self.dets = self.sci_helper.dets()
@@ -281,19 +310,32 @@ class _SelectedCISingleStateSolver:
             self.sci_helper.set_c(self.evecs)
             self.sci_helper.set_energies(np.ascontiguousarray(self.evals.real))
 
-            delta_energy = np.average(self.evals) - old_energy
-            old_energy = np.average(self.evals)
-
-            if abs(delta_energy) < self.sci_params.e_tol:
+            if space_unchanged:
                 logger.log(
-                    f"Selected CI converged in {cycle + 1} cycles.", self.log_level
+                    f"Selected CI converged in {cycle + 1} cycles: no determinants added.",
+                    self.log_level,
                 )
+                converged = True
                 break
-        else:
-            logger.log(
-                f"Selected CI did not converge in {self.sci_params.maxcycle} cycles.",
-                self.log_level,
+            if old_evals is not None:
+                delta_energy = np.max(np.abs(self.evals - old_evals))
+                if delta_energy < self.sci_params.e_tol:
+                    logger.log(
+                        f"Selected CI converged in {cycle + 1} cycles: largest energy "
+                        f"change {delta_energy:.3e} Eh.",
+                        self.log_level,
+                    )
+                    converged = True
+                    break
+            old_evals = self.evals.copy()
+
+        if not converged:
+            message = (
+                f"Selected CI did not converge in {self.sci_params.maxcycle} cycles."
             )
+            if self.die_if_not_converged:
+                raise RuntimeError(message)
+            logger.log_warning(message)
 
         # final selection to update var' and pt2 contributions with the final CI coefficients
         logger.log(f"\n{'=' * 67}", self.log_level)
@@ -308,11 +350,13 @@ class _SelectedCISingleStateSolver:
             self.sci_helper.select_hbci_ref(
                 var_threshold=self.sci_params.var_threshold,
                 pt2_threshold=self.sci_params.pt2_threshold,
+                gas_pt2=do_gas_pt2,
             )
         elif self.sci_params.selection_algorithm.lower() == "hbci":
             self.sci_helper.select_hbci(
                 var_threshold=self.sci_params.var_threshold,
                 pt2_threshold=self.sci_params.pt2_threshold,
+                gas_pt2=do_gas_pt2,
             )
         else:
             raise ValueError(
@@ -322,6 +366,7 @@ class _SelectedCISingleStateSolver:
         self.e_var = np.array(self.sci_helper.energies())
         self.ept2_var = np.array(self.sci_helper.ept2_var())
         self.ept2_pt = np.array(self.sci_helper.ept2_pt())
+        self.ept2_gas = np.array(self.sci_helper.ept2_gas())
         self.spin2_var = np.array(self._compute_spin2())
         self.e_tot = self.e_var + self.ept2_var + self.ept2_pt
 
@@ -334,29 +379,31 @@ class _SelectedCISingleStateSolver:
         )
         logger.log(summary, self.log_level)
 
-        table = AsciiTable(
-            columns=[
-                "Root",
-                "E (var) [Eh]",
-                "S^2 (var)",
-                "E (var') [Eh]",
-                "E (var'+PT2) [Eh]",
-            ],
-            formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}", "{:>20.12f}"],
-        )
+        columns = [
+            "Root",
+            "E (var) [Eh]",
+            "S^2 (var)",
+            "E (var') [Eh]",
+            "E (var'+PT2) [Eh]",
+        ]
+        formats = ["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}", "{:>20.12f}"]
+        if do_gas_pt2:
+            columns.append("E (GAS PT2) [Eh]")
+            formats.append("{:>20.12f}")
+        table = AsciiTable(columns=columns, formats=formats)
 
         logger.log(table.header(), self.log_level)
         for r in range(self.nroot):
-            logger.log(
-                table.row(
-                    r,
-                    self.e_var[r],
-                    self.spin2_var[r],
-                    self.e_var[r] + self.ept2_var[r],
-                    self.e_tot[r],
-                ),
-                self.log_level,
-            )
+            row = [
+                r,
+                self.e_var[r],
+                self.spin2_var[r],
+                self.e_var[r] + self.ept2_var[r],
+                self.e_tot[r],
+            ]
+            if do_gas_pt2:
+                row.append(self.ept2_gas[r])
+            logger.log(table.row(*row), self.log_level)
         logger.log(table.footer(), self.log_level)
 
         if self.do_test_rdms:
@@ -474,7 +521,7 @@ class _SelectedCISingleStateSolver:
                 d0.set_na(i, True)
             for i in range(nb_active):
                 d0.set_nb(i, True)
-            return [d0]
+            return self._automatic_guess_in_gas_space([d0])
 
         nocc = nel_active // 2 - window_occ
         if nocc < 0:
@@ -511,7 +558,29 @@ class _SelectedCISingleStateSolver:
                 [noccel],
                 [noccel],
             )
-        return ci_strings.make_determinants()
+        return self._automatic_guess_in_gas_space(ci_strings.make_determinants())
+
+    def _automatic_guess_in_gas_space(self, dets):
+        """Keep the automatic guess determinants that satisfy the GAS occupation limits."""
+        dets = [d for d in dets if self._in_gas_space(d)]
+        if not dets:
+            raise ValueError(
+                f"No automatic guess determinant satisfies the GAS occupation limits of "
+                f"{self.state}. Give guess_dets."
+            )
+        return dets
+
+    def _in_gas_space(self, d):
+        """Whether a determinant satisfies the GAS occupation limits of the state."""
+        first = 0
+        for g, size in enumerate(self.gas_size):
+            n = sum(d.na(i) + d.nb(i) for i in range(first, first + size))
+            if g < len(self.gas_min) and n < self.gas_min[g]:
+                return False
+            if g < len(self.gas_max) and n > self.gas_max[g]:
+                return False
+            first += size
+        return True
 
     def _initial_determinants(self, slater_rules):
         """
@@ -649,6 +718,10 @@ class _SelectedCISingleStateSolver:
             if nb + self.ncore != self.state.nb:
                 raise ValueError(
                     f"Guess determinant {d.str(self.norb)} has {nb} beta electrons, expected {self.state.nb - self.ncore}."
+                )
+            if not self._in_gas_space(d):
+                raise ValueError(
+                    f"Guess determinant {d.str(self.norb)} violates the GAS occupation limits of {self.state}."
                 )
 
     def _compute_hdiag(self):
@@ -1050,6 +1123,9 @@ class SelectedCISolver(CIBase):
         The PT2 correction due to the new variational determinants, computed by each sub-solver / concatenated into a single array.
     ept2_pt_[per_solver/flat] : list[NDArray] / NDArray
         The PT2 correction due to the perturbative determinants, computed by each sub-solver / concatenated into a single array.
+    ept2_gas_[per_solver/flat] : list[NDArray] / NDArray
+        The PT2 correction due to the determinants outside the GAS occupation limits, computed by each sub-solver / concatenated into a single array.
+        Zero unless ``sci_params.do_gas_restriction_pt2`` is True.
     etot_[per_solver/flat] : list[NDArray] / NDArray
         The total energy (variational + PT2) computed by each sub-solver / concatenated into a single array.
     E : NDArray
@@ -1058,6 +1134,9 @@ class SelectedCISolver(CIBase):
         The total PT2 correction (variational + perturbative) for each CI root.
     E_tot : NDArray
         Alias for `etot_flat`, the total energies of the CI roots.
+    E_gas_pt2 : NDArray
+        Alias for `ept2_gas_flat`, the PT2 correction for lifting the GAS occupation limits of
+        each CI root. Adding it to `E_tot` estimates the energy without the limits.
     E_avg : float
         The average variational energy computed from the state-averaged CI roots.
     """
@@ -1150,15 +1229,18 @@ class SelectedCISolver(CIBase):
         self.evar_per_solver = self.evals_per_solver
         self.ept2_var_per_solver = [s.ept2_var for s in self.sub_solvers]
         self.ept2_pt_per_solver = [s.ept2_pt for s in self.sub_solvers]
+        self.ept2_gas_per_solver = [s.ept2_gas for s in self.sub_solvers]
         self.etot_per_solver = [s.e_tot for s in self.sub_solvers]
 
         self.evar_flat = self.evals_flat
         self.ept2_var_flat = np.concatenate(self.ept2_var_per_solver)
         self.ept2_pt_flat = np.concatenate(self.ept2_pt_per_solver)
+        self.ept2_gas_flat = np.concatenate(self.ept2_gas_per_solver)
         self.etot_flat = np.concatenate(self.etot_per_solver)
 
         self.E_pt2 = self.ept2_var_flat + self.ept2_pt_flat
         self.E_tot = self.etot_flat
+        self.E_gas_pt2 = self.ept2_gas_flat
 
     _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
     _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sd", "sf")

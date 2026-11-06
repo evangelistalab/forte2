@@ -62,13 +62,15 @@ class SelectedCIHelper {
     /// @param V Two-electron integrals in physicist notation (shape: (n_orb, n_orb, n_orb, n_orb))
     /// @param log_level Logging level
     /// @param screening_criterion "hbci" or "ehbci" for heat-bath or energy heat-bath
-    /// @param frozen_creation List of orbitals that cannot be created into
-    /// @param frozen_annihilation List of orbitals that cannot be annihilated from
+    /// @param gas_size Number of orbitals in each GAS, in orbital order
+    /// @param gas_min Minimum number of electrons in each GAS
+    /// @param gas_max Maximum number of electrons in each GAS
+    /// @note A GAS beyond the end of gas_min or gas_max has no minimum or maximum.
     SelectedCIHelper(size_t norb, const std::vector<Determinant>& dets, np_matrix& c, double E,
                      np_matrix& H, np_tensor4& V, int log_level = 3,
                      const std::string& screening_criterion = "hbci",
-                     const std::vector<size_t>& frozen_creation = {},
-                     const std::vector<size_t>& frozen_annihilation = {});
+                     const std::vector<size_t>& gas_size = {}, const std::vector<int>& gas_min = {},
+                     const std::vector<int>& gas_max = {});
 
     // == Class Public Methods ==
 
@@ -107,12 +109,6 @@ class SelectedCIHelper {
     /// @brief Set the number of batches per thread for parallelization
     void set_num_batches_per_thread(size_t n) { num_batches_per_thread_ = n; }
 
-    /// @brief Set the orbital that should be excluded from the list of creation operators
-    void set_frozen_creation(const std::vector<size_t>& frozen_creation);
-
-    /// @brief Set the orbital that should be excluded from the list of annihilation operators
-    void set_frozen_annihilation(const std::vector<size_t>& frozen_annihilation);
-
     /// @brief Set the screening criterion (hbci or ehbci)
     void set_screening_criterion(const std::string& criterion);
 
@@ -131,6 +127,10 @@ class SelectedCIHelper {
     /// @return The PT2 energy contributions of the roots due to the determinant excluded
     const std::vector<double>& ept2_pt() const { return ept2_pt_; }
 
+    /// @return The PT2 energy contributions of the roots due to the determinants outside the GAS
+    /// occupation limits
+    const std::vector<double>& ept2_gas() const { return ept2_gas_; }
+
     /// @return The number of determinants in the variational space
     const size_t num_dets_var() const { return dets_.size(); }
 
@@ -146,12 +146,16 @@ class SelectedCIHelper {
     /// @brief Perform HBCI selection with a reference implementation
     /// @param var_threshold The threshold for variational selection
     /// @param pt2_threshold The threshold for PT2 selection
-    void select_hbci_ref(double var_threshold, double pt2_threshold);
+    /// @param gas_pt2 Whether to compute the PT2 contributions of the determinants outside the GAS
+    ///        occupation limits
+    void select_hbci_ref(double var_threshold, double pt2_threshold, bool gas_pt2 = false);
 
     /// @brief Perform HBCI selection with an optimized batch implementation
     /// @param var_threshold The threshold for variational selection
     /// @param pt2_threshold The threshold for PT2 selection
-    void select_hbci(double var_threshold, double pt2_threshold);
+    /// @param gas_pt2 Whether to compute the PT2 contributions of the determinants outside the GAS
+    ///        occupation limits
+    void select_hbci(double var_threshold, double pt2_threshold, bool gas_pt2 = false);
 
     /// @brief Compute the diagonal of the Hamiltonian matrix
     /// @return A vector of the diagonal elements of the Hamiltonian matrix
@@ -312,13 +316,16 @@ class SelectedCIHelper {
     /// space. Must not be negative.
     /// @param pt2_threshold Connections whose criterion does not exceed this are discarded. Must
     /// not be negative.
+    /// @param gas_pt2 Whether to keep the determinants outside the GAS occupation limits. They are
+    /// never promoted.
     /// @param num_batches The total number of batches
     /// @param batch_id The batch index to process
     /// @param existing_dets The set of determinants already in the variational space to skip
     /// @note Batch membership is decided by the external determinant alone, so every parent
     /// that reaches a given determinant is guaranteed to be visited in the same batch
     void select_hbci_batch(SelectHbciScratch& s, double var_threshold, double pt2_threshold,
-                           size_t num_batches, size_t batch_id, const DetSet& existing_dets);
+                           bool gas_pt2, size_t num_batches, size_t batch_id,
+                           const DetSet& existing_dets);
 
     /// @brief Compute the expectation value of S^2 for a given batch of determinants
     /// @param num_batches The total number of batches
@@ -390,11 +397,12 @@ class SelectedCIHelper {
     /// @brief The Slater rules for the current set of determinants
     SlaterRules slater_rules_;
 
-    /// @brief The mask that controls which spatial orbitals cannot be created into.
-    String frozen_creation_mask_ = String::zero();
-
-    /// @brief The mask that controls which spatial orbitals cannot be annihilated from.
-    String frozen_annihilation_mask_ = String::zero();
+    /// @brief The alpha and beta orbitals of each GAS whose occupation is limited
+    std::vector<Determinant> gas_masks_;
+    /// @brief The minimum number of electrons in each GAS of gas_masks_
+    std::vector<size_t> gas_min_;
+    /// @brief The maximum number of electrons in each GAS of gas_masks_
+    std::vector<size_t> gas_max_;
 
     /// @brief Orbital energies: e[p] = <p|H|p>
     std::vector<double> epsilon_;
@@ -430,20 +438,18 @@ class SelectedCIHelper {
         return v_a_[p * norb3_ + q * norb2_ + r * norb_ + s];
     }
 
-    inline bool creation_allowed(std::size_t orbital) const noexcept {
-        return !frozen_creation_mask_.get_bit(orbital);
-    }
+    /// @brief Store the GAS occupation limits that restrict the space
+    void set_gas_limits(const std::vector<size_t>& gas_size, const std::vector<int>& gas_min,
+                        const std::vector<int>& gas_max);
 
-    inline bool creation_allowed(std::size_t orbital1, std::size_t orbital2) const noexcept {
-        return creation_allowed(orbital1) && creation_allowed(orbital2);
-    }
-
-    inline bool annihilation_allowed(std::size_t orbital) const noexcept {
-        return !frozen_annihilation_mask_.get_bit(orbital);
-    }
-
-    inline bool annihilation_allowed(std::size_t orbital1, std::size_t orbital2) const noexcept {
-        return annihilation_allowed(orbital1) && annihilation_allowed(orbital2);
+    /// @return Whether a determinant satisfies the GAS occupation limits
+    inline bool in_gas_space(const Determinant& det) const noexcept {
+        for (size_t g{0}, ng{gas_masks_.size()}; g < ng; ++g) {
+            const size_t n = (det & gas_masks_[g]).count_all();
+            if (n < gas_min_[g] || n > gas_max_[g])
+                return false;
+        }
+        return true;
     }
 
     /// @brief The number of roots to compute
@@ -476,6 +482,9 @@ class SelectedCIHelper {
     std::vector<double> ept2_var_;
     /// @brief The perturbative energy contributions due to the determinants excluded
     std::vector<double> ept2_pt_;
+    /// @brief The perturbative energy contributions due to the determinants outside the GAS
+    /// occupation limits
+    std::vector<double> ept2_gas_;
 
     /// @brief The number of new variational determinants added in the last selection step
     size_t num_new_dets_var_ = 0;

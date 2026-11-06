@@ -921,10 +921,8 @@ class CI(ActiveSpaceDriver, Method):
         Orbitals to leave behind: "original", "semicanonical", or "natural".
     do_transition_dipole : bool, optional, default=False
         Whether to compute transition dipoles and oscillator strengths.
-    die_if_not_converged : bool, optional, default=True
-        Whether a solver that fails to converge raises instead of warning. Set on
-        the driver rather than the solver: a one-shot calculation has no later
-        iteration to recover from.
+    die_if_not_converged : bool, optional, default=False
+        Whether a solver that fails to converge raises instead of warning.
 
     Attributes
     ----------
@@ -938,4 +936,4 @@ class CI(ActiveSpaceDriver, Method):
 
     final_orbitals: FinalOrbitals = "original"
     do_transition_dipole: bool = False
-    die_if_not_converged: bool = True
+    die_if_not_converged: bool = False

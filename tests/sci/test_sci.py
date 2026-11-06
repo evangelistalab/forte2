@@ -7,7 +7,7 @@ from forte2.lib.sparse_ops import SparseState
 from forte2.lib.det import Determinant
 from forte2.lib.ci_helpers import CIStrings, SelectedCIHelper
 from forte2.ci import CI
-from forte2.scf import RHF
+from forte2.scf import RHF, ROHF
 from forte2 import CI
 from forte2.sci.sci import _SelectedCISingleStateSolver
 from forte2.helpers.comparisons import approx
@@ -222,6 +222,79 @@ def test_sci_ne_core_ionized_single_determinant_guess():
 
     sci.run()
     assert sci.E_ci[0] == pytest.approx(-96.60170826050286, abs=5e-7)
+
+
+@pytest.mark.slow
+def test_sci_ne_core_excited():
+    """
+    Selected CI on the lowest Ne core-excited triplet, with the ENPT2 estimate of the
+    energy without the GAS restriction.
+    """
+    e_gasci = -95.7282434726
+    xyz = """
+    Ne 0.0 0.0 0.0
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
+    sci_solver = SelectedCISolver(
+        states=State(nel=10, multiplicity=3, ms=1.0, gas_max=[1], gas_min=[0]),
+        active_orbitals=[[0], list(range(1, 14))],
+        guess_dets=[Determinant("a2222a")],
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-5,
+            pt2_threshold=0.0,
+            do_spin_penalty=True,
+            screening_criterion="hbci",
+            do_gas_restriction_pt2=True,
+        ),
+        nroots=1,
+    )
+    sci = CI(sci_solver)(rhf)
+    sci.run()
+
+    # the GAS restriction PT2 leaves the energy in the GAS space unchanged
+    assert sci_solver.E_tot[0] == pytest.approx(e_gasci, abs=1e-6)
+    assert sci_solver.E_gas_pt2[0] != 0.0
+
+
+@pytest.mark.parametrize("selection_algorithm", ["hbci", "hbci_ref"])
+def test_sci_o_core_excited_gas_restriction_pt2(selection_algorithm):
+    """
+    Selected CI on the O atom 1s -> 2p core-excited 3B1u state, with at most one electron in
+    1s. The state lies in a gap, so the full CI interior root exists (test_fci_o_core_exc_triplet).
+    Selected CI matches GASCI, and the GAS restriction PT2 recovers the full CI energy to 1.5e-5
+    of the 6.7e-4 shift.
+    """
+    e_gasci = -55.4204153857
+    e_fci = -55.4197469054
+    system = System(
+        xyz="O 0 0 0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    rohf = ROHF(charge=0, ms=1.0, e_tol=1e-10)(system)
+    sci_solver = SelectedCISolver(
+        states=State(nel=8, multiplicity=3, ms=1.0, symmetry=5, gas_max=[1]),
+        active_orbitals=[[0], list(range(1, system.nbf))],
+        guess_dets=[Determinant("a2a22")],
+        sci_params=SelectedCIParams(
+            selection_algorithm=selection_algorithm,
+            var_threshold=1e-5,
+            pt2_threshold=0.0,
+            do_gas_restriction_pt2=True,
+        ),
+    )
+    sci = CI(sci_solver)(rohf)
+    sci.run()
+
+    assert sci_solver.E_tot[0] == pytest.approx(e_gasci, abs=1e-6)
+    assert sci_solver.E_gas_pt2[0] == pytest.approx(6.542203e-4, abs=1e-8)
+    assert sci_solver.E_tot[0] + sci_solver.E_gas_pt2[0] == pytest.approx(
+        e_fci, abs=2e-5
+    )
 
 
 def test_sci_exact_algorithm():
@@ -693,8 +766,8 @@ def test_sci_water_core_excited():
 
     ci = CI(
         SelectedCISolver(
-            states=State(nel=10, multiplicity=1, ms=0.0),
-            active_orbitals=list(range(13)),
+            states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
+            active_orbitals=[[0], list(range(1, 13))],
             guess_dets=guess_dets,
             sci_params=SelectedCIParams(
                 selection_algorithm="hbci",
@@ -702,9 +775,6 @@ def test_sci_water_core_excited():
                 pt2_threshold=1e-10,
                 do_spin_penalty=True,
                 screening_criterion="hbci",
-                # do not allow the core orbital occupation to change from the guess determinants
-                frozen_annihilation=[0],
-                frozen_creation=[0],
                 num_batches_per_thread=16,
             ),
             davidson_liu_params=DavidsonLiuParams(
@@ -751,8 +821,8 @@ def test_sci_water_core_excited_with_gasscf_orbs():
 
     ci = CI(
         SelectedCISolver(
-            states=State(nel=10, multiplicity=1, ms=0.0),
-            active_orbitals=list(range(13)),
+            states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
+            active_orbitals=[[0], list(range(1, 13))],
             guess_dets=guess_dets,
             sci_params=SelectedCIParams(
                 selection_algorithm="hbci",
@@ -760,9 +830,6 @@ def test_sci_water_core_excited_with_gasscf_orbs():
                 pt2_threshold=1e-10,
                 do_spin_penalty=True,
                 screening_criterion="hbci",
-                # do not allow the core orbital occupation to change from the guess determinants
-                frozen_annihilation=[0],
-                frozen_creation=[0],
                 num_batches_per_thread=16,
             ),
             davidson_liu_params=DavidsonLiuParams(
@@ -850,6 +917,41 @@ def test_sci_water_valence_excitation():
     assert sci.E_ci[1] == pytest.approx(-75.80852593, abs=1e-6)
 
 
+def test_sci_water_valence_excitation_gas():
+    """Test SelectedCI on a water valence-excited state with a GAS."""
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0)(system)
+
+    sci_solver = SelectedCISolver(
+        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[4]),
+        active_orbitals=[[0, 1], list(range(2, 13))],
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=2e-4,
+            pt2_threshold=1e-8,
+            do_spin_penalty=True,
+            screening_criterion="hbci",
+            guess_occ_window=3,
+            guess_vir_window=1,
+        ),
+        die_if_not_converged=False,
+        nroots=2,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+        do_test_rdms=True,
+    )
+
+    sci = CI(sci_solver)(rhf)
+    sci.run()
+    assert sci_solver.E_tot[0] == pytest.approx(-76.1134659523, abs=1e-5)
+    assert sci_solver.E_tot[1] == pytest.approx(-75.8034598870, abs=1e-5)
+
+
 @pytest.mark.slow
 def test_sci_1tdm_water_core_excited_and_gs():
     """Test the 1-TDM between a water core-excited state and the ground state."""
@@ -877,42 +979,26 @@ def test_sci_1tdm_water_core_excited_and_gs():
     # to the final state, so we can use a large set here
     ci_strings_s = CIStrings(5, 5, 0, [[0], [0], [0] * 11], [1, 2], [1, 2])
     gas_guess_dets = ci_strings_s.make_determinants()
-    # if the doubly core-excited determinants are included together with the
-    # singles, they will almost certainly be filtered out by the initial guess routine
-    # due to them being much higher in energy.
-    # So we need to pin a small set of them to ensure they are included in the variational space.
-    # This is necessary because orbital 0 is frozen, so if they're not included in the initial guess,
-    # they will never be generated.
-    # Allowing annihilation in the 0-th orbital is theoretically able to overcome this,
-    # but the interals involved are sufficiently small that, unless a very tight threshold is used,
-    # the doubles will alwayus be rejected in the selection process.
-    pinned_guess_dets = [
-        Determinant("022222"),
-        Determinant("02222ab"),
-        Determinant("02222ba"),
-    ]
-    gas_params = gs_params.copy(frozen_annihilation=[0], frozen_creation=[0])
     # the defaul ndets_per_guess is too small, causing convergence onto a higher root.
     gas_ci_params = gs_ci_params.copy(ndets_per_guess=50)
 
     sci = CI(
         SelectedCISolver(
             states=[
-                State(nel=10, multiplicity=1, ms=0.0),
+                State(nel=10, multiplicity=1, ms=0.0, gas_max=[1]),
                 State(nel=10, multiplicity=1, ms=0.0),
             ],
-            active_orbitals=list(range(13)),
-            sci_params=[gas_params, gs_params],
+            active_orbitals=[[0], list(range(1, 13))],
+            sci_params=[gs_params, gs_params],
             davidson_liu_params=[gas_ci_params, gs_ci_params],
             nroots=[1, 1],
             guess_dets=[gas_guess_dets, None],
-            pinned_guess_dets=[pinned_guess_dets, None],
         ),
         do_transition_dipole=True,
     )(rhf)
     sci.run()
 
-    assert sci.E_ci[0] == pytest.approx(-56.36320838, abs=1e-8)
+    assert sci.E_ci[0] == pytest.approx(-56.36326212, abs=1e-8)
     assert sci.E_ci[1] == pytest.approx(-76.12086372, abs=1e-8)
     assert sci.ci_solver.oscillator_strengths[(1, 0)] == pytest.approx(
         0.020634, abs=1e-4

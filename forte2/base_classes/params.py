@@ -210,11 +210,21 @@ class SelectedCIParams(ParamsBase):
     maxcycle: int, optional, default=15
         The maximum number of selection cycles.
     e_tol: float, optional, default=1e-8
-        The energy convergence threshold for selected CI macroiterations.
+        The energy convergence threshold for selected CI macroiterations. The cycles stop
+        when every root's variational energy changes by less than ``e_tol`` between two
+        cycles, or when a selection adds no determinants.
     var_threshold: float, optional, default=5e-4
         The threshold for including determinants in the variational space based on their contribution to the wavefunction.
     pt2_threshold: float, optional, default=1e-8
         The threshold for including determinants in the perturbative correction based on their second-order energy contribution.
+    do_pt2_every_iter: bool, optional, default=False
+        If True, compute the perturbative correction in every selection cycle. If False,
+        compute it only in the final cycle, which runs whether or not the selection
+        converges.
+    do_gas_restriction_pt2: bool, optional, default=False
+        If True, also compute the PT2 correction from the determinants outside the GAS
+        occupation limits of the state, which estimates the energy without the limits. It's
+        computed in the same cycles as the rest of the PT2 correction.
     selection_algorithm: str, optional, default="hbci"
         The algorithm used for selecting determinants. Options are "hbci" and "hbci_ref".
     guess_occ_window: int, optional, default=2
@@ -235,12 +245,6 @@ class SelectedCIParams(ParamsBase):
         to override it.
     do_spin_penalty: bool, optional, default=True
         Whether to apply a spin penalty to the Hamiltonian to enforce correct spin symmetry.
-    frozen_creation: list[int], optional
-        A list of orbital indices for which creation operators are frozen (i.e., not allowed to be occupied in the selected determinants).
-        This is used to enforce certain symmetries or to exclude certain orbitals from the selection process.
-    frozen_annihilation: list[int], optional
-        A list of orbital indices for which annihilation operators are frozen (i.e., not allowed to be unoccupied in the selected determinants).
-        This is used to enforce certain symmetries or to exclude certain orbitals from the selection process.
     screening_criterion: str, optional, default="hbci"
         The criterion used to screen determinants during selection. Options are "hbci" and "ehbci".
     energy_correction: str, optional, default="pt2"
@@ -267,14 +271,14 @@ class SelectedCIParams(ParamsBase):
     e_tol: float = 1e-8
     var_threshold: float = 5e-4
     pt2_threshold: float = 1e-8
+    do_pt2_every_iter: bool = False
+    do_gas_restriction_pt2: bool = False
     selection_algorithm: Literal["hbci", "hbci_ref"] = "hbci"
     guess_occ_window: int = 2
     guess_vir_window: int = 2
     ci_algorithm: Literal["iterative", "exact"] = "iterative"
     num_batches_per_thread: int = 4
     do_spin_penalty: bool = True
-    frozen_creation: list[int] = field(default_factory=list)
-    frozen_annihilation: list[int] = field(default_factory=list)
     screening_criterion: Literal["hbci", "ehbci"] = "hbci"
     energy_correction: Literal["variational", "pt2"] = "pt2"
     energy_shift: float = None

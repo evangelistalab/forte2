@@ -40,8 +40,8 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
         Energy convergence tolerance.
     g_tol : float, optional, default=1e-7
         Gradient convergence tolerance.
-    die_if_not_converged : bool, optional, default=True
-        If True, raises an error if the optimization does not converge.
+    die_if_not_converged : bool, optional, default=False
+        If True, raises an error if the optimization or the solver does not converge.
     freeze_inter_gas_rots : bool, optional, default=False
         Whether to freeze inter-GAS orbital rotations when multiple GASes are defined.
     micro_maxiter : int, optional, default=6
@@ -79,7 +79,7 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
     maxiter: int = 50
     e_tol: float = 1e-8
     g_tol: float = 1e-7
-    die_if_not_converged: bool = True
+    die_if_not_converged: bool = False
 
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
