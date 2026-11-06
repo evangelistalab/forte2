@@ -5,6 +5,7 @@ User guide
 
     basics
     capabilities
+    active_space
     relativistic
     symmetry
     integrals

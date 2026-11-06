@@ -6,7 +6,7 @@ from forte2.lib import ints
 from forte2.scf import RHF, ROHF, GHF
 from forte2.state import MOSpace
 from forte2.helpers import logger, invsqrt_matrix, block_diag_2x2
-from forte2.helpers.matrix_functions import block_eigh
+from forte2.helpers.linalg import block_eigh
 from forte2.base_classes import Method
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm

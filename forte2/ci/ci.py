@@ -19,6 +19,7 @@ from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.orbitals import FinalOrbitals
 from .ci_utils import (
+    orthonormalize_guesses,
     pretty_print_gas_info,
     validate_single_state_rdm,
     make_cumulant_from_rdms,
@@ -52,11 +53,25 @@ class _CISingleStateSolver:
         The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
+    ci_vector_guess : list, optional
+        The initial CI vectors of this state.
+        One (absolute_index, {Determinant: coefficient}) tuple per root. Each guess is
+        projected onto the CSF basis and normalized, so a spin-impure guess, such as a
+        single open-shell determinant, keeps the normalized component of the target
+        multiplicity. The two-component solver has no CSF basis and only normalizes.
+    guess_dets : list[Determinant], optional
+        The candidate determinants for the guess space of this state. If None, all
+        basis functions are candidates.
+    pinned_guess_dets : list[Determinant], optional
+        Determinants whose basis functions always join the guess space of this state.
 
     Attributes
     ----------
     eigensolver : DavidsonLiuSolver
         The eigensolver used to find the roots of the CI problem.
+    guess_energies : NDArray
+        The eigenvalues of the guess Hamiltonian for the guess vectors. Not set when
+        the guess is ``ci_vector_guess``.
     E (evals) : NDArray
         The eigenvalues (energies) of the CI problem.
     evecs : NDArray
@@ -74,6 +89,9 @@ class _CISingleStateSolver:
     do_test_rdms: bool = False
     die_if_not_converged: bool = False
     log_level: int = logger.VERBOSITY_DEBUG
+    ci_vector_guess: list | None = None
+    guess_dets: list | None = None
+    pinned_guess_dets: list | None = None
 
     ### Non-init attributes
     rebuild_guess: bool = field(default=True, init=False)
@@ -415,24 +433,56 @@ class _CISingleStateSolver:
 
     def _build_guess_vectors(self, Hdiag):
         """Build the guess vectors for the CI calculation."""
-        # determine the number of guess vectors
-        self.num_guess_states = min(
-            self.davidson_liu_params.guess_per_root * self.nroot, self.basis_size
-        )
-        logger.log(f"Number of guess states: {self.num_guess_states}", self.log_level)
-        nguess_dets = min(
-            self.davidson_liu_params.ndets_per_guess * self.num_guess_states,
-            self.basis_size,
-        )
-        logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
+        # 1. If ci_vector_guess'es are given, add those to the eigensolver and return
+        if self.ci_vector_guess is not None:
+            guess_mat = self._ci_vector_guess_vectors()
+            logger.log(
+                f"Number of guess states (ci_vector_guess): {guess_mat.shape[1]}",
+                self.log_level,
+            )
+            self.eigensolver.add_guesses(guess_mat)
+            return
 
-        # find the indices of the elements of Hdiag with the lowest values
-        if self.ci_params.energy_shift is not None:
-            indices = np.argsort(np.abs(Hdiag - self.ci_params.energy_shift))[
-                :nguess_dets
-            ]
+        # 2. Else, build a guess Hamiltonian is a basis, which is given by
+        #   - CSFs in guess_dets (converted from determinants), if it is provided
+        #   - all CSFs in the CI space
+        #   both
+        # the candidates are narrowed by energy below,
+        # while the pinned basis functions alwaus stay in the basis
+        if self.guess_dets is None:
+            candidates = np.arange(self.basis_size)
         else:
-            indices = np.argsort(Hdiag)[:nguess_dets]
+            candidates = self._basis_indices(self.guess_dets, "guess_dets")
+        pinned = self._basis_indices(self.pinned_guess_dets or [], "pinned_guess_dets")
+        candidates = candidates[~np.isin(candidates, pinned)]
+
+        # determine the number of guess vectors
+        num_guess_states = min(
+            self.davidson_liu_params.guess_per_root * self.nroot, len(candidates)
+        )
+        nguess_candidates = min(
+            self.davidson_liu_params.ndets_per_guess * num_guess_states,
+            len(candidates),
+        )
+
+        # find the candidates with the lowest diagonal elements
+        if self.ci_params.energy_shift is not None:
+            order = np.argsort(np.abs(Hdiag[candidates] - self.ci_params.energy_shift))
+        else:
+            order = np.argsort(Hdiag[candidates])
+        indices = np.concatenate([candidates[order[:nguess_candidates]], pinned])
+        nguess_dets = len(indices)
+
+        self.num_guess_states = min(
+            self.davidson_liu_params.guess_per_root * self.nroot, nguess_dets
+        )
+        if self.num_guess_states < self.nroot:
+            raise ValueError(
+                f"The guess space of {self.state} has {nguess_dets} basis functions, "
+                f"fewer than the {self.nroot} roots requested."
+            )
+        logger.log(f"Number of guess states: {self.num_guess_states}", self.log_level)
+        logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
 
         _slater_rules = self._basis_matrix_element
         # create the Hamiltonian matrix in the basis of the guess CSFs
@@ -449,7 +499,9 @@ class _CISingleStateSolver:
         if self.ci_params.energy_shift is not None:
             # take the eigenvectors nearest the shift rather than the lowest
             order = np.argsort(np.abs(evals_guess - self.ci_params.energy_shift))
+            evals_guess = evals_guess[order]
             evecs_guess = evecs_guess[:, order]
+        self.guess_energies = evals_guess[: self.num_guess_states]
 
         # Select the first eigenvectors in that order
         guess_mat = np.zeros((self.basis_size, self.num_guess_states), dtype=self.dtype)
@@ -459,6 +511,58 @@ class _CISingleStateSolver:
                 guess_mat[d, i] = guess[j]
 
         self.eigensolver.add_guesses(guess_mat)
+
+    def _det_C_to_basis_C(self, det_vec):
+        """Project a CI vector from the determinant basis onto the CSF basis."""
+        csf_vec = np.zeros(self.basis_size, dtype=self.dtype)
+        # this automatically converts a spin-impure det_vec into an eigenfunction of target S2
+        self.spin_adapter.det_C_to_csf_C(np.ascontiguousarray(det_vec), csf_vec)
+        return csf_vec
+
+    def _det_indices(self, dets, owner):
+        """The positions of dets in the CI vector, raising if one is not in the CI space."""
+        indices = []
+        for d in dets:
+            try:
+                indices.append(self.ci_strings.determinant_index(d))
+            except (IndexError, RuntimeError):
+                raise ValueError(
+                    f"{owner} has the determinant {d.str(self.norb)}, which is not in "
+                    f"the CI space of {self.state}."
+                ) from None
+        return indices
+
+    def _basis_indices(self, dets, owner):
+        """
+        The indices of the CSFs corresponding to all configurations of the determinants.
+        e.g., for a triplet solver, |ab> corresponds to configuration |11> which then
+        correspnods to a CSF of (|ab> + |ba>)/sqrt(2) with some index.
+        For a singlet solver, the same determinant would correspond to the same configuration
+        but that configuration would correspond to a CSF of (|ab> - |ba>)/sqrt(2) with some
+        other index.
+        """
+        self._det_indices(dets, owner)
+        ranges = {self.spin_adapter.configuration_csf_range(d) for d in dets}
+        indices = sorted(i for start, stop in ranges for i in range(start, stop))
+        return np.array(indices, dtype=int)
+
+    def _ci_vector_guess_vectors(self):
+        """ci_vector_guess as orthonormal columns in the CSF basis."""
+        vectors = []
+        for root, det_coeffs in self.ci_vector_guess:
+            det_vec = np.zeros(self.ndet, dtype=self.dtype)
+            dets, coeffs = zip(*det_coeffs.items())
+            indices = self._det_indices(dets, f"ci_vector_guess[{root}]")
+            det_vec[indices] = list(coeffs)
+            vec = self._det_C_to_basis_C(det_vec)
+            vec_norm = np.linalg.norm(vec)
+            if vec_norm < 1e-8 * np.linalg.norm(det_vec):
+                raise ValueError(
+                    f"The guess for root {root} has no component of multiplicity "
+                    f"{self.state.multiplicity}."
+                )
+            vectors.append((root, vec / vec_norm))
+        return orthonormalize_guesses(vectors)
 
     def csf_C_to_det_C(self, csf_vec):
         """
@@ -692,6 +796,21 @@ class CISolver(CIBase):
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
+    ci_vector_guess : list[list[tuple[Determinant, float | complex]]], optional
+        Initial CI vectors, one per root in absolute root order.
+        Each guess is projected onto the configuration state functions (CSFs) of the target multiplicity and normalized.
+        The Davidson-Liu solver starts from these vectors, so ``guess_per_root`` and ``ndets_per_guess`` don't apply.
+        This option is incompatible with ``guess_dets`` or ``pinned_guess_dets``.
+        ``ci_algorithm="exact"`` ignores it.
+    guess_dets : None | list[Determinant] | list[list[Determinant] | None], optional
+        The candidate determinants for the guess space: a list of ``Determinant``s
+        if there is one state, or one entry per state, each a list of ``Determinant``s or None.
+        If None, every CSF is a candidate.
+        The candidates are narrowed down by diagonal energy, or by distance from ``ci_params.energy_shift``, to at most ``ndets_per_guess * guess_per_root * nroot``.
+        The guess vectors are the lowest ``guess_per_root * nroot`` eigenvectors of the Hamiltonian in that space.
+    pinned_guess_dets : None | list[Determinant] | list[list[Determinant] | None], optional
+        Determinants whose CSFs always join the guess space, without the narrowing, in
+        the same per-state format as ``guess_dets``.
 
     Attributes
     ----------
