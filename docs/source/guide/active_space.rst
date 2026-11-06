@@ -96,8 +96,8 @@ roots.
     If True, rotations between orbitals of different GASes are excluded. The default is False.
 
 ``die_if_not_converged``
-    If True, the default, an unconverged optimization raises an error. If False, it logs a
-    warning.
+    If True, an unconverged optimization or solver raises an error. If False, the default,
+    it logs a warning.
 
 ``MCOptimizer`` rotates the orbitals with unitary steps, so the orbitals it starts from must be
 orthonormal in the current basis set. To start from orbitals of another geometry or basis set, map
@@ -202,8 +202,8 @@ problem is solved:
         davidson_liu_params=DavidsonLiuParams(r_tol=1e-8, maxiter=200),
     )
 
-By default, the ``CI`` driver raises an error if the solver doesn't converge. To get a warning
-instead, pass ``die_if_not_converged=False`` to the driver.
+By default, the ``CI`` driver logs a warning if the solver doesn't converge. To raise an error
+instead, pass ``die_if_not_converged=True`` to the driver.
 
 Determinant strings
 -------------------

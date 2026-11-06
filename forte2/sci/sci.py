@@ -173,7 +173,16 @@ class _SelectedCISingleStateSolver:
             self.sci_params.pt2_regularizer_strength,
         )
 
-        old_energy = 0.0
+        # optionally skip pt2 by setting pt2_threshold to the variational threshold
+        do_pt2 = self.sci_params.do_pt2_every_iter
+        cycle_pt2_threshold = (
+            self.sci_params.pt2_threshold
+            if do_pt2
+            else max(self.sci_params.var_threshold, self.sci_params.pt2_threshold)
+        )
+
+        converged = False
+        old_evals = None
         for cycle in range(self.sci_params.maxcycle):
             logger.log(f"\n{'=' * 67}", self.log_level)
             logger.log(f"Selected CI Cycle {cycle + 1}", self.log_level)
@@ -185,21 +194,24 @@ class _SelectedCISingleStateSolver:
             logger.log(
                 f"  var_threshold = {self.sci_params.var_threshold}", self.log_level
             )
-            logger.log(
-                f"  pt2_threshold = {self.sci_params.pt2_threshold}", self.log_level
-            )
+            if do_pt2:
+                logger.log(
+                    f"  pt2_threshold = {self.sci_params.pt2_threshold}", self.log_level
+                )
+            else:
+                logger.log("  PT2 correction in the final cycle only", self.log_level)
 
             old_ndets = self.sci_helper.ndets()
 
             if self.sci_params.selection_algorithm.lower() == "hbci_ref":
                 self.sci_helper.select_hbci_ref(
                     var_threshold=self.sci_params.var_threshold,
-                    pt2_threshold=self.sci_params.pt2_threshold,
+                    pt2_threshold=cycle_pt2_threshold,
                 )
             elif self.sci_params.selection_algorithm.lower() == "hbci":
                 self.sci_helper.select_hbci(
                     var_threshold=self.sci_params.var_threshold,
-                    pt2_threshold=self.sci_params.pt2_threshold,
+                    pt2_threshold=cycle_pt2_threshold,
                 )
             else:
                 raise ValueError(
@@ -210,12 +222,13 @@ class _SelectedCISingleStateSolver:
             self.e_var = np.array(self.sci_helper.energies())
             # These are the expectation values of S^2 for each root computed from the CI vectors
             self.spin2_var = np.array(self._compute_spin2())
-            # These are the PT2 corrections due to the new variational determinants added in this cycle
-            self.ept2_var = np.array(self.sci_helper.ept2_var())
-            # These are the PT2 corrections due to the new perturbative determinants added in this cycle
-            self.ept2_pt = np.array(self.sci_helper.ept2_pt())
-            # These are the total energies of each root including the new variational and perturbative contributions
-            self.e_tot = self.e_var + self.ept2_var + self.ept2_pt
+            if do_pt2:
+                # These are the PT2 corrections due to the new variational determinants added in this cycle
+                self.ept2_var = np.array(self.sci_helper.ept2_var())
+                # These are the PT2 corrections due to the new perturbative determinants added in this cycle
+                self.ept2_pt = np.array(self.sci_helper.ept2_pt())
+                # These are the total energies of each root including the new variational and perturbative contributions
+                self.e_tot = self.e_var + self.ept2_var + self.ept2_pt
 
             summary = "\nSummary of selection:"
             summary += f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
@@ -225,34 +238,38 @@ class _SelectedCISingleStateSolver:
             summary += (
                 f"\n  {'Total variational determinants:':<40}{self.sci_helper.ndets()}"
             )
-            summary += f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
+            if do_pt2:
+                summary += f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
             summary += (
                 f"\n  {'Selection time:':<40}{self.sci_helper.selection_time():.3f} s\n"
             )
             logger.log(summary, self.log_level)
 
-            table = AsciiTable(
-                columns=[
-                    "Root",
-                    "E (CI) [Eh]",
-                    "S^2 (CI)",
-                    "E (CI) + E (PT2) [Eh]",
-                ],
-                formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}"],
-            )
+            columns = ["Root", "E (CI) [Eh]", "S^2 (CI)"]
+            formats = ["{:>4}", "{:>20.12f}", "{:>6.3f}"]
+            if do_pt2:
+                columns.append("E (CI) + E (PT2) [Eh]")
+                formats.append("{:>20.12f}")
+            table = AsciiTable(columns=columns, formats=formats)
 
             logger.log(table.header(), self.log_level)
             for r in range(self.nroot):
+                row = [r, self.e_var[r], self.spin2_var[r]]
+                if do_pt2:
+                    row.append(self.e_tot[r])
+                logger.log(table.row(*row), self.log_level)
+            logger.log(table.footer(), self.log_level)
+
+            # After the first cycle, the CI vectors are eigenvectors of the current space, so a
+            # selection that adds nothing ends the cycles without another diagonalization.
+            space_unchanged = self.sci_helper.num_new_dets_var() == 0
+            if cycle > 0 and space_unchanged:
                 logger.log(
-                    table.row(
-                        r,
-                        self.e_var[r],
-                        self.spin2_var[r],
-                        self.e_tot[r],
-                    ),
+                    f"Selected CI converged in {cycle + 1} cycles: no determinants added.",
                     self.log_level,
                 )
-            logger.log(table.footer(), self.log_level)
+                converged = True
+                break
 
             self.ndet = self.sci_helper.ndets()
             self.dets = self.sci_helper.dets()
@@ -283,19 +300,32 @@ class _SelectedCISingleStateSolver:
             self.sci_helper.set_c(self.evecs)
             self.sci_helper.set_energies(np.ascontiguousarray(self.evals.real))
 
-            delta_energy = np.average(self.evals) - old_energy
-            old_energy = np.average(self.evals)
-
-            if abs(delta_energy) < self.sci_params.e_tol:
+            if space_unchanged:
                 logger.log(
-                    f"Selected CI converged in {cycle + 1} cycles.", self.log_level
+                    f"Selected CI converged in {cycle + 1} cycles: no determinants added.",
+                    self.log_level,
                 )
+                converged = True
                 break
-        else:
-            logger.log(
-                f"Selected CI did not converge in {self.sci_params.maxcycle} cycles.",
-                self.log_level,
+            if old_evals is not None:
+                delta_energy = np.max(np.abs(self.evals - old_evals))
+                if delta_energy < self.sci_params.e_tol:
+                    logger.log(
+                        f"Selected CI converged in {cycle + 1} cycles: largest energy "
+                        f"change {delta_energy:.3e} Eh.",
+                        self.log_level,
+                    )
+                    converged = True
+                    break
+            old_evals = self.evals.copy()
+
+        if not converged:
+            message = (
+                f"Selected CI did not converge in {self.sci_params.maxcycle} cycles."
             )
+            if self.die_if_not_converged:
+                raise RuntimeError(message)
+            logger.log_warning(message)
 
         # final selection to update var' and pt2 contributions with the final CI coefficients
         logger.log(f"\n{'=' * 67}", self.log_level)

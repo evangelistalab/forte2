@@ -210,11 +210,17 @@ class SelectedCIParams(ParamsBase):
     maxcycle: int, optional, default=15
         The maximum number of selection cycles.
     e_tol: float, optional, default=1e-8
-        The energy convergence threshold for selected CI macroiterations.
+        The energy convergence threshold for selected CI macroiterations. The cycles stop
+        when every root's variational energy changes by less than ``e_tol`` between two
+        cycles, or when a selection adds no determinants.
     var_threshold: float, optional, default=5e-4
         The threshold for including determinants in the variational space based on their contribution to the wavefunction.
     pt2_threshold: float, optional, default=1e-8
         The threshold for including determinants in the perturbative correction based on their second-order energy contribution.
+    do_pt2_every_iter: bool, optional, default=False
+        If True, compute the perturbative correction in every selection cycle. If False,
+        compute it only in the final cycle, which runs whether or not the selection
+        converges.
     selection_algorithm: str, optional, default="hbci"
         The algorithm used for selecting determinants. Options are "hbci" and "hbci_ref".
     guess_occ_window: int, optional, default=2
@@ -261,6 +267,7 @@ class SelectedCIParams(ParamsBase):
     e_tol: float = 1e-8
     var_threshold: float = 5e-4
     pt2_threshold: float = 1e-8
+    do_pt2_every_iter: bool = False
     selection_algorithm: Literal["hbci", "hbci_ref"] = "hbci"
     guess_occ_window: int = 2
     guess_vir_window: int = 2
