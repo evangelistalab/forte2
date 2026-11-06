@@ -235,7 +235,7 @@ def test_sci_ne_core_excited():
     system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
     rhf = RHF(charge=0, e_tol=1e-10)(system)
     sci_solver = SelectedCISolver(
-        states=State(nel=10, multiplicity=3, ms=1.0, gas_max=[1]),
+        states=State(nel=10, multiplicity=3, ms=1.0, gas_max=[1], gas_min=[0]),
         active_orbitals=[[0], list(range(1, 14))],
         guess_dets=[Determinant("a2222a")],
         sci_params=SelectedCIParams(
@@ -871,6 +871,41 @@ def test_sci_water_valence_excitation():
     sci.run()
     assert sci.E_ci[0] == pytest.approx(-76.12037086, abs=1e-6)
     assert sci.E_ci[1] == pytest.approx(-75.80852593, abs=1e-6)
+
+
+def test_sci_water_valence_excitation_gas():
+    """Test SelectedCI on a water valence-excited state with a GAS."""
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0)(system)
+
+    sci_solver = SelectedCISolver(
+        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[4]),
+        active_orbitals=[[0, 1], list(range(2, 13))],
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=2e-4,
+            pt2_threshold=1e-8,
+            do_spin_penalty=True,
+            screening_criterion="hbci",
+            guess_occ_window=3,
+            guess_vir_window=1,
+        ),
+        die_if_not_converged=False,
+        nroots=2,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+        do_test_rdms=True,
+    )
+
+    sci = CI(sci_solver)(rhf)
+    sci.run()
+    assert sci_solver.E_tot[0] == pytest.approx(-76.1134659523, abs=1e-5)
+    assert sci_solver.E_tot[1] == pytest.approx(-75.8034598870, abs=1e-5)
 
 
 @pytest.mark.slow
