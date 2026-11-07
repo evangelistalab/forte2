@@ -453,6 +453,11 @@ class _SelectedCISingleStateSolver:
         )
         # Diagonalize the Hamiltonian to get the initial guess coefficients
         evals, evecs = np.linalg.eigh(Hguess)
+        if self.sci_params.energy_shift is not None:
+            # take the eigenvectors nearest the shift rather than the lowest
+            order = np.argsort(np.abs(evals - self.sci_params.energy_shift))
+            evals = evals[order]
+            evecs = evecs[:, order]
         c = (
             S2sub @ evecs[:, : self.nroot].copy()
             if self.sci_params.do_spin_penalty
