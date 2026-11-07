@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, integrals
-from forte2.helpers.matrix_functions import cholesky_wrapper
+from forte2.helpers.linalg import cholesky_wrapper
 
 
 def test_cholesky_tei():

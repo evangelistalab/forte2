@@ -17,6 +17,7 @@ from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.ci.ci_utils import (
+    orthonormalize_guesses,
     pretty_print_ci_summary,
     validate_single_state_rdm,
     make_cumulant_from_rdms,
@@ -50,6 +51,17 @@ class _SelectedCISingleStateSolver:
         The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
+    ci_vector_guess : list, optional
+        The initial CI vectors of this state, as ``CIBase`` processes them: one
+        ``(absolute_root, {Determinant: coefficient})`` tuple per root. The guess
+        determinants make up the initial determinant space. If
+        ``sci_params.do_spin_penalty`` is True, a spin-impure guess keeps only its
+        component of the target multiplicity. Each guess is normalized.
+    guess_dets : list[Determinant], optional
+        The candidate determinants for the initial determinant space of this state. If
+        None, the candidates are generated from the occupation windows.
+    pinned_guess_dets : list[Determinant], optional
+        Determinants that always join the initial determinant space of this state.
 
     Attributes
     ----------
@@ -73,6 +85,9 @@ class _SelectedCISingleStateSolver:
     do_test_rdms: bool = False
     die_if_not_converged: bool = False
     log_level: int = logger.VERBOSITY_DEBUG
+    ci_vector_guess: list | None = None
+    guess_dets: list | None = None
+    pinned_guess_dets: list | None = None
 
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
@@ -355,71 +370,19 @@ class _SelectedCISingleStateSolver:
         # local object used only to build initial guess
         # exact diag uses sci_helper's slater_rules
         slater_rules = SlaterRules(self.norb, self.ints.E, self.ints.H, self.ints.V)
-        window_occ = self.sci_params.guess_occ_window
-        window_vir = self.sci_params.guess_vir_window
-        # If there are no guess determinants, generate some based on occupation windows
-        if (
-            len(self.sci_params.guess_dets) + len(self.sci_params.pinned_guess_dets)
-            == 0
-        ):
-            self.sci_params.guess_dets = self._generate_initial_guess_dets(
-                window_occ, window_vir
-            )
-        else:
-            self._check_guess_dets(self.sci_params.guess_dets)
-            self._check_guess_dets(self.sci_params.pinned_guess_dets)
+        initial_dets = self._initial_determinants(slater_rules)
+        logger.log(f"Number of guess determinants: {len(initial_dets)}", self.log_level)
 
-        # use the determinantal energies to refine the guess determinants
-        # if there are more than needed for the initial guess
-        # this can be controlled by DavidsonLiuParams
-        if len(self.sci_params.guess_dets) > 0:
-            guess_hdiag = slater_rules.energies(self.sci_params.guess_dets)
-            nguess_dets = len(self.sci_params.guess_dets)
-            num_guess_states = min(
-                self.davidson_liu_params.guess_per_root * self.nroot, nguess_dets
-            )
-            nguess_dets = min(
-                self.davidson_liu_params.ndets_per_guess * num_guess_states,
-                nguess_dets,
-            )
-        else:
-            # no guess dets and only pinned guess dets
-            guess_hdiag = np.empty(0)
-            nguess_dets = 0
-
-        # find the indices of the elements of Hdiag with the lowest values
-        # subject to an optional energy shift, which can be used to target specific states (e.g. excited states)
-        if self.sci_params.energy_shift is not None:
-            indices = np.argsort(np.abs(guess_hdiag - self.sci_params.energy_shift))[
-                :nguess_dets
-            ]
-        else:
-            indices = np.argsort(guess_hdiag)[:nguess_dets]
-
-        self.sci_params.guess_dets = [self.sci_params.guess_dets[i] for i in indices]
-        self.sci_params.guess_dets += self.sci_params.pinned_guess_dets
-
-        # Check that we have all spin complement pairs
-        self.sci_params.guess_dets = self._generate_spin_complement_pairs(
-            self.sci_params.guess_dets
-        )
-        logger.log(
-            f"Number of guess determinants: {len(self.sci_params.guess_dets)}",
-            self.log_level,
-        )
-
-        ndet = len(self.sci_params.guess_dets)
+        ndet = len(initial_dets)
         S2guess = np.zeros((ndet, ndet), dtype=self.dtype)
         Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
         for i in range(ndet):
             for j in range(i + 1):
                 Hguess[i, j] = slater_rules.slater_rules(
-                    self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
+                    initial_dets[i], initial_dets[j]
                 )
                 Hguess[j, i] = np.conj(Hguess[i, j])
-                S2guess[i, j] = det.spin2(
-                    self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
-                )
+                S2guess[i, j] = det.spin2(initial_dets[i], initial_dets[j])
                 S2guess[j, i] = np.conj(S2guess[i, j])
 
         svals, svecs = np.linalg.eigh(S2guess)
@@ -446,24 +409,30 @@ class _SelectedCISingleStateSolver:
             else []
         )
 
-        Hguess = (
-            S2sub.conj().T @ Hguess @ S2sub
-            if self.sci_params.do_spin_penalty
-            else Hguess
-        )
-        # Diagonalize the Hamiltonian to get the initial guess coefficients
-        evals, evecs = np.linalg.eigh(Hguess)
-        if self.sci_params.energy_shift is not None:
-            # take the eigenvectors nearest the shift rather than the lowest
-            order = np.argsort(np.abs(evals - self.sci_params.energy_shift))
-            evals = evals[order]
-            evecs = evecs[:, order]
-        c = (
-            S2sub @ evecs[:, : self.nroot].copy()
-            if self.sci_params.do_spin_penalty
-            else evecs[:, : self.nroot].copy()
-        )
-        energies = evals[: self.nroot].copy()
+        if self.ci_vector_guess is not None:
+            spin_projector = S2sub if self.sci_params.do_spin_penalty else None
+            c = self._ci_vector_guess_vectors(initial_dets, spin_projector)
+            energies = np.real(np.einsum("ir,ij,jr->r", c.conj(), Hguess, c))
+        else:
+            Hguess = (
+                S2sub.conj().T @ Hguess @ S2sub
+                if self.sci_params.do_spin_penalty
+                else Hguess
+            )
+            # Diagonalize the Hamiltonian to get the initial guess coefficients
+            evals, evecs = np.linalg.eigh(Hguess)
+            if self.sci_params.energy_shift is not None:
+                # take the eigenvectors nearest the shift rather than the lowest
+                order = np.argsort(np.abs(evals - self.sci_params.energy_shift))
+                evals = evals[order]
+                evecs = evecs[:, order]
+            self._check_guess_space_size(len(evals))
+            c = (
+                S2sub @ evecs[:, : self.nroot].copy()
+                if self.sci_params.do_spin_penalty
+                else evecs[:, : self.nroot].copy()
+            )
+            energies = evals[: self.nroot].copy()
         logger.log(f"Initial guess energies: {energies}", self.log_level)
         # log the following at a more verbose log level
         logger.log(f"Initial guess states:", self.log_level + 1)
@@ -472,10 +441,10 @@ class _SelectedCISingleStateSolver:
             for i in range(c.shape[0]):
                 if abs(c[i, r]) > 1e-4:
                     logger.log(
-                        f"    {self.sci_params.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}",
+                        f"    {initial_dets[i].str(self.norb)}: {c[i, r]:20.12f}",
                         self.log_level + 1,
                     )
-        return self.sci_params.guess_dets, c, energies, S2project_out
+        return initial_dets, c, energies, S2project_out
 
     def _generate_initial_guess_dets(self, window_occ, window_vir):
         logger.log("Generating initial determinant guess", self.log_level)
@@ -543,6 +512,104 @@ class _SelectedCISingleStateSolver:
                 [noccel],
             )
         return ci_strings.make_determinants()
+
+    def _initial_determinants(self, slater_rules):
+        """
+        The determinants of the initial space: those of ci_vector_guess, or else the
+        guess determinants narrowed by determinant energy (or by distance from
+        energy_shift) plus the pinned guess determinants, completed by _complete_guess_dets.
+        """
+        if self.ci_vector_guess is not None:
+            dets = [
+                d for _, det_coeffs in self.ci_vector_guess for d in det_coeffs.keys()
+            ]
+            self._check_in_space(dets, "ci_vector_guess")
+            return self._complete_guess_dets(dets)
+
+        if self.guess_dets is None:
+            candidates = self._generate_initial_guess_dets(
+                self.sci_params.guess_occ_window, self.sci_params.guess_vir_window
+            )
+        else:
+            candidates = list(self.guess_dets)
+            self._check_in_space(candidates, "guess_dets")
+        pinned = list(self.pinned_guess_dets or [])
+        self._check_in_space(pinned, "pinned_guess_dets")
+
+        # use the determinantal energies to refine the candidates
+        # if there are more than needed for the initial guess
+        # this can be controlled by DavidsonLiuParams
+        if len(candidates) > 0:
+            guess_hdiag = slater_rules.energies(candidates)
+            num_guess_states = min(
+                self.davidson_liu_params.guess_per_root * self.nroot, len(candidates)
+            )
+            nguess_dets = min(
+                self.davidson_liu_params.ndets_per_guess * num_guess_states,
+                len(candidates),
+            )
+        else:
+            guess_hdiag = np.empty(0)
+            nguess_dets = 0
+
+        # find the candidates with the lowest energies, subject to an optional energy
+        # shift, which can be used to target specific states (e.g. excited states)
+        if self.sci_params.energy_shift is not None:
+            indices = np.argsort(np.abs(guess_hdiag - self.sci_params.energy_shift))[
+                :nguess_dets
+            ]
+        else:
+            indices = np.argsort(guess_hdiag)[:nguess_dets]
+
+        return self._complete_guess_dets([candidates[i] for i in indices] + pinned)
+
+    def _complete_guess_dets(self, dets):
+        """Add the missing spin complements of the guess determinants."""
+        return self._generate_spin_complement_pairs(dets)
+
+    def _check_in_space(self, dets, owner):
+        """Raise if a determinant of owner is not in the CI space."""
+        for d in dets:
+            if sum(d.na(i) + d.nb(i) for i in range(self.norb)) != d.count():
+                raise ValueError(
+                    f"{owner} has the determinant {d!r}, which is not in the CI space: "
+                    f"it occupies orbitals beyond the {self.norb} active ones."
+                )
+            try:
+                self._check_guess_dets([d])
+            except ValueError as error:
+                raise ValueError(f"{owner} is not in the CI space: {error}") from None
+
+    def _check_guess_space_size(self, nstates):
+        """Raise if explicit guess determinants span fewer states than the roots requested."""
+        if self.guess_dets is not None and nstates < self.nroot:
+            raise ValueError(
+                f"The guess space of {self.state} spans {nstates} states, fewer than "
+                f"the {self.nroot} roots requested."
+            )
+
+    def _ci_vector_guess_vectors(self, initial_dets, spin_projector=None):
+        """
+        ci_vector_guess as orthonormal columns over initial_dets, projected onto the target
+        spin if spin_projector is given.
+        """
+        index = {d: i for i, d in enumerate(initial_dets)}
+        vectors = []
+        for root, det_coeffs in self.ci_vector_guess:
+            vec = np.zeros(len(initial_dets), dtype=self.dtype)
+            for d, coefficient in det_coeffs.items():
+                vec[index[d]] = coefficient
+            full_norm = np.linalg.norm(vec)
+            if spin_projector is not None:
+                vec = spin_projector @ (spin_projector.conj().T @ vec)
+            vec_norm = np.linalg.norm(vec)
+            if vec_norm < 1e-8 * full_norm:
+                raise ValueError(
+                    f"The guess for root {root} has no component of multiplicity "
+                    f"{self.state.multiplicity}."
+                )
+            vectors.append((root, vec / vec_norm))
+        return orthonormalize_guesses(vectors)
 
     def _generate_spin_complement_pairs(self, guess_dets):
         # find all the unique electronic configurations
@@ -945,6 +1012,33 @@ class SelectedCISolver(CIBase):
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to ``logger.VERBOSITY_DEBUG``.
+    ci_vector_guess : list, optional
+        Initial CI vectors, exactly one per root in absolute root order, used as given
+        rather than diagonalized. Each entry is a list of ``(Determinant, coefficient)``
+        pairs. Determinants span only the active orbitals,
+        in the same order as the output of ``get_top_determinants``, which you can pass
+        here to restart a calculation. The guess determinants make up the initial
+        determinant space. If ``sci_params.do_spin_penalty`` is True, each guess is
+        projected onto the target multiplicity, so a spin-impure guess, such as a single
+        open-shell determinant, keeps only its component of the target multiplicity.
+        Each guess is normalized. Selection and the Davidson-Liu solver start from
+        exactly these vectors, so the guess windows, ``guess_per_root``, and
+        ``ndets_per_guess`` don't apply. You can't combine this option with
+        ``guess_dets`` or ``pinned_guess_dets``.
+    guess_dets : list, optional
+        The candidate determinants for the initial determinant space, which is also the
+        guess space: a list of ``Determinant`` objects if there is one state, or one
+        entry per state, each a list or None. If None, for the whole option or for one
+        state, the candidates are generated from ``sci_params.guess_occ_window`` and
+        ``sci_params.guess_vir_window``. The candidates are narrowed by determinant
+        energy, or by distance from ``sci_params.energy_shift``, to at most
+        ``ndets_per_guess * guess_per_root * nroot``, and then completed with every spin
+        arrangement of their configurations. The initial vectors are the lowest
+        ``nroot`` eigenvectors of the Hamiltonian in that space, within the target
+        multiplicity if ``sci_params.do_spin_penalty`` is True.
+    pinned_guess_dets : list, optional
+        Determinants that always join the initial determinant space, without the
+        narrowing, in the same per-state format as ``guess_dets``.
 
     Attributes
     ----------

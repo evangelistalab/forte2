@@ -3,7 +3,7 @@ from numpy.typing import NDArray
 import scipy as sp
 
 import forte2.integrals as integrals
-from forte2.helpers.matrix_functions import compute_Am1y
+from forte2.helpers.linalg import compute_Am1y
 from forte2.lib import ints
 
 

@@ -1,4 +1,4 @@
-from .matrix_functions import (
+from .linalg import (
     print_metric_info,
     invsqrt_matrix,
     canonical_orth,

@@ -168,11 +168,12 @@ void export_ci_spin_adapter_api(nb::module_& sub_m) {
         .def("prepare_couplings", &CISpinAdapter::prepare_couplings, "dets"_a)
         .def("csf_C_to_det_C", &CISpinAdapter::csf_C_to_det_C, "csf_C"_a, "det_C"_a)
         .def("det_C_to_csf_C", &CISpinAdapter::det_C_to_csf_C, "det_C"_a, "csf_C"_a)
+        .def("configuration_csf_range", &CISpinAdapter::configuration_csf_range, "det"_a,
+             "Return the range [start, end) of the CSFs of the configuration of a determinant")
         .def_prop_ro("nconf", &CISpinAdapter::nconf)
         .def_prop_ro("ncsf", &CISpinAdapter::ncsf)
         .def("set_log_level", &CISpinAdapter::set_log_level, "level"_a,
              "Set the logging level for the class");
-    // .def("ndet", &CISpinAdapter::ndet);
 }
 
 void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {

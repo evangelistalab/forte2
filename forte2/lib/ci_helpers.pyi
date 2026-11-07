@@ -237,6 +237,11 @@ class CISpinAdapter:
 
     def det_C_to_csf_C(self, det_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))], csf_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None: ...
 
+    def configuration_csf_range(self, det: forte2.lib.det.Determinant) -> tuple[int, int]:
+        """
+        Return the range [start, end) of the CSFs of the configuration of a determinant
+        """
+
     @property
     def nconf(self) -> int: ...
 
