@@ -21,7 +21,9 @@ def test_davidson_vs_numpy():
     solver = DavidsonLiuSolver(
         size=size,
         nroot=nroot,
-        davidson_liu_params=DavidsonLiuParams(collapse_per_root=3, basis_per_root=6),
+        davidson_liu_params=DavidsonLiuParams(
+            collapse_per_root=3, basis_per_root=6, r_tol=1e-10
+        ),
     )
     solver.add_h_diag(np.diag(H))
     solver.add_sigma_builder(sigma_builder)
@@ -29,6 +31,7 @@ def test_davidson_vs_numpy():
 
     # 4. Run Davidson
     evals, evecs = solver.solve()
+    assert solver.converged
 
     # 5. Reference solution via NumPy
     ref_vals, ref_vecs = np.linalg.eigh(H)
@@ -62,7 +65,9 @@ def test_davidson_vs_numpy_complex():
     solver = DavidsonLiuSolver(
         size=size,
         nroot=nroot,
-        davidson_liu_params=DavidsonLiuParams(collapse_per_root=3, basis_per_root=6),
+        davidson_liu_params=DavidsonLiuParams(
+            collapse_per_root=3, basis_per_root=6, r_tol=1e-10
+        ),
         dtype=np.complex128,
     )
     solver.add_h_diag(np.diag(H))
@@ -71,6 +76,7 @@ def test_davidson_vs_numpy_complex():
 
     # 4. Run Davidson
     evals, evecs = solver.solve()
+    assert solver.converged
 
     # 5. Reference solution via NumPy
     ref_vals, ref_vecs = np.linalg.eigh(H)
