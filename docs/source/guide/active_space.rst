@@ -96,8 +96,8 @@ roots.
     If True, rotations between orbitals of different GASes are excluded. The default is False.
 
 ``die_if_not_converged``
-    If True, the default, an unconverged optimization raises an error. If False, it logs a
-    warning.
+    If True, an unconverged optimization or solver raises an error. If False, the default,
+    it logs a warning.
 
 ``MCOptimizer`` rotates the orbitals with unitary steps, so the orbitals it starts from must be
 orthonormal in the current basis set. To start from orbitals of another geometry or basis set, map
@@ -202,8 +202,8 @@ problem is solved:
         davidson_liu_params=DavidsonLiuParams(r_tol=1e-8, maxiter=200),
     )
 
-By default, the ``CI`` driver raises an error if the solver doesn't converge. To get a warning
-instead, pass ``die_if_not_converged=False`` to the driver.
+By default, the ``CI`` driver logs a warning if the solver doesn't converge. To raise an error
+instead, pass ``die_if_not_converged=True`` to the driver.
 
 Determinant strings
 -------------------
@@ -356,6 +356,25 @@ The guess options work as in CI, with two differences:
   of their configurations.
 - The solver starts from ``nroot`` vectors, not ``guess_per_root * nroot``. With
   ``ci_vector_guess``, the determinants of the guesses make up the initial space.
+
+With a GAS active space, the selection and the perturbative correction include only the
+determinants within the occupation limits of the state, so selected CI converges to GASCI. The
+guess determinants must satisfy the limits, and the automatic guess keeps only the candidates that
+do. For example, for the lowest core-excited triplet of Ne, with at most one electron in 1s::
+
+    sci_solver = forte2.SelectedCISolver(
+        states=forte2.State(nel=10, multiplicity=3, ms=1.0, gas_max=[1]),
+        active_orbitals=[[0], list(range(1, 14))],
+        guess_dets=[Determinant("a2222a")],
+        sci_params=SelectedCIParams(var_threshold=1e-5),
+    )
+
+To estimate the energy without the occupation limits, set ``do_gas_restriction_pt2=True`` in
+``SelectedCIParams``. The solver then also computes ``E_gas_pt2``, the second-order correction
+from the determinants outside the limits, and ``E_tot + E_gas_pt2`` estimates the energy of the
+state in the full active space. The estimate is reliable when the state lies in a gap of the full
+spectrum. When it lies among other states of the full space, as many core-excited states do,
+some terms of the correction can be large.
 
 Relativistic solvers
 --------------------

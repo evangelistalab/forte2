@@ -6,7 +6,9 @@ from forte2 import (
     GHF,
     MCOptimizer,
     MOSpace,
+    RHF,
     RelCISolver,
+    RelState,
     SpinorUpcaster,
     System,
     X2CParams,
@@ -14,9 +16,9 @@ from forte2 import (
 from forte2 import CI
 from forte2.sci import RelSelectedCISolver
 from forte2.helpers.comparisons import approx
-from forte2.base_classes.params import SelectedCIParams
+from forte2.base_classes.params import DavidsonLiuParams, SelectedCIParams
 from forte2.lib.det import Determinant
-from forte2.lib.ci_helpers import RelSelectedCIHelper
+from forte2.lib.ci_helpers import CIStrings, RelSelectedCIHelper
 
 from rdm_debug_utils import make_so_1rdm_debug, make_so_2rdm_debug
 
@@ -183,6 +185,60 @@ def test_rel_sci_hf_ghf():
     sci.run()
 
     assert sci.E_ci[0] == approx(-100.10065023157668)
+
+
+@pytest.mark.parametrize("selection_algorithm", ["hbci", "hbci_ref"])
+def test_rel_sci_gas_core_hole(selection_algorithm):
+    """Relativistic selected CI with at most one electron in the O 1s spinors reproduces the
+    relativistic GASCI core-hole roots of water (test_rel_gasci_rhf_5)."""
+    xyz = """
+    O  0.000000000000  0.000000000000 -0.069592187400
+    H  0.000000000000 -0.783151105291  0.552239257834
+    H  0.000000000000  0.783151105291  0.552239257834
+    """
+    system = System(
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
+    )
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
+    conv = SpinorUpcaster(apply_random_phase=True)(rhf)
+    davidson_liu_params = DavidsonLiuParams(
+        e_tol=1e-10, basis_per_root=10, ndets_per_guess=20, maxiter=200
+    )
+
+    gasci = CI(
+        RelCISolver(
+            active_orbitals=(2, 12),
+            states=RelState(nel=10, gas_max=[1]),
+            nroots=4,
+            davidson_liu_params=davidson_liu_params,
+        )
+    )(conv)
+    gasci.run()
+
+    # every determinant with one electron in the 1s spinors
+    guess_dets = CIStrings(10, 0, 0, [[0] * 2, [0] * 12], [1, 9], [1, 9])
+    sci = CI(
+        RelSelectedCISolver(
+            active_orbitals=(2, 12),
+            states=RelState(nel=10, gas_max=[1]),
+            nroots=4,
+            guess_dets=guess_dets.make_determinants(),
+            davidson_liu_params=davidson_liu_params,
+            sci_params=SelectedCIParams(
+                selection_algorithm=selection_algorithm,
+                var_threshold=1e-12,
+                pt2_threshold=0.0,
+                do_gas_restriction_pt2=True,
+            ),
+        )
+    )(conv)
+    sci.run()
+
+    assert gasci.E_ci[3] == approx(-55.819535370117)
+    for root in range(4):
+        assert sci.E_ci[root] == approx(gasci.E_ci[root])
+    # the triplet roots are degenerate, so only the singlet has a unique correction
+    assert sci.ci_solver.E_gas_pt2[3] == pytest.approx(3.152095e-5, abs=1e-10)
 
 
 def test_rel_sci_hf_ghf_transition_rdms():

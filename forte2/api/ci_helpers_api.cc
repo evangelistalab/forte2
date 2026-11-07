@@ -210,10 +210,10 @@ void export_sci_helper_api(nb::module_& sub_m) {
     nb::class_<SelectedCIHelper>(sub_m, "SelectedCIHelper")
         .def(nb::init<size_t, const std::vector<Determinant>&, np_matrix&, double, np_matrix&,
                       np_tensor4&, int, const std::string&, const std::vector<size_t>&,
-                      const std::vector<size_t>&>(),
+                      const std::vector<int>&, const std::vector<int>&>(),
              "norb"_a, "dets"_a, "c"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
-             "screening_criterion"_a = "hbci", "frozen_creation"_a = std::vector<size_t>{},
-             "frozen_annihilation"_a = std::vector<size_t>{},
+             "screening_criterion"_a = "hbci", "gas_size"_a = std::vector<size_t>{},
+             "gas_min"_a = std::vector<int>{}, "gas_max"_a = std::vector<int>{},
              "Initialize the SelectedCIHelper with the number of orbitals, initial determinants, "
              "energy, Hamiltonian, and integrals")
         .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
@@ -227,10 +227,6 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Set the number of batches each thread will process in parallel sections")
         .def("set_energies", &SelectedCIHelper::set_energies, "e"_a,
              "Set the energies of the roots")
-        .def("set_frozen_creation", &SelectedCIHelper::set_frozen_creation, "frozen_creation"_a,
-             "Set orbitals excluded from creation in selection")
-        .def("set_frozen_annihilation", &SelectedCIHelper::set_frozen_annihilation,
-             "frozen_annihilation"_a, "Set orbitals excluded from annihilation in selection")
         .def("set_screening_criterion", &SelectedCIHelper::set_screening_criterion, "criterion"_a,
              "Set the screening criterion for selection ('hbci' or 'ehbci')")
         .def("set_energy_correction", &SelectedCIHelper::set_energy_correction, "correction"_a,
@@ -239,9 +235,10 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "strength"_a = 0.5,
              "Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength")
         .def("select_hbci_ref", &SelectedCIHelper::select_hbci_ref, "var_threshold"_a,
-             "pt2_threshold"_a, "Perform HBCI selection with the given threshold")
+             "pt2_threshold"_a, "gas_pt2"_a = false,
+             "Perform HBCI selection with the given threshold")
         .def("select_hbci", &SelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
-             "Perform HBCI selection with the given thresholds")
+             "gas_pt2"_a = false, "Perform HBCI selection with the given thresholds")
         .def("compute_spin2", &SelectedCIHelper::compute_spin2,
              "Compute the expectation value of S^2 for each root and return as a list")
         .def("a_1rdm", &SelectedCIHelper::compute_a_1rdm, "left_root"_a, "right_root"_a,
@@ -278,6 +275,9 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Return the variational part of the Epstein-Nesbet second-order energy correction")
         .def("ept2_pt", &SelectedCIHelper::ept2_pt,
              "Return the perturbative part of the Epstein-Nesbet second-order energy correction")
+        .def("ept2_gas", &SelectedCIHelper::ept2_gas,
+             "Return the Epstein-Nesbet second-order energy correction from the determinants "
+             "outside the GAS occupation limits")
         .def("num_new_dets_var", &SelectedCIHelper::num_new_dets_var,
              "Return the number of new variational determinants added in the last selection")
         .def("num_new_dets_pt2", &SelectedCIHelper::num_new_dets_pt2,
@@ -293,10 +293,11 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
     nb::class_<RelSelectedCIHelper>(sub_m, "RelSelectedCIHelper")
         .def(nb::init<size_t, const std::vector<Determinant>&, np_matrix_complex&, double,
                       np_matrix_complex&, np_tensor4_complex&, int, const std::string&,
-                      const std::vector<size_t>&, const std::vector<size_t>&>(),
+                      const std::vector<size_t>&, const std::vector<int>&,
+                      const std::vector<int>&>(),
              "norb"_a, "dets"_a, "c"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
-             "screening_criterion"_a = "hbci", "frozen_creation"_a = std::vector<size_t>{},
-             "frozen_annihilation"_a = std::vector<size_t>{},
+             "screening_criterion"_a = "hbci", "gas_size"_a = std::vector<size_t>{},
+             "gas_min"_a = std::vector<int>{}, "gas_max"_a = std::vector<int>{},
              "Initialize the RelSelectedCIHelper with the number of spinors, initial determinants, "
              "energy, complex Hamiltonian, and complex integrals")
         .def("set_Hamiltonian", &RelSelectedCIHelper::set_Hamiltonian, "E"_a = nb::none(),
@@ -312,10 +313,6 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "Set the number of batches each thread will process in parallel sections")
         .def("set_energies", &RelSelectedCIHelper::set_energies, "e"_a,
              "Set the energies of the roots")
-        .def("set_frozen_creation", &RelSelectedCIHelper::set_frozen_creation, "frozen_creation"_a,
-             "Set orbitals excluded from creation in selection")
-        .def("set_frozen_annihilation", &RelSelectedCIHelper::set_frozen_annihilation,
-             "frozen_annihilation"_a, "Set orbitals excluded from annihilation in selection")
         .def("set_screening_criterion", &RelSelectedCIHelper::set_screening_criterion,
              "criterion"_a, "Set the screening criterion for selection (only 'hbci' is supported)")
         .def("set_energy_correction", &RelSelectedCIHelper::set_energy_correction, "correction"_a,
@@ -324,9 +321,10 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "strength"_a = 0.5,
              "Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength")
         .def("select_hbci_ref", &RelSelectedCIHelper::select_hbci_ref, "var_threshold"_a,
-             "pt2_threshold"_a, "Perform HBCI selection with the reference implementation")
+             "pt2_threshold"_a, "gas_pt2"_a = false,
+             "Perform HBCI selection with the reference implementation")
         .def("select_hbci", &RelSelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
-             "Perform HBCI selection with the batched implementation")
+             "gas_pt2"_a = false, "Perform HBCI selection with the batched implementation")
         .def("so_1rdm", &RelSelectedCIHelper::compute_so_1rdm, "left_root"_a, "right_root"_a,
              "Compute the complex spin-orbital 1-RDM (or transition 1-RDM) between two roots")
         .def("so_2rdm", &RelSelectedCIHelper::compute_so_2rdm, "left_root"_a, "right_root"_a,
@@ -342,6 +340,9 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "Return the variational part of the Epstein-Nesbet second-order energy correction")
         .def("ept2_pt", &RelSelectedCIHelper::ept2_pt,
              "Return the perturbative part of the Epstein-Nesbet second-order energy correction")
+        .def("ept2_gas", &RelSelectedCIHelper::ept2_gas,
+             "Return the Epstein-Nesbet second-order energy correction from the determinants "
+             "outside the GAS occupation limits")
         .def("num_new_dets_var", &RelSelectedCIHelper::num_new_dets_var,
              "Return the number of new variational determinants added in the last selection")
         .def("num_new_dets_pt2", &RelSelectedCIHelper::num_new_dets_pt2,

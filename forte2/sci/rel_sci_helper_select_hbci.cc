@@ -25,7 +25,8 @@ namespace forte2 {
 // criterion uses |integral| (conjugation invariant), so this matters only when several complex
 // c_I contribute to the same J -- but it is the correct PT2 numerator.
 
-void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshold) {
+void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshold,
+                                          bool gas_pt2) {
     compute_det_energies();
     prepare_strings();
 
@@ -60,11 +61,7 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
 
         // single alpha excitations
         for (const auto& i : aocc_span) {
-            if (!annihilation_allowed(i))
-                continue;
             for (const auto& a : avir_span) {
-                if (!creation_allowed(a))
-                    continue;
                 const std::complex<double> integral = singles_coupling_a(i, a, det);
                 const double criterion = std::abs(integral * max_abs_c);
 
@@ -72,9 +69,12 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
                     continue;
 
                 const auto [new_det, sign] = create_single_a_excitation(det, i, a);
+                const bool inside = in_gas_space(new_det);
+                if (!inside && !gas_pt2)
+                    continue;
                 const std::complex<double> coupling = sign * std::conj(integral);
 
-                if (criterion > var_threshold) {
+                if (inside && criterion > var_threshold) {
                     promoted.insert(new_det);
                 }
                 for (size_t r{0}; r < nroots_; ++r) {
@@ -85,16 +85,12 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
 
         // double alpha-alpha excitations
         for (const auto& i : aocc_span) {
-            if (!annihilation_allowed(i))
-                continue;
             for (const auto& j : aocc_span) {
-                if (i >= j || !annihilation_allowed(j))
+                if (i >= j)
                     continue;
                 for (const auto& a : avir_span) {
-                    if (!creation_allowed(a))
-                        continue;
                     for (const auto& b : avir_span) {
-                        if (a >= b || !creation_allowed(b))
+                        if (a >= b)
                             continue;
 
                         const std::complex<double> integral = Va(i, j, a, b);
@@ -103,9 +99,12 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
                             continue;
 
                         const auto [new_det, sign] = create_double_aa_excitation(det, i, j, a, b);
+                        const bool inside = in_gas_space(new_det);
+                        if (!inside && !gas_pt2)
+                            continue;
                         const std::complex<double> coupling = sign * std::conj(integral);
 
-                        if (criterion > var_threshold) {
+                        if (inside && criterion > var_threshold) {
                             promoted.insert(new_det);
                         }
                         for (size_t r{0}; r < nroots_; ++r) {
@@ -135,12 +134,19 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
     for (size_t r{0}; r < nroots_; ++r) {
         double var = 0.0;
         double pt = 0.0;
+        double gas = 0.0;
         for (const auto& [det, val] : map[r]) {
             const double delta = root_energies_[r] - slater_rules_.energy(det);
-            (promoted.count(det) ? var : pt) += compute_delta_ept2(delta, std::abs(val));
+            const double ept2 = compute_delta_ept2(delta, std::abs(val));
+            if (!in_gas_space(det)) {
+                gas += ept2;
+            } else {
+                (promoted.count(det) ? var : pt) += ept2;
+            }
         }
         ept2_var_[r] = var;
         ept2_pt_[r] = pt;
+        ept2_gas_[r] = gas;
     }
 
     // number of new determinants added this cycle (root 0 defines the variational space)
@@ -155,7 +161,7 @@ void RelSelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_thres
     selection_time_ = selection_timer.elapsed_seconds();
 }
 
-void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
+void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold, bool gas_pt2) {
     local_timer selection_timer;
 
     // Plain HBCI stores |V|, which does not change across iterations, so the sorted integral
@@ -170,6 +176,7 @@ void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold
     std::vector<std::vector<Determinant>> thread_new_dets(num_threads);
     std::vector<std::vector<double>> local_ept2_var(num_threads, std::vector<double>(nroots_, 0.0));
     std::vector<std::vector<double>> local_ept2_pt(num_threads, std::vector<double>(nroots_, 0.0));
+    std::vector<std::vector<double>> local_ept2_gas(num_threads, std::vector<double>(nroots_, 0.0));
     std::vector<std::vector<std::tuple<size_t, size_t, double>>> thread_log_data(num_threads);
 
     DetSet existing_dets(dets_.begin(), dets_.end());
@@ -189,19 +196,20 @@ void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold
 
             local_timer batch_timer;
 
-            select_hbci_batch(s, var_threshold, pt2_threshold, num_batches, batch_id,
+            select_hbci_batch(s, var_threshold, pt2_threshold, gas_pt2, num_batches, batch_id,
                               existing_dets);
 
             // Each determinant carries its complete coupling to the variational wave function and
-            // is attributed to exactly one of the two contributions, so no filtering between them
-            // is needed. Determinants already in the variational space were skipped during
+            // is attributed to exactly one of the three contributions, so no filtering between
+            // them is needed. Determinants already in the variational space were skipped during
             // generation.
             new_dets_local.clear();
             size_t num_pt_dets = 0;
             for (const auto& [det, idx] : s.map) {
                 const double energy = slater_rules_.energy(det);
-                auto& target = s.promoted[idx / nroots_] ? local_ept2_var[thread_id]
-                                                         : local_ept2_pt[thread_id];
+                auto& target = !in_gas_space(det)          ? local_ept2_gas[thread_id]
+                               : s.promoted[idx / nroots_] ? local_ept2_var[thread_id]
+                                                           : local_ept2_pt[thread_id];
                 for (size_t r{0}; r < nroots_; ++r) {
                     target[r] +=
                         compute_delta_ept2(root_energies_[r] - energy, std::abs(s.coeffs[idx + r]));
@@ -234,9 +242,11 @@ void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold
     for (size_t r{0}; r < nroots_; ++r) {
         ept2_var_[r] = 0.0;
         ept2_pt_[r] = 0.0;
+        ept2_gas_[r] = 0.0;
         for (size_t t = 0; t < num_threads; ++t) {
             ept2_var_[r] += local_ept2_var[t][r];
             ept2_pt_[r] += local_ept2_pt[t][r];
+            ept2_gas_[r] += local_ept2_gas[t][r];
         }
     }
 
@@ -286,7 +296,7 @@ void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold
 }
 
 void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_threshold,
-                                            double pt2_threshold, size_t num_batches,
+                                            double pt2_threshold, bool gas_pt2, size_t num_batches,
                                             size_t batch_id, const DetSet& existing_dets) {
     auto& map = s.map;
     auto& coeffs = s.coeffs;
@@ -315,9 +325,14 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
                           std::complex<double> coupling, double criterion) {
         if (criterion <= pt2_threshold)
             return;
+        // determinants outside the GAS occupation limits enter only the GAS PT2 correction
+        const bool inside = in_gas_space(det);
+        if (!inside && !gas_pt2)
+            return;
         // if the determinant is already in the variational space, skip it
         if (existing_dets.count(det))
             return;
+        const bool promote = inside && criterion > var_threshold;
         // A determinant can be reached by several parents. Every contribution to <det|H|Psi> has
         // to be summed before that sum is squared, so all of them accumulate into one entry of
         // coeffs regardless of which side of var_threshold the individual connection falls on.
@@ -328,17 +343,17 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
         if (emplaced) {
             for (size_t r{0}; r < nroots_; ++r)
                 coeffs.push_back(coupling * c_parent[r]);
-            promoted.push_back(criterion > var_threshold ? 1 : 0);
+            promoted.push_back(promote ? 1 : 0);
         } else {
             const size_t idx = it->second;
             for (size_t r{0}; r < nroots_; ++r)
                 coeffs[idx + r] += coupling * c_parent[r];
-            if (criterion > var_threshold)
+            if (promote)
                 promoted[idx / nroots_] = 1;
         }
     };
 
-    // norb_mask is used to compute the allowed virtual creation indices
+    // norb_mask is used to compute the virtual orbitals
     String norb_mask = String::zero();
     norb_mask.fill_up_to(norb_);
 
@@ -368,13 +383,9 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
             continue;
 
         // find the occupied and virtual orbitals for the current alpha string
-        auto a_str_annihilation_masked = a_str & ~frozen_annihilation_mask_;
-        // noa is the number of occupied alpha orbitals that we are allowed to annihilate from
         size_t noa, nva;
-        a_str_annihilation_masked.find_set_bits(aocc, noa);
-        auto a_str_creation_masked = (~a_str & norb_mask) & ~frozen_creation_mask_;
-        // nva is the number of virtual alpha orbitals that we are allowed to create into
-        a_str_creation_masked.find_set_bits(avir, nva);
+        a_str.find_set_bits(aocc, noa);
+        (~a_str & norb_mask).find_set_bits(avir, nva);
 
         // spans are more convenient for range-based for loops below
         std::span<size_t> aocc_span(aocc.data(), noa);
@@ -390,6 +401,10 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
                     continue;
                 }
                 new_det.set_alpha_string(new_a_str);
+                // singles_coupling_a is expensive, so drop determinants outside the GAS space
+                // first
+                if (!gas_pt2 && !in_gas_space(new_det))
+                    continue;
                 const std::complex<double> integral = singles_coupling_a(i, a, new_det);
                 accumulate(new_det, c_det, sign * std::conj(integral),
                            std::abs(integral * abs_c_max_det));
@@ -408,7 +423,7 @@ void RelSelectedCIHelper::select_hbci_batch(RelSelectHbciScratch& s, double var_
                     if (std::fabs(key * abs_c_max_det) <= pt2_threshold)
                         break;
 
-                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b))
+                    if (a_str.get_bit(a) or a_str.get_bit(b))
                         continue;
 
                     auto [new_a_str, sign] = create_double_excitation_unchecked(a_str, i, j, a, b);
