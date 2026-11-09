@@ -25,7 +25,7 @@ def _h4_rhf():
     return RHF(charge=0, e_tol=1e-14)(system)
 
 
-def test_sci1():
+def test_sci_h4_matches_fci():
     """Test that SelectedCI reproduces the FCI energy on 4 H atoms in a chain with STO-6G basis set."""
 
     efci = -2.180967812920
@@ -73,7 +73,7 @@ def test_sci_pinned_only_guess():
     assert sci.E_ci[0] == approx(efci)
 
 
-def test_sci2():
+def test_sci_h6_single_det_guess():
     """Test SelectedCI with a single determinant guess."""
 
     xyz = f"""
@@ -116,7 +116,7 @@ def test_sci2():
     assert sci.ci_solver.E_pt2[0] == pytest.approx(-2.53555293e-05, abs=1e-9)
 
 
-def test_sci3():
+def test_sci_h6_multistate_no_spin_penalty():
     """Test SelectedCI on multiple states without spin penalty."""
     xyz = f"""
     H 0.0 0.0 0.0
@@ -155,7 +155,7 @@ def test_sci3():
     assert sci.E_ci[3] == pytest.approx(-3.0403077216, abs=1e-8)
 
 
-def test_sci4():
+def test_sci_h6_multistate_spin_penalty():
     """Test SelectedCI on multiple states with spin penalty."""
     xyz = f"""
     H 0.0 0.0 0.0
@@ -195,13 +195,16 @@ def test_sci4():
 
 
 @pytest.mark.slow
-def test_sci5():
+def test_sci_ne_core_ionized():
     """Test SelectedCI on a core-ionized state."""
     xyz = f"""
     Ne 0.0 0.0 0.0
     """
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
+
+    ci_strings = CIStrings(5, 4, 0, [[0], [0] * 13], [1], [1])
+    guess_dets = ci_strings.make_determinants()
 
     rhf = RHF(charge=0, e_tol=1e-10)(system)
     sci = CI(
@@ -213,8 +216,9 @@ def test_sci5():
                 var_threshold=1e-5,
                 pt2_threshold=0.0,
                 do_spin_penalty=True,
-                guess_dets=[Determinant("a2222")],
+                guess_dets=guess_dets,
                 num_batches_per_thread=16,
+                energy_shift=-96.6,
             ),
             nroots=1,
         )
@@ -225,7 +229,7 @@ def test_sci5():
 
 
 @pytest.mark.skip(reason="Could not reproduce with FCI with energy_shift")
-def test_sci6():
+def test_sci_ne_core_excited():
     """Test SelectedCI on a core-excited state."""
     xyz = """
     Ne 0.0 0.0 0.0
