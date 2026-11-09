@@ -193,6 +193,137 @@ if (USE_LIBCINT)
   )
 endif()
 
+# ---------------------------------------------------------------------------
+# Optional DMRG support: build block2 from source (forte2.dmrg).
+#
+# block2 is configured as an isolated CMake project rather than through
+# add_subdirectory: its CMakeLists overrides CMAKE_CXX_COMPILER and declares
+# cmake_minimum_required(VERSION 3.0), both of which would leak into this build.
+#
+# Building it ourselves is what keeps DMRG usable: the upstream wheel vendors
+# its own MKL and libgomp, which then service forte2's BLAS calls and change
+# its numerics (or fail outright on CPUs whose MKL kernel the wheel omits).
+# Built here, block2 links the same BLAS and OpenMP runtime as forte2 itself.
+# ---------------------------------------------------------------------------
+option(USE_BLOCK2 "Build block2 from source to enable forte2.dmrg" OFF)
+set(BLOCK2_GIT_TAG "v0.5.3" CACHE STRING "block2 version to build")
+
+if (USE_BLOCK2)
+  include(ExternalProject)
+  include(ProcessorCount)
+
+  # block2 needs roughly 1.2 GB of RAM per compile job, so cap the default
+  # rather than saturating a large machine and running it out of memory.
+  ProcessorCount(_block2_nproc)
+  if (_block2_nproc EQUAL 0)
+    set(_block2_nproc 2)
+  elseif (_block2_nproc GREATER 8)
+    set(_block2_nproc 8)
+  endif()
+  set(BLOCK2_BUILD_JOBS ${_block2_nproc}
+      CACHE STRING "Parallel jobs for the block2 build (needs ~1.2 GB each)")
+
+  # block2 v0.5.3 writes `FCIDUMP<FL>::template set_orb_sym(...)` with no
+  # template argument list (src/core/integral_compressed.hpp). GCC accepts it;
+  # Clang 16+ rejects it by default, not via block2's -Werror. Upstream fixed it
+  # after v0.5.3, which is still the newest tag, so suppress it until a release
+  # carries the fix. -Wno-unknown-warning-option keeps older Clang quiet about
+  # the second flag.
+  set(_block2_cxx_flags "")
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(_block2_cxx_flags
+        "-Wno-unknown-warning-option -Wno-missing-template-arg-list-after-template-kw")
+  endif()
+
+  # Pin the exact BLAS/LAPACK forte2 itself resolved. Naming a vendor is not
+  # enough: block2 does SET(BLA_VENDOR Apple) whenever the compiler is
+  # AppleClang, overriding anything passed in, and would link Accelerate
+  # alongside forte2's OpenBLAS. FindBLAS/FindLAPACK guard every vendor branch
+  # with `if(NOT BLAS_LIBRARIES)`, so presetting the cache skips the search.
+  string(REPLACE ";" "|" _block2_blas "${BLAS_LIBRARIES}")
+  string(REPLACE ";" "|" _block2_lapack "${LAPACK_LIBRARIES}")
+
+  # Download only; the build itself runs as a separate CMake invocation below.
+  FetchContent_Declare(
+    block2
+    GIT_REPOSITORY https://github.com/block-hczhai/block2-preview.git
+    GIT_TAG ${BLOCK2_GIT_TAG}
+    GIT_SHALLOW TRUE
+  )
+  FetchContent_Populate(block2)
+
+  set(BLOCK2_BINARY_DIR "${block2_BINARY_DIR}")
+
+  ExternalProject_Add(block2_build
+    SOURCE_DIR       "${block2_SOURCE_DIR}"
+    BINARY_DIR       "${BLOCK2_BINARY_DIR}"
+    DOWNLOAD_COMMAND ""
+    UPDATE_COMMAND   ""
+    INSTALL_COMMAND  ""
+    LIST_SEPARATOR   |
+    CMAKE_ARGS
+      -DCMAKE_BUILD_TYPE=Release
+      -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+      -DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}
+      "-DCMAKE_CXX_FLAGS=${_block2_cxx_flags}"
+      # Everything block2 knows about Python keys off PYTHON_EXECUTABLE: its
+      # include dirs, its extension suffix, and where it looks for pybind11. Its
+      # own PYTHON_EXECUTABLE_HINT check is dead code (it tests a path string for
+      # truth and compares paths with EQUAL), and the FindPythonInterp it falls
+      # back to picks the newest python on PATH, not this environment's.
+      -DPYTHON_EXECUTABLE=${Python_EXECUTABLE}
+      # Link the same BLAS as forte2 rather than a vendored MKL.
+      -DUSE_MKL=OFF
+      -DUSE_MKL64=OFF
+      -DBLAS_LIBRARIES=${_block2_blas}
+      -DLAPACK_LIBRARIES=${_block2_lapack}
+      # Required with USE_MKL=OFF. OpenBLAS exports only the trailing-underscore
+      # Fortran names, so without this block2 links but fails at import with
+      # "undefined symbol: zheev".
+      -DF77UNDERSCORE=ON
+      -DBUILD_LIB=ON
+      -DBUILD_EXE=OFF
+      -DLARGE_BOND=ON
+      -DUSE_KSYMM=OFF
+      # forte2 uses SymmetryTypes.SU2 and SGF|CPX only; SAny and single
+      # precision roughly double the build for symmetries nothing here asks for.
+      -DUSE_SU2SZ=ON
+      -DUSE_SG=ON
+      -DUSE_COMPLEX=ON
+      -DUSE_SANY=OFF
+      -DUSE_SINGLE_PREC=OFF
+      -DCMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE=${BLOCK2_BINARY_DIR}/lib
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --parallel ${BLOCK2_BUILD_JOBS}
+  )
+
+  add_dependencies(lib block2_build)
+
+  # Collect the extension and the pure-Python pyblock2 package side by side, the
+  # layout forte2/dmrg/__init__.py puts on sys.path.
+  set(BLOCK2_STAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/_block2")
+  ExternalProject_Add_Step(block2_build stage_for_forte2
+    COMMAND ${CMAKE_COMMAND} -E copy_directory <BINARY_DIR>/lib ${BLOCK2_STAGE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy_directory <SOURCE_DIR>/pyblock2 ${BLOCK2_STAGE_DIR}/pyblock2
+    DEPENDEES build
+  )
+
+  # An editable install imports forte2 from the source tree, so the vendored
+  # copy has to be there; a wheel install takes it from the staging dir instead.
+  if (SKBUILD_STATE STREQUAL "editable")
+    ExternalProject_Add_Step(block2_build stage_in_source_tree
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+              ${BLOCK2_STAGE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/_block2
+      DEPENDEES stage_for_forte2
+    )
+  endif()
+
+  # Vendored under forte2/_block2 rather than installed as top-level `block2`
+  # and `pyblock2`: those names belong to the upstream distribution, and a later
+  # `pip install block2` would overwrite this build with the MKL wheel and
+  # silently reintroduce the duplicate-BLAS problem.
+  install(DIRECTORY ${BLOCK2_STAGE_DIR}/ DESTINATION forte2/_block2)
+endif()
+
 # Enable Release build with high optimization flags if not already set
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
