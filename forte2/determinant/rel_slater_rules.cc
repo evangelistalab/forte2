@@ -5,20 +5,20 @@
 #include "determinant/determinant_helpers.h"
 
 namespace {
-std::optional<std::uint32_t> screen_slater_connection(const forte2::Determinant& lhs,
-                                                      const forte2::Determinant& rhs) {
+std::optional<std::uint32_t> screen_slater_connection(const forte2::SpinorDeterminant& lhs,
+                                                      const forte2::SpinorDeterminant& rhs) {
 
-    return screen_slater_connection_impl<0, forte2::Determinant::nwords_>(lhs, rhs);
+    return screen_slater_connection_impl<0, forte2::SpinorDeterminant::nwords_>(lhs, rhs);
 }
 
-std::tuple<std::size_t, std::size_t> find_single_connection(const forte2::Determinant& lhs,
-                                                            const forte2::Determinant& rhs) {
-    return find_single_connection_impl<0, forte2::Determinant::nwords_>(lhs, rhs);
+std::tuple<std::size_t, std::size_t> find_single_connection(const forte2::SpinorDeterminant& lhs,
+                                                            const forte2::SpinorDeterminant& rhs) {
+    return find_single_connection_impl<0, forte2::SpinorDeterminant::nwords_>(lhs, rhs);
 }
 
 std::tuple<std::size_t, std::size_t, std::size_t, std::size_t>
-find_double_connection(const forte2::Determinant& lhs, const forte2::Determinant& rhs) {
-    return find_double_connection_impl<0, forte2::Determinant::nwords_>(lhs, rhs);
+find_double_connection(const forte2::SpinorDeterminant& lhs, const forte2::SpinorDeterminant& rhs) {
+    return find_double_connection_impl<0, forte2::SpinorDeterminant::nwords_>(lhs, rhs);
 }
 } // namespace
 
@@ -38,6 +38,11 @@ void RelSlaterRules::update_integrals(int nspinor, std::optional<double> scalar_
                                     std::to_string(nspinor));
     }
     const auto new_nspinor = static_cast<std::size_t>(nspinor);
+    if (new_nspinor > SpinorDeterminant::size()) {
+        throw std::invalid_argument("RelSlaterRules: nspinor = " + std::to_string(nspinor) +
+                                    " exceeds the determinant capacity of " +
+                                    std::to_string(SpinorDeterminant::size()) + ".");
+    }
 
     if (one_electron_integrals) {
         if (one_electron_integrals->ndim() != 2) {
@@ -97,11 +102,11 @@ void RelSlaterRules::update_integrals(int nspinor, std::optional<double> scalar_
     }
 }
 
-double RelSlaterRules::energy(const Determinant& det) const {
+double RelSlaterRules::energy(const SpinorDeterminant& det) const {
     std::complex<double> energy = scalar_energy_;
-    det.for_each_occ([&](size_t p) {
+    det.for_each_set_bit([&](size_t p) {
         energy += h(p, p);
-        det.for_each_occ([&](size_t q) {
+        det.for_each_set_bit([&](size_t q) {
             if (q >= p) {
                 return false;
             }
@@ -114,7 +119,7 @@ double RelSlaterRules::energy(const Determinant& det) const {
     return energy.real();
 }
 
-np_vector RelSlaterRules::energies(const std::vector<Determinant>& dets) const {
+np_vector RelSlaterRules::energies(const std::vector<SpinorDeterminant>& dets) const {
     auto energies = make_zeros<nb::numpy, double, 1>({dets.size()});
     auto energies_view = energies.view();
     for (size_t i{0}; i < dets.size(); ++i) {
@@ -123,8 +128,8 @@ np_vector RelSlaterRules::energies(const std::vector<Determinant>& dets) const {
     return energies;
 }
 
-std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
-                                                  const Determinant& rhs) const {
+std::complex<double> RelSlaterRules::slater_rules(const SpinorDeterminant& lhs,
+                                                  const SpinorDeterminant& rhs) const {
     // Early exit for disconnected pairs or if the determinants have different numbers of
     // electrons
     const auto count = screen_slater_connection(lhs, rhs);
@@ -136,17 +141,17 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
     if (ndiff == 4) {
         const auto [i, j, a, b] = find_double_connection(lhs, rhs);
         auto v_el = v(i, j, a, b) - v(i, j, b, a); // <ij||ab>
-        const double sign = lhs.slater_sign_aaaa(i, j, a, b);
+        const double sign = lhs.double_excitation_sign(i, j, a, b);
         return sign * v_el;
     }
 
     if (ndiff == 2) {
         const auto [i, a] = find_single_connection(lhs, rhs);
         std::complex<double> matrix_element = h(i, a); // <i|a>
-        lhs.for_each_occ([&](size_t j) {
+        lhs.for_each_set_bit([&](size_t j) {
             matrix_element += v(i, j, a, j) - v(i, j, j, a); // \sum_j<ij||aj>
         });
-        const double sign = lhs.slater_sign_aa(i, a);
+        const double sign = lhs.slater_sign(i, a);
         return sign * matrix_element;
     }
 

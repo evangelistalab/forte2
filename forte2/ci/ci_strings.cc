@@ -62,6 +62,11 @@ void CIStrings::startup() {
             norb_ += space_size;
         }
     }
+    if (norb_ > String::size()) {
+        throw std::invalid_argument("CIStrings: " + std::to_string(norb_) +
+                                    " orbitals exceed the string capacity of " +
+                                    std::to_string(String::size()) + ".");
+    }
 
     // Generate the allowed GAS occupation patterns for alpha and beta string
     debug([&]() {
@@ -188,6 +193,20 @@ std::vector<Determinant> CIStrings::make_determinants() const {
     this->for_each_element([&](const size_t block, const int class_Ia, const int class_Ib,
                                const size_t Ia, const size_t Ib, const size_t idx) {
         Determinant I(alpha_str(class_Ia, Ia), beta_str(class_Ib, Ib));
+        dets[idx] = I;
+    });
+    return dets;
+}
+
+std::vector<SpinorDeterminant> CIStrings::make_spinor_determinants() const {
+    if (nb_ != 0) {
+        throw std::runtime_error("CIStrings: spinor determinants require nb == 0.");
+    }
+    std::vector<SpinorDeterminant> dets(ndet_);
+    this->for_each_element([&](const size_t, const int class_Ia, const int, const size_t Ia,
+                               const size_t, const size_t idx) {
+        auto I = SpinorDeterminant::zero();
+        I.set_word(0, alpha_str(class_Ia, Ia).get_word(0));
         dets[idx] = I;
     });
     return dets;
