@@ -1,15 +1,16 @@
 import pytest
 from forte2 import (
-    System,
     AVAS,
-    ROHF,
-    UHF,
-    MCOptimizer,
-    State,
+    CI,
     CISolver,
-    RelCI,
+    MCOptimizer,
+    ROHF,
     RelCISolver,
     SpinorUpcaster,
+    State,
+    System,
+    UHF,
+    X2CParams,
 )
 from forte2.data import EH_TO_WN
 
@@ -23,7 +24,7 @@ def test_casscf_so():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="sf",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
     )
 
     rhf = ROHF(charge=0, ms=0.5)(system)
@@ -39,19 +40,17 @@ def test_casscf_so():
     )
     mc = MCOptimizer(ci_solver)(avas)
     conv = SpinorUpcaster(
-        x2c_type_override="so",
-        snso_type_override="row-dependent",
+        x2c_override=X2CParams(
+            x2c_type="so", x2c_model="1e", snso_type="row-dependent"
+        ),
     )(mc)
-    ci = RelCI(
-        nel=9,
-        nroots=6,
-        core_orbitals=2,
-        active_orbitals=8,
-    )(conv)
+    ci = CI(RelCISolver(nel=9, nroots=6, core_orbitals=2, active_orbitals=8))(conv)
     ci.run()
 
     # corresponds to ~ 4.6e-8 Eh
-    assert (ci.E[4] - ci.E[3]) * EH_TO_WN == pytest.approx(401.042412154626, abs=1e-2)
+    assert (ci.E_ci[4] - ci.E_ci[3]) * EH_TO_WN == pytest.approx(
+        401.04241215150705, abs=1e-2
+    )
 
 
 def test_2c_casscf_with_rohf():
@@ -65,8 +64,7 @@ def test_2c_casscf_with_rohf():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type=None,
-        snso_type=None,
+        x2c=None,
     )
 
     rhf = ROHF(charge=0, ms=0.5)(system)
@@ -77,8 +75,9 @@ def test_2c_casscf_with_rohf():
         subspace=["F(2s)", "F(2p)"],
     )(rhf)
     conv = SpinorUpcaster(
-        x2c_type_override="so",
-        snso_type_override="row-dependent",
+        x2c_override=X2CParams(
+            x2c_type="so", x2c_model="1e", snso_type="row-dependent"
+        ),
     )(avas)
     ci_solver = RelCISolver(
         nel=9,
@@ -88,7 +87,7 @@ def test_2c_casscf_with_rohf():
     mc.run()
     # corresponds to ~ 4.6e-8 Eh
     assert (ci_solver.E[4] - ci_solver.E[3]) * EH_TO_WN == pytest.approx(
-        393.70859781031027, abs=1e-2
+        393.7085978290238, abs=1e-2
     )
 
 
@@ -104,14 +103,14 @@ def test_2c_casscf_with_uhf():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="sf",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
     )
 
     uhf = UHF(charge=0, ms=0.5)(system)
     conv = SpinorUpcaster(
-        x2c_type_override="so",
-        snso_type_override="row-dependent",
+        x2c_override=X2CParams(
+            x2c_type="so", x2c_model="1e", snso_type="row-dependent"
+        ),
     )(uhf)
     ci_solver = RelCISolver(
         nel=9,
@@ -121,7 +120,6 @@ def test_2c_casscf_with_uhf():
     )
     mc = MCOptimizer(ci_solver)(conv)
     mc.run()
-    # corresponds to ~ 4.6e-8 Eh
     assert (ci_solver.E[2] - ci_solver.E[1]) * EH_TO_WN == pytest.approx(
-        135.46252372483025, abs=1e-2
+        134.77771444071902, abs=1e-2
     )

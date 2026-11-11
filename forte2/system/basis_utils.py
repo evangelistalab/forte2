@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from forte2 import Basis
+from forte2.lib.ints import Basis
 from forte2.system import System
 from forte2.helpers import logger
 from forte2.data import Z_TO_ATOM_SYMBOL
@@ -70,7 +70,7 @@ def get_shell_label(l, idx):
             f"Index {idx} exceeds maximum allowed for angular momentum {l}: {2*l}"
         )
 
-    if l > len(AM_LABELS):
+    if l >= len(AM_LABELS):
         raise ValueError(f"Angular momentum {l} exceeds defined labels.")
 
     if l < len(SPH_LABELS) and idx < len(SPH_LABELS[l]):

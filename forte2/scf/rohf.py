@@ -25,13 +25,15 @@ class ROHF(SCFBase):
 
     _parse_state = UHF._parse_state
     _initial_guess = RHF._initial_guess
-    _diagonalize_fock = RHF._diagonalize_fock
     _spin = RHF._spin
     _energy = UHF._energy
     _diis_update = RHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
-    _assign_orbital_symmetries = RHF._assign_orbital_symmetries
     _apply_level_shift = RHF._apply_level_shift
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
 
     def __call__(self, system):
         system.two_component = False
@@ -40,8 +42,9 @@ class ROHF(SCFBase):
         return self
 
     def _build_fock(self, H, fock_builder, S):
-        Ja, Jb = fock_builder.build_J(self.D)
-        K = fock_builder.build_K([self.C[0][:, : self.na], self.C[0][:, : self.nb]])
+        (Ja, Jb), K = fock_builder.build_JK(
+            [self.C[0][:, : self.na], self.C[0][:, : self.nb]]
+        )
         F = [H + Ja + Jb - k for k in K]
 
         F_canon = self._build_canonical_fock(F, S)
@@ -111,9 +114,7 @@ class ROHF(SCFBase):
                 idx = ndocc + i
                 if i % orb_per_row == 0:
                     string += "\n"
-                string += (
-                    f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
-                )
+                string += f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
             logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -122,7 +123,9 @@ class ROHF(SCFBase):
             idx = ndocc + nsocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _print_ao_composition(self):

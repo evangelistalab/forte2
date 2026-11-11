@@ -23,6 +23,7 @@ BASIS_NAMES = [
     "cc-pvqz-rifit",
     "cc-pv5z-rifit",
     "sap_helfem_large",
+    "sap_grasp_large",
     "def2-universal-jkfit",
     "ano-r0",
 ]

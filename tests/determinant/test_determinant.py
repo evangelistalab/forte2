@@ -1,4 +1,4 @@
-from forte2 import Determinant
+from forte2.lib.det import Determinant
 
 PARITY_ALPHA_OCC = (0, 1, 5, 17, 62, 63)
 PARITY_BETA_OCC = (0, 3, 11, 31, 62, 63)
@@ -90,6 +90,7 @@ def test_determinant_set_get():
         assert d2.na(i) == (i in set_a)
         assert d2.nb(i) == (i in set_b)
 
+
 def test_determinant_out_of_range():
     d = Determinant.zero()
     maxnorb = Determinant.maxnorb
@@ -98,7 +99,7 @@ def test_determinant_out_of_range():
         assert False, "Expected an exception for out of range index"
     except IndexError:
         pass
-    
+
     try:
         d.set_nb(maxnorb + 1, True)
         assert False, "Expected an exception for out of range index"
@@ -111,11 +112,11 @@ def test_determinant_out_of_range():
     except IndexError:
         pass
 
-    try:       
+    try:
         d.nb(maxnorb + 1)
         assert False, "Expected an exception for out of range index"
     except IndexError:
-        pass    
+        pass
 
     try:
         d.create_alpha(maxnorb + 1)
@@ -138,7 +139,6 @@ def test_determinant_out_of_range():
         assert False, "Expected an exception for out of range index"
     except IndexError:
         pass
-
 
 
 def test_det_equality():

@@ -1,0 +1,2336 @@
+\documentclass[aip,preprint]{revtex4-1}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{braket}
+\usepackage{xspace}
+
+\usepackage[capitalize]{cleveref}
+
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\ao}{\mathrm{AO}}
+\newcommand{\aux}{\mathrm{aux}}
+\newcommand{\core}{\mathrm{core}}
+\newcommand{\act}{\mathrm{act}}
+\newcommand{\sa}{\mathrm{SA}}
+\newcommand{\df}{\mathrm{DF}}
+\newcommand{\hf}{\mathrm{HF}}
+\newcommand{\pert}{x}
+
+\begin{document}
+
+\title{Technical Notes: Gradient Theory}
+
+\author{Forte2 Developers}
+
+\date{\today}
+
+\maketitle
+
+\section{Scope}
+This note covers the technical details of implementing analytic nuclear gradients, specifically in the case where electron-repulsion integrals are represented using the density-fitting approximation. 
+
+\section{Notation}
+Let $\chi_\mu(\mathbf{r})$ denote an orbital basis function and $\chi_P(\mathbf{r})$ denote an auxiliary
+basis function.
+The one-electron integrals in the orbital basis are given by:
+\begin{equation}
+h_{\mu \nu}
+= \braket{\chi_\mu|\hat{h}|\chi_\nu}
+= \int
+\chi_\mu(\mathbf{r})
+\hat{h}
+\chi_\nu(\mathbf{r})\dd\mathbf{r},
+\end{equation}
+where the one-body operator is the sum of the kinetic and electron-nuclear potential:
+\begin{equation}
+\hat{h} = - \frac{1}{2} \nabla^2 + V_\mathrm{eN}(\mathbf{r})
+= - \frac{1}{2} \nabla^2 - \sum_{A} \frac{Z_A}{|\mathbf{R}_A - \mathbf{r}|}.
+\end{equation}
+The two-electron atomic integrals in chemists' notation are defined as:
+\begin{equation}
+(\mu\nu|\rho\sigma)
+= \iint
+\chi_\mu(\mathbf{r}_1)\chi_\nu(\mathbf{r}_1)
+\frac{1}{r_{12}}
+\chi_\rho(\mathbf{r}_2)\chi_\sigma(\mathbf{r}_2)
+\dd\mathbf{r}_1\dd\mathbf{r}_2,
+\end{equation}
+and we also define the three-center tensor and Coulomb metric as
+\begin{align}
+J^P_{\mu\nu} &\equiv (P|\mu\nu) = \iint
+\chi_P^*(\mathbf{r}_1)\chi_\nu(\mathbf{r}_1)
+\frac{1}{r_{12}}
+\chi_\rho(\mathbf{r}_2)^*\chi_\sigma(\mathbf{r}_2)
+\dd\mathbf{r}_1\dd\mathbf{r}_2 , \\
+M_{PQ} &\equiv (P|Q) = \iint
+\chi_P^*(\mathbf{r}_1)
+\frac{1}{r_{12}}
+\chi_Q(\mathbf{r}_2)
+\dd\mathbf{r}_1\dd\mathbf{r}_2.
+\end{align}
+The inverse Coulomb metric is denoted as:
+\begin{equation}
+N_{PQ} \equiv (M^{-1})_{PQ}.
+\end{equation}
+When writing summations, the range will be implicitly determined by the type of index.
+Following this convention, a density-fitted four-center integral is written as:
+\begin{equation}
+(\mu\nu|\rho\sigma)_\df
+= \sum_{PQ} J^P_{\mu\nu} N_{PQ} J^Q_{\rho\sigma}
+= \sum_{Q} b^{P}_{\mu \nu} b^{P}_{\rho\sigma},
+\label{eq:df_eri}
+\end{equation}
+where the three-index tensor $b^{P}_{\mu \nu}$ is defined as:
+\begin{equation}
+b^{P}_{\mu \nu} = \sum_{Q} J^Q_{\mu\nu} [\mathbf{N}^{1/2}]_{QP}.
+\end{equation}
+
+Let $x$ denote one Cartesian nuclear coordinate, for example
+$x = R_{A\alpha}$ with atom $A$ and component
+$\alpha \in \{x,y,z\}$.  A superscript $\pert$ denotes differentiation with
+respect to $x$:
+\begin{equation}
+A^{\pert} \equiv \frac{\partial A}{\partial x}.
+\end{equation}
+The one-electron operator depends explicitly on the nuclear coordinates, with $h^{\pert}_{\mu\nu}$ being expressed as
+\begin{equation}
+h^{\pert}_{\mu\nu} = 
+\braket{\chi^{\pert}_\mu|\hat{h}|\chi_\nu}
++ \braket{\chi_\mu|\hat{h}^{\pert}|\chi_\nu} 
++ \braket{\chi_\mu|\hat{h}|\chi^{\pert}_\nu}.
+\end{equation}
+The electron-electron operator has no explicit dependence on nuclear
+coordinates in the clamped-nuclei electronic Hamiltonian.  Therefore
+$(\mu\nu|\rho\sigma)^{\pert}$, $J^{P,\pert}_{\mu\nu}$, and $M^{\pert}_{PQ}$ arise from
+the nuclear dependence of the basis functions and auxiliary basis functions.
+
+\section{Energy Expectation Values and Density Matrices}
+
+We now proceed to develop the general theory for evaluating gradients using density fitting.
+
+\subsection{Spinorbital Form}
+
+Let the indices $p,q,r,s$ denote general spinorbitals.  In a spinorbital basis, write the electronic
+Hamiltonian as:
+\begin{equation}
+\hat{H}
+=
+V_\mathrm{NN} +
+\sum_{pq}^{\mathbb{G}} h_{pq}\hat{a}^\dagger_p\hat{a}_q
++
+\frac{1}{4}
+\sum_{pqrs}^{\mathbb{G}} \braket{pq\|rs}
+\hat{a}^\dagger_p\hat{a}^\dagger_q\hat{a}_s\hat{a}_r.
+\label{eq:spinorbital_hamiltonian}
+\end{equation}
+Here we use antisymmetrized integrals defined as:
+\begin{equation}
+\braket{pq\|rs} = \braket{pq|rs} - \braket{pq|sr},
+\end{equation}
+where the integral $\braket{pq|rs}$ assumes the following convention:
+\begin{equation}
+\braket{pq|rs}
+= \iint
+\psi^*_p(x_1) \psi^*_q(x_2)
+\frac{1}{r_{12}}
+\psi_r(x_1) \psi_s(x_2)
+\dd x_1\dd x_2.
+\end{equation}
+We define the spinorbital one- and two-particle density matrices as
+\begin{align}
+\gamma_{pq}
+&=
+\langle \Psi |
+\hat{a}^\dagger_p\hat{a}_q
+| \Psi \rangle,
+\label{eq:spinorbital_1rdm}\\
+\gamma_{pq,rs}
+&=
+\langle \Psi |
+\hat{a}^\dagger_p\hat{a}^\dagger_q\hat{a}_s\hat{a}_r
+| \Psi \rangle.
+\label{eq:spinorbital_2rdm}
+\end{align}
+Then
+\begin{equation}
+E
+= V_\mathrm{NN} +
+\sum_{pq}^{\mathbb{G}} h_{pq}\gamma_{pq}
++
+\frac{1}{4}
+\sum_{pqrs}^{\mathbb{G}} \braket{pq\|rs}\gamma_{pq,rs}.
+\label{eq:spinorbital_energy}
+\end{equation}
+
+For \textbf{a single Slater determinant} the 2-RDM factorizes into a product of two 1-RDMs:
+\begin{equation}
+\gamma_{pq,rs}
+=
+\gamma_{pr}\gamma_{qs}
+-
+\gamma_{ps}\gamma_{qr}.
+\label{eq:determinant_spinorbital_2rdm}
+\end{equation}
+This formula is the most compact way to derive the RHF, UHF, ROHF, and GHF
+pair densities used below.
+
+
+\subsection{Spin-Free Spatial-Orbital Form}
+
+For spin-free nonrelativistic methods, let $p,q,r,s$ denote spatial orbitals and
+introduce the spin-free excitation operator
+\begin{equation}
+\hat{E}_{pq}
+=
+\sum_{\sigma\in\{\alpha,\beta\}}
+\hat{a}^\dagger_{p\sigma}\hat{a}_{q\sigma}.
+\end{equation}
+The Hamiltonian can be written as
+\begin{equation}
+\hat{H}
+= V_\mathrm{NN} +
+\sum_{pq}^{\mathbb{G}}h_{pq}\hat{E}_{pq}
++
+\frac{1}{2}
+\sum_{pqrs}^{\mathbb{G}}\braket{pq|rs}
+\left(
+\hat{E}_{pr}\hat{E}_{qs}
+-
+\delta_{qr}\hat{E}_{ps}
+\right).
+\label{eq:spinfree_hamiltonian}
+\end{equation}
+Define the spin-free one-particle density matrix:
+\begin{equation}
+\Gamma_{pq}
+=
+\langle \Psi | \hat{E}_{pq} | \Psi \rangle
+= \gamma_{p\alpha \, q\alpha} + \gamma_{p\beta \, q\beta},
+\label{eq:spinfree_1rdm}
+\end{equation}
+and the spin-free two-particle density matrix:
+\begin{equation}
+\Gamma_{pq,rs}
+=
+\braket{ \Psi |
+\hat{E}_{pr}\hat{E}_{qs}
+-
+\delta_{qr}\hat{E}_{ps}
+| \Psi }
+=
+\gamma_{p\alpha \, q\alpha, r\alpha \, s\alpha }
++ \gamma_{p\alpha \, q\beta, r\alpha \, s\beta }
++ \gamma_{q\alpha \, p\beta, s\alpha \, r\beta }
++ \gamma_{p\beta \, q\beta, r\beta \, s\beta }.
+\label{eq:spinfree_2rdm}
+\end{equation}
+The energy expectation value is
+\begin{equation}
+E
+= V_\mathrm{NN} +
+\sum_{pq}^{\mathbb{G}} h_{pq}\Gamma_{pq}
++
+\frac{1}{2}
+\sum_{pqrs}^{\mathbb{G}} \braket{pq|rs}\Gamma_{pq,rs}.
+\label{eq:spinfree_energy}
+\end{equation}
+
+%For a determinant expressed in a spatial AO basis, define spin-block density
+%matrices
+%\begin{equation}
+%\gamma^{\omega\tau}_{\mu\nu}
+%=
+%\left\langle
+%\hat{a}^\dagger_{\mu\omega}\hat{a}_{\nu\tau}
+%\right\rangle,
+%\qquad
+%\omega,\tau\in\{\alpha,\beta\},
+%\label{eq:spin_block_density}
+%\end{equation}
+%and the charge density
+%\begin{equation}
+%P_{\mu\nu}
+%=
+%\gamma^{\alpha\alpha}_{\mu\nu}
+%+
+%\gamma^{\beta\beta}_{\mu\nu}.
+%\label{eq:charge_density}
+%\end{equation}
+%Substituting the determinant spinorbital density
+%\cref{eq:determinant_spinorbital_2rdm} into the spin-summed spatial integral
+%contraction gives the determinant spin-free pair density
+%\begin{equation}
+%\Pi_{\mu\nu,\rho\sigma}
+%=
+%P_{\mu\nu}P_{\rho\sigma}
+%-
+%\sum_{\omega\tau}
+%\gamma^{\omega\tau}_{\mu\sigma}
+%\gamma^{\tau\omega}_{\rho\nu}.
+%\label{eq:determinant_spinfree_pair_density}
+%\end{equation}
+%For collinear spin methods, the off-diagonal spin blocks vanish and this
+%reduces to
+%\begin{equation}
+%\Pi_{\mu\nu,\rho\sigma}
+%=
+%P_{\mu\nu}P_{\rho\sigma}
+%-
+%\gamma^{\alpha\alpha}_{\mu\sigma}
+%\gamma^{\alpha\alpha}_{\rho\nu}
+%-
+%\gamma^{\beta\beta}_{\mu\sigma}
+%\gamma^{\beta\beta}_{\rho\nu}.
+%\label{eq:collinear_pair_density}
+%\end{equation}
+%For RHF, $\gamma^{\alpha\alpha}=\gamma^{\beta\beta}=P/2$, so
+%\begin{equation}
+%\Pi_{\mu\nu,\rho\sigma}^{\mathrm{RHF}}
+%=
+%P_{\mu\nu}P_{\rho\sigma}
+%-
+%\frac{1}{2}P_{\mu\sigma}P_{\rho\nu}.
+%\label{eq:rhf_pair_density}
+%\end{equation}
+
+
+
+
+Expanding this expression in terms of orbital basis functions we can write it as:
+\begin{equation}
+\begin{split}
+E
+& = V_\mathrm{NN} +
+\sum_{\mu \nu} h_{\mu\nu} \sum_{pq}^{\mathbb{G}} C_{\mu p}^* \Gamma_{pq} C_{\nu q}
++
+\frac{1}{2}
+\sum_{\mu \nu \rho \sigma}
+\sum_{pqrs}^{\mathbb{G}} \braket{\mu \nu |\rho \sigma }
+C_{\mu p}^* C_{\nu q}^* \Gamma_{pq,rs}
+C_{\rho r} C_{\sigma s} \\
+& = V_\mathrm{NN} + \sum_{\mu \nu} h_{\mu\nu} \Pi_{\mu \nu}
++
+\frac{1}{2}
+\sum_{\mu \nu \rho \sigma}
+(\mu \nu |\rho \sigma)
+\Pi_{\mu \nu,\rho \sigma},
+\label{eq:ao_spinorbital_energy}
+\end{split}
+\end{equation}
+where the one- and two-electron AO densities are defined as:
+\begin{equation}
+\Pi_{\mu \nu} = \sum_{pq}^{\mathbb{G}} C_{\mu p}^* \Gamma_{pq} C_{\nu q},
+\end{equation}
+and
+\begin{equation}
+\Pi_{\mu \nu,\rho \sigma} = \sum_{pqrs}^{\mathbb{G}} 
+C_{\mu p}^* C_{\nu q}^* \Gamma_{pr,qs}
+C_{\rho r} C_{\sigma s}.
+\end{equation}
+\textbf{Note that in defining $\Pi_{\mu \nu,\rho \sigma}$ we had to permute the second and third index in the summation over spinorbital labels.}
+
+\section{General Energy Expression under Density fitting}
+
+Under the density-fitted approximation we can write:
+\begin{equation}
+E = V_\mathrm{NN} +
+\sum_{\mu \nu} h_{\mu\nu} \Pi_{\mu \nu}
++
+\frac{1}{2}
+\sum_{\mu \nu \rho \sigma}
+(\mu \nu |\rho \sigma)_\df
+\Pi_{\mu \nu,\rho \sigma}.
+\label{eq:e2_general}
+\end{equation}
+%For a variational stationary wave function, $\Pi$ is the two-particle density appearing in the energy Lagrangian.  For state-averaged CASSCF, it is the state-weighted average pair density for the state-averaged objective.  For a nonstationary target state evaluated at state-averaged orbitals, additional response terms are required; see
+%\cref{sec:state_average}.
+Only the part of $\Pi_{\mu \nu,\rho \sigma}$ symmetric with respect to interchange of the two orbital
+pairs contributes to \cref{eq:e2_general}.
+Therefore, we define
+\begin{equation}
+\overline{\Pi}_{\mu\nu,\rho\sigma}
+= \frac{1}{2}
+\left(
+\Pi_{\mu\nu,\rho\sigma}
++ \Pi_{\rho\sigma,\mu\nu}
+\right).
+\label{eq:pair_symmetric_density}
+\end{equation}
+Because
+$(\mu\nu|\rho\sigma)_\df = (\rho\sigma|\mu\nu)_\df$, the replacement
+$\Pi \mapsto \overline{\Pi}$ leaves the energy unchanged.  In the remainder of
+the derivation, $\Pi$ denotes this pair-symmetric density.
+
+Substituting \cref{eq:df_eri} into \cref{eq:e2_general} gives
+\begin{equation}
+E
+=  V_\mathrm{NN} +
+\sum_{\mu \nu} h_{\mu\nu} \Pi_{\mu \nu}
++ \frac{1}{2}
+\sum_{\mu \nu \rho \sigma} \sum_{PQ} \Pi_{\mu\nu,\rho\sigma}
+J^P_{\mu\nu} N_{PQ} J^Q_{\rho\sigma}.
+\label{eq:e2_df_raw}
+\end{equation}
+
+\section{First Derivative of the One-Electron Term}
+We begin by computing the first derivative of the one-electron energy:
+\begin{equation}
+E_1 = \sum_{\mu \nu} h_{\mu\nu} \Pi_{\mu \nu}.
+\end{equation}
+We evaluate the derivative with respect to the parameter $x$ at constant one-electron density, obtaining:
+\begin{equation}
+E_1^{\pert} = \sum_{\mu \nu} h_{\mu\nu}^{\pert} \Pi_{\mu \nu}.
+\end{equation}
+This quantity is computed in Forte2 using the functions \texttt{kinetic\_deriv} and \texttt{nuclear\_deriv}, which take $\Pi_{\mu \nu}$ and return a vector of nuclear gradients of dimension $3M$.
+
+\section{First Derivative of the Two-Electron Term}
+
+Taking the first differential of \cref{eq:e2_df_raw} at fixed pair density gives three terms:
+\begin{align}
+E_2^{\pert}
+&=
+\frac{1}{2}
+\Pi_{\mu\nu,\rho\sigma}
+(J^P_{\mu\nu})^{\pert} N_{PQ} J^Q_{\rho\sigma}
+\nonumber\\
+&\quad+
+\frac{1}{2}
+\Pi_{\mu\nu,\rho\sigma}
+J^P_{\mu\nu} (N_{PQ})^{\pert} J^Q_{\rho\sigma}
+\nonumber\\
+&\quad+
+\frac{1}{2}
+\Pi_{\mu\nu,\rho\sigma}
+J^P_{\mu\nu} N_{PQ} (J^Q_{\rho\sigma})^{\pert}.
+\label{eq:de2_three_terms}
+\end{align}
+The first and third terms are equal after exchanging the orbital pair labels
+$(\mu\nu) \leftrightarrow (\rho\sigma)$ and using the symmetry of $\Pi$ and
+$N$.  Thus
+\begin{equation}
+E_2^{\pert}
+=
+\Pi_{\mu\nu,\rho\sigma}
+(J^P_{\mu\nu})^{\pert} N_{PQ} J^Q_{\rho\sigma}
++
+\frac{1}{2}
+\Pi_{\mu\nu,\rho\sigma}
+J^P_{\mu\nu} (N_{PQ})^{\pert} J^Q_{\rho\sigma}
+\label{eq:de2_after_pair_sym}
+\end{equation}
+
+Define the metric-applied three-center tensor
+\begin{equation}
+Z^P_{\mu\nu}
+\equiv
+N_{PQ} J^Q_{\mu\nu}.
+\label{eq:z_ao}
+\end{equation}
+The three-center part of the differential is then
+\begin{equation}
+E_{2,J}^{\pert}
+=
+\Pi_{\mu\nu,\rho\sigma}
+Z^P_{\rho\sigma}
+(J^P_{\mu\nu})^{\pert}.
+\label{eq:de2_j_preweight}
+\end{equation}
+
+The differential of the inverse metric follows from
+\begin{equation}
+N M = I.
+\end{equation}
+Differentiating this identity gives
+\begin{equation}
+N^{\pert} M + N M^{\pert} = 0,
+\end{equation}
+and multiplication by $N$ on the right yields
+\begin{equation}
+N^{\pert} = -NM^{\pert}N.
+\label{eq:dinv_metric}
+\end{equation}
+In index notation,
+\begin{equation}
+N^{\pert}_{PQ}
+=
+-N_{PR}M^{\pert}_{RS}N_{SQ}.
+\end{equation}
+Substitution into the metric term in \cref{eq:de2_after_pair_sym} gives
+\begin{align}
+E_{2,M}^{\pert}
+&=
+-\frac{1}{2}
+\Pi_{\mu\nu,\rho\sigma}
+J^P_{\mu\nu}
+N_{PR}
+M_{RS}^{\pert}
+N_{SQ}
+J^Q_{\rho\sigma}
+\nonumber\\
+&=
+-\frac{1}{2}
+\Pi_{\mu\nu,\rho\sigma}
+Z^R_{\mu\nu}
+Z^S_{\rho\sigma}
+M_{RS}^{\pert}.
+\label{eq:de2_m_preweight}
+\end{align}
+
+Equations \cref{eq:de2_j_preweight,eq:de2_m_preweight} show that the full
+explicit two-electron differential can be written as
+\begin{equation}
+E_2^{\pert}
+=
+W^P_{\mu\nu} (J^P_{\mu\nu})^{\pert}
++
+W_{PQ} M_{PQ}^{\pert},
+\label{eq:de2_weight_form}
+\end{equation}
+where the three-center derivative weight is
+\begin{equation}
+W^P_{\mu\nu}
+=
+\Pi_{\mu\nu,\rho\sigma}
+Z^P_{\rho\sigma},
+\label{eq:w3_ao}
+\end{equation}
+and the metric derivative weight is
+\begin{equation}
+W_{PQ}
+=
+-\frac{1}{2}
+\Pi_{\mu\nu,\rho\sigma}
+Z^P_{\mu\nu}
+Z^Q_{\rho\sigma}.
+\label{eq:w2_aux}
+\end{equation}
+Because $\Pi$ is pair symmetric, $W^M_{PQ}=W^M_{QP}$.  If an implementation
+constructs an unsymmetrized pair density, \cref{eq:w3_ao,eq:w2_aux} should be
+evaluated with $\overline{\Pi}$ from \cref{eq:pair_symmetric_density}.
+
+For a nuclear coordinate $X$, the explicit two-electron gradient contribution is
+\begin{equation}
+E_2^{\pert}
+=
+W_{PQ} M^{\pert}_{PQ}
++
+W^P_{\mu\nu} (J^{P}_{\mu\nu})^{\pert}
+.
+\label{eq:e2_gradient_final_ao}
+\end{equation}
+Written with integral notation, this is
+\begin{equation}
+E_2^{\pert}
+=
+W_{PQ} (P|Q)^{\pert}
++
+W^P_{\mu\nu} (P|\mu\nu)^{\pert}
+.
+\label{eq:e2_gradient_integral_notation}
+\end{equation}
+This is the central result for implementation.  The first requires the
+first derivatives of two-center two-electron Coulomb metric integrals.
+The second contraction requires the first derivatives of three-center two-electron integrals.
+In Forte2, we denote $W_{PQ}$ as $W_2$ and $W^P_{\mu\nu}$ as $W_3$.
+
+%\section{Why Use the Raw Metric Form?}
+%
+%Many density-fitted algorithms store an orthonormalized three-index tensor
+%\begin{equation}
+%B^A_{\mu\nu} = X_{AP}J^P_{\mu\nu},
+%\end{equation}
+%where the metric factor $X$ satisfies
+%\begin{equation}
+%X^T X = N = M^{-1}.
+%\end{equation}
+%The DF integral may then be written
+%\begin{equation}
+%(\mu\nu|\rho\sigma)_\df
+%= B^A_{\mu\nu}B^A_{\rho\sigma}.
+%\end{equation}
+%Although this form is useful for Fock builds, differentiating $B$ directly is
+%not the preferred route:
+%\begin{equation}
+%(B^A_{\mu\nu})^{[X]}
+%=
+%X^{[X]}_{AP}J^P_{\mu\nu}
+%+
+%X_{AP}J^{P,[X]}_{\mu\nu}.
+%\end{equation}
+%The derivative $X^{[X]}$ depends on the particular square-root representation of
+%the inverse metric and becomes especially delicate when the metric is
+%orthogonalized or truncated.  The raw-metric derivation avoids differentiating
+%$X$ entirely.  All metric dependence enters through the invariant identity
+%\begin{equation}
+%N^{[X]} = -N M^{[X]} N,
+%\end{equation}
+%which leads to the single metric derivative contraction in
+%\cref{eq:e2_gradient_final_ao}.  This also makes the formula independent of
+%whether $N$ is applied by Cholesky solves, an eigenvalue-truncated inverse, or
+%another stable linear solve.
+
+\section{Molecular-Orbital Form}
+
+In multiconfigurational methods the pair density is naturally available in the
+molecular-orbital basis.  Let $C_{\mu p}$ be the molecular-orbital coefficient
+matrix and define
+\begin{equation}
+J^P_{pq}
+=
+\sum_{\mu\nu} C^*_{\mu p} J^P_{\mu\nu} C_{\nu q}.
+\label{eq:j_mo}
+\end{equation}
+The metric-applied tensor in the MO basis is
+\begin{equation}
+Z^P_{pq}
+=\sum_{Q}
+N_{PQ}J^Q_{pq}.
+\label{eq:z_mo}
+\end{equation}
+If the two-electron energy is
+\begin{equation}
+E_2
+=
+\frac{1}{2}
+\sum_{pqrs}^\mathbb{G}\Pi_{pq,rs}
+J^P_{pq}N_{PQ}J^Q_{rs},
+\label{eq:e2_mo}
+\end{equation}
+where the pair density is related to the spin-free 2-RDM as:
+\begin{equation}
+\Pi_{pq,rs} = \Gamma_{pr,qs},
+\end{equation}
+then the MO-basis derivative weights are
+\begin{align}
+W^P_{pq}
+&=
+\sum_{rs}^\mathbb{G} \Pi_{pq,rs} Z^P_{rs} = \sum_{rs}^\mathbb{G}  \Gamma_{pr,qs} Z^P_{rs},
+\label{eq:w3_mo}\\
+W_{PQ}
+&=
+-\frac{1}{2}
+\sum_{pqrs}^\mathbb{G}
+\Pi_{pq,rs}Z^P_{pq}Z^Q_{rs}
+=
+-\frac{1}{2}
+\sum_{pqrs}^\mathbb{G}
+\Gamma_{pr,qs} Z^P_{pq} Z^Q_{rs}.
+\label{eq:w2_mo}
+\end{align}
+The metric weight is already in the auxiliary basis and needs no orbital
+transformation.  The three-center weight must be transformed back to the AO
+basis for contraction with AO derivative integrals:
+\begin{equation}
+W^P_{\mu\nu}
+=
+C^*_{\mu p} W^P_{pq} C_{\nu q}.
+\label{eq:w3_backtransform}
+\end{equation}
+For real orbitals this reduces to the usual transformation
+$W^P_{\mu\nu}=C_{\mu p}W^P_{pq}C_{\nu q}$.
+
+Using \cref{eq:w3_backtransform}, the MO-density form gives the same AO
+gradient expression as \cref{eq:e2_gradient_final_ao}:
+\begin{equation}
+E_2^{\pert}
+=
+\sum_{\mu \nu}\left(\sum_{pq}^\mathbb{G}C^*_{\mu p} W^P_{pq} C_{\nu q}\right)(J^{P}_{\mu\nu})^{\pert}
++
+\sum_{PQ}
+W_{PQ}M^{\pert}_{PQ}.
+\label{eq:e2_gradient_mo_to_ao}
+\end{equation}
+
+\section{SCF Specializations and Required Quantities}
+\label{sec:scf_requirements}
+
+For any single-determinant SCF reference, the two-electron density is generated
+from the one-particle density by \cref{eq:determinant_spinorbital_2rdm}.  The
+DF gradient formulas therefore require only the occupied orbitals, the
+spin-block one-particle densities, and the metric-applied three-center tensor
+$Z$.
+
+A complete analytic nuclear gradient additionally requires the one-electron
+and overlap/Lagrangian contributions.  In the notation of the previous
+sections, the method-dependent quantities needed for a full SCF gradient are:
+\begin{enumerate}
+\item the one-particle density matrix for $h^{\pert}$;
+\item the pair density $\Pi_{\mu\nu,\rho\sigma}$ or an equivalent factorization for the
+      two-electron derivative terms in \cref{eq:e2_gradient_final_ao};
+\item the orbital Lagrange multiplier, often represented as an
+      energy-weighted density, for the overlap derivative contribution;
+\item the nuclear repulsion derivative.
+\end{enumerate}
+Only item 2 is specific to the density-fitted two-electron derivation in this
+note, but all four are needed to produce a full gradient.
+
+\subsection{RHF}
+
+For RHF, let $C_{\mu i}$ be the occupied spatial orbitals and define the
+density matrix
+\begin{equation}
+D_{\mu\nu}
+=
+\sum_i^{\mathbb{O}}
+C^*_{\mu i}C_{\nu i}.
+\end{equation}
+The spin-free charge density is
+\begin{equation}
+P_{\mu\nu}=2D_{\mu\nu}.
+\end{equation}
+For a RHF state, we have that:
+\begin{equation}
+\Pi_{\mu\nu,\rho\sigma}^{\mathrm{RHF}}
+=
+P_{\mu\nu}P_{\rho\sigma}
+-
+\frac{1}{2}P_{\mu\sigma}P_{\rho\nu}.
+\end{equation}
+
+This gives:
+\begin{equation}
+W^P_{\mu\nu}(\mathrm{RHF})
+=
+P_{\mu\nu} (\sum_{\rho\sigma}P_{\rho\sigma}
+Z^P_{\rho\sigma})
+-\frac{1}{2}\sum_{\sigma}P_{\mu\sigma}(\sum_{\rho} P_{\rho\nu}Z^P_{\rho\sigma}),
+\end{equation}
+which we express as:
+\begin{equation}
+W^P_{\mu\nu}(\mathrm{RHF})
+=
+P_{\mu\nu} R^P
+-2\sum_{ij} C_{\mu i}^* C_{\nu j} Z^P_{ji},
+\end{equation}
+where
+\begin{equation}
+Z^P_{ij} = \sum_{\mu\nu} C_{\mu i}^* C_{\nu j} Z^P_{\mu\nu},
+\end{equation}
+and
+\begin{equation}
+R^P = \sum_{\rho\sigma}P_{\rho\sigma}
+Z^P_{\rho\sigma}.
+\end{equation}
+
+The metric derivative weight is
+\begin{equation}
+W_{PQ}
+=
+-\frac{1}{2}
+(\sum_{\mu \nu} P_{\mu\nu}Z^P_{\mu\nu})(\sum_{\rho\sigma} P_{\rho\sigma}
+Z^Q_{\rho\sigma})
++
+\frac{1}{4}
+\sum_{\nu\sigma}(\sum_\mu P_{\mu\sigma}Z^P_{\mu\nu}) (\sum_\rho P_{\rho\nu}
+Z^Q_{\rho\sigma}).
+\label{eq:rhf_w2_aux}
+\end{equation}
+which we express as:
+\begin{equation}
+W_{PQ}
+=
+-\frac{1}{2}
+R^P R^Q
++
+\sum_{ij}^\mathbb{O} Z^P_{ij} Z^Q_{ji}.
+\label{eq:rhf_w2_aux}
+\end{equation}
+
+\subsection{UHF}
+
+For UHF, the alpha and beta occupied orbitals define two collinear spin
+densities
+\begin{align}
+D^\alpha_{\mu\nu}
+&=
+\sum_i^{\mathbb{O}_\alpha}
+C^{\alpha *}_{\mu i}C^\alpha_{\nu i},
+\\
+D^\beta_{\mu\nu}
+&=
+\sum_i^{\mathbb{O}_\beta}
+C^{\beta *}_{\mu i}C^\beta_{\nu i}.
+\end{align}
+The charge density is
+\begin{equation}
+P_{\mu\nu}=D^\alpha_{\mu\nu}+D^\beta_{\mu\nu},
+\end{equation}
+and the pair density is
+\begin{equation}
+\Pi_{\mu\nu,\rho\sigma}^{\mathrm{UHF}}
+=
+P_{\mu\nu}P_{\rho\sigma}
+-
+D^\alpha_{\mu\sigma}D^\alpha_{\rho\nu}
+-
+D^\beta_{\mu\sigma}D^\beta_{\rho\nu}.
+\label{eq:uhf_pair_density}
+\end{equation}
+
+Define
+\begin{equation}
+Z^{P,\alpha}_{ij} = \sum_{\mu\nu} C_{\mu i}^{\alpha*} C_{\nu j}^{\alpha} Z^P_{\mu\nu},
+\end{equation}
+and
+\begin{equation}
+Z^{P,\beta}_{ij} = \sum_{\mu\nu} C_{\mu i}^{\beta*} C_{\nu j}^{\beta} Z^P_{\mu\nu},
+\end{equation}
+as well as:
+\begin{equation}
+R^P = \sum_{\rho\sigma}P_{\rho\sigma}
+Z^P_{\rho\sigma}.
+\end{equation}
+
+This gives:
+\begin{equation}
+W^P_{\mu\nu}(\mathrm{UHF})
+=
+P_{\mu\nu} R^P
+-\sum_{\sigma\rho}D^{\alpha}_{\mu\sigma} D^{\alpha}_{\rho\nu}Z^P_{\rho\sigma}
+-\sum_{\sigma\rho}D^{\beta}_{\mu\sigma} D^{\beta}_{\rho\nu}Z^P_{\rho\sigma},
+\end{equation}
+which we express as:
+\begin{equation}
+W^P_{\mu\nu}(\mathrm{UHF})
+=
+P_{\mu\nu} R^P
+-\sum_{ij}^{\mathbb{O}_\alpha} C^{\alpha*}_{\mu i} C^{\alpha}_{\nu j} Z^{P,\alpha}_{ji}
+-\sum_{ij}^{\mathbb{O}_\beta} C^{\beta*}_{\mu i} C^{\beta}_{\nu j} Z^{P,\beta}_{ji}.
+\label{eq:uhf_w3_aux}
+\end{equation}
+
+The metric derivative weight is
+\begin{equation}
+W_{PQ}
+=
+-\frac{1}{2}
+R^P R^Q
++
+\frac{1}{2}
+\sum_{\mu\nu\rho\sigma}D^{\alpha}_{\mu\sigma}D^{\alpha}_{\rho\nu}Z^P_{\mu\nu}Z^Q_{\rho\sigma}
++
+\frac{1}{2}
+\sum_{\mu\nu\rho\sigma}D^{\beta}_{\mu\sigma}D^{\beta}_{\rho\nu}Z^P_{\mu\nu}Z^Q_{\rho\sigma}.
+\end{equation}
+which we express as:
+\begin{equation}
+W_{PQ}
+=
+-\frac{1}{2}
+R^P R^Q
++\frac{1}{2}
+\sum_{ij}^\mathbb{O_\alpha} Z^{P,\alpha}_{ij} Z^{Q,\alpha}_{ji}
++\frac{1}{2}
+\sum_{ij}^\mathbb{O_\beta} Z^{P,\beta}_{ij} Z^{Q,\beta}_{ji}.
+\label{eq:uhf_w2_aux}
+\end{equation}
+
+
+%
+%\subsection{ROHF}
+%
+%ROHF uses a single spatial orbital set but different alpha and beta occupations.
+%For the explicit two-electron gradient, ROHF is algebraically the same
+%collinear determinant as UHF:
+%\begin{equation}
+%D^\alpha_{\mu\nu}
+%=
+%\sum_{i\in \alpha\ \mathrm{occ}} C^*_{\mu i}C_{\nu i},
+%\qquad
+%D^\beta_{\mu\nu}
+%=
+%\sum_{i\in \beta\ \mathrm{occ}} C^*_{\mu i}C_{\nu i}.
+%\end{equation}
+%The same pair density in \cref{eq:uhf_pair_density} therefore generates the
+%two-electron derivative weights.  In terms of the usual closed-shell and
+%open-shell densities,
+%\begin{align}
+%D^{\mathrm{closed}}_{\mu\nu}
+%&=
+%\sum_{i\in \mathrm{doubly\ occ}} C^*_{\mu i}C_{\nu i},
+%\\
+%D^{\mathrm{open}}_{\mu\nu}
+%&=
+%\sum_{i\in \mathrm{singly\ occ}} C^*_{\mu i}C_{\nu i},
+%\end{align}
+%one commonly has, for the high-spin component,
+%\begin{equation}
+%D^\alpha=D^{\mathrm{closed}}+D^{\mathrm{open}},
+%\qquad
+%D^\beta=D^{\mathrm{closed}}.
+%\end{equation}
+%The quantities needed for the two-electron DF part are therefore the common
+%orbital coefficients, the alpha and beta occupation projectors, the resulting
+%$D^\alpha$, $D^\beta$, $P$, and the DF weights.
+%
+%The overlap derivative contribution is the subtle part of ROHF.  Because the
+%ROHF canonical Fock matrix is not unique, the energy-weighted density must be
+%constructed from the ROHF Lagrangian or from the same canonicalization
+%convention used by the SCF procedure.  It is not sufficient to reuse the RHF
+%or UHF occupied orbital energy formula without checking consistency with the
+%chosen ROHF effective Fock matrix.
+%
+%\subsection{GHF and Complex GHF}
+%
+%For GHF, each occupied spinor has alpha and beta spatial components,
+%\begin{equation}
+%\psi_i(\mathbf{x})
+%=
+%\sum_\mu
+%C^\alpha_{\mu i}\chi_\mu(\mathbf{r})\alpha
+%+
+%\sum_\mu
+%C^\beta_{\mu i}\chi_\mu(\mathbf{r})\beta .
+%\end{equation}
+%The spin-block one-particle densities are
+%\begin{equation}
+%\gamma^{\omega\tau}_{\mu\nu}
+%=
+%\sum_i^{\mathrm{occ}}
+%C^{\omega *}_{\mu i}C^\tau_{\nu i},
+%\qquad
+%\omega,\tau\in\{\alpha,\beta\}.
+%\label{eq:ghf_spin_block_density}
+%\end{equation}
+%These density blocks may be complex.  Hermiticity of the full spinor density
+%implies
+%\begin{equation}
+%\gamma^{\tau\omega}_{\nu\mu}
+%=
+%\left(\gamma^{\omega\tau}_{\mu\nu}\right)^*.
+%\end{equation}
+%The charge density entering the Coulomb part is still only the spin trace,
+%\begin{equation}
+%P_{\mu\nu}
+%=
+%\gamma^{\alpha\alpha}_{\mu\nu}
+%+
+%\gamma^{\beta\beta}_{\mu\nu}.
+%\end{equation}
+%The exchange part, however, depends on all four spin blocks:
+%\begin{equation}
+%\Pi_{\mu\nu,\rho\sigma}^{\mathrm{GHF}}
+%=
+%P_{\mu\nu}P_{\rho\sigma}
+%-
+%\sum_{\omega\tau}
+%\gamma^{\omega\tau}_{\mu\sigma}
+%\gamma^{\tau\omega}_{\rho\nu}.
+%\label{eq:ghf_pair_density}
+%\end{equation}
+%The off-diagonal spin densities
+%$\gamma^{\alpha\beta}$ and $\gamma^{\beta\alpha}$ are what distinguish GHF
+%from a collinear UHF determinant.
+%
+%For the two-electron DF gradient, complex GHF therefore needs:
+%\begin{enumerate}
+%\item occupied complex spinor coefficients $C^\alpha_{\mu i}$ and
+%      $C^\beta_{\mu i}$;
+%\item all four spin-block densities
+%      $\gamma^{\alpha\alpha}$, $\gamma^{\alpha\beta}$,
+%      $\gamma^{\beta\alpha}$, and $\gamma^{\beta\beta}$;
+%\item the spin-traced charge density $P$ for the Coulomb part;
+%\item all spin-block exchange contractions from
+%      \cref{eq:ghf_pair_density};
+%\item complex weights $W^P_{\mu\nu}$ and $W^M_{PQ}$, followed by taking the
+%      real part of the final scalar gradient component.
+%\end{enumerate}
+%The derivative integrals $(P|\mu\nu)^{[X]}$ and $(P|Q)^{[X]}$ are real for a
+%real scalar AO and auxiliary basis, but the density weights can be complex.
+%The exact gradient is real; any residual imaginary part in the contraction is
+%numerical noise if the density and Lagrangian are Hermitian and stationary.
+%
+%The one-electron and overlap terms for GHF must be evaluated in the spinor AO
+%basis.  For a nonrelativistic scalar Hamiltonian, one-electron and overlap
+%integral derivatives are spin diagonal, but the orbital Lagrangian and density
+%are spinor quantities.  In a complex GHF implementation, the energy-weighted
+%density must be built with complex conjugation consistent with the occupied
+%spinor coefficients and the converged spinor Fock matrix.
+%
+%\section{CASSCF Pair Density}
+%
+%For CASSCF and GASSCF, the relevant two-electron density is the effective
+%spin-free pair density over the internal orbitals that enter the CASSCF
+%energy expression.  Introduce the spin-free excitation operators
+%\begin{equation}
+%\hat{E}_{pq}
+%=
+%\sum_{\sigma}
+%\hat{a}^\dagger_{p\sigma}\hat{a}_{q\sigma}.
+%\end{equation}
+%The spin-free two-electron Hamiltonian can be written as
+%\begin{equation}
+%\hat{V}
+%=
+%\frac{1}{2}
+%(pq|rs)
+%\left(
+%\hat{E}_{pq}\hat{E}_{rs}
+%-\delta_{qr}\hat{E}_{ps}
+%\right).
+%\label{eq:spinfree_v}
+%\end{equation}
+%Therefore the CASSCF effective pair density is
+%\begin{equation}
+%\Pi_{pq,rs}
+%=
+%\left\langle
+%\hat{E}_{pq}\hat{E}_{rs}
+%-\delta_{qr}\hat{E}_{ps}
+%\right\rangle.
+%\label{eq:casscf_pair_density_operator}
+%\end{equation}
+%With this definition,
+%\begin{equation}
+%E_2^\mathrm{CASSCF}
+%=
+%\frac{1}{2}
+%\Pi_{pq,rs}
+%(pq|rs)_\df.
+%\label{eq:casscf_e2_pair_density}
+%\end{equation}
+%
+%The indices $p,q,r,s$ in \cref{eq:casscf_pair_density_operator} run over the
+%orbital space included in the CASSCF two-electron energy expression.  In the
+%usual closed-core CASSCF partition this includes core and active orbitals.  The
+%closed-shell core part of \cref{eq:casscf_pair_density_operator} reproduces the
+%standard core-core Coulomb and exchange energy, while mixed core-active and
+%active-active blocks are determined by the active-space one- and two-particle
+%RDMs.
+%
+%Equivalently, an implementation may avoid explicitly materializing the full
+%core-plus-active pair density by accumulating the same weights
+%\cref{eq:w3_mo,eq:w2_mo} from the separate CASSCF energy pieces:
+%\begin{equation}
+%E_2^\mathrm{CASSCF}
+%=
+%E_2^{\core\core}
+%+
+%E_2^{\core\act}
+%+
+%E_2^{\act\act}.
+%\end{equation}
+%The total weights are additive:
+%\begin{align}
+%W^P_{pq}
+%&=
+%W^{P,\core\core}_{pq}
+%+
+%W^{P,\core\act}_{pq}
+%+
+%W^{P,\act\act}_{pq},
+%\\
+%W^M_{PQ}
+%&=
+%W^{M,\core\core}_{PQ}
+%+
+%W^{M,\core\act}_{PQ}
+%+
+%W^{M,\act\act}_{PQ}.
+%\end{align}
+%This blockwise implementation is algebraically identical to forming the full
+%$\Pi_{pq,rs}$ in \cref{eq:casscf_pair_density_operator}, as long as all blocks
+%use the same integral index convention.
+%
+%\subsection{Active-Space Contribution}
+%
+%For the purely active part, let $u,v,w,x$ denote active orbitals and let
+%$\Pi_{uv,wx}^{\act}$ be the active-space effective pair density in the same
+%index convention as \cref{eq:casscf_pair_density_operator}.  Then
+%\begin{equation}
+%E_2^{\act\act}
+%=
+%\frac{1}{2}
+%\Pi_{uv,wx}^{\act}
+%J^P_{uv}N_{PQ}J^Q_{wx}.
+%\end{equation}
+%The corresponding weights are
+%\begin{align}
+%W^{P,\act\act}_{uv}
+%&=
+%\Pi_{uv,wx}^{\act}Z^P_{wx},
+%\\
+%W^{M,\act\act}_{PQ}
+%&=
+%-\frac{1}{2}
+%\Pi_{uv,wx}^{\act}Z^P_{uv}Z^Q_{wx}.
+%\end{align}
+%These are the direct analogues of \cref{eq:w3_mo,eq:w2_mo}.
+%
+%\subsection{Core and Core-Active Contributions}
+%
+%The closed-shell core contribution can also be generated from
+%\cref{eq:casscf_pair_density_operator}.  For example, for core orbitals $i,j$
+%only, the effective pair density is
+%\begin{equation}
+%\Pi_{ij,kl}^{\core}
+%=
+%4\delta_{ij}\delta_{kl}
+%-
+%2\delta_{il}\delta_{jk}.
+%\label{eq:core_pair_density}
+%\end{equation}
+%Substitution into
+%$E_2=(1/2)\Pi_{ij,kl}(ij|kl)$ gives
+%\begin{equation}
+%E_2^{\core\core}
+%=
+%2(ii|jj) - (ij|ji),
+%\end{equation}
+%with summation over repeated core indices.  Mixed core-active blocks are
+%obtained from the same operator definition and depend on the active one-particle
+%RDM.  In practice, the least ambiguous implementation is to either:
+%\begin{enumerate}
+%\item build the complete effective internal pair density
+%      $\Pi_{pq,rs}$ from \cref{eq:casscf_pair_density_operator}, or
+%\item build the three-center and metric weights by differentiating the same
+%      block energy expressions used by the CASSCF energy code.
+%\end{enumerate}
+%Both routes must yield the same final weights in
+%\cref{eq:w3_mo,eq:w2_mo}.
+%
+%\section{State-Averaged CASSCF}
+%\label{sec:state_average}
+%
+%For state-averaged CASSCF, the optimized objective is
+%\begin{equation}
+%E_\sa
+%=
+%\sum_I w_I E_I,
+%\qquad
+%\sum_I w_I = 1,
+%\qquad
+%w_I \geq 0,
+%\end{equation}
+%where $I$ labels the CI roots included in the state average.  The two-electron
+%part is
+%\begin{equation}
+%E_{2,\sa}
+%=
+%\sum_I w_I E_{2,I}
+%=
+%\frac{1}{2}
+%\left(
+%\sum_I w_I \Pi^I_{pq,rs}
+%\right)
+%(pq|rs)_\df.
+%\end{equation}
+%Therefore define the state-averaged pair density
+%\begin{equation}
+%\Pi^\sa_{pq,rs}
+%=
+%\sum_I w_I \Pi^I_{pq,rs}.
+%\label{eq:sa_pair_density}
+%\end{equation}
+%The state-averaged two-electron gradient contribution is obtained by using
+%$\Pi^\sa$ in the same equations derived above:
+%\begin{align}
+%W^{P,\sa}_{pq}
+%&=
+%\Pi^\sa_{pq,rs}Z^P_{rs},
+%\\
+%W^{M,\sa}_{PQ}
+%&=
+%-\frac{1}{2}
+%\Pi^\sa_{pq,rs}Z^P_{pq}Z^Q_{rs},
+%\\
+%E_{2,\sa}^{[X]}
+%&=
+%\left(C^*_{\mu p}W^{P,\sa}_{pq}C_{\nu q}\right)
+%J^{P,[X]}_{\mu\nu}
+%+
+%W^{M,\sa}_{PQ}M^{[X]}_{PQ}.
+%\end{align}
+%
+%This expression is valid for the gradient of the state-averaged objective at a
+%state-averaged stationary point.  If instead one wants the gradient of a single
+%root $K$ evaluated at orbitals optimized for a different state-averaged
+%objective, the target root energy is not stationary with respect to those
+%orbitals.  The explicit integral derivative contribution is still obtained by
+%using $\Pi^K$, but the full analytic gradient also requires orbital and CI
+%response, commonly expressed through a CASSCF response or Z-vector equation.
+%
+%\section{CASSCF Z-Vector Equations}
+%\label{sec:casscf_zvector}
+%
+%The preceding sections give the explicit derivative of the two-electron
+%integrals at fixed molecular orbitals and fixed CI coefficients.  For a fully
+%variational, state-specific CASSCF energy, the fixed-wave-function expression
+%is already sufficient apart from the usual overlap/Lagrangian term: the energy
+%is stationary with respect to all nonredundant orbital rotations and CI
+%parameters.  However, a Z-vector is needed whenever the target energy is not
+%the same functional that defined the optimized orbitals and CI coefficients.
+%The most common examples are:
+%\begin{enumerate}
+%\item the gradient of an individual root at state-averaged CASSCF orbitals;
+%\item gradients with orbital spaces held fixed or frozen, such as frozen-core
+%      orbitals excluded from the CASSCF orbital optimization;
+%\item any property or post-CASSCF Lagrangian whose density is not stationary
+%      with respect to the CASSCF variables.
+%\end{enumerate}
+%
+%\subsection{Variables and Stationarity Conditions}
+%
+%Let $y$ collect all independent CASSCF wave-function variables:
+%\begin{equation}
+%y =
+%\begin{pmatrix}
+%\boldsymbol{\kappa} \\
+%\boldsymbol{\theta}
+%\end{pmatrix},
+%\end{equation}
+%where $\boldsymbol{\kappa}$ are the nonredundant anti-Hermitian orbital
+%rotations and $\boldsymbol{\theta}$ parameterizes the CI coefficients in the
+%active space.  In a real spin-free implementation, the nonredundant orbital
+%rotations are the unique lower-triangular elements connecting different orbital
+%spaces, for example core-active, core-virtual, active-virtual, and, for GASSCF,
+%inter-GAS rotations.  In a complex implementation, the Lagrangian is real and
+%the transpose operations below should be understood as Hermitian adjoints in
+%the real-valued parameterization of complex variables.
+%
+%Let $E_R(y)$ be the reference objective used to determine the CASSCF wave
+%function.  For state-specific CASSCF, $E_R$ is the energy of that state.  For
+%state-averaged CASSCF,
+%\begin{equation}
+%E_R = E_\sa = \sum_I w_I E_I.
+%\end{equation}
+%At convergence, the reference stationarity equations are
+%\begin{equation}
+%g_m^R(y) \equiv \frac{\partial E_R}{\partial y_m} = 0,
+%\qquad
+%m \in \mathcal{V},
+%\label{eq:casscf_stationarity}
+%\end{equation}
+%where $\mathcal{V}$ is the set of optimized CASSCF variables.  If some orbital
+%rotations are excluded, for example rotations involving frozen core orbitals,
+%they are not included in $\mathcal{V}$ unless additional constraints are added
+%as described in \cref{subsec:frozen_core_zvector}.
+%
+%Now let $E_T(y)$ be the target energy whose gradient is desired.  The total
+%derivative with respect to a nuclear coordinate $X$ is
+%\begin{equation}
+%\frac{\dd E_T}{\dd X}
+%=
+%E_T^{[X]}
+%+
+%\frac{\partial E_T}{\partial y_m} y_m^{[X]}.
+%\label{eq:target_total_derivative}
+%\end{equation}
+%Differentiating the stationarity conditions gives the response equation
+%\begin{equation}
+%A^R_{mn} y_n^{[X]} + g_m^{R,[X]} = 0,
+%\qquad
+%A^R_{mn}
+%=
+%\frac{\partial g_m^R}{\partial y_n}
+%=
+%\frac{\partial^2 E_R}{\partial y_m \partial y_n}.
+%\label{eq:casscf_response_equation}
+%\end{equation}
+%Solving \cref{eq:casscf_response_equation} separately for every nuclear
+%coordinate is avoidable.  Define the Z-vector by
+%\begin{equation}
+%\left(A^R\right)^T \mathbf{z}
+%=
+%-\mathbf{b},
+%\qquad
+%b_m =
+%\frac{\partial E_T}{\partial y_m}.
+%\label{eq:zvector_equation}
+%\end{equation}
+%Then \cref{eq:target_total_derivative} becomes
+%\begin{equation}
+%\frac{\dd E_T}{\dd X}
+%=
+%E_T^{[X]}
+%+
+%z_m g_m^{R,[X]}.
+%\label{eq:zvector_gradient}
+%\end{equation}
+%This is the basic CASSCF Z-vector result.  If the target is the same stationary
+%functional as the reference, then $\mathbf{b}=0$ and $\mathbf{z}=0$.
+%
+%\subsection{Coupled Orbital-CI Form}
+%
+%Partitioning the variables into orbital rotations and CI parameters gives
+%\begin{equation}
+%\begin{pmatrix}
+%A_{\kappa\kappa}^R & A_{\kappa c}^R \\
+%A_{c\kappa}^R & A_{cc}^R
+%\end{pmatrix}^T
+%\begin{pmatrix}
+%z^\kappa \\
+%z^c
+%\end{pmatrix}
+%=
+%-
+%\begin{pmatrix}
+%b^\kappa \\
+%b^c
+%\end{pmatrix}.
+%\label{eq:coupled_casscf_zvector}
+%\end{equation}
+%The orbital right-hand side is the target orbital gradient,
+%\begin{equation}
+%b^\kappa_{pq}
+%=
+%\frac{\partial E_T}{\partial \kappa_{pq}},
+%\end{equation}
+%evaluated at the reference CASSCF orbitals and CI vectors.  The CI right-hand
+%side is the target CI gradient.  For an individual state energy, the CI vector
+%for that state is an eigenvector of the active-space Hamiltonian at fixed
+%orbitals, so $b^c=0$.  Nevertheless, the CI part of the Z-vector can still be
+%nonzero because the orbital and CI variables are coupled by
+%$A_{\kappa c}^R$ and $A_{c\kappa}^R$.
+%
+%For a single root $I$ with CI vector $\mathbf{c}_I$, the CI stationarity
+%condition may be written as the projected residual
+%\begin{equation}
+%\mathbf{r}_I
+%=
+%Q_I
+%\left(
+%\mathbf{H}^{\act} - E_I \mathbf{1}
+%\right)
+%\mathbf{c}_I
+%=
+%0,
+%\label{eq:ci_projected_residual}
+%\end{equation}
+%where
+%\begin{equation}
+%Q_I = \mathbf{1} - \mathbf{c}_I \mathbf{c}_I^\dagger
+%\end{equation}
+%projects out the normalization direction.  The CI-CI block of the CASSCF
+%Hessian is therefore the projected active-space Hamiltonian shift
+%\begin{equation}
+%A^R_{cc,I}
+%=
+%Q_I
+%\left(
+%\mathbf{H}^{\act} - E_I \mathbf{1}
+%\right)
+%Q_I
+%\label{eq:ci_ci_hessian}
+%\end{equation}
+%for a state-specific root.  In state-averaged calculations, the CI residuals
+%are written for all roots in the average, with root orthogonality constraints
+%included in the projector.  Near-degenerate roots should be treated in the
+%state subspace rather than by assigning arbitrary individual-root phases.
+%
+%The orbital-CI coupling blocks are derivatives of the CI residuals with respect
+%to orbital rotations and derivatives of the orbital gradient with respect to
+%CI parameters:
+%\begin{align}
+%A^R_{c\kappa}
+%&=
+%\frac{\partial \mathbf{r}}{\partial \boldsymbol{\kappa}},
+%\\
+%A^R_{\kappa c}
+%&=
+%\frac{\partial \mathbf{g}^{R,\kappa}}{\partial \mathbf{c}}.
+%\end{align}
+%In practice, these blocks are most often applied as sigma-vector operations
+%rather than formed explicitly.
+%
+%\subsection{Evaluation With Relaxed Density Matrices}
+%
+%After solving \cref{eq:coupled_casscf_zvector}, the gradient may be evaluated
+%directly from \cref{eq:zvector_gradient}.  Equivalently, one can absorb the
+%Z-vector terms into relaxed one- and two-particle density matrices and then use
+%the same derivative-integral formulas as before.
+%
+%For the CI part, introduce a response CI vector $\mathbf{z}^c_I$ for root $I$,
+%orthogonal to $\mathbf{c}_I$.  The CI-response corrections to the active-space
+%spin-free RDMs have the form
+%\begin{align}
+%\gamma^{Z,c}_{uv}
+%&=
+%2\,\mathrm{Re}
+%\left[
+%\langle \mathbf{z}^c_I |
+%\hat{E}_{uv}
+%| \mathbf{c}_I \rangle
+%\right],
+%\label{eq:ci_z_1rdm}\\
+%\Gamma^{Z,c}_{uv,wx}
+%&=
+%2\,\mathrm{Re}
+%\left[
+%\left\langle \mathbf{z}^c_I \left|
+%\hat{E}_{uv}\hat{E}_{wx}
+%-
+%\delta_{vw}\hat{E}_{ux}
+%\right| \mathbf{c}_I \right\rangle
+%\right],
+%\label{eq:ci_z_2rdm}
+%\end{align}
+%with the obvious weighted sum over roots for a state-averaged Lagrangian.  For
+%complex wave functions, the real part is taken after the bra-ket contraction.
+%
+%The orbital Z-vector contributes through the derivative of the orbital
+%stationarity equations, $z^\kappa_{pq}g_{pq}^{R,\kappa,[X]}$.  This term can be
+%implemented either by applying derivative integrals to the corresponding
+%orbital-response density contributions, or by evaluating the contracted
+%Lagrangian derivative directly.  In either approach, the final two-electron
+%gradient can still be written in the density-fitted weight form
+%\begin{equation}
+%E_2^{[X]}
+%=
+%\overline{W}^P_{\mu\nu}(P|\mu\nu)^{[X]}
+%+
+%\overline{W}^M_{PQ}(P|Q)^{[X]},
+%\end{equation}
+%but the weights are built from relaxed densities:
+%\begin{align}
+%\overline{\gamma}
+%&=
+%\gamma^T + \gamma^Z,
+%\\
+%\overline{\Pi}
+%&=
+%\Pi^T + \Pi^Z.
+%\end{align}
+%Here the superscript $T$ denotes the target-state or target-objective density,
+%and the superscript $Z$ denotes all CI and orbital-response contributions from
+%the Z-vector Lagrangian.
+%
+%\subsection{Frozen Core Orbitals}
+%\label{subsec:frozen_core_zvector}
+%
+%Frozen core orbitals require extra bookkeeping because they are included as
+%doubly occupied orbitals in the energy but excluded from the optimized CASSCF
+%orbital-rotation space.  Let the contiguous orbital spaces be
+%\begin{equation}
+%\{p\}
+%=
+%\{f\}
+%\oplus
+%\{i\}
+%\oplus
+%\{u\}
+%\oplus
+%\{a\}
+%\oplus
+%\{r\},
+%\end{equation}
+%where $f$ are frozen core orbitals, $i$ are optimized inactive core orbitals,
+%$u$ are active orbitals, $a$ are optimized virtual orbitals, and $r$ are frozen
+%virtual orbitals if present.  In the Forte2 convention, the inactive doubly
+%occupied space used in the CASSCF energy contains both $f$ and $i$, while
+%nonredundant CASSCF orbital rotations are normally taken only among the
+%non-frozen blocks, for example
+%\begin{equation}
+%\mathcal{R}_{\mathrm{CASSCF}}
+%=
+%\{u i,\; a i,\; a u\}
+%\end{equation}
+%for ordinary CASSCF, plus inter-GAS rotations for GASSCF.  Rotations involving
+%$f$ are omitted from this set.
+%
+%The frozen core orbitals still contribute to the unrelaxed density.  In a
+%spin-free closed-shell treatment,
+%\begin{equation}
+%\gamma_{ff'} \leftarrow 2\delta_{ff'},
+%\end{equation}
+%and the corresponding inactive-inactive and inactive-active pair-density blocks
+%must be included exactly as for any other doubly occupied core orbital.  Thus
+%the explicit DF derivative weights include the frozen core contribution even
+%before any response treatment is considered.
+%
+%There are two distinct gradient conventions:
+%\begin{enumerate}
+%\item \emph{Constrained frozen-orbital gradient.}  The frozen core orbitals are
+%      treated as fixed external orbitals defining a constrained variational
+%      problem.  The Z-vector equation is solved only in the optimized CASSCF
+%      variable space $\mathcal{V}=\mathcal{R}_{\mathrm{CASSCF}}\oplus
+%      \mathcal{V}_{\mathrm{CI}}$.  Omitted rotations involving $f$ are not
+%      stationarity constraints and are not relaxed.  This gives the derivative
+%      of the constrained frozen-orbital energy.
+%\item \emph{Parent-relaxed frozen-core gradient.}  The frozen core orbitals are
+%      assumed to follow the parent mean-field orbitals as the geometry changes.
+%      Then their response must be determined by the parent SCF stationarity
+%      equations, and extra Z-vector multipliers are required for the parent
+%      orbital-gradient constraints that define the frozen core subspace.
+%\end{enumerate}
+%
+%For the parent-relaxed convention, define an additional set of orbital
+%variables $\mathcal{F}$ that contains the nonredundant rotations involving the
+%frozen core and the non-frozen orbital spaces whose response should be inherited
+%from the parent reference.  Typical examples are $u f$ and $a f$ rotations.
+%Rotations within a fully occupied inactive subspace, such as $i f$, are
+%redundant for the CASSCF energy unless the frozen/correlated core distinction
+%is used by a downstream method.
+%
+%The Lagrangian then contains both CASSCF and parent-SCF stationarity
+%constraints:
+%\begin{equation}
+%\mathcal{L}
+%=
+%E_T
+%+
+%z_m^{\mathrm{CAS}} g_m^{\mathrm{CAS}}
+%+
+%z_\alpha^{\mathrm{fc}} g_\alpha^{\mathrm{parent}},
+%\label{eq:frozen_core_lagrangian}
+%\end{equation}
+%where $m\in\mathcal{R}_{\mathrm{CASSCF}}\oplus\mathcal{V}_{\mathrm{CI}}$ and
+%$\alpha\in\mathcal{F}$.  The generalized Z-vector equation is
+%\begin{equation}
+%\begin{pmatrix}
+%\dfrac{\partial g_m^{\mathrm{CAS}}}{\partial y_n} &
+%\dfrac{\partial g_m^{\mathrm{CAS}}}{\partial y_\beta} \\
+%\dfrac{\partial g_\alpha^{\mathrm{parent}}}{\partial y_n} &
+%\dfrac{\partial g_\alpha^{\mathrm{parent}}}{\partial y_\beta}
+%\end{pmatrix}^T
+%\begin{pmatrix}
+%z_n^{\mathrm{CAS}} \\
+%z_\beta^{\mathrm{fc}}
+%\end{pmatrix}
+%=
+%-
+%\begin{pmatrix}
+%\dfrac{\partial E_T}{\partial y_m} \\
+%\dfrac{\partial E_T}{\partial y_\alpha}
+%\end{pmatrix}.
+%\label{eq:frozen_core_zvector}
+%\end{equation}
+%Here $y_n$ are the optimized CASSCF variables and $y_\alpha$ are the
+%parent-defined frozen-core rotation variables.  If $E_T$ is the state-averaged
+%CASSCF objective, the first block of the right-hand side vanishes by CASSCF
+%stationarity, but the frozen-core block
+%\begin{equation}
+%\frac{\partial E_T}{\partial y_\alpha}
+%\end{equation}
+%is generally nonzero because rotations involving frozen core orbitals were not
+%optimized in the CASSCF calculation.
+%
+%After solving \cref{eq:frozen_core_zvector}, the gradient is evaluated as
+%\begin{equation}
+%\frac{\dd E_T}{\dd X}
+%=
+%E_T^{[X]}
+%+
+%z_m^{\mathrm{CAS}} g_m^{\mathrm{CAS},[X]}
+%+
+%z_\alpha^{\mathrm{fc}} g_\alpha^{\mathrm{parent},[X]}.
+%\label{eq:frozen_core_gradient}
+%\end{equation}
+%The last term is the parent-relaxation correction for the frozen core orbitals.
+%Operationally, it adds parent-SCF Z-density contributions to the one-electron,
+%two-electron, and overlap derivative contractions.  The two-electron DF part
+%can still be evaluated by the same weight equations, but using the density
+%augmented by both the CASSCF Z-vector and frozen-core parent-response
+%contributions.
+%
+%\subsection{Practical Solution Strategy}
+%
+%A practical CASSCF Z-vector implementation can proceed as follows:
+%\begin{enumerate}
+%\item Define the variable space: optimized orbital rotations, CI response
+%      parameters, and, if using parent-relaxed frozen core orbitals, the
+%      parent-defined frozen-core rotation variables.
+%\item Build the right-hand side $\mathbf{b}$ from the target orbital and CI
+%      gradients.  For the state-averaged objective itself, this is zero in the
+%      optimized CASSCF variables.  For an individual state at state-averaged
+%      orbitals, the orbital part is the individual-state orbital gradient.
+%\item Implement Hessian-vector products for the CASSCF response matrix.  These
+%      may be analytic sigma-vector operations or finite differences of the
+%      existing CASSCF orbital and CI residual routines.  For frozen-core parent
+%      relaxation, the parent block is the usual coupled-perturbed SCF orbital
+%      Hessian.
+%\item Project out redundant rotations, CI normalization directions, and root
+%      rotations inside exactly degenerate averaged subspaces.  The linear
+%      system is otherwise singular.
+%\item Solve the adjoint equation \cref{eq:zvector_equation} or
+%      \cref{eq:frozen_core_zvector} with an iterative linear solver.  The
+%      orbital Hessian diagonal used in the CASSCF optimizer is a natural
+%      preconditioner for the orbital block; CI energy gaps precondition the CI
+%      block; parent orbital-energy differences precondition the parent-SCF
+%      frozen-core block.
+%\item Convert the converged Z-vector into relaxed one- and two-particle density
+%      matrices, or evaluate the contracted Lagrangian derivative directly.
+%\item Generate the density-fitted two-electron derivative weights from the
+%      relaxed pair density and contract them with
+%      $(P|\mu\nu)^{[X]}$ and $(P|Q)^{[X]}$.
+%\end{enumerate}
+%
+%\section{DSRG-MRPT2 Density-Fitted Derivatives}
+%\label{sec:dsrg_mrpt2_df_derivatives}
+%
+%For DSRG-MRPT2 the two-electron derivative cannot, in general, be obtained by
+%substituting a simple reference pair density into the CASSCF formulas.  The
+%second-order energy is a nonvariational functional of the semicanonical
+%orbitals, the reference cumulants, the Fock matrix, orbital energy
+%denominators, renormalized amplitudes, and renormalized two-electron
+%integrals.  The useful way to realize the derivative is therefore to view the
+%DSRG-MRPT2 energy evaluation as a scalar computation graph and reverse it to
+%obtain adjoints of the DF integral blocks.
+%
+%\subsection{DSRG-MRPT2 Energy Dependencies}
+%
+%For a fixed flow parameter $s$, write the energy evaluated by the DSRG-MRPT2
+%module schematically as
+%\begin{equation}
+%E_{\mathrm{DSRG}}
+%=
+%E_{\mathrm{ref}}
+%+
+%\mathcal{E}^{(2)}
+%\left[
+%F, V, \epsilon,
+%\gamma, \lambda_2, \lambda_3; s
+%\right],
+%\label{eq:dsrg_energy_functional}
+%\end{equation}
+%where $E_{\mathrm{ref}}$ is the bare reference energy and
+%$\mathcal{E}^{(2)}$ is the perturbative DSRG correction.  In Forte2 the
+%reference orbitals are required to be semicanonical before entering the DSRG
+%module.  The DSRG implementation then works in the correlated orbital space
+%after any DSRG-level frozen-core and frozen-virtual projections have been
+%applied.  With core, active, and virtual correlated orbitals denoted by
+%$c$, $a$, and $v$, respectively, the current spin-free implementation builds
+%orthonormalized DF blocks
+%\begin{equation}
+%B^A_{pq} = X_{AP} J^P_{pq},
+%\qquad
+%X^{\mathrm{T}} X = M^{-1},
+%\end{equation}
+%for the orbital blocks
+%\begin{equation}
+%cc,\quad ac,\quad vc,\quad aa,\quad va,
+%\end{equation}
+%and forms the explicit four-index blocks
+%\begin{equation}
+%vvaa,\quad aacc,\quad avca,\quad avac,\quad vaaa,\quad aaca,\quad aaaa.
+%\end{equation}
+%The expensive $ccvv$, $cavv$, and $ccav$ contributions are evaluated
+%on-the-fly from three-index DF intermediates rather than stored as full
+%four-index arrays.
+%
+%These implementation details are important for performance, but they should
+%not change the integral derivative API.  The integral library should still see
+%only the final raw AO derivative weights
+%\begin{equation}
+%W^P_{\mu\nu}
+%\quad\mathrm{and}\quad
+%W^M_{PQ},
+%\end{equation}
+%which are then contracted with $(P|\mu\nu)^{[X]}$ and $(P|Q)^{[X]}$.
+%All DSRG-specific response and adjoint logic belongs in the method layer.
+%
+%\subsection{Adjoints of a DF Four-Index Block}
+%
+%Let the DSRG reverse pass produce an adjoint
+%\begin{equation}
+%\bar V_{pqrs}
+%\equiv
+%\frac{\partial \mathcal{L}}{\partial V_{pqrs}}
+%\end{equation}
+%for a molecular-orbital two-electron block
+%\begin{equation}
+%V_{pqrs} = J^P_{pq} N_{PQ} J^Q_{rs},
+%\qquad
+%J^P_{pq}
+%=
+%C^*_{\mu p} J^P_{\mu\nu} C_{\nu q}.
+%\label{eq:dsrg_mo_df_integral}
+%\end{equation}
+%Here $\mathcal{L}$ denotes the full DSRG gradient Lagrangian, or just the
+%fixed-reference DSRG energy if no orbital, reference, or denominator response
+%has been included yet.  Define the metric-applied three-center tensor
+%\begin{equation}
+%Z^P_{pq} \equiv N_{PQ} J^Q_{pq}.
+%\end{equation}
+%The differential of a scalar contribution
+%\begin{equation}
+%\dd \mathcal{L}_{V}
+%=
+%\bar V_{pqrs} \dd V_{pqrs}
+%\end{equation}
+%gives the raw MO three-center and metric weights
+%\begin{align}
+%A^P_{pq}
+%&\mathrel{+}=
+%\bar V_{pqrs} Z^P_{rs}
+%+
+%\bar V_{rspq} Z^P_{rs},
+%\label{eq:dsrg_mo_j_adjoint}
+%\\
+%A^M_{PQ}
+%&\mathrel{+}=
+%-
+%\bar V_{pqrs} Z^P_{pq} Z^Q_{rs}.
+%\label{eq:dsrg_metric_adjoint}
+%\end{align}
+%The AO three-center derivative weight is then obtained by back-transforming the
+%MO adjoint:
+%\begin{equation}
+%W^P_{\mu\nu}
+%\mathrel{+}=
+%C_{\mu p}^* A^P_{pq} C_{\nu q}.
+%\label{eq:dsrg_j_backtransform}
+%\end{equation}
+%Equations \cref{eq:dsrg_mo_j_adjoint,eq:dsrg_metric_adjoint} are the general
+%adjoint version of the pair-density formulas derived earlier.  If
+%$\bar V_{pqrs} = \frac{1}{2}\Pi_{pq,rs}$ and the pair density is symmetric under
+%$(pq)\leftrightarrow(rs)$, they reduce to
+%\begin{equation}
+%W^P_{pq} = \Pi_{pq,rs} Z^P_{rs},
+%\qquad
+%W^M_{PQ} = -\frac{1}{2}\Pi_{pq,rs} Z^P_{pq} Z^Q_{rs}.
+%\end{equation}
+%
+%For two-component or otherwise complex orbitals, the same equations are used
+%with complex MO adjoints.  The nuclear gradient is real, so the implementation
+%should accumulate the real differential,
+%\begin{equation}
+%\dd \mathcal{L}_{V}
+%=
+%\mathrm{Re}\left[
+%\bar V_{pqrs} \dd V_{pqrs}
+%\right],
+%\end{equation}
+%and contract real AO derivative integrals with the real part of the final AO
+%weights.  The MO transformation in \cref{eq:dsrg_mo_df_integral} must use the
+%conjugate on the bra coefficient.
+%
+%\subsection{Why Prefer Raw Metric Adjoints over $B$-Tensor Adjoints}
+%
+%The existing DSRG code uses orthonormalized DF tensors $B^A_{pq}$ because they
+%make contractions simple:
+%\begin{equation}
+%V_{pqrs} = B^A_{pq} B^A_{rs}.
+%\end{equation}
+%For gradient work, however, differentiating $B^A_{pq}=X_{AP}J^P_{pq}$ directly
+%requires the derivative of the inverse square root of the metric,
+%\begin{equation}
+%X^{[X]} = \left(M^{-1/2}\right)^{[X]},
+%\end{equation}
+%which leads to a Sylvester or eigensystem-response problem and introduces
+%additional numerical choices.  The raw-metric representation avoids this
+%entire issue.  Any adjoint of a four-index block should therefore be converted
+%to raw $J$ and $M$ weights using
+%\cref{eq:dsrg_mo_j_adjoint,eq:dsrg_metric_adjoint} whenever possible.
+%
+%If an implementation first obtains adjoints of $B$ blocks, two paths are
+%available:
+%\begin{enumerate}
+%\item Rewrite the differentiated DSRG term in terms of the equivalent
+%      four-index block adjoint $\bar V$ and use the raw-metric equations above.
+%      This is the preferred route because it automatically includes the metric
+%      derivative.
+%\item Propagate the $B$ adjoint through $B=XJ$.  This gives the three-center
+%      part immediately, but the $X$ adjoint must still be converted into a
+%      metric adjoint by differentiating the inverse-square-root relation.  This
+%      path should be reserved for cases where a four-index or raw-metric
+%      expression is impractical.
+%\end{enumerate}
+%
+%\subsection{Reverse Pass Through DSRG-MRPT2 Blocks}
+%
+%The method layer should accumulate DSRG derivative weights by reverse
+%differentiating each algebraic block used in the energy.  A practical
+%decomposition is:
+%\begin{enumerate}
+%\item Run the usual DSRG-MRPT2 forward pass, but retain the intermediates needed
+%      by the reverse pass: semicanonical orbital slices, raw or metric-applied
+%      DF blocks, Fock blocks, denominators, amplitudes, renormalization
+%      factors, and reference cumulants.
+%\item For every explicit energy contraction in
+%      $\mathcal{E}^{(2)}$, form adjoints for the participating tensors by the
+%      transpose contraction.  In code this mirrors each \texttt{einsum} used in
+%      the forward energy.
+%\item Accumulate adjoints of the renormalized amplitudes $T_1$, $T_2$,
+%      renormalized Fock block $\widetilde F$, and renormalized integrals
+%      $\widetilde V$.  The DSRG amplitudes are closed-form algebraic functions,
+%      so this is a local reverse pass rather than a large amplitude-response
+%      solve.
+%\item Convert adjoints of every unrenormalized four-index integral block
+%      to raw DF derivative weights using
+%      \cref{eq:dsrg_mo_j_adjoint,eq:dsrg_metric_adjoint}.  The same conversion
+%      applies to the adjoints generated from the $vvaa$, $aacc$, $avca$,
+%      $avac$, $vaaa$, $aaca$, and $aaaa$ blocks.
+%\item Treat the on-the-fly $ccvv$, $cavv$, and $ccav$ terms by reversing the
+%      three-index contractions inside the loop over the batched core index.
+%      This produces adjoints of the temporary bare and renormalized
+%      three-index intermediates.  Those adjoints should then be accumulated into
+%      the underlying raw DF blocks, or equivalently into the associated
+%      four-index adjoints before applying the raw-metric equations.
+%\item Add the adjoints from the bare reference energy $E_{\mathrm{ref}}$.
+%      These are exactly the CASSCF-like one- and two-particle density
+%      contributions derived in the earlier sections.
+%\end{enumerate}
+%
+%The important implementation point is that DSRG-MRPT2 does not need a new
+%derivative integral kernel.  It needs a method-specific reverse pass that
+%converts the perturbative energy into the same $W^P_{\mu\nu}$ and $W^M_{PQ}$
+%weights used by SCF and CASSCF gradients.
+%
+%\subsection{Renormalization and Denominator Response}
+%
+%The regularized DSRG amplitudes and renormalized integrals depend explicitly on
+%orbital-energy denominators.  For a generic denominator
+%\begin{equation}
+%\Delta_{ij}^{ab} = \epsilon_i + \epsilon_j - \epsilon_a - \epsilon_b,
+%\end{equation}
+%the amplitude regularizer is
+%\begin{equation}
+%R_s(\Delta)
+%=
+%\frac{1-\exp(-s\Delta^2)}{\Delta},
+%\label{eq:dsrg_regularizer}
+%\end{equation}
+%with the Taylor limit used near $\Delta=0$.  The current utilities also use
+%\begin{equation}
+%Q_s(\Delta) = 1+\exp(-s\Delta^2)
+%\end{equation}
+%for the renormalized four-index integrals and the product
+%\begin{equation}
+%G_s(\Delta) = Q_s(\Delta) R_s(\Delta)
+%\end{equation}
+%for the on-the-fly three-index intermediates.  The reverse pass therefore
+%generates denominator adjoints through
+%\begin{align}
+%\frac{\partial R_s}{\partial \Delta}
+%&=
+%\frac{2s\Delta^2\exp(-s\Delta^2)
+%-
+%\left[1-\exp(-s\Delta^2)\right]}{\Delta^2},
+%\label{eq:dsrg_regularizer_deriv}
+%\\
+%\frac{\partial Q_s}{\partial \Delta}
+%&=
+%-2s\Delta\exp(-s\Delta^2),
+%\\
+%\frac{\partial G_s}{\partial \Delta}
+%&=
+%\frac{\partial Q_s}{\partial \Delta} R_s(\Delta)
+%+
+%Q_s(\Delta)\frac{\partial R_s}{\partial \Delta}.
+%\end{align}
+%Near $\Delta=0$, \cref{eq:dsrg_regularizer_deriv} should be evaluated with the
+%same Taylor expansion policy as the forward regularizer.
+%
+%The resulting orbital-energy adjoints have the form
+%\begin{equation}
+%\bar\epsilon_p
+%=
+%\sum_\Delta \bar\Delta\,
+%\frac{\partial \Delta}{\partial \epsilon_p}.
+%\end{equation}
+%They are not derivative-integral weights by themselves.  They must be folded
+%into the orbital and semicanonical response equations, or into an equivalent
+%Lagrangian enforcing the definition of the orbital energies.  Omitting these
+%terms gives a fixed-denominator derivative, not a full DSRG-MRPT2 gradient.
+%
+%\subsection{Semicanonical Orbital Response}
+%
+%DSRG-MRPT2 in Forte2 assumes that the parent method has delivered
+%semicanonical orbitals.  The active orbitals and active cumulants are also
+%rotated by the semicanonical transformation before the perturbative energy is
+%evaluated.  Thus the full derivative contains response of
+%\begin{equation}
+%C_{\mathrm{semi}},
+%\qquad
+%\epsilon_p,
+%\qquad
+%\gamma,
+%\qquad
+%\lambda_2,
+%\qquad
+%\lambda_3.
+%\end{equation}
+%There are two reasonable formulations:
+%\begin{enumerate}
+%\item Add semicanonicalization constraints to the DSRG Lagrangian.  The
+%      constraints enforce zero off-diagonal Fock blocks inside the
+%      semicanonical subspaces and define the orbital energies.  The
+%      corresponding adjoint variables absorb the derivatives of
+%      $C_{\mathrm{semi}}$, $U_{\mathrm{act}}$, and $\epsilon$.
+%\item Reformulate as much of the DSRG energy as possible in a rotationally
+%      covariant block form, and only introduce denominators through explicitly
+%      constrained Fock eigenvalues.  This reduces, but does not eliminate, the
+%      need for a denominator-response adjoint.
+%\end{enumerate}
+%The first route is the most direct match to the current code because the
+%forward calculation is already semicanonical and denominator based.
+%
+%\subsection{Reference and CASSCF Response}
+%
+%For a CASSCF parent, DSRG-MRPT2 introduces a target energy
+%\begin{equation}
+%E_T = E_{\mathrm{ref}} + \mathcal{E}^{(2)}
+%\end{equation}
+%that is not stationary with respect to the parent CASSCF orbital and CI
+%variables.  The CASSCF Z-vector equations in
+%\cref{sec:casscf_zvector} should therefore be used with a DSRG-specific
+%right-hand side:
+%\begin{equation}
+%A_{mn}^{\mathrm{CAS}} z_n^{\mathrm{CAS}}
+%=
+%-
+%\frac{\partial E_T}{\partial y_m^{\mathrm{CAS}}}.
+%\label{eq:dsrg_cas_zvector_rhs}
+%\end{equation}
+%The right-hand side is assembled from the DSRG reverse pass:
+%\begin{equation}
+%\frac{\partial E_T}{\partial y_m^{\mathrm{CAS}}}
+%=
+%\bar F_{pq}\frac{\partial F_{pq}}{\partial y_m^{\mathrm{CAS}}}
+%+
+%\bar V_{pqrs}\frac{\partial V_{pqrs}}{\partial y_m^{\mathrm{CAS}}}
+%+
+%\bar\gamma_{uv}\frac{\partial \gamma_{uv}}{\partial y_m^{\mathrm{CAS}}}
+%+
+%\bar\lambda_{uvxy}\frac{\partial \lambda_{uvxy}}{\partial y_m^{\mathrm{CAS}}}
+%+
+%\bar\lambda_{uvwxyz}
+%\frac{\partial \lambda_{uvwxyz}}{\partial y_m^{\mathrm{CAS}}}
+%+
+%\bar\epsilon_p
+%\frac{\partial \epsilon_p}{\partial y_m^{\mathrm{CAS}}}.
+%\end{equation}
+%After solving the CASSCF response problem, the DSRG relaxed densities and
+%adjoint DF weights are added to the bare CASSCF reference-density contribution.
+%
+%If DSRG reference relaxation is used, the differentiated objective changes.
+%For a one-shot or iterative relaxed-reference calculation, the Lagrangian must
+%also enforce the relaxed-reference eigenvalue or residual equations generated
+%by the effective Hamiltonian $\bar H$.  Equivalently, after convergence, one can
+%treat the relaxed reference as the stationary state of the final effective
+%Hamiltonian, but then the adjoints of the $\bar H$ one- and two-body
+%intermediates must be included in the same reverse pass.
+%
+%\subsection{Frozen Core and Frozen Virtual Orbitals}
+%
+%The DSRG module may apply additional frozen-core or frozen-virtual projections
+%relative to the parent method.  In the current layout, the perturbative
+%correlation part is built only from the remaining correlated core, active, and
+%virtual slices.  Therefore:
+%\begin{enumerate}
+%\item Frozen orbitals excluded from the DSRG correlated space should not appear
+%      in DSRG amplitude denominators or perturbative DF blocks.
+%\item The bare reference energy still contains the appropriate frozen-core
+%      contribution inherited from the parent reference.  Its explicit
+%      derivative is part of the reference-density gradient, not the DSRG
+%      correlation adjoint.
+%\item If the frozen core is parent-relaxed, the frozen-core parent response
+%      described in \cref{eq:frozen_core_zvector,eq:frozen_core_gradient} must be
+%      included in the total Z-vector system.  The DSRG perturbative right-hand
+%      side contributes to the parent orbital-response equations whenever the
+%      DSRG energy depends on rotations involving the frozen parent orbitals.
+%\item Frozen virtual orbitals require the analogous projection bookkeeping.
+%      They are absent from the DSRG amplitudes, but parent orbital response may
+%      still be required if their definition changes with geometry.
+%\end{enumerate}
+%
+%\subsection{Suggested Forte2 Realization}
+%
+%A staged implementation can be organized as follows:
+%\begin{enumerate}
+%\item Extend the DF builder or add a DSRG-specific helper that can provide raw
+%      MO three-center blocks $J^P_{pq}$ and the inverse metric $N_{PQ}$, in
+%      addition to the current orthonormalized $B^A_{pq}$ blocks.  This avoids
+%      differentiating $M^{-1/2}$.
+%\item Refactor the DSRG-MRPT2 energy routines so that each contraction has a
+%      matching reverse routine.  The reverse routines should accumulate
+%      adjoints to $F$, $V$, $J$, $\epsilon$, and the reference cumulants.
+%\item Implement reverse versions of the DSRG regularization utilities
+%      \texttt{compute\_T1\_block}, \texttt{compute\_T2\_block},
+%      \texttt{renormalize\_V\_block}, and \texttt{renormalize\_3index}.  These
+%      routines should return both tensor adjoints and orbital-energy adjoints.
+%\item For the on-the-fly $ccvv$, $cavv$, and $ccav$ paths, accumulate local
+%      adjoints inside the existing loop over the batched core index.  This
+%      keeps memory comparable to the forward code and avoids materializing the
+%      full four-index blocks.
+%\item Back-transform the final MO three-center adjoints to AO weights and add
+%      the metric adjoint to $W^M_{PQ}$.
+%\item Solve the required orbital, semicanonical, CASSCF, and frozen-core
+%      Z-vector equations.  The relaxed one-electron, two-electron, overlap, and
+%      DF derivative weights are then passed to the same integral derivative
+%      kernels used by the lower-level methods.
+%\end{enumerate}
+%
+%\subsection{Validation Strategy}
+%
+%The DF derivative should be validated in layers:
+%\begin{enumerate}
+%\item First test only the explicit DF integral derivative by holding orbitals,
+%      denominators, amplitudes, and cumulants fixed and finite-differencing the
+%      DSRG scalar energy with respect to displaced three-center and metric
+%      integrals.
+%\item Next compare fixed-reference molecular gradients against finite
+%      differences of the DSRG-MRPT2 energy evaluated at displaced geometries,
+%      including denominator and semicanonical response but without reference
+%      relaxation.
+%\item Then enable CASSCF response and state-averaged parent references.  The
+%      Z-vector right-hand side should be tested against finite differences of
+%      individual-state and state-averaged DSRG energies.
+%\item Finally test DSRG reference relaxation, frozen-core variants, and the
+%      two-component complex path.  For complex calculations, the imaginary part
+%      of the final gradient should be numerically negligible and the reported
+%      gradient should be the real differential.
+%\end{enumerate}
+%
+%\section{Implementation Decomposition}
+%\label{sec:implementation_decomposition}
+%
+%The implementation should separate method-independent derivative integral
+%kernels from method-specific density and response assembly.  The integral
+%library should know how to contract derivative integral buffers with supplied
+%weights.  It should not know whether those weights came from RHF, UHF, GHF,
+%CASSCF, state-averaged CASSCF, DSRG-MRPT2, or a Z-vector Lagrangian.
+%
+%\subsection{Integral-Library Functions}
+%
+%The following functions are method independent and belong in the integral
+%library.
+%
+%\paragraph{Center validation.}
+%The one-electron derivative code already validates that the basis centers and
+%the molecular charge centers are consistent.  The same logic should be reused
+%or generalized for three-center and two-center DF derivative kernels:
+%\begin{equation}
+%\texttt{validate\_deriv\_centers(basis, atoms, basis\_name)}.
+%\end{equation}
+%For a three-center kernel, both the auxiliary basis and the orbital basis sets
+%must have centers matching the nuclear coordinate list.  This is especially
+%important when the auxiliary basis has different shell content but the same
+%atomic centers as the orbital basis.
+%
+%\paragraph{Three-center derivative contraction.}
+%Implement a function with the logical signature
+%\begin{equation}
+%\texttt{coulomb\_3c\_deriv(aux\_basis, basis1, basis2, W3, atoms)}
+%\rightarrow
+%\mathbf{G}^{(3c)}.
+%\end{equation}
+%It computes
+%\begin{equation}
+%G^{(3c)}_{A\alpha}
+%=
+%W^P_{\mu\nu}
+%(P|\mu\nu)^{[A\alpha]}.
+%\label{eq:coulomb_3c_deriv_contract}
+%\end{equation}
+%The expected weight shape is
+%\begin{equation}
+%W3[P,\mu,\nu],
+%\end{equation}
+%matching the raw three-center integral ordering $(P|\mu\nu)$.  The function
+%should:
+%\begin{enumerate}
+%\item check that \texttt{W3.shape == (naux, nbasis1, nbasis2)};
+%\item initialize a first-derivative Libint2 Coulomb engine with
+%      \texttt{BraKet::xs\_xx};
+%\item loop over auxiliary and orbital shell triplets;
+%\item compute derivative buffers for the shell centers of $P$, $\mu$, and
+%      $\nu$;
+%\item map each derivative buffer component to the atom on which that shell is
+%      centered;
+%\item contract each buffer element with the corresponding weight and accumulate
+%      into a real gradient vector of length $3N_{\mathrm{atom}}$.
+%\end{enumerate}
+%For complex methods such as complex GHF, either provide a complex-weight
+%overload or accept a complex ndarray and accumulate
+%\begin{equation}
+%G^{(3c)}_{A\alpha}
+%=
+%\mathrm{Re}
+%\left[
+%W^P_{\mu\nu}
+%(P|\mu\nu)^{[A\alpha]}
+%\right].
+%\end{equation}
+%The derivative integrals are real for a real scalar AO and auxiliary basis; the
+%real part enforces the real-valued energy-gradient convention.
+%
+%\paragraph{Two-center metric derivative contraction.}
+%Implement a function with the logical signature
+%\begin{equation}
+%\texttt{coulomb\_2c\_deriv(aux\_basis1, aux\_basis2, W2, atoms)}
+%\rightarrow
+%\mathbf{G}^{(2c)}.
+%\end{equation}
+%It computes
+%\begin{equation}
+%G^{(2c)}_{A\alpha}
+%=
+%W^M_{PQ}(P|Q)^{[A\alpha]}.
+%\label{eq:coulomb_2c_deriv_contract}
+%\end{equation}
+%The expected weight shape is
+%\begin{equation}
+%W2[P,Q].
+%\end{equation}
+%The function should:
+%\begin{enumerate}
+%\item check that \texttt{W2.shape == (naux1, naux2)};
+%\item initialize a first-derivative Libint2 Coulomb engine with
+%      \texttt{BraKet::xs\_xs};
+%\item loop over auxiliary shell pairs;
+%\item compute derivative buffers for the two auxiliary shell centers;
+%\item map the derivative components to atoms and contract with $W^M_{PQ}$;
+%\item return a real gradient vector of length $3N_{\mathrm{atom}}$.
+%\end{enumerate}
+%If the two auxiliary bases are the same and $W^M$ is symmetric, the
+%implementation may use a symmetry-reduced shell-pair loop with off-diagonal
+%factors.  A full shell-pair loop is simpler and is the safer first
+%implementation.
+%
+%\paragraph{Combined DF derivative contraction.}
+%Add a convenience wrapper
+%\begin{equation}
+%\texttt{df\_coulomb\_deriv(aux\_basis, basis, W3, W2, atoms)}
+%\rightarrow
+%\mathbf{G}^{(2)}.
+%\end{equation}
+%It should return
+%\begin{equation}
+%\mathbf{G}^{(2)}
+%=
+%\mathbf{G}^{(3c)}
+%+
+%\mathbf{G}^{(2c)}.
+%\end{equation}
+%This wrapper should not build $W3$ or $W2$; it only dispatches the two
+%derivative contractions.  Keeping the wrapper weight-driven makes it reusable
+%for all wave-function models.
+%
+%\paragraph{Optional by-shell variants.}
+%For large systems, provide block variants analogous to the existing
+%three-center integral slices:
+%\begin{align}
+%&\texttt{coulomb\_3c\_deriv\_by\_shell(aux\_basis, basis1, basis2, shell\_slices, W3, atoms)},\\
+%&\texttt{coulomb\_2c\_deriv\_by\_shell(aux\_basis1, aux\_basis2, shell\_slices, W2, atoms)}.
+%\end{align}
+%These are useful when $W3$ is generated in auxiliary or AO blocks and the full
+%$N_{\aux}N_{\ao}^2$ tensor cannot be stored.  The by-shell functions should
+%accumulate into a caller-provided gradient vector or return the block
+%contribution for the caller to sum.
+%
+%\paragraph{Derivative integral tensor builders for testing.}
+%The production path should contract derivative buffers immediately, but tests
+%are easier if small derivative tensors can be materialized:
+%\begin{align}
+%&\texttt{coulomb\_3c\_deriv\_tensor(aux\_basis, basis1, basis2, atoms)}
+%\rightarrow
+%T_{A\alpha,P\mu\nu},\\
+%&\texttt{coulomb\_2c\_deriv\_tensor(aux\_basis1, aux\_basis2, atoms)}
+%\rightarrow
+%U_{A\alpha,PQ}.
+%\end{align}
+%These functions should be optional, test-only, or clearly documented as
+%small-system utilities because their storage scales poorly.
+%
+%\paragraph{Nanobind exposure and stubs.}
+%The public C++ functions should be exposed in the integrals API, with
+%overloads for identical basis arguments where useful.  After binding changes,
+%the Python stubs should be regenerated so that the low-level
+%\texttt{forte2.ints} functions are visible to Python-side method code and
+%tests.
+%
+%\subsection{Method-Specific Functions}
+%
+%The following functions should live outside the integral library, in SCF,
+%CASSCF, DSRG, or shared gradient modules.
+%
+%\paragraph{Metric application and DF intermediates.}
+%Build or apply the inverse Coulomb metric:
+%\begin{equation}
+%Z^P_{\mu\nu}=N_{PQ}J^Q_{\mu\nu}.
+%\end{equation}
+%This is method independent mathematically, but it belongs near the DF/Fock
+%builder because it depends on the chosen metric treatment: Cholesky solves,
+%eigenvalue truncation, or an existing stored inverse-square-root representation.
+%The derivative integral library should receive only the final weights.
+%
+%\paragraph{SCF weight builders.}
+%For each SCF reference, construct $W3$ and $W2$ from the converged density:
+%\begin{align}
+%\texttt{build\_rhf\_df\_gradient\_weights} &:
+%P=2D,\quad
+%\Pi=P P-\frac{1}{2}P P_{\mathrm{exchange}},\\
+%\texttt{build\_uhf\_df\_gradient\_weights} &:
+%D^\alpha,\ D^\beta,\quad
+%\Pi=P P-D^\alpha D^\alpha_{\mathrm{exchange}}
+%-D^\beta D^\beta_{\mathrm{exchange}},\\
+%\texttt{build\_rohf\_df\_gradient\_weights} &:
+%\text{same pair density as UHF, but with common spatial orbitals},\\
+%\texttt{build\_ghf\_df\_gradient\_weights} &:
+%\gamma^{\alpha\alpha},\gamma^{\alpha\beta},
+%\gamma^{\beta\alpha},\gamma^{\beta\beta}.
+%\end{align}
+%These functions produce the method-independent tensors
+%\begin{equation}
+%W3[P,\mu,\nu],
+%\qquad
+%W2[P,Q],
+%\end{equation}
+%then call the integral-library derivative contractions.
+%
+%\paragraph{One-electron and overlap-density builders.}
+%A full gradient driver also needs method-specific builders for:
+%\begin{enumerate}
+%\item the one-particle density that contracts with $h_{\mu\nu}^{[X]}$;
+%\item the energy-weighted density or orbital Lagrange multiplier that contracts
+%      with $S_{\mu\nu}^{[X]}$;
+%\item the nuclear repulsion derivative.
+%\end{enumerate}
+%These are not part of the two-electron DF derivative library.  They should be
+%implemented in the method gradient layer so that ROHF canonicalization,
+%complex GHF conjugation, and CASSCF response conventions are handled in one
+%place.
+%
+%\paragraph{CASSCF and SA-CASSCF density builders.}
+%For CASSCF, construct the internal-space pair density from core occupancy and
+%active-space RDMs, or directly accumulate the equivalent DF weights from the
+%core-core, core-active, and active-active energy pieces:
+%\begin{equation}
+%\Pi_{pq,rs}
+%=
+%\left\langle
+%\hat{E}_{pq}\hat{E}_{rs}
+%-
+%\delta_{qr}\hat{E}_{ps}
+%\right\rangle.
+%\end{equation}
+%For state-averaged CASSCF, build
+%\begin{equation}
+%\Pi^\sa_{pq,rs}=\sum_I w_I\Pi^I_{pq,rs}.
+%\end{equation}
+%The method code then transforms the MO-basis three-center weight back to the
+%AO basis:
+%\begin{equation}
+%W^P_{\mu\nu}=C^*_{\mu p}W^P_{pq}C_{\nu q}.
+%\end{equation}
+%
+%\paragraph{Z-vector and relaxed-density builders.}
+%The CASSCF gradient layer must solve the Z-vector equations described in
+%\cref{sec:casscf_zvector} when the target is not stationary in the optimized
+%CASSCF variables.  The outputs are relaxed one- and two-particle densities:
+%\begin{equation}
+%\overline{\gamma}=\gamma^T+\gamma^Z,
+%\qquad
+%\overline{\Pi}=\Pi^T+\Pi^Z.
+%\end{equation}
+%Those relaxed densities are then passed to the same CASSCF DF weight builder.
+%Frozen-core response, if parent-relaxed rather than constrained, also belongs
+%in this method layer.
+%
+%\paragraph{DSRG-MRPT2 adjoint builders.}
+%For DSRG-MRPT2, construct $W3$ and $W2$ from the adjoint reverse pass described
+%in \cref{sec:dsrg_mrpt2_df_derivatives}.  The method-specific code should:
+%\begin{enumerate}
+%\item retain the raw or metric-applied MO three-center blocks needed to avoid
+%      differentiating the orthonormalized $B$ tensor;
+%\item reverse the explicit and on-the-fly DSRG energy contractions to obtain
+%      adjoints of $F$, $V$, $J$, $\epsilon$, and the reference cumulants;
+%\item include reverse derivatives of the DSRG regularizers so orbital-energy
+%      denominator response enters the orbital and semicanonical Z-vector
+%      equations;
+%\item add CASSCF, state-averaged CASSCF, relaxed-reference, and frozen-core
+%      response corrections when those variants define the target energy;
+%\item back-transform the final three-center adjoints to AO weights and pass
+%      them, together with the metric adjoint, to the integral-library kernels.
+%\end{enumerate}
+%
+%\paragraph{Gradient drivers.}
+%Finally, each method should provide a high-level driver that assembles:
+%\begin{equation}
+%\mathbf{G}
+%=
+%\mathbf{G}_{\mathrm{nuc}}
+%+
+%\mathbf{G}_{1e}
+%+
+%\mathbf{G}_{2e,\df}
+%+
+%\mathbf{G}_{S}.
+%\end{equation}
+%Here $\mathbf{G}_{2e,\df}$ is supplied by the integral-library derivative
+%contractions once the method layer has generated $W3$ and $W2$.
+%
+%\section{Derivative Integral Kernel Mapping}
+%
+%For each nuclear coordinate $X=R_{A\alpha}$, the implementation target is
+%\begin{equation}
+%G^{(2)}_{A\alpha}
+%=
+%W^P_{\mu\nu}(P|\mu\nu)^{[A\alpha]}
+%+
+%W^M_{PQ}(P|Q)^{[A\alpha]}.
+%\end{equation}
+%The three-center derivative integral kernel should accumulate derivatives with
+%respect to all centers in the shell triplet $(P|\mu\nu)$:
+%\begin{equation}
+%(P|\mu\nu)^{[A\alpha]}
+%=
+%\frac{\partial}{\partial R_{A\alpha}}
+%(P|\mu\nu).
+%\end{equation}
+%If the auxiliary shell $P$ is centered on atom $A$, its derivative buffer
+%contributes to $G^{(2)}_{A\alpha}$.  If the orbital shells $\mu$ or $\nu$ are
+%centered on atom $A$, their derivative buffers also contribute to
+%$G^{(2)}_{A\alpha}$.
+%
+%Likewise, the two-center metric derivative kernel should accumulate derivatives
+%with respect to both centers in $(P|Q)$:
+%\begin{equation}
+%(P|Q)^{[A\alpha]}
+%=
+%\frac{\partial}{\partial R_{A\alpha}}
+%(P|Q).
+%\end{equation}
+%Because $W^M_{PQ}$ is symmetric, the metric contribution may use the full
+%$P,Q$ shell loop directly or a symmetry-reduced shell loop with the usual
+%off-diagonal factor.
+%
+%\section{Summary of the Working Equations}
+%
+%The density-fitted two-electron gradient contribution can be implemented with
+%the following sequence:
+%\begin{enumerate}
+%\item Build or apply the inverse Coulomb metric
+%      $N_{PQ}=(P|Q)^{-1}$.
+%\item Build the three-center integrals in the basis in which the pair density
+%      is available:
+%      \begin{equation}
+%      J^P_{pq}=C^*_{\mu p}(P|\mu\nu)C_{\nu q}.
+%      \end{equation}
+%\item Apply the inverse metric:
+%      \begin{equation}
+%      Z^P_{pq}=N_{PQ}J^Q_{pq}.
+%      \end{equation}
+%\item Build the derivative weights:
+%      \begin{align}
+%      W^P_{pq}
+%      &=
+%      \Pi_{pq,rs}Z^P_{rs},
+%      \\
+%      W^M_{PQ}
+%      &=
+%      -\frac{1}{2}
+%      \Pi_{pq,rs}Z^P_{pq}Z^Q_{rs}.
+%      \end{align}
+%      For nonvariational methods such as DSRG-MRPT2, replace this
+%      pair-density step by the adjoint equations
+%      \cref{eq:dsrg_mo_j_adjoint,eq:dsrg_metric_adjoint}.
+%\item Transform the three-center weight to the AO basis:
+%      \begin{equation}
+%      W^P_{\mu\nu}=C^*_{\mu p}W^P_{pq}C_{\nu q}.
+%      \end{equation}
+%\item Contract first-derivative integral buffers:
+%      \begin{equation}
+%      E_2^{[X]}
+%      =
+%      W^P_{\mu\nu}(P|\mu\nu)^{[X]}
+%      +
+%      W^M_{PQ}(P|Q)^{[X]}.
+%      \end{equation}
+%\end{enumerate}
+
+\end{document}

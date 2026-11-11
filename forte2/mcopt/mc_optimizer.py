@@ -1,4 +1,3 @@
-from abc import ABC
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -6,27 +5,25 @@ from numpy.typing import NDArray
 
 
 from forte2.base_classes import (
+    ActiveSpaceDriver,
     CIBase,
     RelCIBase,
-    SystemMixin,
-    MOsMixin,
-    MOSpaceMixin,
+    Method,
 )
-from forte2.orbitals import Semicanonicalizer
-from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
+from forte2.orbitals import FinalOrbitals, mo_overlap
 from forte2.helpers import logger, LBFGS
 from forte2.system.basis_utils import BasisInfo
-from forte2.ci.ci_utils import (
-    pretty_print_ci_summary,
-    pretty_print_ci_nat_occ_numbers,
-    pretty_print_ci_dets,
-    pretty_print_ci_transition_props,
-)
+from forte2.system import ModelSystem
+from forte2.symmetry import real_sph_to_j_adapted
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
+
+# Largest tolerated deviation of C^H S C from the identity. Valid orbitals stay
+# below ~1e-9 even in nearly linearly dependent bases.
+_ORTHONORMALITY_TOL = 1.0e-8
 
 
 @dataclass
-class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
+class MCOptimizerBase(ActiveSpaceDriver, Method):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -53,11 +50,22 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         Maximum orbital rotation size for L-BFGS.
     do_transition_dipole : bool, optional, default=False
         Whether to compute and report transition dipole moments at the end of the optimization.
-    final_orbital : str, optional, default="semicanonical"
-        Whether to return the final orbitals in the semicanonical basis or the original basis.
     lambda_penalty : float, optional, default=0.0
-    The penalty parameter for active space orbital rotation.
-    A non-zero value adds a penalty term to the energy to discourage deviation from a reference space.
+        Non-negative coefficient of ||P_active - P_reference||_F^2. The
+        reference is the initial active subspace and remains fixed during
+        this run. E, E_avg, and E_ci remain physical energies; E_penalty and
+        E_objective report the penalty and augmented state-averaged energy.
+    final_orbitals : str, optional, default="semicanonical"
+        Specify the type of final orbitals. Allowed values are:
+
+        - "semicanonical": The average Fock matrix is diagonal within each orbital subspace.
+        - "natural": Same as semicanonical, but the active orbitals are natural orbitals
+          and diagonalize the spin- and state-averaged 1-RDM within the CAS
+          subspace or within each of the GAS subspaces.
+        - "original": The orbitals are left in the original basis after the optimization.
+          This option is only for debugging purposes and should generally be avoided
+          as the active orbitals will not be uniquely defined and may not be suitable
+          for subsequent calculations.
 
     Notes
     -----
@@ -87,41 +95,41 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
     ### Post-iteration
     do_transition_dipole: bool = False
-    final_orbital: str = "semicanonical"
+    final_orbitals: FinalOrbitals = "semicanonical"
 
     ### Non-init attributes
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
+    E_penalty: float = field(default=0.0, init=False)
+    E_objective: float = field(default=0.0, init=False)
+    delta_act: float = field(default=0.0, init=False)
 
     def __post_init__(self):
-        if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
-            raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
+        super().__post_init__()
+        self._validate_penalty()
 
-        if self.final_orbital not in [
-            "semicanonical",
-            "original",
-        ]:
-            raise ValueError(
-                "final_orbital must be either 'semicanonical' or 'original'."
-            )
+    def _validate_penalty(self):
+        if not np.isfinite(self.lambda_penalty) or self.lambda_penalty < 0:
+            raise ValueError("lambda_penalty must be finite and non-negative.")
 
     def __call__(self, method):
-        self.parent_method = method
-        # make sure we don't print the CI output at INFO1 level
+        self._register_parent_method(method)
+        # suppress CI microiteration printing
         current_verbosity = logger.get_verbosity_level()
-        # only log subproblem if the verbosity is higher than INFO1
-        if current_verbosity > 3:
-            self.ci_solver_verbosity = current_verbosity
+        if current_verbosity > logger.VERBOSITY_INFO1:
+            self.ci_solver.log_level = current_verbosity
         else:
-            self.ci_solver_verbosity = current_verbosity + 1
+            self.ci_solver.log_level = current_verbosity + 1
         return self
 
     def _startup(self):
+        self._validate_penalty()
         if not self.parent_method.executed:
             self.parent_method.run()
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        self.system = self.parent_method.system
+        self.mos = self.parent_method.mos.copy()
+        self._check_orthonormal_orbitals()
         # make sure to register parent_method
         self.ci_solver = self.ci_solver(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
@@ -134,7 +142,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
-        self._C = self.C[0][:, perm].copy()
+        self._C = self.mos.C[0][:, perm].copy()
         # core slice does not include frozen orbitals!
         self.core = self.mo_space.docc
         # self.actv will be a list if multiple GASes are defined
@@ -158,6 +166,19 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         self.nrr = self._get_nonredundant_rotations()
 
+    def _check_orthonormal_orbitals(self):
+        # The optimizer only applies unitary rotations, so it never repairs
+        # non-orthonormal starting orbitals.
+        C = self.mos.C[0]
+        error = np.max(np.abs(mo_overlap(C, self.system, C) - np.eye(C.shape[1])))
+        if error > _ORTHONORMALITY_TOL:
+            raise ValueError(
+                "MCOptimizer requires starting orbitals that are orthonormal in the "
+                "AO basis of its system, but C^H S C deviates from the identity by "
+                f"{error:.2e}. Orbitals from another geometry or basis set must be "
+                "mapped with forte2.orbitals.transfer_orbitals first."
+            )
+
     def run(self):
         """
         Run the two-step orbital-CI optimization.
@@ -166,6 +187,12 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         -------
         self : MCOptimizer
             The instance of the optimizer with the results stored in its attributes.
+
+        Raises
+        ------
+        ValueError
+            If the starting orbitals are not orthonormal in the AO basis of the
+            system.
         """
         self._startup()
         self.Hcore = self.system.ints_hcore()  # hcore in AO basis
@@ -192,19 +219,6 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             lambda_penalty=self.lambda_penalty,
         )
 
-        # _CISolver = RelCISolver if self.two_component else CISolver
-        # self.ci_solver = _CISolver(
-        #     states=self.states,
-        #     core_orbitals=self.mo_space.docc_orbitals,
-        #     active_orbitals=self.mo_space.active_orbitals,
-        #     nroots=self.sa_info.nroots,
-        #     weights=self.sa_info.weights,
-        #     log_level=self.ci_solver_verbosity,
-        #     die_if_not_converged=False,
-        #     ci_params=self.ci_params,
-        #     davidson_liu_params=self.davidson_liu_params,
-        # )(self.parent_method)
-
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
         self.lbfgs_solver = LBFGS(
@@ -227,6 +241,14 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.e_tol:.1e}"
         )
         logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.e_tol:.1e}\n")
+        if self.lambda_penalty:
+            logger.log_info1(
+                f"  {'4. abs(F_orb - F_orb_old)':<32} < {self.e_tol:.1e}"
+            )
+            logger.log_info1(
+                f"Projector penalty lambda = {self.lambda_penalty:g}; "
+                "F_orb = E_orb + penalty. E_avg and E_orb are physical energies."
+            )
 
         logger.log_info1("=" * width)
         logger.log_info1(
@@ -244,11 +266,11 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         # Energy after orbital optimization
         self.E_orb = self.E_avg
         self.E_orb_old = self.E_orb
+        self.E_orb_objective = self.E_orb + self.orb_opt._penalty_energy()
+        self.E_orb_objective_old = self.E_orb_objective
 
-        self.g1_act = self.make_average_1rdm()
-        g2_act = self.make_average_2rdm()
-        # ci_maxiter_save = self.ci_solver.get_maxiter()
-        # self.ci_solver.set_maxiter(self.ci_maxiter)
+        self.g1_act = self.make_average_rdm(1)
+        g2_act = self.make_average_rdm(2)
 
         # Prepare the orbital optimizer
         self.orb_opt.set_rdms(self.g1_act, g2_act)
@@ -259,8 +281,8 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         self.g_old = np.zeros(self.orb_opt.nrot, dtype=self.dtype)
 
-        # This holds the *overall* orbital rotation, C_current = C_0 @ exp(R)
-        # It's used as the initial guess at the start of each orbital optimization
+        # Accumulated packed increments used to request successive right
+        # rotations. The actual overall transformation is orb_opt.U.
         R = np.zeros(self.orb_opt.nrot, dtype=self.dtype)
 
         if self.orb_opt.nrot == 0:
@@ -272,7 +294,9 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             conv = False
             while self.iter < self.maxiter:
                 # 1. Optimize orbitals at fixed CI expansion
-                self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
+                self.E_orb_objective = self.lbfgs_solver.minimize(self.orb_opt, R)
+                self.E_penalty = self.orb_opt._penalty_energy()
+                self.E_orb = self.E_orb_objective - self.E_penalty
                 self._C = self.orb_opt.C.copy()
                 self.delta_act = self.orb_opt.active_space_deviation()
                 # 2. Convergence checks
@@ -315,8 +339,8 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                 self.E_ci = np.array(self.ci_solver.E)
                 self.E_avg = self.ci_solver.compute_average_energy()
                 self.E = self.E_avg
-                self.g1_act = self.make_average_1rdm()
-                g2_act = self.make_average_2rdm()
+                self.g1_act = self.make_average_rdm(1)
+                g2_act = self.make_average_rdm(2)
                 self.orb_opt.set_rdms(self.g1_act, g2_act)
                 self.iter += 1
             if self.iter >= self.maxiter and not conv:
@@ -329,7 +353,6 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                     logger.log_warning(
                         f"Orbital optimization did not converge in {self.maxiter} iterations."
                     )
-        # self.ci_solver.set_maxiter(ci_maxiter_save)
         self.ci_solver.set_ints(
             self.orb_opt.Ecore + self.system.nuclear_repulsion,
             self.orb_opt.Fcore[self.actv, self.actv],
@@ -354,100 +377,77 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # undo _make_spaces_contiguous
         perm = self.mo_space.contig_to_orig
-        self.C[0] = self._C[:, perm].copy()
+        self.mos.C[0] = self._C[:, perm].copy()
 
+        # optionally, rotate the final orbitals to semicanonical or natural orbitals
+        self._rotate_final_orbitals()
+        # Final rotations stay within orbital subspaces and preserve P_active.
+        # Keep physical energies compatible with CI and downstream methods.
+        self.E_penalty = self.orb_opt._penalty_energy()
+        self.E_objective = self.E_avg + self.E_penalty
+        self.delta_act = self.orb_opt.active_space_deviation()
+
+        # print information
         self._post_process()
-
-        if self.final_orbital == "semicanonical":
-            semi = Semicanonicalizer(
-                mo_space=self.mo_space,
-                system=self.system,
-                mix_inactive=False,
-                mix_active=False,
-            )
-            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(
-                g1=self.make_average_1rdm(),
-                C_contig=C_contig,
-            )
-            self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
-
-            # recompute the CI vectors in the semicanonical basis
-            if self.system.two_component:
-                ints = SpinorbitalIntegrals(
-                    system=self.system,
-                    C=self.C[0],
-                    spinorbitals=self.mo_space.active_indices,
-                    core_spinorbitals=self.mo_space.docc_indices,
-                )
-            else:
-                ints = RestrictedMOIntegrals(
-                    system=self.system,
-                    C=self.C[0],
-                    orbitals=self.mo_space.active_indices,
-                    core_orbitals=self.mo_space.docc_indices,
-                )
-            self.ci_solver.set_ints(ints.E, ints.H, ints.V)
-            # Basis change, can't restart from previous CI vectors *reliably*
-            self.ci_solver.reset_eigensolver()
-            self.ci_solver.run()
 
         convergence_status = self.ci_solver.get_convergence_status()
         if convergence_status and not all(convergence_status):
             logger.log_warning(
                 f"CI solver did not converge for all roots: {convergence_status}"
             )
-            logger.log_warning("Consider increasing ci_maxiter.")
+            logger.log_warning("Consider increasing davidson_liu_params.maxiter.")
 
         self.executed = True
 
         if self.lambda_penalty > 0.0:
             logger.log_info1(
-                f"Using penalty parameter lambda = {self.lambda_penalty:.4f} for active space orbital rotation."
+                f"Final projector penalty energy: {self.E_penalty:.10f}"
             )
-            self.delta_act = self.orb_opt.active_space_deviation()
-            if self.delta_act > 1e-4:
-                logger.log_info1(
-                    f"Final active-space deviation ||P_A - P_ref||_F = {self.delta_act:.10e}"
-                )
-            else:
-                logger.log_info1(f"The final active-space deviation is under 1e-4.")
-
-        elif self.lambda_penalty < 0.0:
-            raise ValueError("Penalty parameter lambda must be non-negative.")
+            logger.log_info1(f"Final augmented objective: {self.E_objective:.10f}")
+            logger.log_info1(
+                f"Final active-space deviation ||P_A - P_ref||_F = {self.delta_act:.10e}"
+            )
 
         return self
 
-    def _post_process(self):
-        pretty_print_ci_summary(self.ci_solver.sa_info, self.ci_solver.evals_per_solver)
-        self.ci_solver.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(
-            self.ci_solver.sa_info, self.mo_space, self.ci_solver.nat_occs
-        )
-        top_dets = self.ci_solver.get_top_determinants()
-        pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)
-        if not self.system.two_component:
-            # TODO: enable AO composition for 2c
-            self._print_ao_composition()
-        if self.do_transition_dipole:
-            self.ci_solver.compute_transition_properties(self.C[0])
-            pretty_print_ci_transition_props(
-                self.ci_solver.sa_info,
-                self.ci_solver.transition_dipoles,
-                self.ci_solver.oscillator_strengths,
-                self.ci_solver.evals_per_solver,
-            )
+    def _print_orbital_composition(self) -> None:
+        self._print_ao_composition()
+
+    def _final_orbital_irrep_indices(self) -> NDArray:
+        """Return the irrep indices of the final orbitals in contiguous ordering."""
+
+        return np.asarray(self.mos.irrep_indices[0], dtype=int)[
+            self.mo_space.orig_to_contig
+        ]
 
     def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            return
         basis_info = BasisInfo(self.system, self.system.basis)
-        logger.log_info1("\nAO Composition of core MOs:")
-        basis_info.print_ao_composition(
-            self.C[0], list(range(self.core.start, self.core.stop))
-        )
-        logger.log_info1("\nAO Composition of active MOs:")
-        basis_info.print_ao_composition(
-            self.C[0], list(range(self.actv.start, self.actv.stop))
-        )
+        if getattr(self.system, "two_component", False):
+            if self.system.x2c.x2c_type == "so":
+                if not hasattr(self, "Usph2j"):
+                    ua, ub = real_sph_to_j_adapted(self.system.basis)
+                    self.Usph2j = np.vstack((ua, ub))
+                C = self.Usph2j.conj().T @ self.mos.C[0]
+                logger.log_info1("\nSpinor Composition of core MOs:")
+                basis_info.print_spinor_composition(C, self.mo_space.docc_indices)
+                logger.log_info1("\nSpinor Composition of active MOs:")
+                basis_info.print_spinor_composition(C, self.mo_space.active_indices)
+            else:
+                logger.log_info1("\nAO Composition of core MOs:")
+                basis_info.print_ao_composition(
+                    self.mos.C[0], self.mo_space.docc_indices, spinorbital=True
+                )
+                logger.log_info1("\nAO Composition of active MOs:")
+                basis_info.print_ao_composition(
+                    self.mos.C[0], self.mo_space.active_indices, spinorbital=True
+                )
+        else:
+            logger.log_info1("\nAO Composition of core MOs:")
+            basis_info.print_ao_composition(self.mos.C[0], self.mo_space.docc_indices)
+            logger.log_info1("\nAO Composition of active MOs:")
+            basis_info.print_ao_composition(self.mos.C[0], self.mo_space.active_indices)
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
@@ -477,7 +477,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # zero out rotations between orbitals of different irreps
         if self.system.point_group.upper() != "C1":
-            _irrid = np.array(self.irrep_indices[0])
+            _irrid = self._final_orbital_irrep_indices()
             # equivalent to:
             # for i, j in range(nmo):
             #   if i^j != 0:
@@ -500,6 +500,9 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             is_ci_eigval_conv,
             is_ci_avg_conv,
         ]
+        if self.lambda_penalty:
+            self.delta_objective = self.E_orb_objective - self.E_orb_objective_old
+            criteria.append(abs(self.delta_objective) < self.e_tol)
 
         conv = all(criteria)
         conv_str = "".join(["." if _ else "x" for _ in criteria])
@@ -507,59 +510,58 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         self.E_ci_old = self.E_ci.copy()
         self.E_avg_old = self.E_avg
         self.E_orb_old = self.E_orb
+        self.E_orb_objective_old = self.E_orb_objective
         return conv, conv_str
-
-    def make_average_1rdm(self):
-        return self.ci_solver.make_average_1rdm()
-
-    def make_average_2rdm(self):
-        return self.ci_solver.make_average_2rdm()
-
-    def make_average_2cumulant(self):
-        return self.ci_solver.make_average_2cumulant()
-
-    def make_average_3rdm(self):
-        return self.ci_solver.make_average_3rdm()
-
-    def make_average_3cumulant(self):
-        return self.ci_solver.make_average_3cumulant()
-
-    def make_average_cumulants(self):
-        return self.ci_solver.make_average_cumulants()
 
 
 class MCOptimizer(MCOptimizerBase):
-    def make_sd_1rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> tuple[NDArray, NDArray]:
-        return self.ci_solver.make_sd_1rdm(left_root, right_root)
+    def gradient(self, root=None) -> NDArray:
+        r"""
+        Compute a target-root CASSCF/GASSCF analytic nuclear gradient.
 
-    def make_sd_2rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> tuple[NDArray, NDArray, NDArray]:
-        return self.ci_solver.make_sd_2rdm(left_root, right_root)
+        This implementation supports real nonrelativistic and complex
+        two-component state-specific CASSCF/GASSCF wave functions, including
+        SF- and SO-X2C-1e Hamiltonians. It also supports individual roots of
+        real nonrelativistic SA-CASSCF/GASSCF wave functions when
+        ``final_orbitals='original'``. Frozen-core, frozen-virtual,
+        active-frozen orbital, and frozen inter-GAS orbital response are not
+        supported. Nonzero projector penalties also require additional
+        response terms and are not supported by this nuclear gradient.
+        Point and Gaussian nuclear charge distributions are supported; Gaussian
+        charges require libcint. Requesting any unsupported feature raises
+        ``NotImplementedError``.
+        Both the orbital optimization and all CI roots must be converged; an
+        unconverged wave function raises ``RuntimeError`` because the
+        stationary-gradient expression does not apply.
 
-    def make_sd_3rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-        return self.ci_solver.make_sd_3rdm(left_root, right_root)
+        The gradient is assembled in the same integral-layer form as the RHF
+        and UHF gradients:
 
-    def make_sf_1rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> NDArray:
-        return self.ci_solver.make_sf_1rdm(left_root, right_root)
+        .. math::
+            E^x =
+            E_\mathrm{NN}^x
+            + h^x_{\mu\nu}\Gamma_{\mu\nu}
+            - S^x_{\mu\nu} W^S_{\mu\nu}
+            + W^P_{\mu\nu}(P|\mu\nu)^x
+            + W_{PQ}(P|Q)^x.
 
-    def make_sf_2rdm(
-        self,
-        left_root: int,
-        right_root: int | None = None,
-    ) -> NDArray:
-        return self.ci_solver.make_sf_2rdm(left_root, right_root)
+        Here :math:`\Gamma_{\mu\nu}` is the full spin-free one-particle
+        density, :math:`W^S_{\mu\nu}` is the AO energy-weighted density, and
+        :math:`W^P_{\mu\nu}` and :math:`W_{PQ}` are the density-fitted
+        two-electron derivative weights defined in
+        ``docs/technical_notes/df_gradients.tex``.
+
+        Parameters
+        ----------
+        root : int or None, optional
+            Absolute target-root index. Required for a state-averaged wave
+            function and otherwise defaults to zero.
+
+        Returns
+        -------
+        NDArray
+            Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
+        """
+        from .mc_optimizer_grad import _compute_casscf_gradient
+
+        return _compute_casscf_gradient(self, root=root)

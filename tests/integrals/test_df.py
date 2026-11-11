@@ -1,6 +1,7 @@
 import numpy as np
 
 import forte2
+from forte2.lib import ints
 
 
 def test_df():
@@ -17,10 +18,10 @@ O 2.500000000000  0.000000000000  0.000000000000
     #   (mn|rs) = (P|mn) (P|Q)^{-1} (Q|rs)
 
     # Compute the two-electron integrals in the JKfit basis AA = (P|Q)
-    AA = forte2.ints.coulomb_2c(jkfit_basis)
+    AA = ints.coulomb_2c(jkfit_basis)
 
     # Compute the two-electron integrals in the JKfit/computational basis Acc = (P|mn)
-    Acc = forte2.ints.coulomb_3c(jkfit_basis, system.basis, system.basis)
+    Acc = ints.coulomb_3c(jkfit_basis, system.basis, system.basis)
 
     # Compute the pseudoinverse: (P|Q)^{-1} and check it this raises LinAlgError
     try:
@@ -36,7 +37,7 @@ O 2.500000000000  0.000000000000  0.000000000000
     end = time.monotonic_ns()
     print(f"[forte2] Einsum timing:                 {int(end - start) // 1000000:d} ms")
 
-    V = forte2.ints.coulomb_4c(system.basis)
+    V = ints.coulomb_4c(system.basis)
 
     dV = np.linalg.norm(V - Vdf)
     print(f"||V - Vdf|| = {dV:.3e}")

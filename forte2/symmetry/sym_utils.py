@@ -1,3 +1,5 @@
+from numbers import Integral
+
 import numpy as np
 
 SYMMETRY_OPS = {
@@ -153,3 +155,122 @@ def reflection_mat(plane):
     k = 3 - i - j  # the axis not in the plane (since {0,1,2})
     R[k, k] = -1.0
     return R
+
+
+def local_sign(l, m, op):
+    """
+    Return phase describing how the spherical harmonic Y_lm transforms under Abelian symmetry
+    operations `op`, which is one of [E, C2z, C2x, C2y, σ_xy, σ_xz, σ_yz].
+    """
+    ma = abs(m)
+    if op == "E":
+        return 1
+    if op == "i":
+        return (-1) ** l
+    if op == "C2z":
+        return (-1) ** ma
+    if op == "C2x":
+        if m == 0:
+            return (-1) ** l
+        return (-1) ** (l + ma) if m > 0 else (-1) ** (l + ma + 1)
+    if op == "C2y":
+        if m == 0:
+            return (-1) ** l
+        return (-1) ** l if m > 0 else (-1) ** (l + 1)
+    if op == "σ_xz":
+        return 1 if m >= 0 else -1
+    if op == "σ_yz":
+        if m == 0:
+            return 1
+        return (-1) ** ma if m > 0 else (-1) ** (ma + 1)
+    if op == "σ_xy":
+        return (-1) ** (l + ma)
+    raise ValueError(f"Unknown op {op}")
+
+
+def get_symmetry_ops(point_group):
+    """
+    Compute 3x3 matrix representations for the symmetry operators in `point_group`.
+    These representation perform reflections/rotations in the molecular principal frame.
+    """
+    symmetry_ops = {}
+
+    axes = {"x": 0, "y": 1, "z": 2}
+    I = np.eye(3)
+
+    ops = SYMMETRY_OPS[point_group]
+    for op in ops:
+        if op == "E":
+            symmetry_ops[op] = I
+        elif "C2" in op:
+            symmetry_ops[op] = rotation_mat(I[:, axes[op[-1]]], np.deg2rad(180.0))
+        elif op == "i":
+            symmetry_ops[op] = -I
+        elif "σ_" in op:
+            symmetry_ops[op] = reflection_mat((axes[op[-2]], axes[op[-1]]))
+    return symmetry_ops
+
+
+def get_irrep_index(pg, value):
+    """
+    Return the Cotton index of an irrep given by its label or index.
+
+    Parameters
+    ----------
+    pg : str
+        The Abelian point group.
+    value : str | int
+        The irrep's label, in any case, or its Cotton index.
+
+    Returns
+    -------
+    int
+        The irrep's Cotton index.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not an irrep of ``pg``.
+    """
+    labels = COTTON_LABELS[pg]
+    if isinstance(value, str) and value.strip().lower() in labels:
+        return labels[value.strip().lower()]
+    is_index = isinstance(value, Integral) and not isinstance(value, bool)
+    if is_index and 0 <= value < len(labels):
+        return int(value)
+    raise ValueError(
+        f"Unknown irrep {value!r} for {pg}. The irreps are {list(labels)}."
+    )
+
+
+def irrep_product(irreps):
+    """
+    Return the direct product of irreps of an Abelian point group.
+
+    Parameters
+    ----------
+    irreps : ArrayLike
+        The Cotton indices of the irreps.
+
+    Returns
+    -------
+    int
+        The Cotton index of their product. An empty product is totally symmetric.
+
+    Raises
+    ------
+    ValueError
+        If an irrep is not an integer from 0 to 7.
+    """
+    irreps = np.asarray(irreps)
+    if irreps.size == 0:
+        return 0
+    if not np.issubdtype(irreps.dtype, np.integer):
+        raise ValueError(f"Irreps must be integers, but got {irreps.dtype} values.")
+    bad = irreps[(irreps < 0) | (irreps > 7)]
+    if bad.size:
+        raise ValueError(
+            f"Irreps must be Cotton indices from 0 to 7, but got {bad.tolist()}."
+        )
+    # In Cotton order, the product of irreps i and j has index i ^ j.
+    return int(np.bitwise_xor.reduce(irreps))

@@ -1,5 +1,8 @@
 #pragma once
+
+#include <climits>
 #include <complex>
+
 namespace forte2 {
 
 extern "C" {

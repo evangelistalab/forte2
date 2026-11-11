@@ -9,7 +9,12 @@ from forte2.symmetry import real_sph_to_j_adapted
 from forte2.helpers import canonical_orth
 from .scf_base import SCFBase
 from .rhf import RHF
-from .scf_utils import guess_mix_ghf, alpha_beta_mix, break_complex_conjugation_symmetry
+from .scf_utils import (
+    guess_mix_ghf,
+    alpha_beta_mix,
+    break_complex_conjugation_symmetry,
+    sz_adapt_degenerate_orbitals,
+)
 
 
 @dataclass
@@ -32,6 +37,11 @@ class GHF(SCFBase):
 
     Parameters
     ----------
+    ms_guess : float, optional, default=None
+        Target spin projection (Ms) used only to build the initial guess
+        occupation (na_guess/nb_guess). Must be a multiple of 0.5 and
+        compatible with the electron count. If None, a default occupation is
+        used. Also gates whether ``guess_mix`` is applied.
     guess_mix : bool, optional, default=False
         If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if nel is even.
     alpha_beta_mix : bool, optional, default=False
@@ -50,7 +60,15 @@ class GHF(SCFBase):
     j_adapt: bool = False
 
     _diis_update = RHF._diis_update
-    _assign_orbital_symmetries = RHF._assign_orbital_symmetries
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = True
+        if self.target_symmetry is not None or self.irrep_occupations is not None:
+            raise ValueError(
+                "GHF does not use point-group symmetry, so it does not support "
+                "target_symmetry or irrep_occupations."
+            )
 
     def __call__(self, system):
         system.two_component = True
@@ -59,9 +77,16 @@ class GHF(SCFBase):
             self.Usph2j = np.vstack((ua, ub))
             S = system.ints_overlap()
             S_spinor = self.Usph2j.conj().T @ S @ self.Usph2j
-            self.Xorth_spinor, _, info = canonical_orth(S_spinor, system.overlap_ortho_rtol)
+            self.Xorth_spinor, _, info = canonical_orth(
+                S_spinor, system.overlap_ortho_rtol
+            )
             self.nmo_spinor = info["n_kept"]
         self = super().__call__(system)
+        if system.point_group != "C1":
+            logger.log_warning(
+                f"GHF does not use point-group symmetry. Running in C1 instead of "
+                f"{system.point_group}."
+            )
         self._parse_state()
         return self
 
@@ -85,21 +110,16 @@ class GHF(SCFBase):
             ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
-        Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
-        nbf = Jaa.shape[0]
         if self.iter == 0 and self.ms_guess is not None:
             # Apply na/nb_guess
             mo_a, mo_b = self._guess_ms(self.C[0])
             occ = list(mo_a[: self.na_guess]) + list(mo_b[: self.nb_guess])
             occ = sorted(occ)
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K([self.C[0][:, occ]])
+            Cocc = self.C[0][:, occ]
         else:
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K([self.C[0][:, : self.nel]])
-        F = H.copy()
-        F[:nbf, :nbf] += Jaa + Jbb - Kaa
-        F[:nbf, nbf:] += -Kab
-        F[nbf:, :nbf] += -Kba
-        F[nbf:, nbf:] += Jaa + Jbb - Kbb
+            Cocc = self.C[0][:, : self.nel]
+        J, K = fock_builder.build_JK([Cocc])
+        F = H + J[0] - K[0]
 
         F_canon = F
 
@@ -133,16 +153,20 @@ class GHF(SCFBase):
         return np.block([[Daa, Dab], [Dba, Dbb]])
 
     def _apply_level_shift(self, F, S):
-        if self.level_shift is None or self.level_shift < 1e-4:
+        if self._current_level_shift is None or self._current_level_shift < 1e-4:
             return F
         Daa, Dab, Dba, Dbb = self.D
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         D_vir = S - S @ D_spinor @ S
 
-        return [F[0] + self.level_shift * D_vir]
+        return [F[0] + self._current_level_shift * D_vir]
 
     def _initial_guess(self, H, guess_type="minao"):
-        C = RHF._initial_guess(self, H, guess_type)[0]
+        eps, (C,), irreps = RHF._initial_guess(self, H, guess_type)
+        # The guess Hamiltonian is time-reversal symmetric, so its spinors come in
+        # degenerate Kramers pairs, which the eigensolver mixes arbitrarily.
+        S = self.system.ints_overlap()[: self.nbf, : self.nbf]
+        C = sz_adapt_degenerate_orbitals(eps[0], C, S)
         if self.guess_mix and self.ms_guess is not None:
             if self.twicems_guess == 0:
                 mo_a, mo_b = self._guess_ms(C)
@@ -157,7 +181,7 @@ class GHF(SCFBase):
             C = alpha_beta_mix(C)
         if self.break_complex_symmetry:
             C = break_complex_conjugation_symmetry(C)
-        return [C]
+        return eps, [C], irreps
 
     def _build_ao_grad(self, S, F):
         Daa, Dab, Dba, Dbb = self.D
@@ -172,16 +196,16 @@ class GHF(SCFBase):
         Xorth = self.Xorth_spinor if self.j_adapt else self.Xorth
         Ftilde = Xorth.conj().T @ F @ Xorth
         e, c = np.linalg.eigh(Ftilde)
-        return e, Xorth @ c
+        return e, Xorth @ c, np.zeros(len(e), dtype=int)
 
     def _diagonalize_fock(self, F):
         if self.j_adapt:
             F_spinor = self.Usph2j.conj().T @ F[0] @ self.Usph2j
-            eps, C = self._eigh(F_spinor)
+            eps, C, irreps = self._eigh(F_spinor)
             C = self.Usph2j @ C
         else:
-            eps, C = self._eigh(F[0])
-        return [eps], [C]
+            eps, C, irreps = self._eigh(F[0])
+        return [eps], [C], [irreps]
 
     def _spin(self, S):
         """
@@ -215,6 +239,16 @@ class GHF(SCFBase):
         )
         return energy.real
 
+    def gradient(self) -> np.ndarray:
+        """Compute the density-fitted GHF analytic nuclear gradient.
+
+        The SCF calculation is run automatically if needed. The returned
+        gradient has shape ``(natoms, 3)`` and is expressed in Hartree/Bohr.
+        """
+        from .ghf_grad import _compute_ghf_gradient
+
+        return _compute_ghf_gradient(self)
+
     def _get_occupation(self):
         self.nocc = self.nel
         self.nuocc = self.nmo * 2 - self.nocc
@@ -240,7 +274,9 @@ class GHF(SCFBase):
             idx = nocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _guess_ms(self, C):
@@ -262,7 +298,7 @@ class GHF(SCFBase):
             # send a PR if you want this changed
             return
         basis_info = BasisInfo(self.system, self.system.basis)
-        if self.system.x2c_type == "so":
+        if self.system.x2c.x2c_type == "so":
             logger.log_info1("\nSpinor Composition of MOs (HOMO-6 to HOMO):")
             if not hasattr(self, "Usph2j"):
                 ua, ub = real_sph_to_j_adapted(self.system.basis)

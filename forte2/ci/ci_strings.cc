@@ -92,8 +92,8 @@ void CIStrings::startup() {
 
     // Build the 1h1p string lists and their addressers. These strings can have occupation patterns
     // that do not fall under the GAS restriction. Used in the Knowles-Handy algorithm.
-    gas_alpha_1h1p_occupations_ = generate_1h1p_occupations(gas_alpha_occupations_);
-    gas_beta_1h1p_occupations_ = generate_1h1p_occupations(gas_beta_occupations_);
+    gas_alpha_1h1p_occupations_ = generate_1h1p_occupations(gas_alpha_occupations_, gas_size_);
+    gas_beta_1h1p_occupations_ = generate_1h1p_occupations(gas_beta_occupations_, gas_size_);
 
     auto alpha_strings_1h1p_ = make_strings_with_occupation(
         ngas_spaces_, nirrep_, gas_size_, gas_mos_, gas_alpha_1h1p_occupations_, string_class_);

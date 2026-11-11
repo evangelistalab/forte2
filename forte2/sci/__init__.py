@@ -1,1 +1,2 @@
-from .sci import SelectedCI, SelectedCISolver
+from .sci import SelectedCISolver
+from .rel_sci import RelSelectedCISolver

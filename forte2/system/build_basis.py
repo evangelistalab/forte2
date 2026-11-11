@@ -6,9 +6,10 @@ import os
 
 import numpy as np
 
-from forte2 import Basis, Shell
+from forte2.lib.ints import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
+from .autoaux_basis import autoaux_electron_shells
 
 try:
     import basis_set_exchange as bse
@@ -120,6 +121,11 @@ def build_basis(
             1. If the basis set name ends with ``.json``, it is treated as a local JSON file path.
             2. If a JSON file with the basis set name exists in the ``forte2/data/basis`` directory, it is used.
             3. If neither of the above is found, Basis Set Exchange is used (if available).
+
+        If a basis set name ends with ``-autoaux``, for example ``"cc-pvtz-autoaux"``,
+        an AutoAux auxiliary basis (Stoychev, Auer, and Neese, 2017) is generated from
+        the orbital basis set named before the suffix, which is loaded from the sources
+        listed here.
 
         For example, a basis set assignment dictionary can look like::
 
@@ -259,6 +265,67 @@ def decontract_basis(basis: Basis, embed_normalization_into_coefficients: bool =
     return basis_decon
 
 
+def build_sap_potential_basis(basis_name: str, geometry) -> Basis:
+    r"""Build a Gaussian charge-density representation of an SAP potential.
+
+    SAP basis coefficients use the convention of Lehtola, where each primitive
+    coefficient multiplies a unit-charge Gaussian potential. Three-center
+    Coulomb integrals instead expect a charge density. For an unnormalized
+    s-type primitive, the conversion is
+
+    .. math::
+        c_k e^{-\alpha_k r^2}
+        \longrightarrow
+        -c_k \left(\frac{\alpha_k}{\pi}\right)^{3/2}
+        e^{-\alpha_k r^2}.
+
+    The minus sign converts the electronic-potential coefficient convention to
+    a positive screening charge density.
+
+    Parameters
+    ----------
+    basis_name : str
+        Name of an SAP basis available locally or from Basis Set Exchange.
+    geometry : GeometryHelper
+        Molecular geometry on which to center the SAP functions.
+
+    Returns
+    -------
+    Basis
+        Unnormalized, contracted s-type density basis suitable for
+        three-center Coulomb integrals.
+    """
+    sap_basis = build_basis(
+        basis_name,
+        geometry,
+        embed_normalization_into_coefficients=False,
+    )
+
+    density_basis = Basis()
+    density_basis.set_name(f"{basis_name}-density")
+    for shell in sap_basis:
+        if shell.l != 0:
+            raise ValueError(
+                f"SAP basis '{basis_name}' contains a shell with l={shell.l}; "
+                "only s-type SAP functions are supported."
+            )
+        exponents = np.asarray(shell.exponents, dtype=float)
+        coefficients = np.asarray(shell.coeff, dtype=float)
+        density_coefficients = -coefficients * (exponents / np.pi) ** 1.5
+        density_basis.add(
+            Shell(
+                shell.l,
+                exponents,
+                density_coefficients,
+                shell.center,
+                shell.is_pure,
+                embed_normalization_into_coefficients=False,
+            )
+        )
+
+    return density_basis
+
+
 def _parse_custom_basis_assignment(geometry, basis_assignment):
     # explicit_basis contains all entries except "default"
     explicit_basis = basis_assignment.copy()
@@ -314,10 +381,12 @@ def _load_basis(basis_name, Z):
     """
     Load the basis set data for a given atomic number.
 
-    This can be from three sources:
+    This can be from four sources:
     1. A local JSON file specified by `basis_name` (if it ends with .json)
     2. A JSON file supplied in the `forte2/data/basis` directory
-    3. Basis Set Exchange (if available)
+    3. AutoAux generation (if it ends with -autoaux) from the orbital basis set named
+       before the suffix, itself loaded from one of the other sources
+    4. Basis Set Exchange (if available)
 
     Parameters
     ----------
@@ -343,9 +412,11 @@ def _load_basis(basis_name, Z):
             ), f"Element {Z} not found in basis set {basis_name}."
             res = bfile["elements"][str(Z)]["electron_shells"]
     elif resources.is_resource("forte2.data.basis", f"{basis_name}.json"):
-        with resources.files("forte2.data.basis").joinpath(f"{basis_name}.json").open(
-            "r"
-        ) as f:
+        with (
+            resources.files("forte2.data.basis")
+            .joinpath(f"{basis_name}.json")
+            .open("r") as f
+        ):
             bfile = json.load(f)
             # check if the atomic number is in the basis set
             assert (
@@ -353,21 +424,11 @@ def _load_basis(basis_name, Z):
             ), f"Element {Z} not found in basis set {basis_name}."
             res = bfile["elements"][str(Z)]["electron_shells"]
     elif basis_name.endswith("-autoaux"):
-        assert (
-            BSE_AVAILABLE
-        ), f"[forte2] AutoAux basis requested, but basis_set_exchange is not available."
+        orbital_basis_name = basis_name.removesuffix("-autoaux")
         logger.log_info1(
-            f"[forte2] Generating AutoAux basis for element Z={Z} using Basis Set Exchange."
+            f"[forte2] Generating AutoAux basis for element Z={Z} from {orbital_basis_name}."
         )
-        try:
-            bse_basis = bse.get_basis(
-                basis_name.replace("-autoaux", ""), elements=Z, get_aux=1
-            )
-        except KeyError:
-            raise RuntimeError(
-                f"[forte2] Basis Set Exchange could not generate AutoAux basis for element Z={Z} with basis set {basis_name.replace('-autoaux', '')}!"
-            )
-        res = bse_basis["elements"][str(Z)]["electron_shells"]
+        res = autoaux_electron_shells(Z, _load_basis(orbital_basis_name, Z))
     else:
         assert (
             BSE_AVAILABLE

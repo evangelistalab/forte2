@@ -61,7 +61,7 @@ std::vector<double> SelectedCIHelper::spin2_batch(size_t num_batches, size_t bat
             const double a_sign = new_a_str.create(a);
 
             // only process this string if it belongs to the current batch
-            if (String::Hash()(new_a_str) % num_batches != batch_id) {
+            if (batch_of(new_a_str, num_batches) != batch_id) {
                 continue;
             }
             new_det.set_alpha_string(new_a_str);

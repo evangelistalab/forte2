@@ -1,7 +1,20 @@
 import pytest
 
-from forte2 import System, AVAS, CI, RHF, ROHF, State, MCOptimizer, GHF, RelCI, CISolver
+from forte2 import (
+    AVAS,
+    CI,
+    CISolver,
+    GHF,
+    MCOptimizer,
+    RHF,
+    ROHF,
+    RelCISolver,
+    State,
+    System,
+    X2CParams,
+)
 from forte2.helpers.comparisons import approx
+from forte2.symmetry.sym_utils import COTTON_LABELS
 
 
 def test_avas_inputs():
@@ -62,6 +75,51 @@ def test_avas_inputs():
             subspace=["N(2p)"],
         )(rhf)
 
+    # raise on malformed cas
+    for cas in [[6, 6], (6, 6, 1), (6.0, 6)]:
+        with pytest.raises(Exception):
+            avas = AVAS(subspace=["N(2p)"], cas=cas)(rhf)
+
+    # raise on odd electron count or too many electrons for the orbitals
+    for cas in [(5, 6), (8, 3), (-2, 3)]:
+        with pytest.raises(Exception):
+            avas = AVAS(subspace=["N(2p)"], cas=cas)(rhf)
+
+    # more virtuals than available
+    with pytest.raises(Exception):
+        avas = AVAS(subspace=["N(2p)"], cas=(6, 25))(rhf)
+
+    # same checks after removing the singly occupied orbitals
+    rohf = ROHF(charge=0, ms=1.0, e_tol=1e-12)(system)
+    for cas in [(5, 6), (6, 3), (0, 3)]:
+        with pytest.raises(Exception):
+            avas = AVAS(subspace=["N(2p)"], cas=cas)(rohf)
+
+    # more virtuals than available, ROHF
+    with pytest.raises(Exception):
+        avas = AVAS(subspace=["N(2p)"], cas=(6, 25))(rohf)
+
+    # one electron per spinor: more electrons than spinors
+    ghf = GHF(charge=0, e_tol=1e-12)(system)
+    with pytest.raises(Exception):
+        avas = AVAS(subspace=["N(2p)"], cas=(7, 6))(ghf)
+
+    # raise if more active occupied orbitals are requested than the reference has
+    with pytest.raises(Exception):
+        avas = AVAS(
+            subspace=["N(2p)"],
+            selection_method="separate",
+            num_active_docc=8,
+            num_active_uocc=2,
+        )(rhf)
+    for scf, cas in [(rhf, (16, 10)), (rohf, (16, 10)), (ghf, (16, 18))]:
+        with pytest.raises(Exception):
+            avas = AVAS(subspace=["N(2p)"], cas=cas)(scf)
+
+    # don't raise if every occupied orbital is active
+    for scf, cas in [(rhf, (14, 10)), (rohf, (14, 10)), (ghf, (14, 18))]:
+        avas = AVAS(subspace=["N(2p)"], cas=cas)(scf)
+
 
 def test_avas_subspace():
     xyz = """
@@ -103,6 +161,61 @@ def test_avas_subspace():
     )(rhf)
 
 
+def test_avas_bare_element_subspace():
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+
+    expected_minaos = [10, 5, 10]
+    for i, spec in enumerate(["N", "N1", "N1-2"]):
+        avas = AVAS(
+            selection_method="total",
+            num_active=4,
+            subspace=[spec],
+        )(rhf)
+        # A bare element selects at least one AO into the subspace.
+        assert len(avas.minao_subspace) == expected_minaos[i]
+
+
+def test_avas_total_num_active_too_large():
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rhf = RHF(charge=0, e_tol=1e-11)(system)
+    rhf.run()
+    with pytest.raises(Exception, match="must not exceed"):
+        AVAS(selection_method="total", num_active=999, subspace=["N(2p)"])(rhf).run()
+
+
+def test_avas_rohf_half_integer_ms_somo_count():
+    system = System(
+        xyz="N 0 0 0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rohf = ROHF(charge=0, ms=0.5)(system)
+    # AVAS doesn't do anything here since the only
+    # active orbital is the SOMO, but it is a valid input
+    _ = AVAS(
+        selection_method="separate",
+        subspace=["N(2p)"],
+        num_active_docc=0,
+        num_active_uocc=0,
+    )(rohf)
+
+
 def test_avas_separate_n2():
     eref_casci = -109.00462206150347
     eref_casci_avas = -109.005019207444
@@ -117,12 +230,14 @@ def test_avas_separate_n2():
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     casci = CI(
-        active_orbitals=[4, 5, 6, 7, 8, 9],
-        core_orbitals=[0, 1, 2, 3],
-        states=State(nel=14, multiplicity=1, ms=0.0),
+        CISolver(
+            active_orbitals=[4, 5, 6, 7, 8, 9],
+            core_orbitals=[0, 1, 2, 3],
+            states=State(nel=14, multiplicity=1, ms=0.0),
+        )
     )(rhf)
     casci.run()
-    assert casci.E[0] == approx(eref_casci)
+    assert casci.E_ci[0] == approx(eref_casci)
 
     avas = AVAS(
         selection_method="separate",
@@ -131,9 +246,9 @@ def test_avas_separate_n2():
         num_active_uocc=3,
         diagonalize=False,
     )(rhf)
-    casci = CI(states=State(nel=14, multiplicity=1, ms=0.0))(avas)
+    casci = CI(CISolver(states=State(nel=14, multiplicity=1, ms=0.0)))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_casci_avas)
+    assert casci.E_ci[0] == approx(eref_casci_avas)
     avas = AVAS(
         selection_method="separate",
         subspace=["N(2p)"],
@@ -141,9 +256,9 @@ def test_avas_separate_n2():
         num_active_uocc=3,
         diagonalize=True,
     )(rhf)
-    casci = CI(states=State(nel=14, multiplicity=1, ms=0.0))(avas)
+    casci = CI(CISolver(states=State(nel=14, multiplicity=1, ms=0.0)))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_casci_avas_diagonalize)
+    assert casci.E_ci[0] == approx(eref_casci_avas_diagonalize)
 
 
 def test_avas_separate_n2_ghf_equivalent_to_rhf():
@@ -159,13 +274,9 @@ def test_avas_separate_n2_ghf_equivalent_to_rhf():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     mf = GHF(charge=0, e_tol=1e-12)(system)
-    casci = RelCI(
-        nel=14,
-        active_orbitals=12,
-        core_orbitals=8,
-    )(mf)
+    casci = CI(RelCISolver(nel=14, active_orbitals=12, core_orbitals=8))(mf)
     casci.run()
-    assert casci.E[0] == approx(eref_casci)
+    assert casci.E_ci[0] == approx(eref_casci)
 
     avas = AVAS(
         selection_method="separate",
@@ -174,9 +285,9 @@ def test_avas_separate_n2_ghf_equivalent_to_rhf():
         num_active_uocc=6,
         diagonalize=False,
     )(mf)
-    casci = RelCI(nel=14)(avas)
+    casci = CI(RelCISolver(nel=14))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_casci_avas)
+    assert casci.E_ci[0] == approx(eref_casci_avas)
 
     avas = AVAS(
         selection_method="separate",
@@ -185,9 +296,9 @@ def test_avas_separate_n2_ghf_equivalent_to_rhf():
         num_active_uocc=6,
         diagonalize=True,
     )(mf)
-    casci = RelCI(nel=14)(avas)
+    casci = CI(RelCISolver(nel=14))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_casci_avas_diagonalize)
+    assert casci.E_ci[0] == approx(eref_casci_avas_diagonalize)
 
 
 def test_avas_rohf_n2plus():
@@ -208,9 +319,9 @@ def test_avas_rohf_n2plus():
         num_active_uocc=3,
         diagonalize=True,
     )(rhf)
-    casci = CI(State(nel=13, multiplicity=2, ms=0.5))(avas)
+    casci = CI(CISolver(State(nel=13, multiplicity=2, ms=0.5)))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_avas)
+    assert casci.E_ci[0] == approx(eref_avas)
 
 
 def test_avas_rohf_n2minus():
@@ -231,9 +342,9 @@ def test_avas_rohf_n2minus():
         num_active_uocc=2,
         diagonalize=True,
     )(rhf)
-    casci = CI(states=State(nel=15, multiplicity=2, ms=0.5))(avas)
+    casci = CI(CISolver(states=State(nel=15, multiplicity=2, ms=0.5)))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_avas)
+    assert casci.E_ci[0] == approx(eref_avas)
 
 
 def test_avas_cumulative_h2co_all():
@@ -255,10 +366,10 @@ def test_avas_cumulative_h2co_all():
         sigma=1.0,
         diagonalize=True,
     )(rhf)
-    casci = CI(State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
+    casci = CI(CISolver(State(nel=rhf.nel, multiplicity=1, ms=0.0)))(avas)
     casci.run()
 
-    assert casci.E[0] == approx(eref_avas_all)
+    assert casci.E_ci[0] == approx(eref_avas_all)
 
 
 def test_avas_cumulative_h2co_98pc():
@@ -280,9 +391,9 @@ def test_avas_cumulative_h2co_98pc():
         sigma=0.98,
         diagonalize=True,
     )(rhf)
-    casci = CI(State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
+    casci = CI(CISolver(State(nel=rhf.nel, multiplicity=1, ms=0.0)))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_avas_98pc)
+    assert casci.E_ci[0] == approx(eref_avas_98pc)
 
 
 def test_avas_total_h2co():
@@ -304,9 +415,9 @@ def test_avas_total_h2co():
         num_active=2,
         diagonalize=True,
     )(rhf)
-    casci = CI(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
+    casci = CI(CISolver(states=State(nel=rhf.nel, multiplicity=1, ms=0.0)))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_avas_98pc)
+    assert casci.E_ci[0] == approx(eref_avas_98pc)
 
 
 def test_avas_total_h2co_ghf_equivalent_to_rhf():
@@ -328,9 +439,9 @@ def test_avas_total_h2co_ghf_equivalent_to_rhf():
         num_active=4,
         diagonalize=True,
     )(rhf)
-    casci = RelCI(nel=rhf.nel)(avas)
+    casci = CI(RelCISolver(nel=rhf.nel))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_avas_98pc)
+    assert casci.E_ci[0] == approx(eref_avas_98pc)
 
 
 def test_avas_separate_h2co():
@@ -354,9 +465,9 @@ def test_avas_separate_h2co():
         num_active_uocc=2,
         diagonalize=True,
     )(rhf)
-    casci = CI(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
+    casci = CI(CISolver(states=State(nel=rhf.nel, multiplicity=1, ms=0.0)))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_avas)
+    assert casci.E_ci[0] == approx(eref_avas)
 
 
 def test_avas_subspace_planes_h2co():
@@ -381,9 +492,9 @@ def test_avas_subspace_planes_h2co():
         sigma=1.0,
         diagonalize=True,
     )(rhf)
-    casci = CI(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
+    casci = CI(CISolver(states=State(nel=rhf.nel, multiplicity=1, ms=0.0)))(avas)
     casci.run()
-    assert casci.E[0] == approx(eref_avas)
+    assert casci.E_ci[0] == approx(eref_avas)
 
 
 def test_avas_subspace_planes_h2co_casscf():
@@ -448,3 +559,106 @@ def test_avas_zero_uocc2():
     mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E_avg == approx(-37.5906751187)
+
+
+def test_avas_keeps_symmetry_labels():
+    def n2(symmetry):
+        return System(
+            xyz="N 0 0 0; N 0 0 1.2",
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="cc-pvtz-jkfit",
+            symmetry=symmetry,
+        )
+
+    def casci(system):
+        scf = RHF(charge=0, e_tol=1e-12)(system)
+        avas = AVAS(
+            selection_method="separate",
+            num_active_docc=3,
+            num_active_uocc=3,
+            subspace=["N(2p)"],
+            diagonalize=True,
+        )(scf)
+        ci_solver = CISolver(states=State(nel=14, multiplicity=1, ms=0.0))
+        ci = CI(ci_solver)(avas).run()
+        return avas, ci.E_ci[0]
+
+    # Labels that follow the AVAS rotations give the same CASCI energy as C1.
+    system = n2(symmetry=True)
+    avas, energy = casci(system)
+    assert energy == approx(casci(n2(symmetry=False))[1])
+    indices = avas.mos.irrep_indices[0]
+    # test that the irrep assignment logic in AVAS gives identical results to explicit assignment
+    assert system.symmetry_basis.orbital_irreps(avas.mos.C[0]).tolist() == indices
+    names = {h: label for label, h in COTTON_LABELS["D2H"].items()}
+    assert avas.mos.irrep_labels[0] == [names[h] for h in indices]
+
+    # A subspace on one of the two equivalent atoms breaks the symmetry.
+    one_atom = AVAS(
+        subspace=["N1(2p)"],
+        diagonalize=True,
+        selection_method="cumulative",
+    )(RHF(charge=0)(n2(True)))
+    with pytest.raises(ValueError, match="AVAS subspace breaks D2H symmetry"):
+        one_atom.run()
+
+
+def test_avas_cas_specification_rohf():
+    # from num_active_docc=2, num_active_uocc=3
+    eref = -108.42593367486047
+
+    sys = System(
+        xyz="N 0 0 0; N 0 0 1",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+    )
+    scf = ROHF(charge=1, ms=-0.5)(sys)
+    avas = AVAS(
+        subspace=["N(2p)"],
+        cas=(5, 6),
+    )(scf)
+    ci_solver = CISolver(states=State(nel=scf.nel, multiplicity=2, ms=0.5))
+    ci = CI(ci_solver)(avas)
+    ci.run()
+    assert ci.E_ci[0] == approx(eref)
+
+
+def test_avas_cas_specification_rhf():
+    # from num_active_docc=4, num_active_uocc=2
+    eref = -109.01279230660653
+
+    sys = System(
+        xyz="N 0 0 0; N 0 0 1",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+    )
+    scf = RHF(charge=0)(sys)
+    avas = AVAS(
+        subspace=["N(2s)", "N(2p)"],
+        cas=(8, 6),
+    )(scf)
+    ci_solver = CISolver(states=State(nel=scf.nel, multiplicity=1, ms=0.0))
+    ci = CI(ci_solver)(avas)
+    ci.run()
+    assert ci.E_ci[0] == approx(eref)
+
+
+def test_avas_cas_specification_ghf():
+    # from num_active_docc=8, num_active_uocc=4
+    eref = -113.49718153801523
+
+    sys = System(
+        xyz="N 0 0 0; N 0 0 1",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        x2c=X2CParams(x2c_type="so", snso_type="boettger", light_speed=10.0),
+    )
+    scf = GHF(charge=0)(sys)
+    avas = AVAS(
+        subspace=["N(2s)", "N(2p)"],
+        cas=(8, 12),
+    )(scf)
+    ci_solver = RelCISolver(nel=scf.nel)
+    ci = CI(ci_solver)(avas)
+    ci.run()
+    assert ci.E_ci[0] == approx(eref)

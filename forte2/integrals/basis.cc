@@ -116,6 +116,12 @@ std::string shell_label(int l, int idx) {
     if (l < static_cast<int>(labels.size()) and idx < static_cast<int>(labels[l].size())) {
         return labels[l][idx];
     }
+    // general_labels only defines labels up to l = general_labels.size() - 1;
+    // guard the fallback so l beyond that raises instead of reading past the end.
+    if (l >= static_cast<int>(general_labels.size())) {
+        throw std::out_of_range("Angular momentum " + std::to_string(l) +
+                                " exceeds defined shell labels.");
+    }
     return general_labels[l] + "(" + std::to_string(idx) + ")";
 }
 

@@ -2,18 +2,19 @@ from dataclasses import dataclass, field
 import numpy as np
 import re
 
-from forte2 import ints
+from forte2.lib import ints
 from forte2.scf import RHF, ROHF, GHF
 from forte2.state import MOSpace
 from forte2.helpers import logger, invsqrt_matrix, block_diag_2x2
-from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from forte2.helpers.matrix_functions import block_eigh
+from forte2.base_classes import Method
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
 from forte2.data import ATOM_SYMBOL_TO_Z
 
 
 @dataclass
-class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
+class AVAS(Method):
     """
     Atomic valence active space (AVAS) method for selecting active orbitals for multi-reference calculations.
 
@@ -31,6 +32,9 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         - "total": Selects a total number of active orbitals. Must define `num_active`.
     diagonalize : bool, optional, default=True
         Whether to diagonalize the occupied and virtual space overlap matrices.
+    cas : tuple | str | None, optional, default=None
+        A direct specification of the CAS as a tuple of (x, y) specifying a CAS space of x electrons in y orbitals (or spinors in cas of GHF reference).
+        If specified, the tuple is parsed and the "separate" selection backend will be used, if selection_method is specified, it'll be ignored.
     sigma : float, optional, default=0.98
         Cumulative cutoff for the eigenvalues of the overlap matrix, controlling the size of the active space.
     cutoff : float, optional, default=1.0
@@ -64,12 +68,13 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
     subspace_pi_planes: list = None
     selection_method: str = "cumulative"
     diagonalize: bool = True
+    cas: tuple[int, int] | None = None
     sigma: float = 0.98
     cutoff: float = 1.0
     evals_threshold: float = 1.0e-6
-    num_active: int = 0
     num_active_docc: int = 0
     num_active_uocc: int = 0
+    num_active: int = 0
 
     executed: bool = field(init=False, default=False)
 
@@ -85,6 +90,8 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         # Group 4: \(?((?:\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\)? - optionally match a parenthesis containing the subset of AOs
         #   Example: "C(2p)", "C(1s)", "C(2s)", "Ce(4fzx2-zy2)", etc. The subset can be empty, which means all AOs of the specified atoms.
         self._regex = "^([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\\)?$"
+        self.requires = {"system", "mos"}
+        self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, parent_method):
         assert isinstance(
@@ -94,10 +101,10 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             logger.log_info1(
                 "*** AVAS will take all singly occupied orbitals to be active! ***"
             )
-        self.parent_method = parent_method
+        self._register_parent_method(parent_method=parent_method)
         self._check_parameters()
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
+        self.system = parent_method.system
         self.basis_info = BasisInfo(self.system, self.system.basis)
         minao_info = BasisInfo(self.system, self.system.minao_basis)
         self.minao_labels = minao_info.basis_labels
@@ -115,9 +122,8 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
     def run(self):
         if not self.parent_method.executed:
             self.parent_method.run()
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-        self.nmo = self.C[0].shape[1]
-        self.two_component = self.system.two_component
+        self.mos = self.parent_method.mos.copy()
+        self.nmo = self.mos.nmo
         self.dtype = float if not self.two_component else complex
 
         logger.log_info1("\nAVAS: building the AVAS projector...")
@@ -135,6 +141,64 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             "total",
         ], f"Invalid selection method: {self.selection_method}"
 
+        nmo = self.parent_method.system.nmo
+        if isinstance(self.parent_method, (RHF, ROHF)):
+            ndocc = min(self.parent_method.na, self.parent_method.nb)
+            nsocc = 0
+            if isinstance(self.parent_method, ROHF):
+                nsocc = abs(round(2 * self.parent_method.ms))
+            nuocc = nmo - ndocc - nsocc
+        else:  # GHF
+            nmo *= 2
+            ndocc = self.parent_method.nel
+            nuocc = nmo - ndocc
+            nsocc = 0
+
+        # parse smart CAS specification first
+        if self.cas is not None:
+            if not isinstance(self.cas, tuple):
+                raise TypeError(
+                    f"type of 'cas' must be a tuple of ints, got {type(self.cas)} instead!"
+                )
+            if len(self.cas) != 2:
+                raise ValueError(
+                    f"'cas' must be a tuple of (nel, norb), got {self.cas} instead!"
+                )
+            if not all(isinstance(x, int) for x in self.cas):
+                raise TypeError(
+                    f"'cas' must be a tuple of ints, got {self.cas} instead!"
+                )
+            self.selection_method = "separate"
+            _nel, _nactv = self.cas
+            if isinstance(self.parent_method, GHF):
+                if _nel < 0 or _nel > _nactv:
+                    raise ValueError(
+                        f"cas={self.cas} cannot place {_nel} electrons in {_nactv} spinors!"
+                    )
+                self.num_active_docc = _nel
+                self.num_active_uocc = _nactv - _nel
+            else:  # RHF or ROHF
+                _socc_error = ""
+                if isinstance(self.parent_method, ROHF):
+                    _nel -= nsocc
+                    _nactv -= nsocc
+                    _socc_error = f" outside the {nsocc} singly occupied orbitals"
+                if _nel % 2 != 0:
+                    raise ValueError(
+                        f"cas={self.cas} has an odd number of electrons ({_nel}){_socc_error}, "
+                        "which cannot doubly occupy orbitals!"
+                    )
+                if _nel < 0 or _nel > 2 * _nactv:
+                    raise ValueError(
+                        f"cas={self.cas} cannot place {_nel} electrons in {_nactv} orbitals{_socc_error}!"
+                    )
+                self.num_active_docc = _nel // 2
+                self.num_active_uocc = _nactv - self.num_active_docc
+            logger.log_info1(
+                f"AVAS: converted cas={self.cas} into num_active_docc={self.num_active_docc}, "
+                f"num_active_uocc={self.num_active_uocc}"
+            )
+
         if self.selection_method == "cumulative":
             assert (
                 self.sigma >= 0.0 and self.sigma <= 1.0 + 1e-10
@@ -151,12 +215,17 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             assert (
                 self.num_active_uocc >= 0
             ), "Number of active unoccupied orbitals cannot be negative."
-            if isinstance(self.parent_method, ROHF):
-                nactv = (
-                    int(self.parent_method.ms) * 2
-                    + self.num_active_docc
-                    + self.num_active_uocc
+
+            if self.num_active_docc > ndocc:
+                raise ValueError(
+                    f"num_active_docc={self.num_active_docc} exceeds the {ndocc} occupied orbitals of the reference."
                 )
+            if self.num_active_uocc > nuocc:
+                raise ValueError(
+                    f"num_active_uocc={self.num_active_uocc} exceeds the {nuocc} occupied orbitals of the reference."
+                )
+            if isinstance(self.parent_method, ROHF):
+                nactv = nsocc + self.num_active_docc + self.num_active_uocc
                 assert (
                     nactv > 0
                 ), f"ROHF reference given, but num_active_docc + num_active_uocc + ms * 2 = {nactv}, at least one active orbital must be selected."
@@ -167,6 +236,9 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
                 ), f"Number of active orbitals must be positive, got {nactv}."
         elif self.selection_method == "total":
             assert self.num_active > 0, "Number of active orbitals must be positive."
+            assert (
+                self.num_active <= nmo
+            ), "Number of active orbitals must not exceed total number of MOs"
 
     def _parse_subspace(self, ss_str):
         # get rid of leading and trailing whitespaces
@@ -204,7 +276,8 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             end = start + 1 if mgroups[2] is None else int(mgroups[2]) + 1
 
         # mgroups[3] contains the subset of AOs e.g. "2p", "2pz", "3dz2" etc.
-        if mgroups[3] is None:
+        # if empty, then treat as "all"
+        if not mgroups[3]:
             # no subset specified (e.g. "C")
             # select all AOs of the element, subject to subspace_planes
             for A in range(start, end):
@@ -332,7 +405,9 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         nsocc = getattr(self.parent_method, "nsocc", 0)
         nuocc = self.parent_method.nuocc
 
-        CpsC = self.C[0].T.conj() @ self.ao_projector @ self.C[0]
+        CpsC = self.mos.C[0].T.conj() @ self.ao_projector @ self.mos.C[0]
+        # irrep of each MO; all rotations below stay within irreps
+        irreps = np.array(self.mos.irrep_indices[0])
 
         logger.log_info1(
             "\nMOs with significant overlap with the subspace (> 1.00e-3):"
@@ -354,7 +429,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         logger.log_info1("=" * 18)
         logger.log_info1("AO Composition of MOs with significant overlap:")
         self.basis_info.print_ao_composition(
-            self.C[0],
+            self.mos.C[0],
             print_mos,
             nprint=5,
             thres=1.0e-3,
@@ -372,13 +447,27 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
                 "The eigenvalues of the projected overlap matrix will be used to select the AVAS orbitals."
             )
             U = np.zeros((self.nmo, self.nmo), dtype=self.dtype)
-            # smallest to largest eigenvalues for occupied
-            s_docc, Udocc = np.linalg.eigh(CpsC[docc_sl, docc_sl])
+            try:
+                # smallest to largest eigenvalues for occupied
+                s_docc, Udocc, h_docc = self._eigh(
+                    CpsC[docc_sl, docc_sl], irreps[docc_sl]
+                )
+                s_uocc, Uuocc, h_uocc = self._eigh(
+                    CpsC[uocc_sl, uocc_sl], irreps[uocc_sl]
+                )
+            except ValueError as e:
+                # e.g. N2 with N1(2p) subspace breaks D2h symmetry
+                raise ValueError(
+                    f"The AVAS subspace breaks {self.system.point_group} symmetry. Use a "
+                    "subspace that the symmetry operations map onto itself, or run with "
+                    "symmetry=False."
+                ) from e
             U[docc_sl, docc_sl] = Udocc
-            s_uocc, Uuocc = np.linalg.eigh(CpsC[uocc_sl, uocc_sl])
+            irreps[docc_sl] = h_docc
             # largest to smallest eigenvalues for virtual
             s_uocc = s_uocc[::-1]
             U[uocc_sl, uocc_sl] = Uuocc[:, ::-1]
+            irreps[uocc_sl] = h_uocc[::-1]
             sigma_type = "eigen"
         else:
             logger.log_info1(
@@ -446,6 +535,11 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
                     else:
                         inact_uocc.append(indices[imo])
         elif self.selection_method == "total":
+            if self.num_active > nsig:
+                raise ValueError(
+                    f"num_active ({self.num_active}) exceeds the number of "
+                    f"available AVAS orbitals ({nsig})."
+                )
             for imo in range(self.num_active):
                 if occupations[imo] == 1:
                     act_docc.append(indices[imo])
@@ -476,6 +570,10 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         inact_uocc = np.array(inact_uocc, dtype=int)
         act_docc = np.array(act_docc, dtype=int)
         act_uocc = np.array(act_uocc, dtype=int)
+        if nsocc == 0 and (len(act_docc) == 0 or len(act_uocc) == 0):
+            logger.log_warning(
+                f"selection_method {self.selection_method} has selected an empty active space with {len(act_docc)} doubly occupied orbitals and {len(act_uocc)} unoccupied orbitals."
+            )
 
         logger.log_info1(
             f"\nSum of {sigma_type}values of selected orbitals:\t{s_act_sum:.6f}"
@@ -528,13 +626,21 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
 
         logger.log_info1("\nAVAS: canonicalizing the AVAS orbitals")
         # reminder that C_tilde will have zero SOCC coefficients, if ROHF
-        C_tilde = self.C[0] @ U
+        C_tilde = self.mos.C[0] @ U
         fock = self.parent_method.F[0]
         # separately canonicalize the Fock matrix blocks
-        C_inact_docc = self._canonicalize_block(fock, C_tilde, inact_docc)
-        C_inact_uocc = self._canonicalize_block(fock, C_tilde, inact_uocc)
-        C_act_docc = self._canonicalize_block(fock, C_tilde, act_docc)
-        C_act_uocc = self._canonicalize_block(fock, C_tilde, act_uocc)
+        C_inact_docc, h_inact_docc = self._canonicalize_block(
+            fock, C_tilde, inact_docc, irreps
+        )
+        C_inact_uocc, h_inact_uocc = self._canonicalize_block(
+            fock, C_tilde, inact_uocc, irreps
+        )
+        C_act_docc, h_act_docc = self._canonicalize_block(
+            fock, C_tilde, act_docc, irreps
+        )
+        C_act_uocc, h_act_uocc = self._canonicalize_block(
+            fock, C_tilde, act_uocc, irreps
+        )
 
         # fill the C matrix as follows:
         # [C_inact_docc, C_act_docc, !!C_socc!!, C_act_uocc, C_inact_uocc]
@@ -548,25 +654,40 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         au_sl = slice(ad_sl.stop + nsocc, ad_sl.stop + nsocc + n_act_uocc)
         iu_sl = slice(au_sl.stop, self.nmo)
 
-        self.C[0][:, id_sl] = C_inact_docc
-        self.C[0][:, ad_sl] = C_act_docc
-        self.C[0][:, au_sl] = C_act_uocc
-        self.C[0][:, iu_sl] = C_inact_uocc
+        self.mos.C[0][:, id_sl] = C_inact_docc
+        self.mos.C[0][:, ad_sl] = C_act_docc
+        self.mos.C[0][:, au_sl] = C_act_uocc
+        self.mos.C[0][:, iu_sl] = C_inact_uocc
+
+        # the irreps follow their orbitals; the singly occupied ones are unchanged
+        irreps[id_sl] = h_inact_docc
+        irreps[ad_sl] = h_act_docc
+        irreps[au_sl] = h_act_uocc
+        irreps[iu_sl] = h_inact_uocc
+        names = dict(zip(self.mos.irrep_indices[0], self.mos.irrep_labels[0]))
+        self.mos.irrep_indices[0] = irreps.tolist()
+        self.mos.irrep_labels[0] = [names[h] for h in irreps]
 
         logger.log_info1(
             "\nAO composition of final canonicalized active MOs prepared by AVAS:"
         )
         self.basis_info.print_ao_composition(
-            self.C[0],
+            self.mos.C[0],
             list(range(ad_sl.start, au_sl.stop)),
             spinorbital=True,
         )
 
-    def _canonicalize_block(self, F, C, mos):
-        C_sub = C[:, mos]
+    def _canonicalize_block(self, F, C, mo_ids, irreps):
+        C_sub = C[:, mo_ids]
         F_sub = C_sub.T.conj() @ F @ C_sub
-        _, U_sub = np.linalg.eigh(F_sub)
-        return C_sub @ U_sub
+        _, U_sub, h_sub = self._eigh(F_sub, irreps[mo_ids])
+        return C_sub @ U_sub, h_sub
+
+    def _eigh(self, M, irreps):
+        """Diagonalize M within each irrep, in ascending order of eigenvalue."""
+        # Orbitals of more than one irrep come from the system's symmetry basis.
+        tol = getattr(self.system.symmetry_basis, "tol", 0.0)
+        return block_eigh(M, irreps, atol=0.0, rtol=tol, sort=True)
 
     def _parse_subspace_pi_planes(self):
         """

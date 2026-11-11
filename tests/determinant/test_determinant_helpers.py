@@ -1,4 +1,4 @@
-from forte2 import Determinant, hilbert_space
+from forte2.lib.det import Determinant, hilbert_space
 
 
 def det(s):

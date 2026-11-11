@@ -1,5 +1,5 @@
 from numpy import diag
-import forte2
+from forte2.lib import ints
 import numpy as np
 
 
@@ -7,7 +7,7 @@ def orbital_extents(basis, C, indices=None):
     """Compute the average position of the basis functions and their spread."""
 
     # evaluate the multipole moments in the AO basis
-    AO_ints = forte2.ints.emultipole2(basis)
+    AO_ints = ints.emultipole2(basis)
 
     print(f"C.shape = {C.shape}")
     # transform the multipole moments to the MO basis

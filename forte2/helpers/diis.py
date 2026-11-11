@@ -5,6 +5,9 @@ from numpy.typing import NDArray
 
 from forte2.helpers import logger
 
+# DIIS extrapolation coefficients becomes numerical noise above this cond
+_MAX_B_CONDITION = 1.0e12
+
 
 @dataclass
 class DIIS:
@@ -13,16 +16,17 @@ class DIIS:
 
     Parameters
     ----------
-    diis_start : int, optional, default=3
+    diis_start : int, optional, default=4
         Start saving DIIS vectors after this many iterations.
-        A value less than 0 means no DIIS
+        A value less than 0 means no DIIS.
     diis_nvec : int, optional, default=8
         The number of vectors to keep in the DIIS.
     diis_min : int, optional, default=3
         The minimum number of vectors to perform extrapolation.
     do_diis : bool, optional
         If True, DIIS is performed. If False, DIIS is not performed.
-        If None, DIIS is performed unless `diis_start` or `diis_nvec` is less than 1.
+        If None, DIIS is performed unless `diis_start` is less than 0 or
+        `diis_nvec` is less than 1.
 
     Attributes
     ----------
@@ -50,7 +54,7 @@ class DIIS:
         turn_off = (self.diis_start < 0) or (self.diis_nvec < 1)
         if self.do_diis is True and turn_off:
             logger.log_warning(
-                "DIIS is turned off due to diis_start < 1 or diis_nvec < 1."
+                "DIIS is turned off due to diis_start < 0 or diis_nvec < 1."
             )
             self.do_diis = False
         if self.do_diis is None:
@@ -94,14 +98,41 @@ class DIIS:
         self.e_diis.append(e.copy())
 
         self.status += "S"
-        diis_dim = len(self.p_diis)
-        if diis_dim < self.diis_min:
+        if len(self.p_diis) < self.diis_min:
             return p
-        # construct diis B matrix (following Crawford Group github tutorial)
-        B = np.ones((diis_dim + 1, diis_dim + 1), dtype=p.dtype) * -1.0
-        B[-1, -1] = 0.0
-        bsol = np.zeros(diis_dim + 1, dtype=p.dtype)
+
+        # Drop the oldest vectors until B becomes well conditioned, 
+        # or skip the extrapolation if that's not possible
+        B = self._build_B()
+        while True:
+            try:
+                condition = np.linalg.cond(B)
+            except np.linalg.LinAlgError:
+                condition = np.inf
+            if np.isfinite(condition) and condition <= _MAX_B_CONDITION:
+                break
+            if len(self.p_diis) <= self.diis_min:
+                return p
+            self.p_diis.popleft()
+            self.e_diis.popleft()
+            B = self._build_B()
+
+        diis_dim = len(self.p_diis)
+        bsol = np.zeros(diis_dim + 1, dtype=B.dtype)
         bsol[-1] = -1.0
+        x = np.linalg.solve(B, bsol)
+
+        self.status += "/E"
+        p_new = np.zeros_like(p)
+        for l in range(diis_dim):
+            p_new += x[l] * self.p_diis[l]
+        return p_new
+
+    def _build_B(self):
+        # Pulay's B matrix, bordered by the constraint that the coefficients sum to one.
+        diis_dim = len(self.e_diis)
+        B = np.ones((diis_dim + 1, diis_dim + 1), dtype=self.p_diis[0].dtype) * -1.0
+        B[-1, -1] = 0.0
         for i in range(diis_dim):
             for j in range(i, diis_dim):
                 B[i, j] = np.dot(
@@ -109,16 +140,5 @@ class DIIS:
                 )
                 if i != j:
                     B[j, i] = B[i, j].conj()
-
         B[:-1, :-1] /= np.abs(B[:-1, :-1]).max()
-        try:
-            x = np.linalg.solve(B, bsol)
-        except np.linalg.LinAlgError:
-            logger.log_warning("DIIS matrix is singular, skipping DIIS update.")
-            return p
-
-        self.status += "/E"
-        p_new = np.zeros_like(p)
-        for l in range(diis_dim):
-            p_new += x[l] * self.p_diis[l]
-        return p_new
+        return B

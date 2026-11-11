@@ -32,11 +32,13 @@ class OrbOptimizer:
         self.e_nuc = e_nuc
         self.compute_active_hessian = compute_active_hessian
         self.nmo = self.C.shape[1]
+        if not np.isfinite(lambda_penalty) or lambda_penalty < 0:
+            raise ValueError("lambda_penalty must be finite and non-negative.")
         self.lambda_penalty = lambda_penalty
 
-        # the skew-hermitian rotation matrix, C_current = C_0 @ exp(R)
+        # Accumulated packed increments; in general U != exp(R) because
+        # successive rotations do not commute. C_current = C_0 @ U.
         self.R = np.zeros(self.nrot, dtype=float)
-        # the unitary transformation matrix, U = exp(R)
         self.U = np.eye(self.C.shape[1], dtype=float)
 
     def get_eri_gaaa(self):
@@ -64,21 +66,55 @@ class OrbOptimizer:
 
         E_orb = self._compute_reference_energy()
 
-        return E_orb
+        return E_orb + self._penalty_energy()
 
     def gradient(self, x):
         grad = self._compute_orbgrad()
+        if self.lambda_penalty:
+            grad += self._penalty_gradient_matrix() * self.nrr
         g = self._mat_to_vec(grad)
         return g
 
     def hess_diag(self, x):
         hess = self._compute_orbhess()
+        if self.lambda_penalty:
+            hess += self._penalty_hessian_diagonal() * self.nrr
         h0 = self._mat_to_vec(hess)
         return h0
 
+    def compute_orbital_lagrangian(self):
+        r"""
+        Return the symmetric CASSCF orbital Lagrangian matrix.
+
+        The orbital optimizer forms the matrix :math:`A_{pq}` whose
+        antisymmetric part is the orbital gradient,
+
+        .. math::
+            g_{pq} = 2(A_{pq} - A_{qp}).
+
+        At a fully optimized state-specific CASSCF solution, the nonredundant
+        antisymmetric part vanishes.  The symmetric part of :math:`A` is the
+        molecular-orbital energy-weighted density used in the Pulay overlap
+        derivative contribution,
+
+        .. math::
+            W^{S}_{\mu\nu}
+            =
+            C_{\mu p}
+            \frac{1}{2}(A_{pq}+A_{qp})
+            C_{\nu q}.
+
+        Returns
+        -------
+        np.ndarray
+            Symmetric orbital Lagrangian in the current MO basis.
+        """
+        self._compute_orbgrad()
+        return 0.5 * (self.A_pq + self.A_pq.T.conj())
+
     def _update_orbitals(self, R):
         dR = R - self.R
-        if np.max(np.abs(dR)) < 1e-12:
+        if dR.size == 0 or np.max(np.abs(dR)) < 1e-12:
             # no change in orbitals, skip the update
             return False
         self.R += dR
@@ -96,7 +132,7 @@ class OrbOptimizer:
         return eM
 
     def _vec_to_mat(self, x):
-        R = np.zeros_like(self.C)
+        R = np.zeros((self.nmo, self.nmo), dtype=self.C.dtype)
         R[self.nrr] = x
         R += -R.T.conj()
         return R
@@ -110,34 +146,33 @@ class OrbOptimizer:
         energy += 0.5 * np.einsum("tvuw,tuvw->", self.get_active_space_ints(), self.g2)
         return energy
 
-    def _compute_Fcore(self):
-        # Compute the core Fock matrix [eq (3)], also return the core energy
-        Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
-        self.Fcore = np.einsum(
+    @staticmethod
+    def _transform_ao_operator(operator, C):
+        return np.einsum(
             "mp,mn,nq->pq",
-            self.Cgen.conj(),
-            self.hcore + 2 * Jcore[0] - Kcore[0],
-            self.Cgen,
+            C.conj(),
+            operator,
+            C,
             optimize=True,
         )
-        self.Ecore = np.einsum(
-            "pi,qi,pq->",
-            self.Ccore.conj(),
-            self.Ccore,
-            2 * self.hcore + 2 * Jcore[0] - Kcore[0],
+
+    def _compute_Fcore(self):
+        # Compute the core Fock matrix [eq (3)], also return the core energy
+        Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
+        self.Fcore = self._transform_ao_operator(Fcore_ao, self.Cgen)
+
+        core_factor = 0.5 if self.fock_builder.system.two_component else 1.0
+        self.Ecore = core_factor * np.trace(
+            self._transform_ao_operator(
+                self.hcore + Fcore_ao,
+                self.Ccore,
+            )
         )
 
     def _compute_Fact(self):
-        Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
-
         # [eq (13)]
-        self.Fact = np.einsum(
-            "mp,mn,nq->pq",
-            self.Cgen.conj(),
-            Jact - 0.5 * Kact,
-            self.Cgen,
-            optimize=True,
-        )
+        Fact_ao = self.fock_builder.build_active_fock(self.Cact, self.g1)
+        self.Fact = self._transform_ao_operator(Fact_ao, self.Cgen)
 
     def _compute_orbgrad(self):
         self._compute_Fact()
@@ -155,19 +190,6 @@ class OrbOptimizer:
         )
         # (rt|vw) D_tu,vw, where (rt|vw) = <rv|tw>
         self.A_pq[:, self.actv] += np.einsum("rvtw,tuvw->ru", self.eri_gaaa, self.g2)
-
-        if self.lambda_penalty > 0:
-            PA = self._build_active_projector()
-            PR = self._build_ref_projector()
-
-            penalty_term = -self.lambda_penalty * (PR @ PA - PA @ PR)
-            # Debug sanity checks (temporary?)
-            if np.allclose(self.R, 0.0):
-                assert (
-                    np.linalg.norm(penalty_term) < 1e-12
-                ), "Penalty nonzero at iteration 0"
-
-            self.A_pq += penalty_term
 
         # screen small gradients to prevent symmetry breaking
         self.A_pq[np.abs(self.A_pq) < 1e-12] = 0.0
@@ -204,11 +226,6 @@ class OrbOptimizer:
             diag_F[None, self.core] * diag_g1[:, None] - diag_grad[self.actv, None]
         )
 
-        if self.lambda_penalty > 0:
-            lam = self.lambda_penalty
-            orbhess[self.virt, self.actv] += 4.0 * lam
-            orbhess[self.actv, self.core] += 4.0 * lam
-
         # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
         if self.compute_active_hessian:
             eri_actv = self.get_active_space_ints()
@@ -233,19 +250,17 @@ class OrbOptimizer:
         return orbhess
 
     def _build_ref_projector(self):
-        """Build reference projector, invariant under orbital rotations.
-        P_ref is defined in the basis of the initial active orbitals C_a0.
-        """
+        """Fixed initial active-space projector, in the initial MO frame."""
         if hasattr(self, "P_ref"):
             return self.P_ref
 
-        self.P_ref = np.zeros((self.nmo, self.nmo))
-
-        self.P_ref[self.actv, self.actv] = np.eye(self.nact)
+        # Column selection works for both a CAS slice and a GAS index list.
+        active = np.eye(self.nmo)[:, self.actv]
+        self.P_ref = active @ active.T
         return self.P_ref
 
     def _build_active_projector(self):
-        """Build active-space projector."""
+        """Current active-space projector, expressed in the initial MO frame."""
         Uact = self.U[:, self.actv]
         return Uact @ Uact.T.conj()
 
@@ -255,14 +270,37 @@ class OrbOptimizer:
         return np.linalg.norm(PA - PR, ord="fro")
 
     def _penalty_energy(self):
+        """Non-negative contribution to the augmented orbital objective."""
+        if not self.lambda_penalty:
+            return 0.0
         PA = self._build_active_projector()
         PR = self._build_ref_projector()
-        return self.lambda_penalty * np.trace((PA - PR) @ (PA - PR))
+        return float(self.lambda_penalty * np.linalg.norm(PA - PR, ord="fro") ** 2)
 
     def _penalty_gradient_matrix(self):
-        PA = self._build_active_projector()
-        PR = self._build_ref_projector()
-        return -self.lambda_penalty * (PR @ PA - PA @ PR)
+        """Packed-coordinate gradient in the CURRENT MO frame.
+
+        For right increments U <- U exp(K), D selects the active columns and
+        B = U^H P_ref U. The independent-coordinate gradient is -4 lambda[B,D].
+        Select nrr directly; the factor for the paired skew-Hermitian entries
+        is already included. For complex coordinates, real/imaginary parts
+        differentiate real/imaginary rotation components, respectively.
+        """
+        D = self._build_ref_projector()
+        B = self.U.T.conj() @ D @ self.U
+        return -4.0 * self.lambda_penalty * (B @ D - D @ B)
+
+    def _penalty_hessian_diagonal(self):
+        """Exact penalty curvature for each independent rotation component.
+
+        It equals 4 lambda for active/nonactive mixing at alignment, but can
+        be negative away from the reference. Internal active rotations leave
+        the projector invariant, including rotations between GAS blocks.
+        """
+        D = self._build_ref_projector()
+        d = np.diag(D)
+        b = np.diag(self.U.T.conj() @ D @ self.U).real
+        return 4.0 * self.lambda_penalty * (d[:, None] - d) * (b[:, None] - b)
 
 
 class RelOrbOptimizer(OrbOptimizer):
@@ -285,6 +323,7 @@ class RelOrbOptimizer(OrbOptimizer):
             e_nuc,
             nrr,
             compute_active_hessian,
+            lambda_penalty,
         )
         self.R = self.R.astype(np.complex128)
         self.U = self.U.astype(np.complex128)
@@ -300,40 +339,18 @@ class RelOrbOptimizer(OrbOptimizer):
         # '2RDM' defined as in [eq (6)]
         self.g2 = g2.swapaxes(1, 2)
 
+    def compute_orbital_lagrangian(self):
+        """Return the Hermitian two-component CASSCF orbital Lagrangian."""
+        self._compute_orbgrad()
+        # RelOrbOptimizer stores its generalized Fock matrix with the
+        # Lagrangian indices transposed relative to the AO transformation.
+        return 0.5 * (self.Fock + self.Fock.T.conj()).T
+
     def _compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc
         energy += np.einsum("uv,uv->", self.Fcore[self.actv, self.actv], self.g1)
         energy += 0.5 * np.einsum("tvuw,tuvw->", self.get_active_space_ints(), self.g2)
         return energy
-
-    def _compute_Fcore(self):
-        # Compute the core Fock matrix [eq (3)], also return the core energy
-        Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
-        self.Fcore = np.einsum(
-            "mp,nq,mn->pq",
-            self.Cgen.conj(),
-            self.Cgen,
-            self.hcore + Jcore[0] - Kcore[0],
-            optimize=True,
-        )
-        self.Ecore = np.einsum(
-            "pi,qi,pq->",
-            self.Ccore.conj(),
-            self.Ccore,
-            self.hcore + 0.5 * (Jcore[0] - Kcore[0]),
-        )
-
-    def _compute_Fact(self):
-        Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
-
-        # [eq (13)]
-        self.Fact = np.einsum(
-            "mp,nq,mn->pq",
-            self.Cgen.conj(),
-            self.Cgen,
-            Jact - Kact,
-            optimize=True,
-        )
 
     def _compute_orbgrad(self):
         self._compute_Fact()

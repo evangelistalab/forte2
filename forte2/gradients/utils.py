@@ -1,9 +1,10 @@
 import numpy as np
+from numpy.typing import NDArray
 import scipy as sp
 
 import forte2.integrals as integrals
 from forte2.helpers.matrix_functions import compute_Am1y
-from forte2._forte2 import ints
+from forte2.lib import ints
 
 
 def flat_to_atom_gradient(gradient, natoms):
@@ -19,7 +20,7 @@ def flat_to_atom_gradient(gradient, natoms):
 
     Returns
     -------
-    ndarray
+    NDArray
         Gradient array with shape ``(natoms, 3)``.
     """
     gradient = np.asarray(gradient, dtype=float)
@@ -50,7 +51,7 @@ def nuclear_repulsion_deriv(atoms):
 
     Returns
     -------
-    ndarray
+    NDArray
         Nuclear repulsion derivative with shape ``(natoms, 3)``.
     """
     natoms = len(atoms)
@@ -73,7 +74,32 @@ def nuclear_repulsion_deriv(atoms):
     return gradient
 
 
-def compute_gradient(system, D1, W1, W2, W3):
+def _system_nuclear_repulsion_deriv(system):
+    """Compute nuclear repulsion derivatives for the system's nuclear model."""
+    if not system.use_gaussian_charges:
+        return nuclear_repulsion_deriv(system.atoms)
+
+    weights = 0.5 * np.outer(system.atomic_charges, system.atomic_charges)
+    np.fill_diagonal(weights, 0.0)
+    return flat_to_atom_gradient(
+        ints.coulomb_2c_deriv(
+            system.gaussian_charge_basis,
+            system.gaussian_charge_basis,
+            weights,
+            system.atoms,
+        ),
+        system.natoms,
+    )
+
+
+def compute_gradient(
+    system,
+    D1,
+    W1,
+    W2,
+    W3,
+    hcore_gradient=None,
+):
     r"""
     Compute the total gradient from the one-electron density matrix and two-electron derivative weights.
 
@@ -83,23 +109,40 @@ def compute_gradient(system, D1, W1, W2, W3):
     ----------
     system : System
         The system for which to compute the gradient.
-    D1 : ndarray
+    D1 : NDArray
         The one-electron density matrix with shape ``(nbasis, nbasis)``.
-    W1 : ndarray
+    W1 : NDArray
         The energy-weighted density matrix with shape ``(nbasis, nbasis)``.
-    W2 : ndarray
-        The two-electron derivative weight for the metric with shape ``(nbasis, nbasis)``.
-    W3 : ndarray
+    W2 : NDArray
+        The two-electron derivative weight for the metric with shape ``(naux, naux)``.
+    W3 : NDArray
         The two-electron derivative weight for the three-center integrals with shape ``(naux, nbasis, nbasis)``.
+    hcore_gradient : NDArray, optional
+        Precontracted one-electron Hamiltonian contribution with shape
+        ``(natoms, 3)``. When provided, this replaces the separate kinetic-
+        and nuclear-attraction derivative contractions.
+
+    Returns
+    -------
+    NDArray
+        Total gradient with shape ``(natoms, 3)``.
     """
     natoms = system.natoms
-    gradient = nuclear_repulsion_deriv(system.atoms)
-    gradient += flat_to_atom_gradient(
-        ints.kinetic_deriv(system.basis, system.basis, D1, system.atoms), natoms
-    )
-    gradient += flat_to_atom_gradient(
-        ints.nuclear_deriv(system.basis, system.basis, D1, system.atoms), natoms
-    )
+    gradient = _system_nuclear_repulsion_deriv(system)
+    if hcore_gradient is not None:
+        hcore_gradient = np.asarray(hcore_gradient, dtype=float)
+        if hcore_gradient.shape != (natoms, 3):
+            raise ValueError(
+                f"Expected hcore_gradient shape {(natoms, 3)}, "
+                f"got {hcore_gradient.shape}."
+            )
+        gradient += hcore_gradient
+    else:
+        gradient += flat_to_atom_gradient(
+            ints.kinetic_deriv(system.basis, system.basis, D1, system.atoms),
+            natoms,
+        )
+        gradient += flat_to_atom_gradient(integrals.nuclear_deriv(system, D1), natoms)
     gradient -= flat_to_atom_gradient(
         ints.overlap_deriv(system.basis, system.basis, W1, system.atoms), natoms
     )
@@ -107,10 +150,3 @@ def compute_gradient(system, D1, W1, W2, W3):
     gradient += flat_to_atom_gradient(integrals.coulomb_3c_deriv(system, W3), natoms)
     gradient += flat_to_atom_gradient(integrals.coulomb_2c_deriv(system, W2), natoms)
     return gradient
-
-
-def apply_inverse_metric(system, M, J):
-    """Apply the density fitting metric inverse to a three-center tensor."""
-    rhs = J.reshape(J.shape[0], -1)
-    result = compute_Am1y(M, rhs, system.df_ortho_rtol)
-    return result.reshape(J.shape)

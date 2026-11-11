@@ -1,15 +1,15 @@
 import numpy as np
 import scipy as sp
 
-from forte2 import Basis, Shell, integrals
-from forte2.system import System
-from forte2.system.build_basis import build_basis
+from forte2 import integrals
+from forte2.system.build_basis import build_sap_potential_basis
 from forte2.helpers.matrix_functions import givens_rotation
 
 
-def minao_initial_guess(system, H):
+def sap_guess_hamiltonian(system, H):
     """
-    Generate a superposition of atomic potentials (SAP) initial guess for the SCF procedure
+    Return the superposition of atomic potentials (SAP) guess Hamiltonian.
+
     S. Lehtola, J. Chem. Theory Comput. 15, 1593-1604 (2019), arXiv:1810.11659.
     For details, see https://doi.org/10.1063/5.0004046
 
@@ -18,40 +18,19 @@ def minao_initial_guess(system, H):
     system : forte2.System
         The system object containing the atoms and basis set.
     H : NDArray
-        The Fock matrix.
-    S : NDArray
-        The overlap matrix.
+        The core Hamiltonian matrix.
 
     Returns
     -------
     NDArray
-        The initial MO guess for the SCF procedure.
+        The core Hamiltonian plus the SAP potential, whose orbitals are the initial guess.
     """
 
-    # generate the SAP basis from the initial guess file. Skip normalization
-    sap_basis = build_basis(
+    # Convert the SAP potential coefficients to a normalized charge-density basis.
+    scaled_sap_basis = build_sap_potential_basis(
         "sap_helfem_large",
         system.geom_helper,
-        embed_normalization_into_coefficients=False,
     )
-
-    # create a new basis that will be used to store the scaled coefficients
-    scaled_sap_basis = Basis()
-
-    for shell in sap_basis:
-        # scales the coefficients by -(exponent / pi)^(3/2)
-        scaled_coeff = np.array(
-            [-c * ((e / np.pi) ** 1.5) for c, e in zip(shell.coeff, shell.exponents)]
-        )
-        scaled_shell = Shell(
-            shell.l,
-            shell.exponents,
-            scaled_coeff,
-            shell.center,
-            shell.is_pure,
-            embed_normalization_into_coefficients=False,  # do not normalize
-        )
-        scaled_sap_basis.add(scaled_shell)
 
     # generate the SAP integrals (P|mn)
     SAP_ints = integrals.coulomb_3c(system, scaled_sap_basis)
@@ -64,37 +43,45 @@ def minao_initial_guess(system, H):
     else:
         _SAP_V = SAP_V
 
-    # generate the SAP Hamiltonian and diagonalize it
-    Xorth = system.get_Xorth()
-    H_SAP = Xorth.T @ (H + _SAP_V) @ Xorth
-    _, C = np.linalg.eigh(H_SAP)
-
-    return Xorth @ C
+    return H + _SAP_V
 
 
-def core_initial_guess(system: System, H):
+def smallest_gap_same_irrep(eps, irreps, nocc):
     """
-    Generate an initial guess by diagonalizing the core Hamiltonian.
+    Find two orbitals that belong to the same irrep with the smallest gap.
 
     Parameters
     ----------
-    system : forte2.System
-        The system object containing the atoms and basis set.
-    H : NDArray
-        The core Hamiltonian matrix.
+    eps : NDArray
+        Orbital energies, in ascending order within the occupied orbitals and within
+        the virtual ones.
+    irreps : NDArray
+        The irrep index of each orbital.
+    nocc : int
+        The number of occupied orbitals, which come first.
 
     Returns
     -------
-    NDArray
-        The initial MO guess for the SCF procedure.
+    tuple[int, int] | None
+        The HOMO and LUMO if they share an irrep. Otherwise, of the occupied and
+        virtual orbitals that share an irrep, the pair with the smallest energy gap, or
+        None if no such pair exists.
     """
-    Xorth = system.get_Xorth()
-    Htilde = Xorth.T @ H @ Xorth
-    _, C = np.linalg.eigh(Htilde)
-    return Xorth @ C
+    homo, lumo = nocc - 1, nocc
+    if irreps[homo] == irreps[lumo]:
+        return homo, lumo
+    best = None
+    for irrep in np.unique(irreps[:nocc]):
+        virtuals = nocc + np.flatnonzero(irreps[nocc:] == irrep)
+        if len(virtuals) == 0:
+            continue
+        pair = (int(np.flatnonzero(irreps[:nocc] == irrep)[-1]), int(virtuals[0]))
+        if best is None or eps[pair[1]] - eps[pair[0]] < eps[best[1]] - eps[best[0]]:
+            best = pair
+    return best
 
 
-def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
+def guess_mix(C, occ_idx, vir_idx, mixing_parameter=np.pi / 4):
     """
     Induce the breaking of S^2 symmetry for UHF ms=0.0 calculations.
     This is helpful for obtaining proxies for open-shell singlets, for example.
@@ -103,12 +90,12 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     ----------
     C : NDArray
         The MO coefficients.
-    homo_idx : int
-        The index of the highest occupied molecular orbital (HOMO).
+    occ_idx : int
+        The index of the occupied orbital to mix, usually the HOMO.
+    vir_idx : int
+        The index of the virtual orbital to mix, usually the LUMO.
     mixing_parameter : float, optional
         The mixing parameter for the Givens rotation.
-    twocomp : bool, optional
-        Whether the system is two-component.
 
     Returns
     -------
@@ -122,8 +109,8 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     """
     cosq = np.cos(mixing_parameter)
     sinq = np.sin(mixing_parameter)
-    Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
-    Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
+    Ca = givens_rotation(C, cosq, sinq, occ_idx, vir_idx)
+    Cb = givens_rotation(C, cosq, -sinq, occ_idx, vir_idx)
     return [Ca, Cb]
 
 
@@ -163,6 +150,48 @@ def guess_mix_ghf(C, ha, hb, la, lb, mixing_parameter=np.pi / 4):
     C = givens_rotation(C, cosq, sinq, ha, la)
     # beta channel
     C = givens_rotation(C, cosq, -sinq, hb, lb)
+    return C
+
+
+def sz_adapt_degenerate_orbitals(eps, C, S, degeneracy_tol=1.0e-8):
+    """
+    Rotate each degenerate set of two-component orbitals onto eigenfunctions of S_z.
+
+    An eigensolver returns an arbitrary basis within a degenerate eigenspace, and this
+    choice differs between LAPACK implementations. Diagonalizing S_z within each
+    eigenspace fixes the basis, up to phases, independently of the eigensolver.
+
+    Parameters
+    ----------
+    eps : NDArray
+        The orbital energies, in ascending order.
+    C : NDArray
+        The two-component MO coefficients, with the alpha AO block above the beta block.
+    S : NDArray
+        The one-component AO overlap matrix.
+    degeneracy_tol : float, optional
+        The largest orbital energy gap within a degenerate set.
+
+    Returns
+    -------
+    NDArray
+        The rotated MO coefficients. Each degenerate set is ordered as pairs of
+        opposite S_z, starting with the largest S_z.
+    """
+    nbf = S.shape[0]
+    C = C.copy()
+    bounds = np.flatnonzero(np.diff(eps) > degeneracy_tol) + 1
+    for block in np.split(np.arange(len(eps)), bounds):
+        if len(block) < 2:
+            continue
+        Ca = C[:nbf, block]
+        Cb = C[nbf:, block]
+        # 2 < i | S_z | j > for i,j in a degenerate set
+        _, U = np.linalg.eigh(Ca.conj().T @ S @ Ca - Cb.conj().T @ S @ Cb)
+        # Interleave the largest and smallest S_z so each +S_z orbital is followed by a -S_z one
+        n = len(block)
+        order = np.stack((np.arange(n)[::-1], np.arange(n)), axis=1).ravel()[:n]
+        C[:, block] = C[:, block] @ U[:, order]
     return C
 
 

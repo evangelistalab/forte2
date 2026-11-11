@@ -293,4 +293,65 @@ np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
     return cint_int3c(intor, shell_slice, atm, bas, env, ints);
 }
 
+/// @brief Compute a multi-component three-center integral tensor.
+/// @details Libcint stores components after the three AO dimensions. The returned C-contiguous
+/// tensor reverses that layout to `(component, k, j, i)`, consistent with the component-first
+/// convention used by the other Python-facing Libcint wrappers.
+template <std::size_t M>
+np_tensor4_c cint_int3c_components(CIntorFunc intor, const std::vector<int>& shell_slice,
+                                   np_matrix_int atm, np_matrix_int bas, np_vector env) {
+    const int ksh_0 = static_cast<int>(shell_slice[0]);
+    const int ksh_1 = static_cast<int>(shell_slice[1]);
+    const int jsh_0 = static_cast<int>(shell_slice[2]);
+    const int jsh_1 = static_cast<int>(shell_slice[3]);
+    const int ish_0 = static_cast<int>(shell_slice[4]);
+    const int ish_1 = static_cast<int>(shell_slice[5]);
+
+    const int njsh = jsh_1 - jsh_0;
+    const int nksh = ksh_1 - ksh_0;
+    const int natm = static_cast<int>(atm.shape(0));
+    const int nbas = static_cast<int>(bas.shape(0));
+
+    auto* atm_data = atm.data();
+    auto* bas_data = bas.data();
+    auto* env_data = env.data();
+
+    std::vector<int> ao_offset(nbas + 1, 0);
+    for (int shell = 0; shell < nbas; ++shell) {
+        ao_offset[shell + 1] = ao_offset[shell] + CINTcgto_spheric(shell, bas_data);
+    }
+
+    const int nao_i = ao_offset[ish_1] - ao_offset[ish_0];
+    const int nao_j = ao_offset[jsh_1] - ao_offset[jsh_0];
+    const int nao_k = ao_offset[ksh_1] - ao_offset[ksh_0];
+
+    auto ints = make_zeros<nb::numpy, double, 4, nb::c_contig>(std::array<size_t, 4>{
+        M, static_cast<size_t>(nao_k), static_cast<size_t>(nao_j), static_cast<size_t>(nao_i)});
+    auto ints_f = c_to_fortran<nb::numpy, double, 4>(ints);
+
+    double* buf = ints_f.data();
+    int dims[3] = {nao_i, nao_j, nao_k};
+
+    auto kernel = [&](std::size_t kj) {
+        int shells[3];
+        const int j = jsh_0 + static_cast<int>(kj % static_cast<std::size_t>(njsh));
+        const int k = ksh_0 + static_cast<int>(kj / static_cast<std::size_t>(njsh));
+        shells[2] = k;
+        shells[1] = j;
+
+        const int shell_offset_j = ao_offset[j] - ao_offset[jsh_0];
+        const int shell_offset_k = ao_offset[k] - ao_offset[ksh_0];
+        for (int i = ish_0; i < ish_1; ++i) {
+            shells[0] = i;
+            const int shell_offset_i = ao_offset[i] - ao_offset[ish_0];
+            auto* buf_ijk =
+                buf + shell_offset_i + shell_offset_j * nao_i + shell_offset_k * nao_i * nao_j;
+            intor(buf_ijk, dims, shells, atm_data, natm, bas_data, nbas, env_data, NULL, NULL);
+        }
+    };
+
+    parallel_for(static_cast<std::size_t>(njsh) * static_cast<std::size_t>(nksh), kernel);
+    return fortran_to_c<nb::numpy, double, 4>(ints_f);
+}
+
 } // namespace forte2

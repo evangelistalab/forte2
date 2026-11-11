@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 import forte2
+from forte2.lib import ints
 from forte2.helpers.comparisons import approx_abs
 from forte2.data.atom_data import ANGSTROM_TO_BOHR
 
@@ -23,11 +24,15 @@ def test_deriv_rejects_mismatched_charge_centers():
     system = forte2.System(xyz="H 0.0 0.0 0.0 \n H 0.0 0.0 1.0", basis_set="sto-3g")
     dm = np.eye(len(system.basis))
 
-    with pytest.raises(ValueError, match="basis1 has 2 centers, but charges has 1 centers"):
-        forte2.ints.overlap_deriv(system.basis, system.basis, dm, system.atoms[:1])
+    with pytest.raises(
+        ValueError, match="basis1 has 2 centers, but charges has 1 centers"
+    ):
+        ints.overlap_deriv(system.basis, system.basis, dm, system.atoms[:1])
 
-    with pytest.raises(ValueError, match="basis1 center 0 does not match charges center 0"):
-        forte2.ints.overlap_deriv(system.basis, system.basis, dm, list(reversed(system.atoms)))
+    with pytest.raises(
+        ValueError, match="basis1 center 0 does not match charges center 0"
+    ):
+        ints.overlap_deriv(system.basis, system.basis, dm, list(reversed(system.atoms)))
 
 
 def test_overlap_deriv_h2_minbas():
@@ -38,7 +43,7 @@ def test_overlap_deriv_h2_minbas():
     xyzm = f"H 0.0 0.0 0.0 \n H 0.0 0.0 {1.0 - dz}"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="sto-3g")
 
-    s_deriv_analytical = forte2.ints.overlap_deriv(
+    s_deriv_analytical = ints.overlap_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -57,7 +62,7 @@ def test_kinetic_deriv_h2_minbas():
     xyzm = f"H 0.0 0.0 0.0 \n H 0.0 0.0 {1.0 - dz}"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="sto-3g")
 
-    s_deriv_analytical = forte2.ints.kinetic_deriv(
+    s_deriv_analytical = ints.kinetic_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -76,7 +81,7 @@ def test_nuclear_deriv_h2_minbas():
     xyzm = f"H 0.0 0.0 0.0 \n H 0.0 0.0 {1.0 - dz}"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="sto-3g")
 
-    s_deriv_analytical = forte2.ints.nuclear_deriv(
+    s_deriv_analytical = ints.nuclear_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -94,7 +99,7 @@ def test_overlap_deriv_h2o_dz():
     xyzm = f"O 0 0 0\n H 0 0 {1.0 - delta}\n H 0 1.0 0"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="cc-pvdz")
 
-    s_deriv_analytical = forte2.ints.overlap_deriv(
+    s_deriv_analytical = ints.overlap_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -109,7 +114,7 @@ def test_overlap_deriv_h2o_dz():
     xyzm = f"O 0 {-delta:.10f} 0\n H 0 0 1.0\n H 0 1.0 0"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="cc-pvdz")
 
-    s_deriv_analytical = forte2.ints.overlap_deriv(
+    s_deriv_analytical = ints.overlap_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -124,7 +129,7 @@ def test_overlap_deriv_h2o_dz():
     xyzm = f"O 0 0 0\n H 0 0 1.0\n H {-delta:.10f} 1.0 0"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="cc-pvdz")
 
-    s_deriv_analytical = forte2.ints.overlap_deriv(
+    s_deriv_analytical = ints.overlap_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -143,7 +148,7 @@ def test_kinetic_deriv_h2o_dz():
     xyzm = f"O 0 0 0\n H 0 0 {1.0 - delta}\n H 0 1.0 0"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="cc-pvdz")
 
-    s_deriv_analytical = forte2.ints.kinetic_deriv(
+    s_deriv_analytical = ints.kinetic_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -158,7 +163,7 @@ def test_kinetic_deriv_h2o_dz():
     xyzm = f"O 0 {-delta:.10f} 0\n H 0 0 1.0\n H 0 1.0 0"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="cc-pvdz")
 
-    s_deriv_analytical = forte2.ints.kinetic_deriv(
+    s_deriv_analytical = ints.kinetic_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -173,7 +178,7 @@ def test_kinetic_deriv_h2o_dz():
     xyzm = f"O 0 0 0\n H 0 0 1.0\n H {-delta:.10f} 1.0 0"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="cc-pvdz")
 
-    s_deriv_analytical = forte2.ints.kinetic_deriv(
+    s_deriv_analytical = ints.kinetic_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -192,7 +197,7 @@ def test_nuclear_deriv_h2o_dz():
     xyzm = f"O 0 0 0\n H 0 0 {1.0 - delta:.10f}\n H 0 1.0 0"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="cc-pvdz")
 
-    s_deriv_analytical = forte2.ints.nuclear_deriv(
+    s_deriv_analytical = ints.nuclear_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -206,7 +211,7 @@ def test_nuclear_deriv_h2o_dz():
     xyzm = f"O 0 {-delta:.10f} 0\n H 0 0 1.0\n H 0 1.0 0"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="cc-pvdz")
 
-    s_deriv_analytical = forte2.ints.nuclear_deriv(
+    s_deriv_analytical = ints.nuclear_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 
@@ -221,7 +226,7 @@ def test_nuclear_deriv_h2o_dz():
     xyzm = f"O 0 0 0\n H 0 0 1.0\n H {-delta:.10f} 1.0 0"
     system0, systemp, systemm, dm = _set_up_tests(xyz0, xyzp, xyzm, basis_set="cc-pvdz")
 
-    s_deriv_analytical = forte2.ints.nuclear_deriv(
+    s_deriv_analytical = ints.nuclear_deriv(
         system0.basis, system0.basis, dm, system0.atoms
     )
 

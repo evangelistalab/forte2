@@ -2,8 +2,8 @@ import numpy as np
 from typing import Any
 from numpy.typing import NDArray
 import scipy as sp
-
-from forte2 import cpp_helpers
+from forte2.base_classes import ActiveSpaceDriver
+from forte2.lib import cpp_helpers
 
 
 class MutualCorrelationAnalysis:
@@ -12,8 +12,8 @@ class MutualCorrelationAnalysis:
 
     Parameters
     ----------
-    solver : forte2 solver object of type ActiveSpaceSolver
-        The solver from which to extract the RDMs.
+    driver : forte2 driver object of type ActiveSpaceDriver 
+        The object from which to extract the RDMs. This should be a driver that owns a solver (`CI`, `MCOptimizer`).
     root : int, optional
         The root index for which to perform the analysis. Default is 0.
     sub_solver_index : int, optional
@@ -36,12 +36,13 @@ class MutualCorrelationAnalysis:
 
     Notes
     ----------------------
-    This analysis expects an active space solver with the following API
-    on the selected sub-solver `solver.sub_solvers[sub_solver_index]`:
+    This analysis takes a driver that owns an active-space solver (`CI` or
+    `MCOptimizer`) and reaches the workers through `solver.ci_solver.sub_solvers`.
+    It expects the following API on the selected sub-solver:
 
-    - make_sd_1rdm(root) -> tuple[NDArray, NDArray]
+    - make_rdm(root, order=1, spin_type="sd") -> tuple[NDArray, NDArray]
             Returns (γa, γb) spin-dependent 1-RDMs with shape (norb, norb) each.
-    - make_sd_2rdm(root) -> tuple[NDArray, NDArray, NDArray]
+    - make_rdm(root, order=2, spin_type="sd") -> tuple[NDArray, NDArray, NDArray]
             Returns (γaa, γab, γbb) spin-dependent 2-RDMs.
             γaa and γbb are packed (lower-triangular pair indices) and are
             converted to full (norb, norb, norb, norb) tensors via
@@ -65,19 +66,25 @@ class MutualCorrelationAnalysis:
     - This implementation targets the non-relativistic case.
     """
 
-    def __init__(self, solver, root=0, sub_solver_index=0):
+    def __init__(self, driver, root=0, sub_solver_index=0):
         self.Q = None
 
-        self.active_mo_indices = solver.mo_space.active_indices[:]
+        # check that a driver is passed before attempting to extract properties
+        if not isinstance(driver, ActiveSpaceDriver):
+            raise TypeError("driver must be an ActiveSpaceDriver, for example, forte2.CI or forte2.MCOptimizer")
+
+        self.active_mo_indices = driver.mo_space.active_indices[:]
+
+        sub_solver = driver.ci_solver.sub_solvers[sub_solver_index]
 
         # extract the spin-dependent 1-RDM  from the solver
-        γa, γb = solver.sub_solvers[sub_solver_index].make_sd_1rdm(root)
+        γa, γb = sub_solver.make_rdm(root, order=1, spin_type="sd")
 
         # compute the spin-dependent 1-RDM
         self.Γ1 = γa + γb
 
         # extract the spin-dependent 2-RDM from the solver
-        γaa, γab, γbb = solver.sub_solvers[sub_solver_index].make_sd_2rdm(root)
+        γaa, γab, γbb = sub_solver.make_rdm(root, order=2, spin_type="sd")
 
         # convert packed 2-RDMs to full tensors (only the aa and bb components are packed)
         γaa = cpp_helpers.packed_tensor4_to_tensor4(γaa)

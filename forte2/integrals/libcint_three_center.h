@@ -30,6 +30,7 @@ extern "C" {
     int name##_sph(double* buf, int* dims, int* shls, int* atm, int natm, int* bas, int nbas,      \
                    double* env, CINTOpt* opt, double* cache);
 DECL_CINT_FUNC_SPH(int3c2e)
+DECL_CINT_FUNC_SPH(int3c2e_spsp1)
 #undef DECL_CINT_FUNC_SPH
 }
 
@@ -53,6 +54,11 @@ namespace forte2 {
 
 DECL_CINT_FORTE2_FUNC_SPH(int3c2e)
 #undef DECL_CINT_FORTE2_FUNC_SPH
+
+np_tensor4_c cint_int3c2e_spsp1_sph(const std::vector<int>& shell_slice, np_matrix_int atm,
+                                    np_matrix_int bas, np_vector env) {
+    return cint_int3c_components<4>(int3c2e_spsp1_sph, shell_slice, atm, bas, env);
+}
 
 } // namespace forte2
 

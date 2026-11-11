@@ -46,37 +46,82 @@ find_double_connection_beta(const forte2::Determinant& lhs, const forte2::Determ
 namespace forte2 {
 
 SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_integrals,
-                         np_tensor4 two_electron_integrals)
-    : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), scalar_energy_(scalar_energy) {
+                         np_tensor4 two_electron_integrals) {
+    update_integrals(norb, scalar_energy, one_electron_integrals, two_electron_integrals);
+}
+
+void SlaterRules::update_integrals(int norb, std::optional<double> scalar_energy,
+                                   std::optional<np_matrix> H, std::optional<np_tensor4> V) {
     if (norb < 0) {
         throw std::invalid_argument("SlaterRules: norb must be non-negative, got " +
                                     std::to_string(norb));
     }
+    const auto new_norb = static_cast<std::size_t>(norb);
 
-    // Precompute the one-electron, Coulomb and Exchange integrals
-    h_.resize(norb_ * norb_);
-    J_.resize(norb_ * norb_);
-    JK_.resize(norb_ * norb_);
-    f_J_.resize(norb_ * norb_ * norb_);
-    f_JK_.resize(norb_ * norb_ * norb_);
-    v_.resize(norb_ * norb_ * norb_ * norb_);
-    va_.resize(norb_ * norb_ * norb_ * norb_);
-    auto h_view = one_electron_integrals.view();
-    auto v_view = two_electron_integrals.view();
+    if (H) {
+        if (H->ndim() != 2) {
+            throw std::runtime_error("SlaterRules: H must be a 2D matrix.");
+        }
+        if (H->shape(0) != new_norb || H->shape(1) != new_norb) {
+            throw std::runtime_error("SlaterRules: H shape does not match the number of orbitals.");
+        }
+    }
+    if (V) {
+        if (V->ndim() != 4) {
+            throw std::runtime_error("SlaterRules: V must be a 4D tensor.");
+        }
+        if (V->shape(0) != new_norb || V->shape(1) != new_norb || V->shape(2) != new_norb ||
+            V->shape(3) != new_norb) {
+            throw std::runtime_error("SlaterRules: V shape does not match the number of orbitals.");
+        }
+    }
+    if (new_norb != norb_ && (!H || !V)) {
+        throw std::runtime_error(
+            "SlaterRules: changing norb requires one_electron_integrals and "
+            "two_electron_integrals to be given together, since every derived array depends on "
+            "norb.");
+    }
 
-    for (std::size_t p = 0; p < norb_; ++p) {
-        for (std::size_t q = 0; q < norb_; ++q) {
-            h_[p * norb_ + q] = h_view(p, q);                             // <p|h|q>
-            J_[p * norb_ + q] = v_view(p, q, p, q);                       // <pq|pq>
-            JK_[p * norb_ + q] = v_view(p, q, p, q) - v_view(p, q, q, p); // <pq|pq> - <pq|qp>
-            for (std::size_t r = 0; r < norb_; ++r) {
-                f_J_[p * norb2_ + q * norb_ + r] = v_view(p, r, q, r); // <pr|qr>
-                f_JK_[p * norb2_ + q * norb_ + r] =
-                    v_view(p, r, q, r) - v_view(p, r, r, q); // <pr|qr> - <pr|rq>
-                for (std::size_t s = 0; s < norb_; ++s) {
-                    v_[p * norb3_ + q * norb2_ + r * norb_ + s] = v_view(p, q, r, s); // <pq|rs>
-                    va_[p * norb3_ + q * norb2_ + r * norb_ + s] =
-                        v_view(p, q, r, s) - v_view(p, q, s, r); // <pq||rs> = <pq|rs> - <pq|sr>
+    norb_ = new_norb;
+    norb2_ = norb_ * norb_;
+    norb3_ = norb_ * norb_ * norb_;
+
+    if (scalar_energy) {
+        scalar_energy_ = *scalar_energy;
+    }
+
+    if (H) {
+        h_.resize(norb_ * norb_);
+        auto h_view = H->view();
+        for (std::size_t p = 0; p < norb_; ++p) {
+            for (std::size_t q = 0; q < norb_; ++q) {
+                h_[p * norb_ + q] = h_view(p, q); // <p|h|q>
+            }
+        }
+    }
+
+    if (V) {
+        J_.resize(norb_ * norb_);
+        JK_.resize(norb_ * norb_);
+        f_J_.resize(norb_ * norb_ * norb_);
+        f_JK_.resize(norb_ * norb_ * norb_);
+        v_.resize(norb_ * norb_ * norb_ * norb_);
+        va_.resize(norb_ * norb_ * norb_ * norb_);
+        auto v_view = V->view();
+
+        for (std::size_t p = 0; p < norb_; ++p) {
+            for (std::size_t q = 0; q < norb_; ++q) {
+                J_[p * norb_ + q] = v_view(p, q, p, q);                       // <pq|pq>
+                JK_[p * norb_ + q] = v_view(p, q, p, q) - v_view(p, q, q, p); // <pq|pq>-<pq|qp>
+                for (std::size_t r = 0; r < norb_; ++r) {
+                    f_J_[p * norb2_ + q * norb_ + r] = v_view(p, r, q, r); // <pr|qr>
+                    f_JK_[p * norb2_ + q * norb_ + r] =
+                        v_view(p, r, q, r) - v_view(p, r, r, q); // <pr|qr> - <pr|rq>
+                    for (std::size_t s = 0; s < norb_; ++s) {
+                        v_[p * norb3_ + q * norb2_ + r * norb_ + s] = v_view(p, q, r, s); // <pq|rs>
+                        va_[p * norb3_ + q * norb2_ + r * norb_ + s] =
+                            v_view(p, q, r, s) - v_view(p, q, s, r); // <pq||rs>=<pq|rs>-<pq|sr>
+                    }
                 }
             }
         }
