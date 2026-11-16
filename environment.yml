@@ -21,6 +21,6 @@ dependencies:
     - pytest
     - pytest-cov
     - nbmake
-    - conda-forge::libint
+    - conda-forge::libint-cxx-devel=2.14.1
     - conda-forge::regex
     - conda-forge::basis_set_exchange
