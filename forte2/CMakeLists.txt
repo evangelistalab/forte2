@@ -31,7 +31,7 @@ if (USE_LIBCINT)
   FetchContent_Declare(
     libcint
     GIT_REPOSITORY https://github.com/sunqm/libcint.git
-    GIT_TAG v6.1.3    # "master", or specific commit/tag, e.g. v6.1.3
+    GIT_TAG v6.2.1    # "master", or specific commit/tag, e.g. v6.1.3
   )
 
   FetchContent_Populate(libcint)     # produces ${libcint_SOURCE_DIR} and ${libcint_BINARY_DIR}

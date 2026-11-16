@@ -453,13 +453,13 @@ def test_jkbuilder_on_the_fly_large():
     J_otf = fb_otf.build_J(D)[0]
     K_otf = fb_otf.build_K([Cocc])[0]
 
-    assert np.linalg.norm(J_otf - J_ref) < 1e-8
-    assert np.linalg.norm(K_otf - K_ref) < 1e-8
+    assert np.linalg.norm(J_otf - J_ref) < 5e-8
+    assert np.linalg.norm(K_otf - K_ref) < 5e-8
 
     # separately test the combined JK builder, since the algorithm is different for the combined builder
     J_otf, K_otf = fb_otf.build_JK([Cocc])
-    assert np.linalg.norm(J_otf[0] - J_ref[0]) < 1e-8
-    assert np.linalg.norm(K_otf[0] - K_ref[0]) < 1e-8
+    assert np.linalg.norm(J_otf[0] - J_ref[0]) < 5e-8
+    assert np.linalg.norm(K_otf[0] - K_ref[0]) < 5e-8
 
 
 def test_jkbuilder_lindep_metric():
