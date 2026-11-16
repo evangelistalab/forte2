@@ -4,7 +4,10 @@ from forte2 import CISolver, MCOptimizer, RHF, State, System
 from forte2.helpers.comparisons import approx
 
 
-def test_sa_casscf_hf():
+# micro_maxiter=50 lets the first orbital step at fixed CI reach g_tol, so the
+# optimizer must re-solve the CI before declaring convergence.
+@pytest.mark.parametrize("micro_maxiter", [6, 50])
+def test_sa_casscf_hf(micro_maxiter):
     erhf = -100.009873562527
     emcscf_root_1 = -99.9964137656
     emcscf_root_2 = -99.6886809114
@@ -28,6 +31,7 @@ def test_sa_casscf_hf():
     )
     mc = MCOptimizer(
         ci_solver,
+        micro_maxiter=micro_maxiter,
         do_transition_dipole=True,
     )(rhf)
     mc.run()
