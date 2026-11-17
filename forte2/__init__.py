@@ -1,8 +1,9 @@
 __version__ = "2026.11.2"
 __author__ = "Forte2 Developers"
 
-from .helpers.echo_script import echo_invoking_script
+from .helpers.echo_script import echo_invoking_script, report_run_timing
 
+report_run_timing()
 # print the invoking python script to stdout
 echo_invoking_script()
 
