@@ -433,11 +433,14 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
     def _check_convergence(self):
         is_grad_conv = self.g_rms < self.g_tol
 
+        # on iteration 0 delta CI energies are zero by construction
+        ci_is_updated = self.iter > 0
+
         self.max_ci_de = np.max(np.abs(self.E_ci - self.E_ci_old))
-        is_ci_eigval_conv = self.max_ci_de < self.e_tol
+        is_ci_eigval_conv = ci_is_updated and self.max_ci_de < self.e_tol
 
         self.delta_ci_avg = self.E_avg - self.E_avg_old
-        is_ci_avg_conv = abs(self.delta_ci_avg) < self.e_tol
+        is_ci_avg_conv = ci_is_updated and abs(self.delta_ci_avg) < self.e_tol
 
         criteria = [
             is_grad_conv,
