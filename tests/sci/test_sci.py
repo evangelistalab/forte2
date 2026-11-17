@@ -441,7 +441,7 @@ def test_sci_initial_guess_validates_occupation_windows(
         solver._generate_initial_guess_dets(window_occ, window_vir)
 
 
-def test_sci_transition_dipole_matches_ci():
+def test_sci_transition_dipole_matches_ci(tmp_path):
     """SelectedCI transition dipoles should match CI in the full selected space."""
     xyz = """
     H 0.0 0.0 0.0
@@ -502,6 +502,19 @@ def test_sci_transition_dipole_matches_ci():
         assert sci.ci_solver.oscillator_strengths[key] == pytest.approx(
             ci.ci_solver.oscillator_strengths[key], abs=1e-4
         )
+
+    assert sci.result.ci_energies == approx(sci.ci_solver.E_tot)
+    assert np.allclose(sci.result.ci_energies, ci.result.ci_energies, atol=1e-8)
+    assert sci.result.trdm1.keys() == ci.result.trdm1.keys()
+
+    sci.result.to_npz(tmp_path / "temp_test_sci_transition_dipole_matches_ci.npz")
+    with np.load(
+        tmp_path / "temp_test_sci_transition_dipole_matches_ci.npz", allow_pickle=True
+    ) as f:
+        assert np.allclose(f["ci_energies"], sci.ci_solver.E_tot)
+        assert np.allclose(f["mo_coeff"][()]["C"][0], sci.mos.C[0])
+        assert np.allclose(f["rdm1"][1], sci.make_rdm(1, order=1, spin_type="sd"))
+        assert f["trdm1"][()].keys() == sci.result.trdm1.keys()
 
 
 def test_sci_transition_dipole_different_nroots_matches_ci():
@@ -852,6 +865,7 @@ def test_sci_n2_multiple_roots():
     assert sci.E_ci[1] == pytest.approx(-108.35946592810289, abs=1e-8)
 
 
+@pytest.mark.slow
 def test_sci_water_valence_excitation():
     """Test SelectedCI on a water valence-excited state."""
     xyz = """

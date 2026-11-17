@@ -1,10 +1,11 @@
+import numpy as np
 import pytest
 
 from forte2 import CISolver, MCOptimizer, RHF, State, System
 from forte2.helpers.comparisons import approx
 
 
-def test_sa_casscf_hf():
+def test_sa_casscf_hf(tmp_path):
     erhf = -100.009873562527
     emcscf_root_1 = -99.9964137656
     emcscf_root_2 = -99.6886809114
@@ -55,3 +56,16 @@ def test_sa_casscf_hf():
     assert abs(mc.ci_solver.transition_dipoles[(1, 1)][2]) == pytest.approx(
         0.8239033452222257, abs=1e-4
     )
+
+    mc.result.to_npz(tmp_path / "temp_test_sa_casscf_hf.npz")
+    with np.load(tmp_path / "temp_test_sa_casscf_hf.npz", allow_pickle=True) as f:
+        assert np.allclose(f["ci_energies"], mc.E_ci)
+        C = f["mo_coeff"][()]["C"][0]
+        C_unrotated = f["mo_coeff_unrotated"][()]["C"][0]
+        act = mc.mo_space.active_indices
+        assert np.allclose(C, mc.mos.C[0])
+        assert np.allclose(C[:, act], C_unrotated[:, act] @ f["active_rotation"])
+        assert np.allclose(f["rdm1"][3], mc.make_rdm(3, order=1, spin_type="sd"))
+        assert (
+            f["transition_dipoles"][()].keys() == mc.ci_solver.transition_dipoles.keys()
+        )

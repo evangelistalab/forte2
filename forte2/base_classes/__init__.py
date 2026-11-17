@@ -4,4 +4,4 @@ from .params import X2CParams, DavidsonLiuParams, CIParams, SelectedCIParams
 from .ci_base import CIBase, RelCIBase
 from .method import Method
 from .mo import MO
-from .results import SCFResult
+from .results import SCFResult, ActiveSpaceResult

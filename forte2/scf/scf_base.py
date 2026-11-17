@@ -40,7 +40,8 @@ class SCFBase(Method):
     level_shift_thresh : float, optional, default=1e-5
         If energy change is below this threshold, level shift is turned off.
     die_if_not_converged : bool, optional, default=True
-        Whether to raise an error if the SCF calculation does not converge.
+        Whether to raise an error if the SCF calculation does not converge. The
+        error is raised after ``result`` is stored.
     target_symmetry : str | int | None, optional
         The irrep of the HF determinant, by label or index. In each iteration, the
         occupied orbitals are those with the lowest energy sum among determinants of
@@ -69,6 +70,8 @@ class SCFBase(Method):
         The orbital energies.
     determinant_symmetry : str
         The irrep of the converged HF determinant.
+    result : SCFResult
+        The results of the calculation, stored even if it did not converge.
 
     Raises
     ------
@@ -236,6 +239,7 @@ class SCFBase(Method):
         logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
         self.iter = 0
+        self.converged = False
         self._orbital_irreps = None
         if self.C is None:
             eps, C, irreps = self._occupy(
@@ -312,14 +316,9 @@ class SCFBase(Method):
         else:
             logger.log_info1("=" * width)
             logger.log_info1(f"{self.method} iterations did not converge")
-            if self.die_if_not_converged:
-                raise RuntimeError(
-                    f"{self.method} did not converge in {self.maxiter} iterations."
-                )
-            else:
-                logger.log_warning(
-                    f"{self.method} did not converge in {self.maxiter} iterations."
-                )
+            logger.log_warning(
+                f"{self.method} did not converge in {self.maxiter} iterations."
+            )
 
         end = time.monotonic()
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
@@ -332,6 +331,10 @@ class SCFBase(Method):
             mo_coeff=self.mos,
             ao_fock_matrix=F,
         )
+        if not self.converged and self.die_if_not_converged:
+            raise RuntimeError(
+                f"{self.method} did not converge in {self.maxiter} iterations."
+            )
 
         self.executed = True
         return self

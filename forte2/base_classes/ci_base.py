@@ -294,6 +294,8 @@ class CIBase(ActiveSpaceSolver):
         self.evals_flat = np.concatenate(self.evals_per_solver)
         self.E_avg = self.compute_average_energy()
         self.E = self.evals_flat
+        # solvers with a perturbative correction overwrite this in _collect_root_results
+        self.E_tot = self.evals_flat
 
         self._collect_root_results()
 
@@ -378,24 +380,83 @@ class CIBase(ActiveSpaceSolver):
             top_dets += ci_solver.get_top_determinants(n)
         return top_dets
 
-    def compute_natural_occupation_numbers(self):
+    def _make_root_rdm1s(self):
+        """
+        Make the active-space 1-RDMs of all roots.
+
+        Returns
+        -------
+        NDArray
+            Shape (nroots, 2, norb, norb) with the alpha and beta blocks, or
+            (nroots, norb, norb) spin-orbital RDMs for two-component solvers.
+        """
+        spin_type = "so" if self.two_component else "sd"
+        return np.array(
+            [
+                self.make_rdm(i, order=1, spin_type=spin_type)
+                for i in range(self.sa_info.nroots_sum)
+            ]
+        )
+
+    def _spin_free_rdm1s(self, rdm1):
+        """Spin-free (or spin-orbital, for two-component) form of `_make_root_rdm1s` output."""
+        return rdm1 if self.two_component else rdm1.sum(axis=1)
+
+    def compute_natural_occupation_numbers(self, rdm1=None):
         """
         Compute the natural occupation numbers for the CI states and store them
         in ``self.nat_occs`` (this method returns None).
         If more than one CI roots are requested, then self.nat_occs_avg stores
         the state-averaged natural occupation numbers.
 
+        Parameters
+        ----------
+        rdm1 : NDArray, optional
+            The active-space 1-RDMs of all roots, with shape (nroots, 2, norb, norb)
+            for the alpha and beta blocks, or (nroots, norb, norb) for two-component
+            solvers. Computed if not provided.
         """
-        nos = []
-        for ci_solver in self.sub_solvers:
-            nos.append(ci_solver.compute_natural_occupation_numbers())
-        self.nat_occs = np.concatenate(nos, axis=1)
+        if rdm1 is None:
+            rdm1 = self._make_root_rdm1s()
+        g1 = self._spin_free_rdm1s(rdm1)
+        # (norb, nroots), in descending order
+        self.nat_occs = np.linalg.eigvalsh(g1)[:, ::-1].T
         self.nat_occs_avg = None
         if self.sa_info.nroots_sum > 1:
-            g1_avg = self.make_average_rdm(1)
+            g1_avg = np.einsum("r,rpq->pq", self.sa_info.weights_flat, g1)
             self.nat_occs_avg = np.linalg.eigvalsh(g1_avg)[::-1]
 
-    def compute_transition_properties(self, C=None):
+    def compute_dipoles(self, C=None, rdm1=None):
+        """
+        Compute the dipole moments (nuclear + electronic) of all CI roots in atomic units.
+
+        Parameters
+        ----------
+        C : NDArray, optional
+            The MO coefficients. If not provided, ``self.mos.C[0]`` is used.
+        rdm1 : NDArray, optional
+            The active-space 1-RDMs of all roots, with shape (nroots, 2, norb, norb)
+            for the alpha and beta blocks, or (nroots, norb, norb) for two-component
+            solvers. Computed if not provided.
+
+        Returns
+        -------
+        NDArray
+            The dipole moments, shape (nroots, 3).
+        """
+        if C is None:
+            C = self.mos.C[0]
+        if rdm1 is None:
+            rdm1 = self._make_root_rdm1s()
+        core_dip = self._core_dipole(C)
+        return np.array(
+            [
+                np.real(self._electronic_dipole(g, C) + core_dip)
+                for g in self._spin_free_rdm1s(rdm1)
+            ]
+        )
+
+    def compute_transition_properties(self, C=None, dipoles=None):
         """
         Compute the transition dipole moments, oscillator strengths, and vertical
         transition energies from the 1-TDMs.
@@ -404,6 +465,9 @@ class CIBase(ActiveSpaceSolver):
         ----------
         C : NDArray, optional
             The MO coefficients. If not provided, ``self.mos.C[0]`` is used.
+        dipoles : NDArray, optional
+            The dipole moments of all roots, as returned by `compute_dipoles`.
+            Computed if not provided.
 
         Returns
         -------
@@ -416,41 +480,28 @@ class CIBase(ActiveSpaceSolver):
         vertical_transition_energies : dict[tuple[int, int], float]
             Maps pairs of CI roots to their vertical transition energies. Also
             saved in ``self.vertical_transition_energies``.
-        """
-        from forte2.props import get_1e_property
 
+        Notes
+        -----
+        The active-space 1-TRDMs of distinct pairs are saved in
+        ``self.transition_rdms``, keyed like ``self.transition_dipoles``.
+        """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
 
         if C is None:
             C = self.mos.C[0]
 
-        Cact = C[:, self.active_indices]
-        Ccore = C[:, self.core_indices]
-        rdm_spin_type = "so" if self.two_component else "sf"
-        # spin-summed 1-RDM for the spatial-orbital case; spinors are singly occupied
-        factor = 1.0 if self.two_component else 2.0
-        rdm_core = factor * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
-        # this includes nuclear dipole contribution
-        core_dip = get_1e_property(
-            self.system, rdm_core, property_name="dipole", unit="au"
-        )
+        if dipoles is None:
+            dipoles = self.compute_dipoles(C)
+        tdm_spin_type = "so" if self.two_component else "sd"
         self.transition_dipoles = OrderedDict()
         self.oscillator_strengths = OrderedDict()
         self.vertical_transition_energies = OrderedDict()
+        self.transition_rdms = OrderedDict()
         for ici in range(self.sa_info.nroots_sum):
             istate, iroot_in_state = self._get_state_root(ici)
-            rdm = self.sub_solvers[istate].make_rdm(
-                iroot_in_state, None, order=1, spin_type=rdm_spin_type
-            )
-            # Different (back-)transformation rules for RDMs:
-            # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
-            # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
-            rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
-            dip = get_1e_property(
-                self.system, rdm, property_name="electric_dipole", unit="au"
-            )
-            self.transition_dipoles[(ici, ici)] = dip + core_dip
+            self.transition_dipoles[(ici, ici)] = dipoles[ici]
             # No oscillator strength or vertical transition energy for i->i transitions
             self.oscillator_strengths[(ici, ici)] = 0.0
             self.vertical_transition_energies[(ici, ici)] = 0.0
@@ -468,13 +519,12 @@ class CIBase(ActiveSpaceSolver):
                         vte = -vte
                     else:
                         _ici, _jci = ici, jci
-                    tdm = self.make_rdm(_ici, _jci, order=1, spin_type=rdm_spin_type)
-                    tdm = np.einsum(
-                        "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
+                    tdm = np.asarray(
+                        self.make_rdm(_ici, _jci, order=1, spin_type=tdm_spin_type)
                     )
-                    tdip = get_1e_property(
-                        self.system, tdm, property_name="electric_dipole", unit="au"
-                    )
+                    self.transition_rdms[(_ici, _jci)] = tdm
+                    tdm_sf = tdm if self.two_component else tdm.sum(axis=0)
+                    tdip = self._electronic_dipole(tdm_sf, C)
                     self.transition_dipoles[(_ici, _jci)] = tdip
                     self.oscillator_strengths[(_ici, _jci)] = (
                         (2 / 3) * vte * np.linalg.norm(tdip) ** 2
@@ -495,6 +545,29 @@ class CIBase(ActiveSpaceSolver):
             self.oscillator_strengths,
             self.vertical_transition_energies,
         )
+
+    def _electronic_dipole(self, rdm, C):
+        """Electronic dipole (a.u.) of a spin-free active-space 1-(T)RDM."""
+        from forte2.props import get_1e_property
+
+        Cact = C[:, self.active_indices]
+        # Different (back-)transformation rules for RDMs:
+        # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
+        # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
+        rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
+        return get_1e_property(
+            self.system, rdm, property_name="electric_dipole", unit="au"
+        )
+
+    def _core_dipole(self, C):
+        """Dipole (a.u.) of the core electrons and the nuclei."""
+        from forte2.props import get_1e_property
+
+        Ccore = C[:, self.core_indices]
+        # spin-summed 1-RDM for the spatial-orbital case; spinors are singly occupied
+        factor = 1.0 if self.two_component else 2.0
+        rdm_core = factor * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
+        return get_1e_property(self.system, rdm_core, property_name="dipole", unit="au")
 
     def make_cumulant(self, root: int, *, order: int, spin_type: str):
         """

@@ -1,5 +1,7 @@
 import logging
 
+import numpy as np
+
 import pytest
 
 from forte2 import MCOptimizer, State, System
@@ -25,7 +27,7 @@ from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
     ],
 )
 def test_sciscf_n2_multiple_roots(
-    var_threshold, expected_energies, expect_rotation_warning, caplog
+    var_threshold, expected_energies, expect_rotation_warning, caplog, tmp_path
 ):
     """Test that multiple roots can be converged for N2 and warning about orbital rotation invariance."""
     xyz = """
@@ -73,3 +75,15 @@ def test_sciscf_n2_multiple_roots(
     else:
         assert ci_solver.E[0] == approx(expected_energies[0])
         assert ci_solver.E[1] == approx(expected_energies[1])
+
+    mc.result.to_npz(tmp_path / "temp_test_sciscf_n2_multiple_roots.npz")
+    with np.load(
+        tmp_path / "temp_test_sciscf_n2_multiple_roots.npz", allow_pickle=True
+    ) as f:
+        assert np.allclose(f["ci_energies"], ci_solver.E_tot)
+        C = f["mo_coeff"][()]["C"][0]
+        C_unrotated = f["mo_coeff_unrotated"][()]["C"][0]
+        act = mc.mo_space.active_indices
+        assert np.allclose(C, mc.mos.C[0])
+        assert np.allclose(C[:, act], C_unrotated[:, act] @ f["active_rotation"])
+        assert np.allclose(f["rdm1"][1], mc.make_rdm(1, order=1, spin_type="sd"))
