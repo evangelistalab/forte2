@@ -1,16 +1,17 @@
 import pytest
 
+import numpy as np
+
 from forte2 import System
 from forte2.lib import ints
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
 from forte2.system import BSE_AVAILABLE
-from forte2.base_classes import SCFResult
 
 LIBCINT_AVAILABLE = getattr(ints, "HAS_LIBCINT", False)
 
 
-def test_rhf():
+def test_rhf(tmp_path):
     erhf = -76.061466407195
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
@@ -21,6 +22,14 @@ def test_rhf():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
+    res = scf.result
+    res.to_npz(tmp_path / "temp_test_rhf.npz")
+
+    with np.load(tmp_path / "temp_test_rhf.npz", allow_pickle=True) as f:
+        assert f["energy"] == scf.E
+        assert np.allclose(f["orbital_energies"][0], scf.eps[0])
+        assert np.allclose(f["mo_coeff"][()]["C"][0], scf.mos.C[0])
+        assert np.allclose(f["ao_fock_matrix"][0], scf.F[0])
 
 
 def test_rhf_zero_electron():

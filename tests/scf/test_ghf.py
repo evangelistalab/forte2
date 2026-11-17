@@ -25,7 +25,7 @@ def test_equivalence_to_rhf():
     assert scf.S2 == approx(s2_ghf)
 
 
-def test_ghf_complex_perturbation():
+def test_ghf_complex_perturbation(tmp_path):
     """
     This test checks that, for a system that's stable wrt to
     Sz and time-reversal symmetry breaking, the GHF algorithm will converge to
@@ -59,6 +59,15 @@ def test_ghf_complex_perturbation():
     scf.run()
     assert scf.E == approx(e_uhf)
     assert scf.S2 == approx(s2_uhf)
+
+    res = scf.result
+    res.to_npz(tmp_path / "temp_test_ghf_complex_perturbation.npz")
+
+    with np.load(tmp_path / "temp_test_ghf_complex_perturbation.npz", allow_pickle=True) as f:
+        assert f["energy"] == scf.E
+        assert np.allclose(f["orbital_energies"][0], scf.eps[0])
+        assert np.allclose(f["mo_coeff"][()]["C"][0], scf.mos.C[0])
+        assert np.allclose(f["ao_fock_matrix"][0], scf.F[0])
 
 
 def test_j_adapted_ghf():
