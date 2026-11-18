@@ -17,7 +17,7 @@ except Exception as e:
 
 
 from .integrals import integrals
-from .base_classes import X2CParams
+from .base_classes import X2CParams, save_results
 from .system import System, ModelSystem, HubbardModel
 from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, GHF

@@ -1,10 +1,90 @@
 from dataclasses import dataclass, fields, asdict
 from abc import ABC
+from datetime import datetime
+from pathlib import Path
+import glob
+import itertools
+import os
 
+from forte2.helpers import logger
 from .mo import MO
 import numpy as np
 from numpy.typing import NDArray
-from typing import Any
+
+# File-name prefix (including the directory) of saved results; None when saving is off
+_save_prefix = None
+# Numbers saved results in the order they are produced, over the whole process
+_save_counter = itertools.count(1)
+
+
+def save_results(name=None, directory=None):
+    """
+    Save every result produced to an NPZ file. Saving is off by default.
+
+    Files are written as ``{prefix}_{NNN}_{Method}.npz``. ``NNN`` numbers the
+    results in the order they are produced, and ``Method`` is the class that
+    produced the result. A file that cannot be written is skipped with a warning,
+    and the calculation continues.
+
+    Parameters
+    ----------
+    name : str | bool | None, optional, default=None
+        The file-name prefix. If None, the prefix is the script's name followed by
+        the current date and time, with ``-2``, ``-3``, ... appended if files with
+        that prefix already exist. False turns saving off.
+    directory : str | os.PathLike | None, optional, default=None
+        The directory to save to, created if it does not exist. If None, the
+        directory of the invoking script is used, or the working directory when
+        there is no plain script (IPython, Jupyter, pytest).
+
+    Raises
+    ------
+    ValueError
+        If the directory cannot be created or is not writable.
+    """
+    from forte2.helpers.echo_script import _plain_script_path
+
+    global _save_prefix
+    if name is False:
+        _save_prefix = None
+        return
+
+    script = _plain_script_path()
+    if directory is None:
+        directory = Path(script).resolve().parent if script else Path.cwd()
+    else:
+        directory = Path(directory).expanduser()
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise ValueError(
+                f"Cannot create the results directory {directory}: {e}"
+            ) from e
+    if not os.access(directory, os.W_OK):
+        raise ValueError(f"The results directory {directory} is not writable.")
+
+    if name is not None:
+        _save_prefix = directory / name
+        return
+
+    stem = Path(script).stem if script else "forte2"
+    base = f"{stem}_{datetime.now():%Y%m%d-%H%M%S}"
+    prefix, serial = base, 1
+    while any(directory.glob(f"{glob.escape(prefix)}_*.npz")):
+        serial += 1
+        prefix = f"{base}-{serial}"
+    _save_prefix = directory / prefix
+
+
+def _save_result(result, method_name):
+    """Write `result` to the next numbered NPZ file if saving is on."""
+    if _save_prefix is None:
+        return
+    path = f"{_save_prefix}_{next(_save_counter):03d}_{method_name}.npz"
+    try:
+        result.to_npz(path)
+    except OSError as e:
+        logger.log_warning(f"Could not save the {method_name} result to {path}: {e}")
 
 
 @dataclass(frozen=True)
