@@ -30,6 +30,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Two-component CI for relativistic Hamiltonians
   * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
   * Overlaps between one- or two-component CI wavefunctions that differ in orbitals, geometry, or basis set [10]_ [11]_
+  * Spin-adapted density matrix renormalization group (DMRG) through block2, with state averaging and point-group symmetry [12]_. This requires block2, which isn't installed with Forte2 (see :ref:`install-block2`).
   
 * Multi-configuration self-consistent field (MCSCF) methods
   
@@ -69,3 +70,4 @@ References
 .. [9] Surjuse, K. A.; Valeev, E. F. SAP-X2C: Optimally-Simple Two-Component Relativistic Hamiltonian with Size-Intensive Picture Change. J. Chem. Theory Comput. 2026, 22 (7), 3443-3452. https://doi.org/10.1021/acs.jctc.6c00032.
 .. [10] Plasser, F.; Ruckenbauer, M.; Mai, S.; Oppel, M.; Marquetand, P.; González, L. Efficient and Flexible Computation of Many-Electron Wave Function Overlaps. J. Chem. Theory Comput. 2016, 12 (3), 1207-1219. https://doi.org/10.1021/acs.jctc.5b01148.
 .. [11] Malmqvist, P. Å. Calculation of Transition Density Matrices by Nonunitary Orbital Transformations. Int. J. Quantum Chem. 1986, 30 (4), 479-494. https://doi.org/10.1002/qua.560300404.
+.. [12] Zhai, H.; Larsson, H. R.; Lee, S.; Cui, Z.-H.; Zhu, T.; Sun, C.; Peng, L.; Peng, R.; Liao, K.; Tölle, J.; Yang, J.; Li, S.; Chan, G. K.-L. Block2: A Comprehensive Open Source Framework to Develop and Apply State-of-the-Art DMRG Algorithms in Electronic Structure and Beyond. J. Chem. Phys. 2023, 159 (23), 234801. https://doi.org/10.1063/5.0180424.

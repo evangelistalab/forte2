@@ -202,6 +202,195 @@ class CIParams(ParamsBase):
 
 
 @dataclass
+class DMRGParams(ParamsBase):
+    """
+    Parameters for the DMRG solver.
+
+    The per-sweep schedules ``bond_dims``, ``noises``, and ``davidson_tols`` are padded to
+    ``n_sweeps`` by repeating their last entry.
+
+    Parameters
+    ----------
+    bond_dims : list[int], optional, default=[250] * 4 + [500] * 4
+        The MPS bond dimension of each sweep.
+    noises : list[float], optional, default=[1e-4] * 4 + [1e-5] * 4 + [0.0]
+        The perturbative noise of each sweep.
+    davidson_tols : list[float], optional, default=[1e-10] * 8
+        The Davidson convergence threshold of each sweep, on the squared residual norm.
+    n_sweeps : int, optional, default=20
+        The maximum number of sweeps.
+    twosite_to_onesite : int, optional, default=None
+        The number of two-site sweeps before the remaining sweeps switch to the one-site
+        algorithm. The two-site sweeps don't stop early. If None, every sweep is a
+        two-site sweep.
+    tol : float, optional, default=1e-8
+        The energy convergence threshold that ends the sweeps early.
+    orbital_ordering : str, optional, default="fiedler"
+        The order of the active orbitals along the MPS chain. "fiedler" orders them by the
+        Fiedler vector of the exchange integrals, which places strongly coupled orbitals
+        close together. "gaopt" refines the Fiedler order with a genetic algorithm, which
+        takes longer. "original" keeps the order of the active space.
+    random_seed : int, optional, default=1234
+        The seed of block2's random number generator, set before each initial MPS is
+        built. It must be positive.
+    stack_memory : int, optional, default=1024
+        The working memory (in MB) that block2 reserves for each solver.
+    scratch : str, optional, default=None
+        The directory in which each solver creates its scratch directory. If None, the
+        system temporary directory is used.
+    iprint : int, optional, default=0
+        The block2 verbosity level.
+    """
+
+    bond_dims: list[int] = field(default_factory=lambda: [250] * 4 + [500] * 4)
+    noises: list[float] = field(default_factory=lambda: [1e-4] * 4 + [1e-5] * 4 + [0.0])
+    davidson_tols: list[float] = field(default_factory=lambda: [1e-10] * 8)
+    n_sweeps: int = 20
+    twosite_to_onesite: int = None
+    tol: float = 1e-8
+    orbital_ordering: Literal["fiedler", "gaopt", "original"] = "fiedler"
+    random_seed: int = 1234
+    stack_memory: int = 1024
+    scratch: str = None
+    iprint: int = 0
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not self.bond_dims or not all(
+            isinstance(m, int) and m > 0 for m in self.bond_dims
+        ):
+            raise ValueError(
+                f"bond_dims must be a non-empty list of positive integers, got {self.bond_dims}."
+            )
+        if not self.noises or not all(n >= 0 for n in self.noises):
+            raise ValueError(
+                f"noises must be a non-empty list of non-negative numbers, got {self.noises}."
+            )
+        if not self.davidson_tols or not all(t > 0 for t in self.davidson_tols):
+            raise ValueError(
+                f"davidson_tols must be a non-empty list of positive numbers, got {self.davidson_tols}."
+            )
+        if self.n_sweeps < 1:
+            raise ValueError(f"n_sweeps must be >= 1, got {self.n_sweeps}.")
+        if self.twosite_to_onesite is not None and not (
+            0 < self.twosite_to_onesite < self.n_sweeps
+        ):
+            raise ValueError(
+                f"twosite_to_onesite must be between 1 and n_sweeps - 1, got "
+                f"{self.twosite_to_onesite}."
+            )
+        if self.tol <= 0:
+            raise ValueError(f"tol must be > 0, got {self.tol}.")
+        # block2 treats a seed of 0 as a request for a time-based seed
+        if self.random_seed < 1:
+            raise ValueError(f"random_seed must be >= 1, got {self.random_seed}.")
+        if self.stack_memory < 1:
+            raise ValueError(f"stack_memory must be >= 1, got {self.stack_memory}.")
+        # if n_sweeps > length of any of these, pad them with their last entries
+        for name in ("bond_dims", "noises", "davidson_tols"):
+            schedule = list(getattr(self, name))
+            schedule += [schedule[-1]] * (self.n_sweeps - len(schedule))
+            setattr(self, name, schedule)
+
+    @classmethod
+    def auto_schedule(
+        cls, max_bond_dim, start_bond_dim=250, n_sweeps=None, tol=1e-5, **kwargs
+    ):
+        """
+        Automatic schedule, matches block2's "default" scheduler.
+
+        The automatic bond dimensions are 50, 100, 250, 500, range(1000, 10001, 1000).
+        The ``start_bond_dim`` and ``max_bond_dim`` do not have to take one of the values
+        above, e.g., start_bond_dim=200, max_bond_dim=900 gives [200, 250, 500, 900].
+        Each bond dimension runs 8 sweeps up to 1000 and 4 after 1000,
+        with noise and Davidson tolerances that decrease along the ladder, and the last
+        bond dimension runs 8 sweeps.
+        If more sweeps are left over, Noise-free sweeps at ``max_bond_dim``, with a Davidson
+        tolerance of ``tol / 10``, are added.
+        After the first 2 noise-free sweeps, the remaining sweeps switch to the one-site
+        algorithm, unless ``twosite_to_onesite`` is passed.
+
+        Parameters
+        ----------
+        max_bond_dim : int
+            The final bond dimension.
+        start_bond_dim : int, optional, default=250
+            The first bond dimension.
+        n_sweeps : int, optional
+            The maximum number of sweeps.
+            It must exceed the number of sweeps required by the schedule.
+            If None, 4 noise-free sweeps are added at the end of the schedule.
+        tol : float, optional, default=1e-5
+            The energy convergence threshold.
+        **kwargs
+            Any other ``DMRGParams`` field.
+
+        Returns
+        -------
+        DMRGParams
+            The parameters with an automatic schedule filled in.
+        """
+        if not 0 < start_bond_dim <= max_bond_dim:
+            raise ValueError(
+                f"Need 0 < start_bond_dim <= max_bond_dim, got {start_bond_dim} and "
+                f"{max_bond_dim}."
+            )
+        # Each rung is (bond dimension, sweeps, Davidson tolerance, noise)
+        ladder = [50, 100, 250, 500] + [1000 * x for x in range(1, 11)]
+        rungs = list(
+            zip(
+                ladder,
+                [8] * 5 + [4] * 9,
+                [1e-4] * 3 + [1e-5] * 2 + [5e-6] * 9,
+                [1e-3] * 3 + [1e-4] * 2 + [5e-5] * 9,
+            )
+        )
+        if start_bond_dim < ladder[0]:
+            rungs.insert(0, (start_bond_dim, *rungs[0][1:]))
+        elif start_bond_dim > ladder[-1]:
+            while start_bond_dim > rungs[-1][0]:
+                rungs.append((rungs[-1][0] + 1000, *rungs[-1][1:]))
+        else:
+            i = next(
+                (i for i in range(1, len(ladder)) if start_bond_dim < ladder[i]), None
+            )
+            if i is not None:
+                rungs[i - 1] = (start_bond_dim, *rungs[i - 1][1:])
+        steps = []
+        for m, n, dav_tol, noise in rungs:
+            if m >= max_bond_dim:
+                steps.append((max_bond_dim, n, dav_tol, noise))
+                break
+            if m >= start_bond_dim:
+                steps.append((m, n, dav_tol, noise))
+        # The last step always runs 8 sweeps
+        steps[-1] = (steps[-1][0], 8, *steps[-1][2:])
+
+        bond_dims, davidson_tols, noises = [], [], []
+        for m, n, dav_tol, noise in steps:
+            bond_dims += [m] * n
+            davidson_tols += [dav_tol] * n
+            noises += [noise] * n
+        n_ladder = len(bond_dims)
+        if n_sweeps is None:
+            n_sweeps = n_ladder + 4
+        elif n_sweeps <= n_ladder:
+            raise ValueError(
+                f"n_sweeps must exceed the {n_ladder} ladder sweeps, got {n_sweeps}."
+            )
+        if n_ladder + 2 < n_sweeps:
+            kwargs.setdefault("twosite_to_onesite", n_ladder + 2)
+        return cls(
+            bond_dims=bond_dims + [max_bond_dim],
+            noises=noises + [0.0],
+            davidson_tols=davidson_tols + [tol / 10],
+            n_sweeps=n_sweeps,
+            tol=tol,
+            **kwargs,
+        )
+
+
+@dataclass
 class SelectedCIParams(ParamsBase):
     """
     Parameters for the Selected CI solver.

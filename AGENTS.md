@@ -47,9 +47,9 @@ reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`.
 
 Active-space methods come in pairs, and the distinction is load-bearing.
 
-A **solver** (`CISolver`, `RelCISolver`, `SelectedCISolver`, `RelSelectedCISolver`, all on
-`base_classes/ci_base.py::CIBase`) answers one question: solve in the *current* orbital basis with
-the *current* integrals. Its `run()` is idempotent and safe to call in a loop, and it never touches
+A **solver** (`CISolver`, `RelCISolver`, `SelectedCISolver`, `RelSelectedCISolver`, `DMRGSolver`,
+all on `base_classes/ci_base.py::CIBase`) answers one question: solve in the *current* orbital basis
+with the *current* integrals. Its `run()` is idempotent and safe to call in a loop, and it never touches
 the orbitals. 
  `base_classes/ci_base.py::CIBase` owns everything representation-agnostic — the `_startup`/`run`
  skeletons, sub-solver fan-out, state-averaged RDMs and cumulants, and transition properties.
@@ -160,6 +160,8 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 ### Subsystem map (beyond the obvious)
 - `ci` — full / spin-adapted / GAS CI.
 - `sci` — selected CI / heat-bath CI (`SelectedCISolver`), usable as an active-space solver in MCSCF.
+- `dmrg` — spin-adapted DMRG through block2 (`DMRGSolver`). block2 is an optional dependency that
+  forte2 never installs; `forte2.dmrg.BLOCK2_AVAILABLE` gates the tests.
 - `determinant` / `sparse` — determinant & bit-string representations, Slater rules, `SparseOperator`/`SparseState`.
 - `mcopt` — MCSCF/CASSCF/GASSCF optimizer, exposed as `forte2.MCOptimizer` (not `MCSCF`).
 - `dsrg` — DSRG-MRPT2 and its relativistic variant.
@@ -173,7 +175,7 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 ## Environment And Build
 - Preferred environment setup:
   - `conda env create -f environment.yml`
-  - `conda activate forte2` (CI uses environment name `forte`)
+  - `conda activate forte2`
 - If conda is not yet installed, install Miniconda first. On a fresh conda you must accept the
   default-channel Terms of Service before `conda env create` will run, even though
   `environment.yml` only uses conda-forge:
@@ -190,6 +192,10 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
   - `Libint2`, `Eigen3`, BLAS/LAPACK are required by CMake
 - `USE_LIBCINT` is enabled by default through `pyproject.toml`; override if needed:
   - `pip install . --config-settings=cmake.define.USE_LIBCINT=OFF`
+- DMRG needs block2 0.5.4 in the same environment (install steps in
+  `docs/source/quickstart/index.rst`). The PyPI wheel brings its own MKL and OpenMP, so never
+  import `pyblock2` when `forte2` is imported (that loads them into every forte2 process) and never
+  set `RTLD_GLOBAL` (that lets MKL serve forte2's own BLAS calls).
 
 ## Test Commands
 - Fast local run:
