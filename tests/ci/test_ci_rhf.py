@@ -462,3 +462,79 @@ def test_ci_large_active(alg):
     ci = CI(ci_solver)(scf)
     ci.run()
     assert ci.E_ci[0] == approx(-0.7834196502)
+
+
+def test_ci_result_transition_properties(tmp_path):
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.069592187400
+    H            0.000000000000    -0.783151105291     0.552239257834
+    H            0.000000000000     0.783151105291     0.552239257834
+    """
+    system = System(
+        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit"
+    )
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
+    ci_solver = CISolver(
+        states=[
+            State(nel=10, multiplicity=1, ms=0.0),
+            State(nel=10, multiplicity=3, ms=1.0),
+        ],
+        core_orbitals=[0],
+        active_orbitals=[1, 2, 3, 4, 5, 6],
+        nroots=[2, 1],
+    )
+    ci = CI(ci_solver, final_orbitals="natural", do_transition_dipole=True)(rhf)
+    ci.run()
+    res = ci.result
+
+    assert res.ci_energies == approx(ci.E_ci)
+
+    # the result owns copies of the final orbitals and keeps the unrotated ones
+    assert res.mo_coeff is not ci.mos
+    assert np.allclose(res.mo_coeff.C[0], ci.mos.C[0])
+    assert not np.allclose(res.mo_coeff_unrotated.C[0], res.mo_coeff.C[0])
+    act = ci.mo_space.active_indices
+    assert res.mo_coeff.C[0][:, act] == approx(
+        res.mo_coeff_unrotated.C[0][:, act] @ res.active_rotation
+    )
+
+    # active-space (na, nb) of each root: singlet (4, 4), singlet (4, 4), triplet (5, 3)
+    assert res.rdm1.shape == (3, 2, 6, 6)
+    traces = np.einsum("rsii->rs", res.rdm1)
+    assert traces == approx(np.array([[4, 4], [4, 4], [5, 3]], dtype=float))
+
+    # the result owns copies of the solver's transition dictionaries
+    assert res.transition_dipoles is not ci.ci_solver.transition_dipoles
+    assert res.transition_dipoles.keys() == ci.ci_solver.transition_dipoles.keys()
+    for i in range(3):
+        assert res.transition_dipoles[(i, i)] == approx(res.dipoles[i])
+    assert np.linalg.norm(res.dipoles[0]) > 0.1
+
+    # singlet-singlet pair, stored once as <i|a^+_p a_q|j>
+    key = next(k for k in res.trdm1 if set(k) == {0, 1})
+    i, j = key
+    assert res.trdm1[key].shape == (2, 6, 6)
+    tdm_ji = np.array(ci.make_rdm(j, i, order=1, spin_type="sd"))
+    assert tdm_ji == approx(res.trdm1[key].swapaxes(-1, -2))
+    vte = abs(res.ci_energies[j] - res.ci_energies[i])
+    assert res.oscillator_strengths[key] == approx(
+        (2 / 3) * vte * np.linalg.norm(res.transition_dipoles[key]) ** 2
+    )
+
+    # singlet-triplet(ms=1) pairs cannot couple and are absent
+    for i in (0, 1):
+        for pair in ((i, 2), (2, i)):
+            assert pair not in res.trdm1
+            assert pair not in res.transition_dipoles
+            assert pair not in res.oscillator_strengths
+
+    res.to_npz(tmp_path / "temp_test_ci_result_transition_properties.npz")
+    with np.load(
+        tmp_path / "temp_test_ci_result_transition_properties.npz", allow_pickle=True
+    ) as f:
+        assert np.allclose(f["ci_energies"], ci.E_ci)
+        assert np.allclose(f["mo_coeff"][()]["C"][0], ci.mos.C[0])
+        assert np.allclose(f["active_rotation"], res.active_rotation)
+        assert np.allclose(f["rdm1"], res.rdm1)
+        assert f["trdm1"][()].keys() == res.trdm1.keys()
+        assert f["oscillator_strengths"][()] == res.oscillator_strengths

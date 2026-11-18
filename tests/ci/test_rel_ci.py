@@ -198,7 +198,7 @@ def test_rel_ci_hf_transition_dipole_equivalence_to_rhf():
     )
 
 
-def test_rel_ci_hf_transition_dipole_ghf():
+def test_rel_ci_hf_transition_dipole_ghf(tmp_path):
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
@@ -235,6 +235,28 @@ def test_rel_ci_hf_transition_dipole_ghf():
     assert np.abs(ci.ci_solver.oscillator_strengths[(0, 3)]) == pytest.approx(
         1.7104694791515446e-05, abs=1e-6
     )
+
+    res = ci.result
+    assert res.rdm1.shape == (5, 12, 12)
+    assert np.einsum("rii->r", res.rdm1).real == approx(np.full(5, 8.0))
+    assert np.isrealobj(res.dipoles)
+    assert np.abs(res.dipoles[3]) == pytest.approx(
+        [0.0, 0.0, 7.21062788763614e-01], abs=1e-6
+    )
+    tdm_30 = ci.make_rdm(3, 0, order=1, spin_type="so")
+    assert tdm_30 == approx(res.trdm1[(0, 3)].conj().T)
+    assert np.abs(res.oscillator_strengths[(0, 3)]) == pytest.approx(
+        1.7104694791515446e-05, abs=1e-6
+    )
+
+    res.to_npz(tmp_path / "temp_test_rel_ci_hf_transition_dipole_ghf.npz")
+    with np.load(
+        tmp_path / "temp_test_rel_ci_hf_transition_dipole_ghf.npz", allow_pickle=True
+    ) as f:
+        assert np.allclose(f["ci_energies"], ci.E_ci)
+        assert np.allclose(f["mo_coeff"][()]["C"][0], ci.mos.C[0])
+        assert np.allclose(f["rdm1"][3], ci.make_rdm(3, order=1, spin_type="so"))
+        assert np.allclose(f["trdm1"][()][(0, 3)], res.trdm1[(0, 3)])
 
 
 @pytest.mark.parametrize("algorithm", ["hz", "sparse", "exact"])

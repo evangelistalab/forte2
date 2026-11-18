@@ -131,7 +131,7 @@ def test_rel_casscf_frozen_co_x2c():
     assert mc.E == approx(emcscf)
 
 
-def test_rel_casscf_na_ghf():
+def test_rel_casscf_na_ghf(tmp_path):
     emcscf = -161.9905346837
     xyz = """
     Na 0.0 0.0 0.0
@@ -155,6 +155,16 @@ def test_rel_casscf_na_ghf():
     mc.run()
 
     assert mc.E == approx(emcscf)
+
+    mc.result.to_npz(tmp_path / "temp_test_rel_casscf_na_ghf.npz")
+    with np.load(tmp_path / "temp_test_rel_casscf_na_ghf.npz", allow_pickle=True) as f:
+        assert np.allclose(f["ci_energies"], mc.E_ci)
+        C = f["mo_coeff"][()]["C"][0]
+        C_unrotated = f["mo_coeff_unrotated"][()]["C"][0]
+        act = mc.mo_space.active_indices
+        assert np.allclose(C, mc.mos.C[0])
+        assert np.allclose(C[:, act], C_unrotated[:, act] @ f["active_rotation"])
+        assert np.allclose(f["rdm1"][7], mc.make_rdm(7, order=1, spin_type="so"))
 
 
 def test_rel_casscf_br():

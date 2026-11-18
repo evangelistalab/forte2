@@ -1,11 +1,12 @@
 import pytest
+import numpy as np
 
 from forte2 import System
 from forte2.scf import UHF, RHF
 from forte2.helpers.comparisons import approx
 
 
-def test_uhf_triplet():
+def test_uhf_triplet(tmp_path):
     # Test the UHF implementation with a simple example
     euhf = -75.810772399321
     s2uhf = 2.005739321130
@@ -21,6 +22,17 @@ def test_uhf_triplet():
     scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)
+    res = scf.result
+    res.to_npz(tmp_path / "temp_test_uhf_triplet.npz")
+
+    with np.load(tmp_path / "temp_test_uhf_triplet.npz", allow_pickle=True) as f:
+        assert f["energy"] == scf.E
+        assert np.allclose(f["orbital_energies"][0], scf.eps[0])
+        assert np.allclose(f["orbital_energies"][1], scf.eps[1])
+        assert np.allclose(f["mo_coeff"][()]["C"][0], scf.mos.C[0])
+        assert np.allclose(f["mo_coeff"][()]["C"][1], scf.mos.C[1])
+        assert np.allclose(f["ao_fock_matrix"][0], scf.F[0])
+        assert np.allclose(f["ao_fock_matrix"][1], scf.F[1])
 
 
 def test_uhf_singlet():

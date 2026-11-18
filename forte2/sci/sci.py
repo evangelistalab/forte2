@@ -858,25 +858,6 @@ class _SelectedCISingleStateSolver:
         )
         return make_cumulant_from_rdms(self, root, order=order, spin_type=spin_type)
 
-    def compute_natural_occupation_numbers(self):
-        """
-        Compute the natural occupation numbers from the 1-RDM.
-
-        Returns
-        -------
-        (norb, nroot) NDArray
-            The natural occupation numbers for each root.
-        """
-        if not self.executed:
-            raise RuntimeError("CI solver has not been executed yet.")
-        spin_type = "so" if self.two_component else "sf"
-        no = np.zeros((self.norb, self.nroot))
-        for i in range(self.nroot):
-            g1 = self.make_rdm(i, order=1, spin_type=spin_type)
-            no[:, i] = np.linalg.eigvalsh(g1)[::-1]
-
-        return no
-
     def set_ints(self, scalar, oei, tei):
         """
         Set the active-space integrals for the CI solver.
@@ -1139,7 +1120,4 @@ class SelectedCISolver(CIBase):
 
     def reset_eigensolver(self, guesses=None):
         # sCI eigensolver gets reset every iteration anyway
-        pass
-
-    def get_convergence_status(self):
         pass
