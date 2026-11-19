@@ -2,9 +2,12 @@
 #include <cassert>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
 
 #include "determinant/determinant_helpers.h"
+#include "determinant/rel_slater_rules.h"
 #include "determinant/slater_rules.h"
+#include "helpers/math_structures.h"
 #include "helpers/parallel.h"
 
 namespace forte2 {
@@ -209,21 +212,22 @@ double spin2(const Determinant& lhs, const Determinant& rhs) {
 
 namespace {
 template <typename F>
-np_matrix make_symmetric_det_matrix(const std::vector<Determinant>& dets, F&& element) {
+auto make_hermitian_det_matrix(const std::vector<Determinant>& dets, F&& element) {
+    using Scalar = std::invoke_result_t<F, const Determinant&, const Determinant&>;
     const size_t n = dets.size();
-    if (n != 0 && n > std::numeric_limits<size_t>::max() / sizeof(double) / n) {
+    if (n != 0 && n > std::numeric_limits<size_t>::max() / sizeof(Scalar) / n) {
         throw std::length_error("Determinant matrix is too large to allocate.");
     }
 
-    auto matrix = make_ndarray<nb::numpy, double, 2>({n, n});
+    auto matrix = make_ndarray<nb::numpy, Scalar, 2>({n, n});
     auto view = matrix.view();
     parallel_for(n, [&](size_t i) {
         const auto& bra = dets[i];
         view(i, i) = element(bra, bra);
         for (size_t j = i + 1; j < n; ++j) {
-            const double value = element(bra, dets[j]);
+            const auto value = element(bra, dets[j]);
             view(i, j) = value;
-            view(j, i) = value;
+            view(j, i) = conjugate(value);
         }
     });
     return matrix;
@@ -231,7 +235,7 @@ np_matrix make_symmetric_det_matrix(const std::vector<Determinant>& dets, F&& el
 } // namespace
 
 np_matrix make_s2_matrix(const std::vector<Determinant>& dets) {
-    return make_symmetric_det_matrix(dets, spin2);
+    return make_hermitian_det_matrix(dets, spin2);
 }
 
 np_matrix make_hamiltonian_matrix(const std::vector<Determinant>& dets,
@@ -244,7 +248,25 @@ np_matrix make_hamiltonian_matrix(const std::vector<Determinant>& dets,
                                         "the SlaterRules integrals.");
         }
     }
-    return make_symmetric_det_matrix(dets, [&](const Determinant& bra, const Determinant& ket) {
+    return make_hermitian_det_matrix(dets, [&](const Determinant& bra, const Determinant& ket) {
+        return slater_rules.slater_rules(bra, ket);
+    });
+}
+
+np_matrix_complex make_hamiltonian_matrix(const std::vector<Determinant>& dets,
+                                          const RelSlaterRules& slater_rules) {
+    const auto in_range = [nspinor = slater_rules.nspinor()](size_t p) { return p < nspinor; };
+    for (const auto& det : dets) {
+        if (det.count_beta() != 0) {
+            throw std::invalid_argument("RelSlaterRules requires determinants with an empty "
+                                        "beta string.");
+        }
+        if (!det.for_each_a_occ(in_range)) {
+            throw std::invalid_argument("A determinant occupies a spinor outside the range of "
+                                        "the RelSlaterRules integrals.");
+        }
+    }
+    return make_hermitian_det_matrix(dets, [&](const Determinant& bra, const Determinant& ket) {
         return slater_rules.slater_rules(bra, ket);
     });
 }

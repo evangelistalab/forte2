@@ -372,6 +372,35 @@ def test_make_hamiltonian_matrix_rejects_out_of_range_orbitals(occupation):
         make_hamiltonian_matrix([Determinant(occupation)], rules)
 
 
+def test_make_hamiltonian_matrix_spinors():
+    nspinor = 6
+    h, v = _random_hermitian_integrals(nspinor, seed=31)
+    rules = RelSlaterRules(nspinor, 0.37, h, v)
+    dets = hilbert_space(nspinor, 3, 0)[::-1]
+    expected = [[rules.slater_rules(bra, ket) for ket in dets] for bra in dets]
+
+    matrix = make_hamiltonian_matrix(dets, rules)
+
+    assert matrix.dtype == np.complex128
+    assert np.any(np.abs(matrix.imag) > 1e-12)
+    np.testing.assert_allclose(matrix, expected, atol=1e-12, rtol=0.0)
+    np.testing.assert_array_equal(matrix, matrix.conj().T)
+    empty = make_hamiltonian_matrix([], rules)
+    assert empty.shape == (0, 0)
+    assert empty.dtype == np.complex128
+
+
+@pytest.mark.parametrize(
+    "occupation, message",
+    [("b", "empty beta string"), ("0a", "spinor outside the range")],
+)
+def test_make_hamiltonian_matrix_rejects_invalid_spinors(occupation, message):
+    h, v = _random_hermitian_integrals(1, seed=31)
+    rules = RelSlaterRules(1, 0.0, h, v)
+    with pytest.raises(ValueError, match=message):
+        make_hamiltonian_matrix([Determinant(occupation)], rules)
+
+
 def test_slater_rules_1():
     """Test SlaterRules by building the FCI matrix and finding the ground state energy."""
     xyz = """

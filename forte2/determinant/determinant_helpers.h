@@ -7,6 +7,7 @@
 
 namespace forte2 {
 
+class RelSlaterRules;
 class SlaterRules;
 
 /// @brief Create a single excitation from orbital i to orbital a
@@ -99,6 +100,13 @@ std::pair<Determinant, double> create_double_ab_excitation(const Determinant& de
 /// @return A matrix of size (num_dets, num_dets) with the Hamiltonian operator matrix
 np_matrix make_hamiltonian_matrix(const std::vector<Determinant>& dets,
                                   const SlaterRules& slater_rules);
+
+/// @brief Build the Hermitian Hamiltonian matrix in the given spinor determinant basis.
+/// @param dets The determinant basis in matrix order, with spinors occupied in the alpha string
+/// @param slater_rules The Slater rules evaluator for the spinor integrals
+/// @return A complex matrix of size (num_dets, num_dets)
+np_matrix_complex make_hamiltonian_matrix(const std::vector<Determinant>& dets,
+                                          const RelSlaterRules& slater_rules);
 
 /// @brief Build the S^2 operator matrix in the given basis of determinants (restricted orbitals)
 /// @param dets The determinant basis, in matrix row and column order

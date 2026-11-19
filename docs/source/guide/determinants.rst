@@ -1,7 +1,8 @@
 Determinant matrices
 ====================
 
-The ``forte2.lib.det`` module builds dense Hamiltonian and spin-squared matrices in a basis of determinants formed from a common set of spatial orbitals.
+The ``forte2.lib.det`` module builds dense Hamiltonian matrices for restricted spatial orbitals or two-component spinors.
+It also builds spin-squared matrices for restricted spatial orbitals.
 Both builders return NumPy arrays whose rows and columns follow the order of the supplied determinants.
 
 Spin-squared matrix from two determinants
@@ -70,3 +71,25 @@ The same determinant list can be used to compute the ground state's spin expecta
     print(f"Ground-state <S^2> = {ground_state @ s2 @ ground_state:.6f}")
 
 The ground state is a singlet, so its spin expectation value is zero to numerical precision.
+
+Two-component Hamiltonians
+--------------------------
+
+Pass a ``RelSlaterRules`` object to ``make_hamiltonian_matrix`` to build a complex Hermitian matrix from two-component spinor integrals.
+The determinant's alpha string stores the occupied spinor indices, and its beta string is empty.
+When generating this basis with ``hilbert_space``, set ``na`` to the number of electrons and ``nb=0``.
+
+This example uses one electron in two spinors. In a molecular calculation, ``SpinorbitalIntegrals`` supplies the scalar energy and the one- and two-electron integrals.
+
+.. code-block:: python
+
+    import numpy as np
+    from forte2.lib.det import RelSlaterRules, hilbert_space, make_hamiltonian_matrix
+
+    h = np.array([[0.2, 0.1j], [-0.1j, 0.5]])
+    v = np.zeros((2, 2, 2, 2), dtype=complex)
+    rules = RelSlaterRules(2, 0.0, h, v)
+    dets = hilbert_space(nmo=2, na=1, nb=0)
+
+    hamiltonian = make_hamiltonian_matrix(dets, rules)
+    print(np.linalg.eigvalsh(hamiltonian))

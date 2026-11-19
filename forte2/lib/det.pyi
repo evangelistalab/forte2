@@ -155,9 +155,16 @@ def spin2(arg0: Determinant, arg1: Determinant, /) -> float:
 def make_s2_matrix(dets: Sequence[Determinant]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
     """Build the S^2 matrix in the given determinant order."""
 
+@overload
 def make_hamiltonian_matrix(dets: Sequence[Determinant], slater_rules: SlaterRules) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
     """
     Build the Hamiltonian matrix in the given determinant order using Slater rules (real case, restricted orbitals).
+    """
+
+@overload
+def make_hamiltonian_matrix(dets: Sequence[Determinant], slater_rules: RelSlaterRules) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
+    """
+    Build the complex Hermitian Hamiltonian matrix in the given spinor determinant order. Spinor occupations must be stored in the alpha string.
     """
 
 class SlaterRules:
