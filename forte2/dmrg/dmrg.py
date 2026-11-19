@@ -14,8 +14,12 @@ from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.base_classes import CIBase
 from forte2.base_classes.params import DMRGParams
-from forte2.ci.ci_utils import make_cumulant_from_rdms, validate_single_state_rdm
-from .dmrg_utils import block2_2pdm_to_sf_2rdm
+from forte2.ci.ci_utils import (
+    make_cumulant_from_rdms,
+    pack_sd_rdm,
+    validate_single_state_rdm,
+)
+from .dmrg_utils import block2_pdm_to_rdm
 
 # Locate pyblock2 without importing it, so `import forte2` never loads block2's
 # libraries. The import happens when the first DMRG calculation runs.
@@ -71,9 +75,9 @@ class _DMRGSingleStateSolver:
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
 
-    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
-    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sf",)
-    _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2, 3)
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sd", "sf")
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2, 3)
     _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("sf",)
 
     def __post_init__(self):
@@ -266,29 +270,35 @@ class _DMRGSingleStateSolver:
         left_root: int,
         right_root: int | None = None,
         *,
-        order: Literal[1, 2],
-        spin_type: Literal["sf"],
+        order: Literal[1, 2, 3],
+        spin_type: Literal["sd", "sf"],
+        packed: bool = True,
     ):
         """
-        Make the spin-free RDM of the given order for one DMRG root.
+        Make the RDM of the given order and representation for two DMRG roots.
 
         Parameters
         ----------
         left_root : int
-            The root index.
-        right_root : int | None, optional
-            Must be None or equal to ``left_root``.
+            The root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            The root for the ket state.
         order : int
-            The RDM order (1 or 2).
+            The RDM order (1, 2, or 3).
         spin_type : str
-            "sf" (spin-free). The aliases "spin_free" and "spin-free" are also accepted.
+            "sd" (spin-dependent) or "sf" (spin-free). The aliases "spin_dependent",
+            "spin-dependent", "spin_free", and "spin-free" are also accepted.
+        packed : bool, optional, default=True
+            For spin_type=sd, if True, the same-spin index pairs and triplets are packed
+            (see ``pack_sd_rdm``); if False, every block is a full tensor.
 
         Returns
         -------
-        NDArray
-            The RDM.
+        NDArray or tuple[NDArray, ...]
+            spin_type=sd -> (a, b) at order 1, (aa, ab, bb) at order 2, and
+            (aaa, aab, abb, bbb) at order 3; spin_type=sf -> a single full tensor.
         """
-        validate_single_state_rdm(
+        spin_type = validate_single_state_rdm(
             self,
             left_root,
             right_root,
@@ -297,27 +307,65 @@ class _DMRGSingleStateSolver:
             spin_type,
             self._rdm_spin_types,
         )
-        if right_root is not None and right_root != left_root:
-            raise NotImplementedError(
-                "DMRGSolver does not support transition RDMs yet."
-            )
+        if right_root is None:
+            right_root = left_root
         if self.norb == 0:
-            return np.zeros((0,) * (2 * order))
-        driver = self._make_driver()
-        ket = driver.load_mps(self._root_tags[left_root], nroots=1)
-        pdm = driver.get_npdm(ket, pdm_type=order)
+            nblocks = order + 1 if spin_type == "sd" else 1
+            pdms = [np.zeros((0,) * (2 * order)) for _ in range(nblocks)]
+        else:
+            pdms = self._npdms(left_root, right_root, order, spin_type == "sd")
         # Back from MPS chain order to active-space order
         inv = np.argsort(self._order)
-        pdm = pdm[np.ix_(*[inv] * pdm.ndim)]
-        if order == 1:
-            return np.ascontiguousarray(pdm)
-        return block2_2pdm_to_sf_2rdm(pdm)
+        rdms = [block2_pdm_to_rdm(pdm[np.ix_(*[inv] * pdm.ndim)]) for pdm in pdms]
+        if spin_type == "sf":
+            return rdms[0]
+        return pack_sd_rdm(rdms) if packed else tuple(rdms)
+
+    def _npdms(self, left_root, right_root, order, spin_resolved):
+        """
+        Compute the block2 PDMs between two roots: the spin-summed one, or the spin
+        blocks for this state's Ms, in MPS chain order.
+        """
+        from pyblock2.driver.core import SymmetryTypes
+
+        driver = self._make_driver()
+        tags = [self._root_tags[left_root], self._root_tags[right_root]]
+        bra, ket = [driver.load_mps(tag, nroots=1) for tag in tags]
+        if spin_resolved:
+            # Take the Ms component of each root into a non-spin-adapted MPS. block2
+            # converts only an MPS with its center at the first site, so move the
+            # center on a copy, leaving the MPS that a warm restart reloads unchanged.
+            # The component has less than unit norm unless Ms is the only one, so
+            # normalize it.
+            converted = []
+            for mps, tag in zip((bra, ket), tags):
+                mps = driver.copy_mps(mps, f"SU2-{tag}")
+                driver.align_mps_center(mps, ref=0)
+                converted.append(
+                    driver.mps_change_to_sz(mps, f"SZ-{tag}", sz=self.state.twice_ms)
+                )
+            bra, ket = converted
+            driver.symm_type = SymmetryTypes.SZ
+            driver.initialize_system(
+                n_sites=self.norb,
+                n_elec=self.nactel,
+                spin=self.state.twice_ms,
+                pg_irrep=self.state.symmetry,
+                orb_sym=[self.orb_sym[i] for i in self._order],
+            )
+            identity = driver.get_identity_mpo()
+            for mps in (bra, ket):
+                mps.iscale(1 / np.sqrt(driver.expectation(mps, identity, mps)))
+        pdms = driver.get_npdm(
+            ket, pdm_type=order, bra=None if left_root == right_root else bra
+        )
+        return list(pdms) if spin_resolved else [pdms]
 
     def make_cumulant(
         self,
         root: int,
         *,
-        order: Literal[2],
+        order: Literal[2, 3],
         spin_type: Literal["sf"],
     ):
         """
@@ -328,7 +376,7 @@ class _DMRGSingleStateSolver:
         root : int
             The root index.
         order : int
-            The cumulant order (2).
+            The cumulant order (2 or 3).
         spin_type : str
             "sf" (spin-free). The aliases "spin_free" and "spin-free" are also accepted.
 
@@ -420,11 +468,11 @@ class DMRGSolver(CIBase):
     # Single state solver class
     _ss_solver_cls: ClassVar[type] = _DMRGSingleStateSolver
 
-    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2)
-    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sf",)
+    _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2, 3)
+    _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sd", "sf")
     # each state has its own MPS, so there are no RDMs between roots of different states
     _rdm_cross_state_orders: ClassVar[tuple[int, ...]] = ()
-    _cumulant_orders: ClassVar[tuple[int, ...]] = (2,)
+    _cumulant_orders: ClassVar[tuple[int, ...]] = (2, 3)
     _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("sf",)
 
     def __post_init__(self):
@@ -440,10 +488,14 @@ class DMRGSolver(CIBase):
         left_root: int,
         right_root: int | None = None,
         *,
-        order: Literal[1, 2],
-        spin_type: Literal["sf"],
+        order: Literal[1, 2, 3],
+        spin_type: Literal["sd", "sf"],
+        packed: bool = True,
     ):
-        """Spin-free RDM of the given order for one absolute DMRG root."""
+        """
+        RDM of the given order and representation for two absolute DMRG roots of the
+        same state. See ``_DMRGSingleStateSolver.make_rdm``.
+        """
         left_state, _, left_root_in_state, right_root_in_state, spin_type = (
             self._validate_rdm_inputs(
                 left_root,
@@ -456,7 +508,11 @@ class DMRGSolver(CIBase):
             )
         )
         return self.sub_solvers[left_state].make_rdm(
-            left_root_in_state, right_root_in_state, order=order, spin_type=spin_type
+            left_root_in_state,
+            right_root_in_state,
+            order=order,
+            spin_type=spin_type,
+            packed=packed,
         )
 
     def get_convergence_status(self):

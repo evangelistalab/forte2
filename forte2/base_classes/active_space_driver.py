@@ -172,9 +172,11 @@ class ActiveSpaceDriver:
         *,
         order: int,
         spin_type: str,
+        **kwargs,
     ):
+        # kwargs carries options only some solvers take, such as packed
         return self.ci_solver.make_rdm(
-            left_root, right_root, order=order, spin_type=spin_type
+            left_root, right_root, order=order, spin_type=spin_type, **kwargs
         )
 
     def make_cumulant(self, root: int, *, order: int, spin_type: str):

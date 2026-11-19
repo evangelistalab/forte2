@@ -1,22 +1,24 @@
 import numpy as np
 
 
-def block2_2pdm_to_sf_2rdm(pdm2):
+def block2_pdm_to_rdm(pdm):
     """
-    Convert a block2 spin-adapted 2-particle density matrix to a forte2 spin-free 2-RDM.
+    Convert a block2 n-particle density matrix, or one of its spin blocks, to forte2's
+    index order.
 
-    block2 orders the annihilation indices in reverse, so the two layouts differ by a
-    swap of the last two axes.
+    block2 orders the annihilation indices in reverse, so the two layouts differ by
+    reversing the annihilation axes.
 
     Parameters
     ----------
-    pdm2 : NDArray
-        The block2 2-PDM, ``pdm2[p, q, r, s] = <a^+_p a^+_q a_r a_s>`` summed over spin.
+    pdm : NDArray
+        The block2 PDM, ``pdm[p, q, ..., t, u] = <a^+_p a^+_q ... a_t a_u>``.
 
     Returns
     -------
     NDArray
-        The spin-free 2-RDM, ``gamma2[p, q, r, s] = <a^+_p a^+_q a_s a_r>`` summed over
-        spin.
+        The RDM, ``gamma[p, q, ..., t, u] = <a^+_p a^+_q ... a_u a_t>``.
     """
-    return np.ascontiguousarray(np.transpose(pdm2, (0, 1, 3, 2)))
+    n = pdm.ndim // 2
+    axes = list(range(n)) + list(range(pdm.ndim - 1, n - 1, -1))
+    return np.ascontiguousarray(np.transpose(pdm, axes))
