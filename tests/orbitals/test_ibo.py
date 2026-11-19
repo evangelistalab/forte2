@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System, RHF
+from forte2 import RHF, System
 from forte2.orbitals.iao import IBO
 from forte2.helpers.comparisons import approx
 

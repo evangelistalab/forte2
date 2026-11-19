@@ -198,6 +198,62 @@ def eigh_gen(A, B, rtol=1e-7, mode="canonical"):
     return e, X @ c, info
 
 
+def block_eigh(A, block_idx, atol=1e-8, rtol=1e-8, sort=False):
+    """
+    Diagonalize a Hermitian matrix whose blocks are not coupled to each other.
+
+    Parameters
+    ----------
+    A : NDArray
+        A Hermitian matrix.
+    block_idx : ArrayLike
+        The block each row and column of ``A`` belongs to.
+    atol : float, optional, default=1e-8
+        Absolute tolerance for elements that couple different blocks.
+    rtol : float, optional, default=1e-8
+        Tolerance for elements that couple different blocks, relative to the largest
+        element of ``A``.
+    sort : bool, optional, default=False
+        Whether to sort all eigenpairs by eigenvalue. Otherwise the eigenvectors of each
+        block occupy that block's positions, in ascending order of eigenvalue.
+
+    Returns
+    -------
+    eigvals : NDArray
+        The eigenvalues.
+    eigvecs : NDArray
+        The eigenvectors, as columns.
+    eigvec_blocks : NDArray
+        The block of each eigenvector.
+
+    Raises
+    ------
+    ValueError
+        If an element coupling different blocks exceeds ``atol + rtol * max(abs(A))``.
+        Smaller couplings are treated as zero.
+    """
+    block_idx = np.asarray(block_idx)
+    if len(set(block_idx)) == 1:
+        return *(np.linalg.eigh(A)), block_idx
+
+    coupling = np.abs(A[block_idx[:, None] != block_idx[None, :]]).max(initial=0.0)
+    tol = atol + rtol * np.abs(A).max(initial=0.0)
+    if coupling > tol:
+        raise ValueError(
+            f"Elements coupling different blocks reach {coupling:.2e}, above the "
+            f"tolerance {tol:.2e}."
+        )
+    eigvals = np.empty(len(block_idx))
+    eigvecs = np.zeros(A.shape, dtype=A.dtype)
+    for block in np.unique(block_idx):
+        idx = np.flatnonzero(block_idx == block)
+        eigvals[idx], eigvecs[np.ix_(idx, idx)] = np.linalg.eigh(A[np.ix_(idx, idx)])
+    if not sort:
+        return eigvals, eigvecs, block_idx
+    order = np.argsort(eigvals, kind="stable")
+    return eigvals[order], eigvecs[:, order], block_idx[order]
+
+
 def givens_rotation(A, c, s, i, j, column=True):
     """
     Apply a Givens rotation to the matrix A.
@@ -268,7 +324,7 @@ def cholesky_wrapper(M, tol):
     return B
 
 
-def block_diag_2x2(M, complex=True):
+def block_diag_2x2(M, force_complex=True):
     """
     Return a block-diagonal matrix with two copies of `M` on the diagonal.
     Note this is **not** a function to block-diagonalize a matrix.
@@ -277,7 +333,7 @@ def block_diag_2x2(M, complex=True):
     ----------
     M : NDArray
         The matrix to convert, shape (n, n).
-    complex : bool, optional, default=True
+    force_complex : bool, optional, default=True
         If True, the output will be explicitly converted to complex type.
 
     Returns
@@ -286,7 +342,7 @@ def block_diag_2x2(M, complex=True):
         The block-diagonal matrix, shape (2n, 2n).
     """
     A = sp.linalg.block_diag(M, M)
-    if complex:
+    if force_complex and not np.iscomplexobj(A):
         return A.astype(np.complex128)
     else:
         return A
@@ -351,6 +407,73 @@ def random_unitary(size, cmplx=True, rng=None, rotation=True):
                 Q[:, 0] *= -1.0
 
     return Q
+
+
+def real_orthogonal_logm(Q, tol=1e-10):
+    r"""
+    Computes the logarithm of a real orthogonal matrix, returning a real antisymmetric logarithm
+
+    Parameters
+    ----------
+    Q : NDArray
+        A real orthogonal matrix with determinant +1, shape (n, n).
+    tol : float, optional, default=1e-10
+        The subdiagonal magnitude of the real Schur form below which an
+        eigenvalue counts as real.
+
+    Returns
+    -------
+    NDArray
+        The real antisymmetric matrix :math:`K` with :math:`e^K = Q`, shape (n, n).
+
+    Raises
+    ------
+    ValueError
+        If ``Q`` isn't square, real, and orthogonal, or if it has determinant
+        -1, which leaves an eigenvalue at -1 unpaired.
+
+    Notes
+    -----
+    ``scipy.linalg.logm`` uses the complex Schur decomposition and
+    generally returns a complex result.
+    This function uses the real Schur decomposition:
+    instead of having a diagonal eigenvalue matrix with entries with eigenvalues exp(±i * theta_i),
+    a pair of eigenvalues are given in 2x2 blocks of [[c, -s], [s, c]],
+    (c = cos(theta), s = sin(theta)) whose logarithm is [[0, -theta], [theta, 0]].
+    This allows us to use ``arctan2`` to read off the rotation angles, and construct the real logarithm exactly.
+    There are always even numbers of -1 eigenvalues, so they are paired together
+    to correspond to rotations by pi.
+    +1 eigenvalues are simple: they have a logarithm of 0.
+    """
+    if Q.ndim != 2 or Q.shape[0] != Q.shape[1]:
+        raise ValueError(f"Q must be square, got shape {Q.shape}.")
+    if np.any(np.abs(Q.imag) > 1e-11):
+        raise ValueError("Q must be real.")
+    Q = Q.real
+    n = Q.shape[0]
+    if np.any(np.abs(Q.T @ Q - np.eye(n)) > 1e-10):
+        raise ValueError("Q must be orthogonal.")
+
+    T, Z = sp.linalg.schur(Q, output="real")
+    K = np.zeros((n, n))
+    unpaired = []
+    i = 0
+    while i < n:
+        if i + 1 < n and abs(T[i + 1, i]) > tol:
+            theta = np.arctan2(T[i + 1, i], T[i, i])
+            K[i, i + 1] = -theta
+            K[i + 1, i] = theta
+            i += 2
+        else:
+            if T[i, i] < 0:
+                unpaired.append(i)
+            i += 1
+    if len(unpaired) % 2 != 0:
+        raise ValueError("Q must be a proper rotation, with determinant +1.")
+    for a, b in zip(unpaired[::2], unpaired[1::2]):
+        K[a, b] = -np.pi
+        K[b, a] = np.pi
+    return Z @ K @ Z.T
 
 
 def i_sigma_dot(scalar, x, y, z):
@@ -444,9 +567,10 @@ def compute_Am1y(A, y, ortho_rtol=None):
     y : NDArray
         The vector that A^{-1} is to be applied onto
     ortho_rtol : None | float, optional
-        The relative tolerance for orthogonalizing A. 
+        The relative tolerance for orthogonalizing A.
         If supplied, a truncated eigendecomposition of A is used to compute the action of A^{-1},
         otherwise, a complete Cholesky decomposition is used.
+
     Returns
     -------
     NDArray
@@ -467,3 +591,47 @@ def compute_Am1y(A, y, ortho_rtol=None):
         evals = evals[ndiscard:]
         evecs = evecs[:, ndiscard:]
         return _compute_Am1y_eigh(evecs, evals, y)
+
+
+def split_unitary(U):
+    """
+    Split a unitary matrix into U = M R, where M = P D
+    with P a permutation matrix and D containing diagonal phases,
+    and R being a rotation matrix that as close to the identity as possible.
+    In the real case, M is a signed permutation matrix, and R is a proper rotation.
+
+    Parameters
+    ----------
+    U : NDArray
+        The unitary matrix being decomposed.
+
+    Returns
+    -------
+    M, R : tuple[NDArray]
+        The phased permutation and rotation matrices.
+    """
+    if U.ndim != 2 or U.shape[0] != U.shape[1]:
+        raise ValueError(f"U must be square, got shape {U.shape}.")
+    n = U.shape[0]
+    if np.any(np.abs(U.T.conj() @ U - np.eye(n)) > 1e-10):
+        raise ValueError("U must be unitary.")
+    is_cmplx = np.abs(U.imag).max() > 1e-11
+    U = U if is_cmplx else U.real
+
+    # for a square matrix, rows = arange(0, n) and
+    # cols is such that sum_i abs(U[i, cols[i]]) is maximized
+    rows, cols = sp.optimize.linear_sum_assignment(np.abs(U), maximize=True)
+    # matched is a 1D array of U[i, cols[i]]
+    matched = U[rows, cols]
+    M = np.zeros_like(U)
+    M[rows, cols] = matched / np.abs(matched)
+
+    # we need to keep R proper (det = +1) in case of real
+    # flip the smallest magnitude element to keep R close to identity
+    if not is_cmplx and np.linalg.det(M.T @ U) < 0:
+        weakest = np.argmin(np.abs(matched))
+        M[rows[weakest], cols[weakest]] *= -1
+
+    # U = M R => R = M^+ U
+    R = M.conj().T @ U
+    return M, R

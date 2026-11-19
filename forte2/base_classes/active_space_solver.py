@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import ClassVar
 
 from .method import Method
 from forte2.state import StateAverageInfo, State, MOSpace
@@ -20,10 +19,6 @@ class ActiveSpaceSolver(Method):
 
     # The actual mo_space built in _make_mo_space
     mo_space: MOSpace = field(default=None, init=False)
-
-    # Sanity-check tolerance for comparing energies before/after a final-orbital
-    # rotation
-    _final_orbital_energy_tol: ClassVar[float] = 1e-8
 
     def __post_init__(self):
         self.dtype = float

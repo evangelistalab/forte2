@@ -2,7 +2,13 @@ import pytest
 import numpy as np
 
 from forte2 import System
-from forte2.system.basis_utils import AM_LABELS, BasisInfo, get_shell_label, shell_label_to_lm, get_spinor_label
+from forte2.system.basis_utils import (
+    AM_LABELS,
+    BasisInfo,
+    get_shell_label,
+    shell_label_to_lm,
+    get_spinor_label,
+)
 from forte2.system.build_basis import decontract_basis, build_basis, BSE_AVAILABLE
 from forte2.integrals import overlap
 
@@ -84,6 +90,7 @@ def test_get_shell_label():
     with pytest.raises(ValueError):
         get_shell_label(len(AM_LABELS), 0)
 
+
 def test_get_spinor_label():
     # s shell: only j = 1/2 (jdouble = 1), mj = -1/2, +1/2
     assert get_spinor_label(0, 1, -1) == "s1/2, -1/2"
@@ -118,6 +125,7 @@ def test_get_spinor_label():
     # angular momentum beyond the defined labels
     with pytest.raises(Exception):
         get_spinor_label(12, 1, -1)
+
 
 def test_shell_label_to_lm():
     assert shell_label_to_lm("s") == [(0, 0)]

@@ -7,7 +7,12 @@ import json
 
 from forte2 import integrals
 from forte2.lib.ints import Basis
-from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
+from forte2.data import (
+    ANGSTROM_TO_BOHR,
+    DEBYE_TO_AU,
+    DEBYE_ANGSTROM_TO_AU,
+    Z_TO_ATOM_SYMBOL,
+)
 from forte2.helpers import (
     logger,
     invsqrt_matrix,
@@ -19,6 +24,7 @@ from forte2.x2c import X2CHelper
 from forte2.base_classes.params import X2CParams
 from forte2.jkbuilder import FockBuilder, FockBuilderOTF
 from .build_basis import build_basis, build_basis_from_dict
+from forte2.symmetry.symmetry_basis import SymmetryBasis
 from .geom_utils import (
     GeometryHelper,
     parse_geometry,
@@ -43,10 +49,10 @@ class System:
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
-    x2c : X2CParams | None, optional, default=None
-        The X2C Hamiltonian to use, specified as an :class:`X2CParams` instance
-        (see its documentation for the available ``x2c_type``, ``x2c_model``, and
-        ``snso_type`` options). If None, no X2C transformation is applied.
+    x2c : X2CParams, optional, default=X2CParams()
+        The X2C Hamiltonian to use (see :class:`X2CParams` for the options). The
+        default, with ``x2c_type=None``, applies no X2C transformation; None is
+        accepted and means the same.
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     overlap_ortho_rtol : float, optional, default=1e-8
@@ -60,9 +66,12 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     symmetry : bool, optional, default=False
         Whether to automatically detect the largest Abelian point group symmetry of the molecule.
-        This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
+        RHF, ROHF, and UHF preserve this symmetry during Fock diagonalization.
+        This will center the molecule at its center of mass, reorient it along its principal axes of inertia,
+        and move each atom by at most ``symmetry_tol`` to make the geometry exactly symmetric.
     symmetry_tol : float, optional, default=1e-4
-        The tolerance for detecting symmetry.
+        A symmetry operation is accepted when it maps every atom to within this distance,
+        in bohr, of an atom of the same element.
     use_gaussian_charges : bool, optional, default=False
         Whether to use Gaussian nuclear charge distributions instead of point charges.
     jk_mem_thres_mb : float | None, optional, default=None
@@ -91,6 +100,10 @@ class System:
         A dictionary mapping atomic numbers to their numbers in the system.
     atom_to_center : dict[int : list[int]]
         A dictionary mapping atomic numbers to a list of (0-based) indices of atoms of that type in the system.
+    atom_map : dict[str, NDArray]
+        For each symmetry operation of the point group, the index of the atom that each atom is mapped to.
+    symmetry_basis : SymmetryBasis | None
+        The symmetry-adapted orbital basis of the point group, built on first use. None in C1.
     basis : ints.Basis
         The basis set for the system, built from the provided `basis_set`.
     auxiliary_basis : ints.Basis
@@ -116,7 +129,7 @@ class System:
     # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
-    x2c: X2CParams | None = None
+    x2c: X2CParams = field(default_factory=X2CParams)
     unit: Literal["angstrom", "bohr"] = "angstrom"
     overlap_ortho_rtol: float = 1e-8
     df_ortho_rtol: float | None = None
@@ -160,7 +173,9 @@ class System:
             raise ValueError("cholesky_tol must be non-negative.")
         if self.symmetry_tol < 0:
             raise ValueError("symmetry_tol must be non-negative.")
-        if self.x2c is not None and not isinstance(self.x2c, X2CParams):
+        if self.x2c is None:
+            self.x2c = X2CParams()
+        if not isinstance(self.x2c, X2CParams):
             raise ValueError(
                 f"x2c must be an X2CParams instance or None, but got {type(self.x2c)}."
             )
@@ -169,21 +184,6 @@ class System:
             raise ValueError(
                 f"Invalid integral_backend: {self.integral_backend}. Must be one of {_valid_backends}."
             )
-
-    @property
-    def x2c_type(self):
-        """Spin structure from :attr:`x2c` (``"sf"``, ``"so"``, or None)."""
-        return self.x2c.x2c_type if self.x2c is not None else None
-
-    @property
-    def x2c_model(self):
-        """Decoupling model from :attr:`x2c` (``"1e"``, ``"sap"``, or None)."""
-        return self.x2c.x2c_model if self.x2c is not None else None
-
-    @property
-    def snso_type(self):
-        """SNSO scaling from :attr:`x2c`, or None when not requested."""
-        return self.x2c.snso_type if self.x2c is not None else None
 
     def _common_init(self, skip_basis_init=False, atoms=None):
         self._init_geometry(atoms=atoms)
@@ -196,6 +196,7 @@ class System:
         self.Xorth, _, info = canonical_orth(_S, self.overlap_ortho_rtol)
         print_metric_info(info)
         self.nmo = int(info["n_kept"])
+        self._symmetry_basis = None
         self.fock_builder = self._init_fock_builder()
         # The B tensors here are lazily evaluated, so no overhead if not used
 
@@ -261,8 +262,7 @@ class System:
         d["auxiliary_basis_set"] = None
         d["minao_basis_set"] = None
         # json.dump can't serialize an X2CParams instance; store its fields as a dict.
-        if self.x2c is not None:
-            d["x2c"] = asdict(self.x2c)
+        d["x2c"] = asdict(self.x2c)
 
         res = {"init_args": d}
         res["basis_data"] = self.basis.serialize()
@@ -325,12 +325,15 @@ class System:
         self.atom_to_center = self.geom_helper.atom_to_center
         self.prin_atomic_positions = self.geom_helper.prin_atomic_positions
         self.point_group = self.geom_helper.point_group
+        self.atom_map = self.geom_helper.atom_map
 
-        logger.log_info1("Principal Atomic Positions (a.u.):")
-        for i in range(self.natoms):
-            logger.log_info1(
-                f"   {Z_TO_ATOM_SYMBOL[self.atoms[i][0]]}   {self.prin_atomic_positions[i, 0]:<.8f}   {self.prin_atomic_positions[i, 1]:<.8f}   {self.prin_atomic_positions[i, 2]:<.8f}"
+        logger.log_info1("Principal Atomic Positions (angstrom):")
+        for (Z, _), r in zip(self.atoms, self.prin_atomic_positions):
+            # rounding, then adding 0.0, prints tiny negative values as 0.0, not -0.0
+            coords = " ".join(
+                f"{round(x / ANGSTROM_TO_BOHR, 10) + 0.0:>16.10f}" for x in r
             )
+            logger.log_info1(f"   {Z_TO_ATOM_SYMBOL[Z]:<3}{coords}")
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.geom_helper)
@@ -391,15 +394,11 @@ class System:
         self.nminao = self.minao_basis.size if self.minao_basis else None
 
     def _init_x2c(self):
-        if self.x2c_type is not None:
-            assert self.x2c_type in [
-                "sf",
-                "so",
-            ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
+        if self.x2c.x2c_type is not None:
             self.x2c_helper = X2CHelper(self)
         else:
             self.x2c_helper = None
-        if self.x2c_type == "so":
+        if self.x2c.x2c_type == "so":
             self.two_component = True
 
     def _init_fock_builder(self):
@@ -459,13 +458,13 @@ class System:
         NDArray
             Core Hamiltonian integrals matrix.
         """
-        if self.x2c_type in ["sf", "so"]:
+        if self.x2c.x2c_type is not None:
             H = self.x2c_helper.hcore_x2c()
         else:
             T = integrals.kinetic(self)
             V = integrals.nuclear(self)
             H = T + V
-        if self.x2c_type in [None, "sf"] and self.two_component:
+        if self.x2c.x2c_type != "so" and self.two_component:
             H = block_diag_2x2(H)
         return H
 
@@ -482,6 +481,29 @@ class System:
             return block_diag_2x2(self.Xorth)
         else:
             return self.Xorth
+
+    @property
+    def symmetry_basis(self):
+        """
+        The symmetry-adapted orbital basis of the point group, built on first use.
+
+        Returns
+        -------
+        SymmetryBasis | None
+            The symmetry basis, or None if the point group is C1.
+        """
+        if self.point_group == "C1":
+            return None
+        if self._symmetry_basis is None:
+            # basis_utils imports System, so it cannot be imported at module level.
+            from .basis_utils import BasisInfo
+
+            # Spatial orbitals: the one-component overlap and orthogonalizer are used
+            # even after a two-component method has set two_component.
+            self._symmetry_basis = SymmetryBasis(
+                self, BasisInfo(self, self.basis), integrals.overlap(self), self.Xorth
+            )
+        return self._symmetry_basis
 
     def nuclear_dipole(self, origin=None, unit="debye"):
         """
@@ -554,7 +576,7 @@ class ModelSystem:
 
     def __post_init__(self):
         self.Zsum = 0  # total nuclear charge, here set to zero, so charge can be set to -nel later
-        self.x2c_type = None
+        self.x2c = X2CParams()
         self.nuclear_repulsion = 0.0
         self.nbf = self.hcore.shape[0]
         self.nmo = self.nbf

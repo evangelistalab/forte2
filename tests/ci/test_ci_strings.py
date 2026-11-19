@@ -1,5 +1,5 @@
 import pytest
-from forte2 import State, MOSpace
+from forte2 import MOSpace, State
 from forte2.lib.ci_helpers import CIStrings
 
 

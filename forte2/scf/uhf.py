@@ -6,9 +6,9 @@ from numpy.typing import NDArray
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from forte2.symmetry import MOSymmetryDetector
+from forte2.symmetry.sym_utils import COTTON_LABELS
 from .scf_base import SCFBase
-from .scf_utils import guess_mix
+from .scf_utils import guess_mix, smallest_gap_same_irrep
 
 
 @dataclass
@@ -21,7 +21,10 @@ class UHF(SCFBase):
     ms : float
         Spin projection. Must be a multiple of 0.5.
     guess_mix : bool, optional, default=False
-        If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if ms is 0.0.
+        If True and ms is 0.0, mixes the HOMO and LUMO to break the alpha-beta
+        degeneracy. With point-group symmetry, if the HOMO and LUMO are in different
+        irreps, the occupied and virtual orbitals of one irrep with the smallest
+        energy gap are mixed instead, with a warning.
     """
 
     ms: float = None
@@ -57,6 +60,7 @@ class UHF(SCFBase):
         assert (
             self.na >= 0 and self.nb >= 0
         ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
+        self._set_occupation_constraints()
 
     def _build_fock(self, H, fock_builder, S):
         (Ja, Jb), K = fock_builder.build_JK(
@@ -80,12 +84,24 @@ class UHF(SCFBase):
     def _initial_guess(self, H, guess_type="minao"):
         from .rhf import RHF
 
-        C = RHF._initial_guess(self, H, guess_type=guess_type)[0]
+        (eps,), (C,), (irreps,) = RHF._initial_guess(self, H, guess_type=guess_type)
+        return [eps, eps], [C, C], [irreps, irreps]
 
-        if self.twicems == 0 and self.guess_mix:
-            return guess_mix(C, self.nel // 2 - 1)
-
-        return [C, C]
+    def _mix_guess(self, eps, C, irreps):
+        if self.twicems != 0 or not self.guess_mix:
+            return C
+        # Each spin rotates its own frontier pair, in opposite directions.
+        mixed, messages = [], set()
+        for spin in (0, 1):
+            pair, message = _guess_mix_pair(
+                eps[spin], irreps[spin], self.na, self.system.point_group
+            )
+            if message is not None:
+                messages.add(message)
+            mixed.append(C[spin] if pair is None else guess_mix(C[spin], *pair)[spin])
+        for message in messages:
+            logger.log_warning(message)
+        return mixed
 
     def _build_ao_grad(self, S, F):
         AO_grad = np.hstack(
@@ -95,11 +111,6 @@ class UHF(SCFBase):
             ]
         )
         return AO_grad
-
-    def _diagonalize_fock(self, F):
-        eps_a, C_a = self._eigh(F[0])
-        eps_b, C_b = self._eigh(F[1])
-        return [eps_a, eps_b], [C_a, C_b]
 
     def _spin(self, S):
         # alpha-beta orbital overlap matrix
@@ -154,9 +165,7 @@ class UHF(SCFBase):
             return F
         D_vir = [S - S @ d @ S for d in self.D]
 
-        return [
-            f + ls * d for ls, f, d in zip(self._current_level_shift, F, D_vir)
-        ]
+        return [f + ls * d for ls, f, d in zip(self._current_level_shift, F, D_vir)]
 
     def _get_occupation(self):
         self.aocc = self.na
@@ -211,28 +220,6 @@ class UHF(SCFBase):
             )
         logger.log_info1(string)
 
-    def _assign_orbital_symmetries(self):
-        S = self._get_overlap()
-        mosym_a = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[0],
-            self.eps[0],
-        )
-        mosym_a.run()
-
-        mosym_b = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[1],
-            self.eps[1],
-        )
-        mosym_b.run()
-        self.irrep_labels = [mosym_a.labels, mosym_b.labels]
-        self.irrep_indices = [mosym_a.irrep_indices, mosym_b.irrep_indices]
-
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
             # send a PR if you want this changed
@@ -254,3 +241,28 @@ class UHF(SCFBase):
         basis_info.print_ao_composition(
             self.C[1], list(range(self.na, min(self.na + 5, self.nmo)))
         )
+
+
+def _guess_mix_pair(eps, irreps, nocc, point_group):
+    """
+    Return the orbitals that guess_mix rotates, and a warning if they are not the HOMO
+    and LUMO.
+    """
+    homo, lumo = nocc - 1, nocc
+    pair = smallest_gap_same_irrep(eps, irreps, nocc)
+    if pair == (homo, lumo):
+        return pair, None
+    names = {index: label for label, index in COTTON_LABELS[point_group].items()}
+    if pair is None:
+        return None, (
+            f"guess_mix: no occupied and virtual orbitals share a {point_group} irrep, so "
+            "the initial guess is not mixed. Run with symmetry=False to mix the HOMO and "
+            "LUMO."
+        )
+    return pair, (
+        f"guess_mix: the HOMO ({names[irreps[homo]]}) and LUMO ({names[irreps[lumo]]}) "
+        f"are in different irreps, so mixing them would break {point_group} symmetry. "
+        f"Mixing orbitals {pair[0]} ({names[irreps[pair[0]]]}) and {pair[1]} "
+        f"({names[irreps[pair[1]]]}) instead. Run with symmetry=False to mix the HOMO "
+        "and LUMO."
+    )

@@ -1,14 +1,7 @@
 import pytest
 import numpy as np
 
-from forte2 import (
-    CISolver,
-    MCOptimizer,
-    RHF,
-    State,
-    System,
-    GHF,
-)
+from forte2 import CISolver, GHF, MCOptimizer, RHF, State, System
 from forte2.base_classes import X2CParams
 from forte2.gradients import FDGradient
 
@@ -74,3 +67,17 @@ def test_fd_gradient_matches_analytic_casscf_gradient():
     numeric = fd.gradient()
 
     np.testing.assert_allclose(numeric, analytic, atol=1.0e-6)
+
+
+def test_fd_gradient_rejects_symmetry_when_attached():
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+        symmetry=True,
+    )
+    rhf = RHF(charge=0)(system)
+    with pytest.raises(NotImplementedError, match="FDGradient requires symmetry=False"):
+        FDGradient()(rhf)
+    assert not rhf.executed

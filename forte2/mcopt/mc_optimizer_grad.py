@@ -64,7 +64,7 @@ def _compute_nonrel_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
 
     hcore_gradient = (
         mc.system.x2c_helper.hcore_gradient(D1)
-        if mc.system.x2c_type is not None
+        if mc.system.x2c.x2c_type is not None
         else None
     )
     return compute_gradient(
@@ -114,7 +114,7 @@ def _compute_nonrel_sa_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
 
     hcore_gradient = (
         mc.system.x2c_helper.hcore_gradient(D1)
-        if mc.system.x2c_type is not None
+        if mc.system.x2c.x2c_type is not None
         else None
     )
     return compute_gradient(
@@ -335,8 +335,8 @@ def _compute_rel_casscf_gradient(mc, C: NDArray) -> NDArray:
     )
 
     hcore_gradient = None
-    if mc.system.x2c_type is not None:
-        x2c_density = D_spinor if mc.system.x2c_type == "so" else D1
+    if mc.system.x2c.x2c_type is not None:
+        x2c_density = D_spinor if mc.system.x2c.x2c_type == "so" else D1
         hcore_gradient = mc.system.x2c_helper.hcore_gradient(x2c_density)
 
     return compute_gradient(

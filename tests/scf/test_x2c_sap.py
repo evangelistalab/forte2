@@ -5,7 +5,6 @@ from forte2 import System, X2CParams
 from forte2.helpers.comparisons import approx
 from forte2.scf import GHF, RHF
 
-
 HBR = "H 0 0 0\nBr 0 0 1.4"
 
 

@@ -28,6 +28,41 @@ def test_libcint_overlap():
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_mixed_geom():
+    # Each basis carries its own centers, and the nuclei come from system1.
+    xyz1 = """
+    Li 0 0 0
+    Li 0 0 1.9
+    """
+    system1 = System(
+        xyz1, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+    xyz2 = """
+    Li 0 0 0
+    Li 0 0 2.5
+    """
+    system2 = System(xyz2, basis_set="cc-pvdz")
+    b1, b2 = system1.basis, system2.basis
+
+    s_cint = integrals.cint_overlap(system1, b1, b2)
+    assert s_cint.shape == (10, 28)
+    assert np.linalg.norm(s_cint - integrals.overlap(system1, b1, b2)) < 1e-8
+    assert np.linalg.norm(s_cint) == pytest.approx(4.332697983158035, rel=1e-6)
+
+    t_cint = integrals.cint_kinetic(system1, b1, b2)
+    assert np.linalg.norm(t_cint - integrals.kinetic(system1, b1, b2)) < 1e-8
+
+    v_cint = integrals.cint_nuclear(system1, b1, b2)
+    assert np.linalg.norm(v_cint - integrals.nuclear(system1, b1, b2)) < 1e-8
+
+    aux = system1.auxiliary_basis
+    b_cint = integrals.cint_coulomb_3c(system1, aux, b1, b2)
+    b_int2 = integrals.coulomb_3c(system1, aux, b1, b2)
+    assert np.linalg.norm(b_cint - b_int2) < 1e-8
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_overlap_cross():
     xyz = """
     Li 0 0 0
@@ -161,6 +196,7 @@ def test_gaussian_nuclear_deriv_finite_difference():
     weights = rng.standard_normal((system.nbf, system.nbf))
     weights /= np.linalg.norm(weights)
     analytical = integrals.nuclear_deriv(system, weights)[5]
+
     def contracted(z):
         return np.einsum("mn,mn->", integrals.nuclear(make_system(z)), weights)
 
@@ -509,3 +545,34 @@ def test_choose_backend_explicit_libcint_used_for_low_l():
             integrals_impl._choose_backend(0, backend="libcint")
     else:
         assert integrals_impl._choose_backend(0, backend="libcint") == "libcint"
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_sprsp_sph_with_shifted_origin():
+    xyz = """
+    H 0 0 0
+    Br 0 0 1.2
+    """
+    system = System(xyz, basis_set="ano-rcc", minao_basis_set=None)
+    s_cint = integrals.cint_sprsp(system, origin=[0.1, -0.2, 0.3])
+    # mol = pyscf.M(atom="H 0 0 0; Br 0 0 1.2", basis="ano-rcc.nw", spin=0, charge=0)
+    # with mol.with_common_orig((0.1, -0.2, 0.3)):
+    #     integrals = mol.intor("int1e_sprsp_sph")
+    #     for i in integrals:
+    #         print(np.linalg.norm(i))
+    norm_ref = [
+        0.0,
+        26.026312334673438,
+        25.724080350429066,
+        205.49749994791185,
+        26.026312334673438,
+        0.0,
+        25.724080350429066,
+        386.2822061421359,
+        25.724080350429066,
+        25.724080350429062,
+        0.0,
+        3713.7650944042684,
+    ]
+    for i in range(12):
+        assert np.linalg.norm(s_cint[i]) == pytest.approx(norm_ref[i], rel=1e-6)

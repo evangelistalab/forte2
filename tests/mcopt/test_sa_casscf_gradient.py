@@ -547,7 +547,7 @@ def test_sf_x2c_sa_gasscf_gradient_h2_ccpvdz_finite_difference():
         components=[(1, 2)],
     )[0, 1]
 
-    assert mc.system.x2c_type == "sf"
+    assert mc.system.x2c.x2c_type == "sf"
     assert mc.mo_space.ngas == 2
     assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-7)
     assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)

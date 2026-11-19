@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State, ROHF, CISolver
+from forte2 import CI, CISolver, MCOptimizer, RHF, ROHF, State, System
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx
 
@@ -106,3 +106,36 @@ def test_mrpt2_all_active():
     pt = DSRG_MRPT2(flow_param=0.5)(mc)
     pt.run()
     assert pt.E_dsrg == approx(-1.096071975854)
+
+
+def test_mrpt2_c_atom_ci_reference_relaxation():
+    """
+    Reference relaxation with a CI reference
+    """
+    escf = -37.682415354711
+    edsrg = -37.741130215328
+    edsrg_relaxed = -37.741196308282
+    eref = -37.678689834640
+
+    system = System(
+        xyz="C 0 0 0",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    scf = ROHF(charge=0, ms=1.0)(system)
+    ci = CI(
+        CISolver(
+            State(nel=6, multiplicity=3, ms=1.0),
+            nroots=3,
+            core_orbitals=1,
+            active_orbitals=4,
+        ),
+        final_orbitals="semicanonical",
+    )(scf)
+    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="once")(ci)
+    dsrg.run()
+
+    assert scf.E == approx(escf)
+    assert dsrg.relax_energies[0, 0] == approx(edsrg)
+    assert dsrg.relax_energies[0, 1] == approx(edsrg_relaxed)
+    assert dsrg.relax_energies[0, 2] == approx(eref)

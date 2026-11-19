@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from forte2 import System, RHF, MCOptimizer, AVAS, State, CISolver
+from forte2 import AVAS, CISolver, MCOptimizer, RHF, State, System
 from forte2.helpers.comparisons import approx
 
 

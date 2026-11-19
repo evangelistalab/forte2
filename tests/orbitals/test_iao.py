@@ -1,4 +1,4 @@
-from forte2 import System, RHF
+from forte2 import RHF, System
 from forte2.orbitals.iao import IAO
 from forte2.props.props import iao_partial_charge
 from forte2.helpers.comparisons import approx

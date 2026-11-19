@@ -25,13 +25,9 @@ def _four_point_hcore_gradient_component(
     """Differentiate Tr(hcore D) with respect to a single internal coordinate."""
 
     def contracted_hcore(value):
-        return np.einsum(
-            "mn,nm->", system_factory(value).ints_hcore(), density
-        ).real
+        return np.einsum("mn,nm->", system_factory(value).ints_hcore(), density).real
 
-    return float(
-        finite_difference(contracted_hcore, coordinate, step=step, npoints=4)
-    )
+    return float(finite_difference(contracted_hcore, coordinate, step=step, npoints=4))
 
 
 @pytest.mark.parametrize("x2c_type", ["sf", "so"])

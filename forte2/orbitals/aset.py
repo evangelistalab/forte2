@@ -7,15 +7,17 @@ from forte2.lib import ints
 from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.system.basis_utils import BasisInfo
 from forte2.helpers import logger
+from forte2.helpers.matrix_functions import block_diag_2x2, block_eigh
 from forte2.base_classes import Method
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
+from forte2.orbitals.final_orbitals import FinalOrbitals
 
 
 @dataclass
 class ASET(Method):
     """
-    Active Space Embedding Theory (ASET) method for paritioning and projecting molecules.
+    Zeroth-order Active Space Embedding Theory (ASET(0)) method for paritioning and projecting molecules.
 
     Parameters
     ----------
@@ -44,7 +46,15 @@ class ASET(Method):
     - ["C1-7"]           # carbon atoms #1 through #7
     - ["C1-3","N2"]      # carbon atoms #1, #2, #3 and nitrogen atom #2
 
-    See J. Chem. Phys. 2020, 152 (9), 094107 <https://doi.org/10.1063/1.5142481>_ for details on the ASET(mf) method.
+    If the parent method is two-component, the partition is carried out in the
+    spinor basis. The fragment projector is spin-independent, so it commutes with
+    time reversal and never assigns the two members of a Kramers pair to different
+    subspaces.
+
+    References
+    ----------
+    .. [1] N. He and F. A. Evangelista, "A zeroth-order active-space frozen-orbital embedding scheme for multireference calculations",
+            J. Chem. Phys. 2020, 152 (9), 094107
     """
 
     fragment: list
@@ -56,9 +66,10 @@ class ASET(Method):
     num_A_vir: int = 0
 
     executed: bool = field(default=False, init=False)
+    final_orbitals: FinalOrbitals = field(default="semicanonical", init=False)
 
     def __post_init__(self):
-        self._regex = r"^([A-Z][a-z]?)(\d+)?(?:-(\d+))?$"
+        self._regex = r"^([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)??$"
         self._check_parameters()
         self.requires = {"system", "mos", "mo_space"}
         self.provides = {"system", "mos", "mo_space"}
@@ -161,7 +172,7 @@ class ASET(Method):
             end = match.group(3)  # e.g., "3" (if it's a range)
 
             try:
-                Z = ATOM_SYMBOL_TO_Z[symbol]
+                Z = ATOM_SYMBOL_TO_Z[symbol.upper()]
             except KeyError:
                 raise ValueError(f"Unknown atom symbol: {symbol}")
 
@@ -200,11 +211,15 @@ class ASET(Method):
         2. Extract fragment block S_A
         3. Pseudo invert S_A and embed into full AO space
         4. Form P_ao_frag = S_ff @ S_A_nn @ S_ff
+        5. For a two-component parent, repeat the projector on the diagonal so
+           that it acts identically on the alpha and beta halves of a spinor
 
         Returns
         -------
         P_ao_frag : ndarray
-            The fragment projector matrix S_ff @ S_A_mm @ S_ff.
+            The fragment projector matrix S_ff @ S_A_mm @ S_ff. Its dimension is
+            the number of basis functions for a one-component parent and twice
+            that for a two-component one.
         """
         # 1. Compute AO overlap S_ff
         S_ff = ints.overlap(self.system.basis)
@@ -245,6 +260,12 @@ class ASET(Method):
         # Build fragment projector P_ao_frag = S_ff S_A_ff S_ff
         P_ao_frag = S_ff @ S_A_ff @ S_ff
 
+        if self.two_component:
+            # The projector is spin-independent, so it commutes with time
+            # reversal: its eigenvalues come in Kramers-degenerate pairs and a
+            # partition by eigenvalue never separates the members of a pair.
+            P_ao_frag = block_diag_2x2(P_ao_frag)
+
         return P_ao_frag
 
     def _make_embedding(self):
@@ -258,7 +279,7 @@ class ASET(Method):
 
         # Build the fragment projector
         P_ao_frag = self.P_ao_frag
-        P_frag = C_contig.T @ P_ao_frag @ C_contig
+        P_frag = C_contig.conj().T @ P_ao_frag @ C_contig
 
         # 6) Split P_frag into occupied and virtual blocks
         core = self.mo_space.core
@@ -270,12 +291,29 @@ class ASET(Method):
         # Split P_frag into occupied and virtual blocks
         P_frag_oo = P_frag[core, core]
         P_frag_vv = P_frag[virt, virt]
-        lo_vals, Uo = np.linalg.eigh(P_frag_oo)
-        lv_vals, Uv = np.linalg.eigh(P_frag_vv)
 
-        # resort the virtual eigenvalue/eigenvector pairs
+        # irrep of each MO; all rotations below stay within irreps
+        irreps = np.array(self.mos.irrep_indices[0])
+        tol = getattr(self.system.symmetry_basis, "tol", 0.0)
+        try:
+            lo_vals, Uo, h_o = block_eigh(
+                P_frag_oo, irreps[core_inds], atol=0.0, rtol=tol, sort=True
+            )
+            lv_vals, Uv, h_v = block_eigh(
+                P_frag_vv, irreps[virt_inds], atol=0.0, rtol=tol, sort=True
+            )
+        except ValueError as e:
+            raise ValueError(
+                f"The ASET fragment breaks {self.system.point_group} symmetry. Use a "
+                "fragment that the symmetry operations map onto itself, or run with "
+                "symmetry=False."
+            ) from e
+
+        # resort the virtual eigenvalue/eigenvector pairs, and their irreps with them
         lv_vals = lv_vals[::-1]
         Uv = Uv[:, ::-1]
+        irreps[core_inds] = h_o
+        irreps[virt_inds] = h_v[::-1]
 
         # Sort the eigenvalue/eigenvector pairs by eigenvalue in descending order
         occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
@@ -341,11 +379,19 @@ class ASET(Method):
         C_emb = C[:, emb_space.orig_to_contig].copy()
 
         # Semi-canonicalize according to the embedding space
-        semican = Semicanonicalizer(system=self.system, mo_space=emb_space)
+        semican = Semicanonicalizer(
+            system=self.system,
+            mo_space=emb_space,
+            irrep_indices=irreps[emb_space.orig_to_contig],
+        )
         semican.semi_canonicalize(g1=g1, C_contig=C_emb)
 
         # Replace the original orbitals with the semi-canonicalized ones in the original order
         self.mos.C[0] = semican.C_semican[:, emb_space.contig_to_orig].copy()
+        # semicanonicalization keeps each orbital's irrep at its position
+        names = dict(zip(self.mos.irrep_indices[0], self.mos.irrep_labels[0]))
+        self.mos.irrep_indices[0] = irreps.tolist()
+        self.mos.irrep_labels[0] = [names[h] for h in irreps]
 
         return {
             "index_A_occ": index_A_occ,
@@ -442,7 +488,7 @@ class ASET(Method):
         """
 
         self.mo_space = MOSpace(
-            nmo=self.system.nmo,
+            nmo=self.nmo,
             active_orbitals=self.partition["active_orbitals"],
             core_orbitals=self.partition["index_A_occ"],
             frozen_core_orbitals=sorted(

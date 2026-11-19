@@ -129,6 +129,15 @@ class CIStrings:
 
     def make_determinants(self) -> DeterminantVector: ...
 
+@overload
+def permutation_map(ci_strings: CIStrings, perm: Annotated[NDArray[numpy.int32], dict(shape=(None,))], phase: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> tuple[Annotated[NDArray[numpy.int64], dict(shape=(None,))], Annotated[NDArray[numpy.float64], dict(shape=(None,))]]: ...
+
+@overload
+def permutation_map(ci_strings: CIStrings, perm: Annotated[NDArray[numpy.int32], dict(shape=(None,))], phase: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> tuple[Annotated[NDArray[numpy.int64], dict(shape=(None,))], Annotated[NDArray[numpy.complex128], dict(shape=(None,))]]:
+    """
+    Re-express the determinants in orbitals relabeled by a phased permutation, where orbital u of the permuted set is phase[u] times orbital perm[u] of the original set. Return pi(I) and epsilon_I for every determinant I, so that the permutation maps the CI coefficients as c_I -> epsilon_I c_{pi(I)}.
+    """
+
 class CISigmaBuilder:
     def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3, algorithm: str = 'kh') -> None:
         """

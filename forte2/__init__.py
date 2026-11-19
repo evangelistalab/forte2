@@ -1,4 +1,4 @@
-__version__ = "2026.9.1"
+__version__ = "2026.11.2"
 __author__ = "Forte2 Developers"
 
 from .helpers.echo_script import echo_invoking_script
@@ -19,9 +19,9 @@ from .integrals import integrals
 from .base_classes import X2CParams
 from .system import System, ModelSystem, HubbardModel
 from .state import State, RelState, MOSpace
-from .scf import RHF, ROHF, UHF, CUHF, GHF
-from .ci import CI, RelCI, CISolver, RelCISolver
-from .sci import SelectedCI, SelectedCISolver, RelSelectedCI, RelSelectedCISolver
+from .scf import RHF, ROHF, UHF, GHF
+from .ci import CI, CISolver, RelCISolver
+from .sci import SelectedCISolver, RelSelectedCISolver
 from .x2c import x2c
 from .orbitals import (
     AVAS,

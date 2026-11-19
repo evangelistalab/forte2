@@ -273,3 +273,28 @@ def test_fd_gradient_dsrg_mrpt2():
     assert optimizer.converged
     assert optimizer.E == pytest.approx(-1.1492336391828861, abs=1.0e-7)
     assert bond_length == pytest.approx(1.4140893807, abs=1.0e-6)
+
+
+def test_geometry_optimizer_rejects_symmetry_before_running():
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        symmetry=True,
+    )
+    message = "GeometryOptimizer requires symmetry=False"
+
+    rhf = RHF(charge=0)(system)
+    with pytest.raises(NotImplementedError, match=message):
+        GeometryOptimizer()(rhf)
+    assert not rhf.executed
+
+    built = []
+
+    def build_method(current_system):
+        built.append(current_system)
+        return RHF(charge=0)(current_system)
+
+    with pytest.raises(NotImplementedError, match=message):
+        GeometryOptimizer(method_factory=build_method).run(system)
+    assert not built

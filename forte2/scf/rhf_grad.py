@@ -21,7 +21,7 @@ def _compute_rhf_gradient(rhf) -> NDArray:
 
     hcore_gradient = (
         rhf.system.x2c_helper.hcore_gradient(D1)
-        if rhf.system.x2c_type is not None
+        if rhf.system.x2c.x2c_type is not None
         else None
     )
     return compute_gradient(

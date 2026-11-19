@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System, GHF, RelState, MCOptimizer, RelCISolver, X2CParams
+from forte2 import GHF, MCOptimizer, RelCISolver, RelState, System, X2CParams
 from forte2.helpers.comparisons import approx
 
 

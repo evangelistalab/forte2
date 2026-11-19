@@ -16,9 +16,9 @@ Both methods take a ``spin_type`` argument that selects the representation:
 The spelled-out forms are also accepted: ``spin_dependent`` or ``spin-dependent``,
 ``spin_free`` or ``spin-free``, and ``spin_orbital``, ``spin-orbital``, or ``spinorbital``.
 
-Which orders and spin types are available depends on the solver. ``MCOptimizer`` forwards both
-methods to its ``ci_solver``, so the tables that follow also describe an MCSCF calculation built
-on a given solver.
+Which orders and spin types are available depends on the solver. The drivers, ``CI`` and
+``MCOptimizer``, forward both methods to their ``ci_solver``, so the tables that follow also
+describe a CI or MCSCF calculation built on a given solver.
 
 .. note::
     For RDMs, "spin-free" simply means spin-summed, e.g., the spin-free three-body RDMs are given by:
@@ -87,22 +87,22 @@ belong to different states are more restricted.
      - Spin types
      - Transition RDMs within a state
      - Transition RDMs between states
-   * - ``CI``
+   * - ``CISolver``
      - 1, 2, 3
      - ``sd``, ``sf``
      - All orders
      - Order 1
-   * - ``RelCI``
+   * - ``RelCISolver``
      - 1, 2, 3
      - ``so``
      - All orders
      - Not supported
-   * - ``SelectedCI``
+   * - ``SelectedCISolver``
      - 1, 2
      - ``sd``, ``sf``
      - All orders
      - Order 1
-   * - ``RelSelectedCI``
+   * - ``RelSelectedCISolver``
      - 1, 2
      - ``so``
      - All orders
@@ -126,16 +126,16 @@ transition counterpart.
    * - Solver
      - Orders
      - Spin types
-   * - ``CI``
+   * - ``CISolver``
      - 2, 3
      - ``sf``
-   * - ``RelCI``
+   * - ``RelCISolver``
      - 2, 3
      - ``so``
-   * - ``SelectedCI``
+   * - ``SelectedCISolver``
      - 2
      - ``sf``
-   * - ``RelSelectedCI``
+   * - ``RelSelectedCISolver``
      - 2
      - ``so``
 

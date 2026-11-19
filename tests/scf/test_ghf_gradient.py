@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import GHF, System, UHF, X2CParams
+from forte2.data.atom_data import LIGHT_SPEED
 from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
     xyz_string,
@@ -82,15 +83,16 @@ def test_ghf_gradient_auto_runs_and_is_repeatable():
     assert first == pytest.approx(second, abs=1.0e-12)
 
 
+@pytest.mark.parametrize("light_speed", [LIGHT_SPEED, LIGHT_SPEED / 10])
 @pytest.mark.parametrize("x2c_type", ["sf", "so"])
-def test_x2c_ghf_gradient_finite_difference(x2c_type):
+def test_x2c_ghf_gradient_finite_difference(x2c_type, light_speed):
     def make_system(z):
         return System(
             xyz=f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
             basis_set="sto-3g",
             auxiliary_basis_set="def2-universal-JKFIT",
             unit="bohr",
-            x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e"),
+            x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e", light_speed=light_speed),
             minao_basis_set=None,
         )
 
