@@ -202,6 +202,7 @@ class _DMRGSingleStateSolver:
             tol=p.tol,
             bond_dims=p.bond_dims[start:],
             noises=p.noises[start:],
+            noise_type=p.noise_type,
             thrds=p.davidson_tols[start:],
             forward=forward,
             iprint=p.iprint,

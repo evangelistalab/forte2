@@ -10,10 +10,12 @@ pytestmark = pytest.mark.skipif(not BLOCK2_AVAILABLE, reason="block2 is not inst
 
 
 def _dmrg_params(scratch, orbital_ordering="fiedler", twosite_to_onesite=None):
-    # Six sites, so a bond dimension of a few hundred is exact
+    # Six sites, so a bond dimension of a few hundred is exact, and perturbative noise
+    # can't move a solve off an excited state it lands on
     return DMRGParams(
         bond_dims=[200] * 4 + [400] * 4,
         noises=[1e-4] * 4 + [1e-6] * 2 + [0.0],
+        noise_type="DensityMatrix",
         davidson_tols=[1e-12] * 8,
         n_sweeps=12,
         twosite_to_onesite=twosite_to_onesite,
