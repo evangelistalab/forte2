@@ -3,12 +3,11 @@
 #include <vector>
 
 #include "determinant/determinant.h"
-
-namespace psi {
-class Matrix;
-} // namespace psi
+#include "helpers/ndarray.h"
 
 namespace forte2 {
+
+class SlaterRules;
 
 /// @brief Create a single excitation from orbital i to orbital a
 /// @param str The original string
@@ -94,18 +93,17 @@ std::pair<Determinant, double> create_double_ab_excitation(const Determinant& de
                                                            size_t j, size_t a, size_t b);
 
 /// @brief Build the S^2 operator matrix in the given basis of determinants (multithreaded)
-/// @param dets A vector of determinants
+/// @param dets The determinant basis, in matrix row and column order
 /// @return A matrix of size (num_dets, num_dets) with the S^2 operator matrix
-// std::shared_ptr<psi::Matrix> make_s2_matrix(const std::vector<Determinant>& dets);
+np_matrix make_s2_matrix(const std::vector<Determinant>& dets);
 
-/// @brief Build the Hamiltonian operator matrix in the given basis of determinants
+/// @brief Build the real symmetric Hamiltonian matrix in the given determinant basis
 /// (multithreaded)
-/// @param dets A vector of determinants
-/// @param as_ints A pointer to the ActiveSpaceIntegrals object
+/// @param dets The determinant basis, in matrix row and column order
+/// @param slater_rules The Slater rules evaluator for the restricted orbital integrals
 /// @return A matrix of size (num_dets, num_dets) with the Hamiltonian operator matrix
-// std::shared_ptr<psi::Matrix> make_hamiltonian_matrix(const std::vector<Determinant>& dets,
-//                                                      std::shared_ptr<ActiveSpaceIntegrals>
-//                                                      as_ints);
+np_matrix make_hamiltonian_matrix(const std::vector<Determinant>& dets,
+                                  const SlaterRules& slater_rules);
 
 /// @brief Generate all strings of n orbitals and k electrons in each irrep
 /// @param n The number of orbitals

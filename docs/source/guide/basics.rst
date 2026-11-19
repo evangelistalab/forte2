@@ -61,6 +61,23 @@ To run the whole chain, call ``run`` on its last method::
 
 To use a relativistic Hamiltonian, see :doc:`relativistic`.
 
+Determinant matrices
+--------------------
+
+The ``forte2.lib.det`` module can build dense Hamiltonian and spin-squared matrices in a determinant basis.
+Both functions return a NumPy array with rows and columns in the order of the supplied determinants.
+The real Hamiltonian builder takes a ``SlaterRules`` object constructed from the scalar energy and restricted one- and two-electron integrals.
+For example, given restricted active-space integrals ``ints`` and ``norb`` active spatial orbitals, use the following code.
+
+.. code-block:: python
+
+    from forte2.lib.det import SlaterRules, hilbert_space, make_hamiltonian_matrix, make_s2_matrix
+
+    dets = hilbert_space(norb, na, nb)
+    rules = SlaterRules(norb, ints.E, ints.H, ints.V)
+    hamiltonian = make_hamiltonian_matrix(dets, rules)
+    spin_squared = make_s2_matrix(dets)
+
 Parallelism
 -----------
 

@@ -277,6 +277,12 @@ void export_determinant_helpers_api(nb::module_& sub_m) {
     sub_m.def(
         "spin2", [](const Determinant& d1, const Determinant& d2) { return spin2(d1, d2); },
         "Compute the S^2 value between two determinants");
+
+    sub_m.def("make_s2_matrix", &make_s2_matrix, "dets"_a,
+              "Build the dense S^2 matrix in the given determinant order.");
+    sub_m.def("make_hamiltonian_matrix", &make_hamiltonian_matrix, "dets"_a, "slater_rules"_a,
+              "Build the dense, real symmetric Hamiltonian matrix in the given determinant "
+              "order using restricted Slater rules.");
 }
 
 void export_slater_rules_api(nb::module_& sub_m) {

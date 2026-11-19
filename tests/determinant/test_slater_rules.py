@@ -2,7 +2,13 @@ import numpy as np
 import pytest
 
 from forte2 import RHF, System
-from forte2.lib.det import Determinant, SlaterRules, RelSlaterRules, hilbert_space
+from forte2.lib.det import (
+    Determinant,
+    SlaterRules,
+    RelSlaterRules,
+    hilbert_space,
+    make_hamiltonian_matrix,
+)
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
 from forte2.ci.rel_ci import _RelCISingleStateSolver
@@ -339,6 +345,31 @@ def test_slater_rules_matches_reference_for_fock_space():
             expected = _reference_slater_rule(norb, 0.37, h, v, lhs, rhs)
             found = slater_rules.slater_rules(lhs, rhs)
             assert found == approx(expected)
+
+
+@pytest.mark.parametrize("threads", ["1", "2"])
+def test_make_hamiltonian_matrix(monkeypatch, threads):
+    monkeypatch.setenv("FORTE_NUM_THREADS_OVERRIDE", threads)
+    norb = 4
+    h, v = _symmetric_integrals(norb)
+    rules = SlaterRules(norb, 0.37, h, v)
+    dets = hilbert_space(norb, 2, 1)[::-1]
+    expected = [[rules.slater_rules(bra, ket) for ket in dets] for bra in dets]
+
+    matrix = make_hamiltonian_matrix(dets, rules)
+
+    np.testing.assert_allclose(matrix, expected, atol=1e-12)
+    np.testing.assert_array_equal(matrix, matrix.T)
+    assert make_hamiltonian_matrix([], rules).shape == (0, 0)
+
+
+@pytest.mark.parametrize("occupation", ["0a", "0b"])
+def test_make_hamiltonian_matrix_rejects_out_of_range_orbitals(occupation):
+    rules = SlaterRules(1, 0.0, np.zeros((1, 1)), np.zeros((1, 1, 1, 1)))
+    with pytest.raises(
+        ValueError, match="outside the range of the SlaterRules integrals"
+    ):
+        make_hamiltonian_matrix([Determinant(occupation)], rules)
 
 
 def test_slater_rules_1():

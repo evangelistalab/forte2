@@ -1,7 +1,11 @@
 #include <algorithm>
 #include <cassert>
+#include <limits>
+#include <stdexcept>
 
 #include "determinant/determinant_helpers.h"
+#include "determinant/slater_rules.h"
+#include "helpers/parallel.h"
 
 namespace forte2 {
 
@@ -203,46 +207,47 @@ double spin2(const Determinant& lhs, const Determinant& rhs) {
     return (matrix_element);
 }
 
-// std::shared_ptr<psi::Matrix> make_s2_matrix(const std::vector<Determinant>& dets) {
-//     const size_t n = dets.size();
-//     auto S2 = std::make_shared<psi::Matrix>("S^2", n, n);
+namespace {
+template <typename F>
+np_matrix make_symmetric_det_matrix(const std::vector<Determinant>& dets, F&& element) {
+    const size_t n = dets.size();
+    if (n != 0 && n > std::numeric_limits<size_t>::max() / sizeof(double) / n) {
+        throw std::length_error("Determinant matrix is too large to allocate.");
+    }
 
-//     auto threads = omp_get_max_threads();
+    auto matrix = make_ndarray<nb::numpy, double, 2>({n, n});
+    auto view = matrix.view();
+    // Interleave rows to distribute the decreasing amount of work per row.
+    parallel_for_interleaved_thread(0, n, [&](size_t i) {
+        const auto& bra = dets[i];
+        view(i, i) = element(bra, bra);
+        for (size_t j = i + 1; j < n; ++j) {
+            const double value = element(bra, dets[j]);
+            view(i, j) = value;
+            view(j, i) = value;
+        }
+    });
+    return matrix;
+}
+} // namespace
 
-// #pragma omp parallel for schedule(dynamic) num_threads(threads)
-//     for (size_t I = 0; I < n; I++) {
-//         const Determinant& detI = dets[I];
-//         for (size_t J = I; J < n; J++) {
-//             const Determinant& detJ = dets[J];
-//             const double S2IJ = spin2(detI, detJ);
-//             S2->set(I, J, S2IJ);
-//             S2->set(J, I, S2IJ);
-//         }
-//     }
-//     return S2;
-// }
+np_matrix make_s2_matrix(const std::vector<Determinant>& dets) {
+    return make_symmetric_det_matrix(dets, spin2);
+}
 
-// std::shared_ptr<psi::Matrix>
-// make_hamiltonian_matrix(const std::vector<Determinant>& dets,
-//                         std::shared_ptr<ActiveSpaceIntegrals> as_ints) {
-//     const size_t n = dets.size();
-//     auto H = std::make_shared<psi::Matrix>("H", n, n);
-
-//     // If we are running DiskDF then we need to revert to a single thread loop
-//     auto threads = (as_ints->get_integral_type() == DiskDF) ? 1 : omp_get_max_threads();
-
-// #pragma omp parallel for schedule(dynamic) num_threads(threads)
-//     for (size_t I = 0; I < n; I++) {
-//         const Determinant& detI = dets[I];
-//         for (size_t J = I; J < n; J++) {
-//             const Determinant& detJ = dets[J];
-//             double HIJ = as_ints->slater_rules(detI, detJ);
-//             H->set(I, J, HIJ);
-//             H->set(J, I, HIJ);
-//         }
-//     }
-//     return H;
-// }
+np_matrix make_hamiltonian_matrix(const std::vector<Determinant>& dets,
+                                  const SlaterRules& slater_rules) {
+    const auto in_range = [norb = slater_rules.norb()](size_t p) { return p < norb; };
+    for (const auto& det : dets) {
+        if (!det.for_each_a_occ(in_range) || !det.for_each_b_occ(in_range)) {
+            throw std::invalid_argument("A determinant occupies an orbital outside the range of "
+                                        "the SlaterRules integrals.");
+        }
+    }
+    return make_symmetric_det_matrix(dets, [&](const Determinant& bra, const Determinant& ket) {
+        return slater_rules.slater_rules(bra, ket);
+    });
+}
 
 std::vector<std::vector<String>> make_strings(int n, int k, size_t nirrep,
                                               const std::vector<int>& mo_symmetry) {

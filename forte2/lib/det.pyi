@@ -152,6 +152,14 @@ def hilbert_space(nmo: int, na: int, nb: int, ref: Determinant, truncation: int,
 def spin2(arg0: Determinant, arg1: Determinant, /) -> float:
     """Compute the S^2 value between two determinants"""
 
+def make_s2_matrix(dets: Sequence[Determinant]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    """Build the dense S^2 matrix in the given determinant order."""
+
+def make_hamiltonian_matrix(dets: Sequence[Determinant], slater_rules: SlaterRules) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    """
+    Build the dense, real symmetric Hamiltonian matrix in the given determinant order using restricted Slater rules.
+    """
+
 class SlaterRules:
     def __init__(self, norb: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
         """
