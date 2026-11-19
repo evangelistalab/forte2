@@ -279,10 +279,11 @@ void export_determinant_helpers_api(nb::module_& sub_m) {
         "Compute the S^2 value between two determinants");
 
     sub_m.def("make_s2_matrix", &make_s2_matrix, "dets"_a,
-              "Build the dense S^2 matrix in the given determinant order.");
+              "Build the S^2 matrix in the given determinant order.");
+
     sub_m.def("make_hamiltonian_matrix", &make_hamiltonian_matrix, "dets"_a, "slater_rules"_a,
-              "Build the dense, real symmetric Hamiltonian matrix in the given determinant "
-              "order using restricted Slater rules.");
+              "Build the Hamiltonian matrix in the given determinant "
+              "order using Slater rules (real case, restricted orbitals).");
 }
 
 void export_slater_rules_api(nb::module_& sub_m) {

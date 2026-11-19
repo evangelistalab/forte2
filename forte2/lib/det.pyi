@@ -153,11 +153,11 @@ def spin2(arg0: Determinant, arg1: Determinant, /) -> float:
     """Compute the S^2 value between two determinants"""
 
 def make_s2_matrix(dets: Sequence[Determinant]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
-    """Build the dense S^2 matrix in the given determinant order."""
+    """Build the S^2 matrix in the given determinant order."""
 
 def make_hamiltonian_matrix(dets: Sequence[Determinant], slater_rules: SlaterRules) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
     """
-    Build the dense, real symmetric Hamiltonian matrix in the given determinant order using restricted Slater rules.
+    Build the Hamiltonian matrix in the given determinant order using Slater rules (real case, restricted orbitals).
     """
 
 class SlaterRules:

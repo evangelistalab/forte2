@@ -217,8 +217,7 @@ np_matrix make_symmetric_det_matrix(const std::vector<Determinant>& dets, F&& el
 
     auto matrix = make_ndarray<nb::numpy, double, 2>({n, n});
     auto view = matrix.view();
-    // Interleave rows to distribute the decreasing amount of work per row.
-    parallel_for_interleaved_thread(0, n, [&](size_t i) {
+    parallel_for(n, [&](size_t i) {
         const auto& bra = dets[i];
         view(i, i) = element(bra, bra);
         for (size_t j = i + 1; j < n; ++j) {
@@ -237,6 +236,7 @@ np_matrix make_s2_matrix(const std::vector<Determinant>& dets) {
 
 np_matrix make_hamiltonian_matrix(const std::vector<Determinant>& dets,
                                   const SlaterRules& slater_rules) {
+    // Check that all determinants occupy orbitals within the range of the SlaterRules integrals
     const auto in_range = [norb = slater_rules.norb()](size_t p) { return p < norb; };
     for (const auto& det : dets) {
         if (!det.for_each_a_occ(in_range) || !det.for_each_b_occ(in_range)) {
