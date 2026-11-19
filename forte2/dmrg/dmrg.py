@@ -93,6 +93,8 @@ class _DMRGSingleStateSolver:
         # Single-root MPS tags, one per root, used to reload each root for its RDMs
         self._root_tags = []
         self._scratch = None
+        # Whether the MPS of a previous run is on disk to restart from
+        self._has_mps = False
 
     def _make_driver(self):
         """
@@ -141,18 +143,21 @@ class _DMRGSingleStateSolver:
         h1e = np.asarray(self.ints.H)
         # block2 takes chemist-notation integrals, (pq|rs) = <pr|qs>; this is a view
         g2e = np.asarray(self.ints.V).transpose(0, 2, 1, 3)
+        p = self.dmrg_params
+        # The previous MPS fixes the orbital ordering, so only a cold start can reorder orbitals
+        warm = self._has_mps
         driver = self._make_driver()
-        if self.dmrg_params.orbital_ordering != "original":
+        if warm:
+            logger.log("Restarting DMRG from the previous MPS", self.log_level)
+        elif p.orbital_ordering != "original":
             self._order = np.asarray(
-                driver.orbital_reordering(
-                    h1e, g2e, method=self.dmrg_params.orbital_ordering
-                )
+                driver.orbital_reordering(h1e, g2e, method=p.orbital_ordering)
             )
             # The orbital irreps the driver was set up with must follow the new order
             driver = self._make_driver()
             logger.log(
                 f"Using orbital ordering {self._order} (active space relative indexing), "
-                f"generated with the '{self.dmrg_params.orbital_ordering}' algorithm",
+                f"generated with the '{p.orbital_ordering}' algorithm",
                 self.log_level,
             )
         else:
@@ -163,23 +168,38 @@ class _DMRGSingleStateSolver:
             # Fancy indexing returns a new contiguous array, the only copy of V made
             g2e=g2e[np.ix_(o, o, o, o)],
             ecore=float(self.ints.E),
-            iprint=self.dmrg_params.iprint,
+            iprint=p.iprint,
         )
-        driver.bw.b.Random.rand_seed(self.dmrg_params.random_seed)
-        ket = driver.get_random_mps(
-            tag="GS", bond_dim=self.dmrg_params.bond_dims[0], nroots=self.nroot
-        )
+        twosite_to_onesite = p.twosite_to_onesite
+        if warm:
+            # Repeat only the final stretch of the schedule, so that the previous MPS
+            # isn't first truncated to the smaller bond dimensions of the ramp
+            start = self._final_stretch_start()
+            onesite = twosite_to_onesite is not None and twosite_to_onesite <= start
+            if twosite_to_onesite is not None:
+                twosite_to_onesite = None if onesite else twosite_to_onesite - start
+            ket = driver.load_mps("GS", nroots=self.nroot)
+            ket, forward = driver.adjust_mps(ket, dot=1 if onesite else 2)
+        else:
+            start = 0
+            forward = None
+            driver.bw.b.Random.rand_seed(p.random_seed)
+            ket = driver.get_random_mps(
+                tag="GS", bond_dim=p.bond_dims[0], nroots=self.nroot
+            )
         energy = driver.dmrg(
             mpo,
             ket,
-            n_sweeps=self.dmrg_params.n_sweeps,
-            twosite_to_onesite=self.dmrg_params.twosite_to_onesite,
-            tol=self.dmrg_params.tol,
-            bond_dims=self.dmrg_params.bond_dims,
-            noises=self.dmrg_params.noises,
-            thrds=self.dmrg_params.davidson_tols,
-            iprint=self.dmrg_params.iprint,
+            n_sweeps=p.n_sweeps - start,
+            twosite_to_onesite=twosite_to_onesite,
+            tol=p.tol,
+            bond_dims=p.bond_dims[start:],
+            noises=p.noises[start:],
+            thrds=p.davidson_tols[start:],
+            forward=forward,
+            iprint=p.iprint,
         )
+        self._has_mps = True
         self.converged = self._sweeps_converged(driver)
 
         if self.nroot == 1:
@@ -194,7 +214,7 @@ class _DMRGSingleStateSolver:
         if not self.converged and self.die_if_not_converged:
             raise RuntimeError(
                 f"DMRG sweeps for state {self.state} did not converge to "
-                f"tol={self.dmrg_params.tol}."
+                f"tol={p.tol}."
             )
 
         for i, e in enumerate(self.evals):
@@ -202,6 +222,18 @@ class _DMRGSingleStateSolver:
 
         self.executed = True
         return self
+
+    def _final_stretch_start(self):
+        """
+        The first sweep from which the bond dimension, noise, and Davidson tolerance
+        stay at their final values.
+        """
+        p = self.dmrg_params
+        schedule = list(zip(p.bond_dims, p.noises, p.davidson_tols))[: p.n_sweeps]
+        start = len(schedule) - 1
+        while start > 0 and schedule[start - 1] == schedule[-1]:
+            start -= 1
+        return start
 
     def _sweeps_converged(self, driver):
         """Whether the energy of every root changed by less than tol over the last sweep."""
@@ -326,9 +358,10 @@ class _DMRGSingleStateSolver:
 
     def reset_eigensolver(self, guess=None):
         """
-        Do nothing. Each run starts from a random MPS, so there is no eigensolver
-        state to reset, and ``guess`` is ignored.
+        Start the next run from a random MPS, with a newly chosen orbital ordering,
+        rather than from the previous MPS. ``guess`` is ignored.
         """
+        self._has_mps = False
 
     def cleanup(self):
         """Remove the scratch directory."""
@@ -336,17 +369,14 @@ class _DMRGSingleStateSolver:
             shutil.rmtree(self._scratch, ignore_errors=True)
             self._scratch = None
         self._root_tags = []
+        self._has_mps = False
 
 
 @dataclass
 class DMRGSolver(CIBase):
     """
     A spin-adapted density matrix renormalization group (DMRG) active-space solver,
-    backed by block2.
-
-    It takes the place of ``CISolver`` under the ``CI`` driver and supports state
-    averaging over several states and roots. It requires block2 (``pyblock2``),
-    which is not installed with forte2.
+    using block2.
 
     Parameters
     ----------

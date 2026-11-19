@@ -74,8 +74,10 @@ def test_dmrgscf_n2_vs_casscf(tmp_path):
     assert e_rdm == approx_abs(mc.E_ci[0], 1e-6)
 
 
-def test_dmrg_state_averaged_h2o_with_symmetry(tmp_path):
-    # Active orbitals span the A1, B1, and B2 irreps of C2v
+def test_dmrgscf_state_averaged_h2o_with_symmetry(tmp_path):
+    # Active orbitals span the A1, B1, and B2 irreps of C2v. The DMRG-SCF iterations
+    # restart from the previous, one-site MPS of each state, and the final rotation
+    # to natural orbitals starts from a random MPS again.
     xyz = """
     O 0.0  0.000  0.117
     H 0.0  0.757 -0.469
@@ -103,16 +105,9 @@ def test_dmrg_state_averaged_h2o_with_symmetry(tmp_path):
         core_orbitals=core_orbitals,
         active_orbitals=active_orbitals,
     )
-    ci = CI(ci_solver, final_orbitals="natural")(rhf)
-    ci.run()
+    mc = MCOptimizer(ci_solver, final_orbitals="natural")(rhf)
+    mc.run()
 
-    system = System(
-        xyz=xyz,
-        basis_set="cc-pvdz",
-        auxiliary_basis_set="cc-pvtz-jkfit",
-        symmetry=True,
-    )
-    rhf = RHF(charge=0, e_tol=1e-12)(system)
     dmrg_solver = DMRGSolver(
         states=states,
         nroots=nroots,
@@ -120,11 +115,13 @@ def test_dmrg_state_averaged_h2o_with_symmetry(tmp_path):
         active_orbitals=active_orbitals,
         dmrg_params=_dmrg_params(str(tmp_path), twosite_to_onesite=8),
     )
-    dmrg = CI(dmrg_solver, final_orbitals="natural")(rhf)
-    dmrg.run()
+    dmrgscf = MCOptimizer(dmrg_solver, final_orbitals="natural")(rhf)
+    dmrgscf.run()
 
-    assert dmrg.E_ci == approx(ci.E_ci)
-    assert dmrg.E_avg == approx(ci.E_avg)
+    # Only the average energy is stationary in the orbitals, so individual roots of two
+    # runs converged to the same tolerances can differ by about 1e-7
+    assert dmrgscf.E_avg == approx(mc.E_avg)
+    assert dmrgscf.E_ci == approx_abs(mc.E_ci, 1e-6)
     np.testing.assert_allclose(dmrg_solver.nat_occs, ci_solver.nat_occs, atol=1e-5)
     np.testing.assert_allclose(
         dmrg_solver.nat_occs_avg, ci_solver.nat_occs_avg, atol=1e-5
