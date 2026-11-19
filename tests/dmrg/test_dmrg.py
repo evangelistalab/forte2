@@ -74,6 +74,32 @@ def test_dmrgscf_n2_vs_casscf(tmp_path):
     assert e_rdm == approx_abs(mc.E_ci[0], 1e-6)
 
 
+def test_dmrgscf_two_orbitals(tmp_path):
+    # With two sites, the wavefunction center sits at both ends of the chain, and
+    # one-site sweeps are skipped
+    xyz = """
+    H 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    """
+    state = State(nel=2, multiplicity=1, ms=0.0)
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(states=state, active_orbitals=[0, 1])
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
+    mc.run()
+
+    dmrg_solver = DMRGSolver(
+        states=state,
+        active_orbitals=[0, 1],
+        dmrg_params=_dmrg_params(str(tmp_path), twosite_to_onesite=8),
+    )
+    dmrgscf = MCOptimizer(dmrg_solver, final_orbitals="original")(rhf)
+    dmrgscf.run()
+
+    assert dmrgscf.E_ci[0] == approx(mc.E_ci[0])
+
+
 def test_dmrgscf_state_averaged_h2o_with_symmetry(tmp_path):
     # Active orbitals span the A1, B1, and B2 irreps of C2v. The DMRG-SCF iterations
     # restart from the previous, one-site MPS of each state, and the final rotation

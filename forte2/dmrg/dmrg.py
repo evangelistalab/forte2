@@ -171,6 +171,9 @@ class _DMRGSingleStateSolver:
             iprint=p.iprint,
         )
         twosite_to_onesite = p.twosite_to_onesite
+        if self.norb == 2:
+            # A two-site step solves the problem the exactly
+            twosite_to_onesite = None
         if warm:
             # Repeat only the final stretch of the schedule, so that the previous MPS
             # isn't first truncated to the smaller bond dimensions of the ramp
@@ -180,6 +183,10 @@ class _DMRGSingleStateSolver:
                 twosite_to_onesite = None if onesite else twosite_to_onesite - start
             ket = driver.load_mps("GS", nroots=self.nroot)
             ket, forward = driver.adjust_mps(ket, dot=1 if onesite else 2)
+            if ket.n_sites == ket.dot:
+                # adjust_mps takes center 0 to mean the left end, but here it is also
+                # the right end. Sweep away from the end the wavefunction is on.
+                forward = ket.canonical_form[-1] in "LR"
         else:
             start = 0
             forward = None
@@ -200,7 +207,8 @@ class _DMRGSingleStateSolver:
             iprint=p.iprint,
         )
         self._has_mps = True
-        self.converged = self._sweeps_converged(driver)
+        last_change = self._last_sweep_change(driver)
+        self.converged = last_change is None or last_change < p.tol
 
         if self.nroot == 1:
             self._root_tags = ["GS"]
@@ -211,11 +219,15 @@ class _DMRGSingleStateSolver:
                 driver.split_mps(ket, r, tag=tag)
             self.evals = np.array([float(e) for e in energy])
 
-        if not self.converged and self.die_if_not_converged:
-            raise RuntimeError(
-                f"DMRG sweeps for state {self.state} did not converge to "
-                f"tol={p.tol}."
+        if not self.converged:
+            message = (
+                f"DMRG sweeps for state {self.state} did not converge: the energy "
+                f"changed by {last_change:.1e} over the last sweep, above "
+                f"tol={p.tol:.1e}."
             )
+            if self.die_if_not_converged:
+                raise RuntimeError(message)
+            logger.log_warning(message)
 
         for i, e in enumerate(self.evals):
             logger.log(f"Final DMRG Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
@@ -235,15 +247,18 @@ class _DMRGSingleStateSolver:
             start -= 1
         return start
 
-    def _sweeps_converged(self, driver):
-        """Whether the energy of every root changed by less than tol over the last sweep."""
+    def _last_sweep_change(self, driver):
+        """
+        The largest change in a root's energy over the last sweep, or None after a
+        single sweep.
+        """
         # block2 keeps its per-sweep statistics on driver._dmrg
         energies = driver._dmrg.energies
         if len(energies) < 2:
-            return True
+            return None
         last = np.array(energies[-1], dtype=float)
         prev = np.array(energies[-2], dtype=float)
-        return bool(np.max(np.abs(last - prev)) < self.dmrg_params.tol)
+        return float(np.max(np.abs(last - prev)))
 
     def make_rdm(
         self,
