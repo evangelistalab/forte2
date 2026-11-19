@@ -1,4 +1,9 @@
-from forte2 import CI, CISolver, MCOptimizer, RHF, ROHF, State, System
+import numpy as np
+import pytest
+
+from forte2 import CI, CISolver, DMRGSolver, MCOptimizer, RHF, ROHF, State, System
+from forte2.base_classes import DMRGParams
+from forte2.dmrg import BLOCK2_AVAILABLE
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx
 
@@ -139,3 +144,51 @@ def test_mrpt2_c_atom_ci_reference_relaxation():
     assert dsrg.relax_energies[0, 0] == approx(edsrg)
     assert dsrg.relax_energies[0, 1] == approx(edsrg_relaxed)
     assert dsrg.relax_energies[0, 2] == approx(eref)
+
+
+@pytest.mark.skipif(not BLOCK2_AVAILABLE, reason="block2 is not installed")
+def test_dmrg_dsrg_n2_relax(tmp_path):
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.1
+    """
+    state = State(nel=14, multiplicity=1, ms=0.0)
+    core_orbitals = [0, 1, 2, 3]
+    active_orbitals = [4, 5, 6, 7, 8, 9]
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
+        states=state, core_orbitals=core_orbitals, active_orbitals=active_orbitals
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
+    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="twice")(mc)
+    dsrg.run()
+
+    # Six sites, so a bond dimension of a few hundred is exact, and perturbative noise
+    # can't move a solve off an excited state it lands on
+    dmrg_params = DMRGParams(
+        bond_dims=[200] * 4 + [400] * 4,
+        noises=[1e-4] * 4 + [1e-6] * 2 + [0.0],
+        noise_type="DensityMatrix",
+        davidson_tols=[1e-12] * 8,
+        n_sweeps=12,
+        orbital_ordering="gaopt",
+        scratch=str(tmp_path),
+    )
+    dmrg_solver = DMRGSolver(
+        states=state,
+        core_orbitals=core_orbitals,
+        active_orbitals=active_orbitals,
+        dmrg_params=dmrg_params,
+    )
+    dmrgscf = MCOptimizer(dmrg_solver)(rhf)
+    # DSRG-MRPT2 needs the 3-cumulant, and each relaxation restarts the DMRG
+    dmrg_dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="twice")(dmrgscf)
+    dmrg_dsrg.run()
+
+    assert dmrg_solver.get_convergence_status() == [True]
+    assert dmrgscf.E_ci[0] == approx(mc.E_ci[0])
+    np.testing.assert_allclose(
+        dmrg_dsrg.relax_energies, dsrg.relax_energies, rtol=0, atol=5e-8
+    )

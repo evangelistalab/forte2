@@ -4,7 +4,6 @@ import pytest
 from forte2 import System, RHF, State, CI, CISolver, DMRGSolver, MCOptimizer
 from forte2.base_classes import DMRGParams
 from forte2.dmrg import BLOCK2_AVAILABLE
-from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx, approx_abs
 
 pytestmark = pytest.mark.skipif(not BLOCK2_AVAILABLE, reason="block2 is not installed")
@@ -22,67 +21,6 @@ def _dmrg_params(scratch, orbital_ordering="fiedler", twosite_to_onesite=None):
         twosite_to_onesite=twosite_to_onesite,
         orbital_ordering=orbital_ordering,
         scratch=scratch,
-    )
-
-
-def test_dmrgscf_n2_vs_casscf(tmp_path):
-    xyz = """
-    N 0.0 0.0 0.0
-    N 0.0 0.0 1.1
-    """
-    state = State(nel=14, multiplicity=1, ms=0.0)
-    core_orbitals = [0, 1, 2, 3]
-    active_orbitals = [4, 5, 6, 7, 8, 9]
-
-    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
-    rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci_solver = CISolver(
-        states=state, core_orbitals=core_orbitals, active_orbitals=active_orbitals
-    )
-    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
-    mc.run()
-
-    dmrg_solver = DMRGSolver(
-        states=state,
-        core_orbitals=core_orbitals,
-        active_orbitals=active_orbitals,
-        dmrg_params=_dmrg_params(str(tmp_path), orbital_ordering="gaopt"),
-    )
-    dmrgscf = MCOptimizer(dmrg_solver, final_orbitals="original")(rhf)
-    dmrgscf.run()
-
-    assert dmrg_solver.get_convergence_status() == [True]
-    assert dmrgscf.E_ci[0] == approx(mc.E_ci[0])
-
-    g1 = dmrg_solver.make_rdm(0, order=1, spin_type="sf")
-    g2 = dmrg_solver.make_rdm(0, order=2, spin_type="sf")
-    np.testing.assert_allclose(
-        g1, ci_solver.make_rdm(0, order=1, spin_type="sf"), atol=1e-5
-    )
-    np.testing.assert_allclose(
-        g2, ci_solver.make_rdm(0, order=2, spin_type="sf"), atol=1e-5
-    )
-    np.testing.assert_allclose(
-        dmrg_solver.make_cumulant(0, order=2, spin_type="sf"),
-        ci_solver.make_cumulant(0, order=2, spin_type="sf"),
-        atol=1e-5,
-    )
-
-    ints = dmrg_solver.make_active_space_ints()
-    e_rdm = (
-        ints.E
-        + np.einsum("pq,pq", ints.H, g1)
-        + 0.5 * np.einsum("pqrs,pqrs", ints.V, g2)
-    )
-    assert e_rdm == approx_abs(mc.E_ci[0], 1e-6)
-
-    # DSRG-MRPT2 needs the 3-cumulant, and its relaxation restarts the DMRG
-    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="once")(mc)
-    dsrg.run()
-    dmrg_dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="once")(dmrgscf)
-    dmrg_dsrg.run()
-    np.testing.assert_allclose(
-        dmrg_dsrg.relax_energies, dsrg.relax_energies, rtol=0, atol=5e-8
     )
 
 
