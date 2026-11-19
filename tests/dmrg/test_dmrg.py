@@ -93,23 +93,30 @@ def _flat(rdm):
 
 
 def test_dmrg_rdms_vs_ci(tmp_path):
-    # The triplet at Ms = 1 has different alpha and beta RDMs. None of the roots are
-    # degenerate, so transition RDMs between roots are defined up to their sign.
+    # In C2v, the states differ in irrep and spin, and the triplet at Ms = 1 has
+    # different alpha and beta RDMs. None of the roots are degenerate, so transition
+    # RDMs are defined up to their sign.
     xyz = """
     O 0.0  0.000  0.117
     H 0.0  0.757 -0.469
     H 0.0 -0.757 -0.469
     """
     states = [
-        State(nel=10, multiplicity=1, ms=0.0),
-        State(nel=10, multiplicity=3, ms=0.0),
-        State(nel=10, multiplicity=3, ms=1.0),
+        State(nel=10, multiplicity=1, ms=0.0, symmetry=0),
+        State(nel=10, multiplicity=1, ms=0.0, symmetry=2),
+        State(nel=10, multiplicity=3, ms=0.0, symmetry=3),
+        State(nel=10, multiplicity=3, ms=1.0, symmetry=3),
     ]
-    nroots = [3, 2, 1]
-    core_orbitals = [0, 1]
-    active_orbitals = [2, 3, 4, 5, 6, 7]
+    nroots = [2, 1, 2, 1]
+    core_orbitals = [0]
+    active_orbitals = [1, 2, 3, 4, 5, 6]
 
-    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(
         states=states,
@@ -117,7 +124,7 @@ def test_dmrg_rdms_vs_ci(tmp_path):
         core_orbitals=core_orbitals,
         active_orbitals=active_orbitals,
     )
-    ci = CI(ci_solver, final_orbitals="original")(rhf)
+    ci = CI(ci_solver, final_orbitals="original", do_transition_dipole=True)(rhf)
     ci.run()
 
     dmrg_solver = DMRGSolver(
@@ -127,28 +134,34 @@ def test_dmrg_rdms_vs_ci(tmp_path):
         active_orbitals=active_orbitals,
         dmrg_params=_dmrg_params(str(tmp_path)),
     )
-    dmrg = CI(dmrg_solver, final_orbitals="original")(rhf)
+    dmrg = CI(dmrg_solver, final_orbitals="original", do_transition_dipole=True)(rhf)
     dmrg.run()
 
     assert dmrg.E_ci == approx(ci.E_ci)
-    # Pairs of absolute roots within the singlet and the Ms = 0 triplet
-    for left, right in [(0, 0), (2, 2), (3, 3), (5, 5), (0, 1), (2, 0), (3, 4)]:
-        sign = 1.0
-        if left != right:
-            # Both solvers fix each root only up to sign, so match the sign once and
-            # apply it to every RDM of the pair
-            ci_tdm = ci_solver.make_rdm(left, right, order=1, spin_type="sf")
-            dmrg_tdm = dmrg_solver.make_rdm(left, right, order=1, spin_type="sf")
-            largest = np.unravel_index(np.argmax(np.abs(ci_tdm)), ci_tdm.shape)
-            sign = np.sign(ci_tdm[largest] * dmrg_tdm[largest])
-        for spin_type, packed in [("sf", True), ("sd", True), ("sd", False)]:
-            for order in (1, 2, 3):
-                kwargs = dict(order=order, spin_type=spin_type, packed=packed)
-                np.testing.assert_allclose(
-                    sign * _flat(dmrg_solver.make_rdm(left, right, **kwargs)),
-                    _flat(ci_solver.make_rdm(left, right, **kwargs)),
-                    atol=1e-5,
+    # Absolute roots: 0 and 1 are A1 singlets, 2 is the B1 singlet, 3 and 4 are B2
+    # triplets at Ms = 0, and 5 is the B2 triplet at Ms = 1
+    same_state = [(0, 0), (2, 2), (3, 3), (5, 5), (0, 1), (4, 3)]
+    between_states = [(0, 2), (2, 1), (0, 3), (4, 2)]
+    for pairs, orders in [(same_state, (1, 2, 3)), (between_states, (1,))]:
+        for left, right in pairs:
+            sign = 1.0
+            if left != right:
+                # Both solvers fix each root only up to sign, so match the sign once,
+                # on the spin-dependent 1-RDM, which is nonzero for every pair
+                ci_tdm = _flat(ci_solver.make_rdm(left, right, order=1, spin_type="sd"))
+                dmrg_tdm = _flat(
+                    dmrg_solver.make_rdm(left, right, order=1, spin_type="sd")
                 )
+                largest = np.argmax(np.abs(ci_tdm))
+                sign = np.sign(ci_tdm[largest] * dmrg_tdm[largest])
+            for spin_type, packed in [("sf", True), ("sd", True), ("sd", False)]:
+                for order in orders:
+                    kwargs = dict(order=order, spin_type=spin_type, packed=packed)
+                    np.testing.assert_allclose(
+                        sign * _flat(dmrg_solver.make_rdm(left, right, **kwargs)),
+                        _flat(ci_solver.make_rdm(left, right, **kwargs)),
+                        atol=1e-5,
+                    )
     for order in (2, 3):
         np.testing.assert_allclose(
             dmrg_solver.make_cumulant(5, order=order, spin_type="sf"),
@@ -160,6 +173,11 @@ def test_dmrg_rdms_vs_ci(tmp_path):
             ci_solver.make_average_cumulant(order),
             atol=1e-5,
         )
+    assert (
+        dmrg_solver.oscillator_strengths.keys() == ci_solver.oscillator_strengths.keys()
+    )
+    for pair, strength in ci_solver.oscillator_strengths.items():
+        assert dmrg_solver.oscillator_strengths[pair] == approx_abs(strength, 1e-6)
 
 
 def test_dmrgscf_two_orbitals(tmp_path):

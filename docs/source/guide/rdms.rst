@@ -140,7 +140,7 @@ belong to different states are more restricted.
      - 1, 2, 3
      - ``sd``, ``sf``
      - All orders
-     - Not supported
+     - Order 1
 
 A transition RDM between two states also requires the two states to have the same number of alpha
 and beta electrons.

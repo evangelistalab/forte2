@@ -31,9 +31,9 @@ class _DMRGSingleStateSolver:
     """
     A spin-adapted DMRG solver for a single ``State``, backed by block2.
 
-    This is the per-state worker of ``DMRGSolver``. Each worker owns a private
-    scratch directory, so the workers of a state-averaged calculation never share
-    MPS files.
+    This is the per-state worker of ``DMRGSolver``. The workers of one solver share its
+    scratch directory, with MPS tags that start with each worker's own prefix, so that
+    one driver can load the MPS of any state.
 
     Parameters
     ----------
@@ -47,6 +47,10 @@ class _DMRGSingleStateSolver:
         The number of roots. More than one root gives a state-averaged MPS.
     active_orbsym : list[list[int]]
         The irrep of each active orbital, one list per GAS.
+    scratch : str
+        The scratch directory, shared with the other workers of the solver.
+    tag_prefix : str
+        The prefix of this worker's MPS tags.
     dmrg_params : DMRGParams, optional
         The DMRG sweep parameters.
     die_if_not_converged : bool, optional, default=False
@@ -67,6 +71,8 @@ class _DMRGSingleStateSolver:
     ints: RestrictedMOIntegrals
     nroot: int
     active_orbsym: list[list[int]]
+    scratch: str
+    tag_prefix: str
     dmrg_params: DMRGParams = field(default_factory=DMRGParams)
     die_if_not_converged: bool = False
     log_level: int = logger.VERBOSITY_DEBUG
@@ -92,17 +98,19 @@ class _DMRGSingleStateSolver:
             self.nactel >= 0
         ), f"Number of active electrons {self.nactel} must be non-negative."
         self.orb_sym = [int(irrep) for irrep in self.active_orbsym[0]]
-        # The active orbital at each site of the MPS chain
-        self._order = np.arange(self.norb)
+        # The tag of the MPS of all roots, which a warm restart reloads
+        self._tag = f"{self.tag_prefix}GS"
         # Single-root MPS tags, one per root, used to reload each root for its RDMs
         self._root_tags = []
-        self._scratch = None
         # Whether the MPS of a previous run is on disk to restart from
         self._has_mps = False
+        # The active orbital at each site of the MPS chain. The solver sets the same one
+        # on all its workers before a cold start, so all states share one chain.
+        self._order = None
 
     def _make_driver(self):
         """
-        Create a block2 driver on this worker's scratch directory.
+        Create a block2 driver on the shared scratch directory.
 
         Note to devs: each block2 DMRGDriver allocates a DataFrame,
         which has stack_mem amount of memory reserved.
@@ -113,18 +121,9 @@ class _DMRGSingleStateSolver:
         """
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
 
-        if self._scratch is None:
-            if self.dmrg_params.scratch is not None:
-                os.makedirs(self.dmrg_params.scratch, exist_ok=True)
-            self._scratch = tempfile.mkdtemp(
-                prefix="forte2_dmrg_", dir=self.dmrg_params.scratch
-            )
-            # clean up on python exit or garbage collection
-            weakref.finalize(self, shutil.rmtree, self._scratch, ignore_errors=True)
-
         driver = DMRGDriver(
             stack_mem=self.dmrg_params.stack_memory << 20,
-            scratch=self._scratch,
+            scratch=self.scratch,
             symm_type=SymmetryTypes.SU2,
             n_threads=cpp_helpers.get_num_threads(),
         )
@@ -148,24 +147,10 @@ class _DMRGSingleStateSolver:
         # block2 takes chemist-notation integrals, (pq|rs) = <pr|qs>; this is a view
         g2e = np.asarray(self.ints.V).transpose(0, 2, 1, 3)
         p = self.dmrg_params
-        # The previous MPS fixes the orbital ordering, so only a cold start can reorder orbitals
         warm = self._has_mps
         driver = self._make_driver()
         if warm:
             logger.log("Restarting DMRG from the previous MPS", self.log_level)
-        elif p.orbital_ordering != "original":
-            self._order = np.asarray(
-                driver.orbital_reordering(h1e, g2e, method=p.orbital_ordering)
-            )
-            # The orbital irreps the driver was set up with must follow the new order
-            driver = self._make_driver()
-            logger.log(
-                f"Using orbital ordering {self._order} (active space relative indexing), "
-                f"generated with the '{p.orbital_ordering}' algorithm",
-                self.log_level,
-            )
-        else:
-            logger.log("Using original orbital ordering", self.log_level)
         o = self._order
         mpo = driver.get_qc_mpo(
             h1e=np.ascontiguousarray(h1e[np.ix_(o, o)]),
@@ -176,7 +161,7 @@ class _DMRGSingleStateSolver:
         )
         twosite_to_onesite = p.twosite_to_onesite
         if self.norb == 2:
-            # A two-site step solves the problem the exactly
+            # A two-site step solves the problem exactly
             twosite_to_onesite = None
         if warm:
             # Repeat only the final stretch of the schedule, so that the previous MPS
@@ -185,7 +170,7 @@ class _DMRGSingleStateSolver:
             onesite = twosite_to_onesite is not None and twosite_to_onesite <= start
             if twosite_to_onesite is not None:
                 twosite_to_onesite = None if onesite else twosite_to_onesite - start
-            ket = driver.load_mps("GS", nroots=self.nroot)
+            ket = driver.load_mps(self._tag, nroots=self.nroot)
             ket, forward = driver.adjust_mps(ket, dot=1 if onesite else 2)
             if ket.n_sites == ket.dot:
                 # adjust_mps takes center 0 to mean the left end, but here it is also
@@ -196,7 +181,7 @@ class _DMRGSingleStateSolver:
             forward = None
             driver.bw.b.Random.rand_seed(p.random_seed)
             ket = driver.get_random_mps(
-                tag="GS", bond_dim=p.bond_dims[0], nroots=self.nroot
+                tag=self._tag, bond_dim=p.bond_dims[0], nroots=self.nroot
             )
         energy = driver.dmrg(
             mpo,
@@ -216,10 +201,10 @@ class _DMRGSingleStateSolver:
         self.converged = last_change is None or last_change < p.tol
 
         if self.nroot == 1:
-            self._root_tags = ["GS"]
+            self._root_tags = [self._tag]
             self.evals = np.array([float(energy)])
         else:
-            self._root_tags = [f"GS-{r}" for r in range(self.nroot)]
+            self._root_tags = [f"{self._tag}-{r}" for r in range(self.nroot)]
             for r, tag in enumerate(self._root_tags):
                 driver.split_mps(ket, r, tag=tag)
             self.evals = np.array([float(e) for e in energy])
@@ -309,11 +294,20 @@ class _DMRGSingleStateSolver:
         )
         if right_root is None:
             right_root = left_root
+        return self._rdm(self, left_root, right_root, order, spin_type, packed)
+
+    def _rdm(self, bra_solver, left_root, right_root, order, spin_type, packed):
+        """
+        Make the RDM between root left_root of bra_solver, which may be another worker
+        of the same solver, and root right_root of this worker, in forte2's layout.
+        """
         if self.norb == 0:
             nblocks = order + 1 if spin_type == "sd" else 1
             pdms = [np.zeros((0,) * (2 * order)) for _ in range(nblocks)]
         else:
-            pdms = self._npdms(left_root, right_root, order, spin_type == "sd")
+            pdms = self._npdms(
+                bra_solver, left_root, right_root, order, spin_type == "sd"
+            )
         # Back from MPS chain order to active-space order
         inv = np.argsort(self._order)
         rdms = [block2_pdm_to_rdm(pdm[np.ix_(*[inv] * pdm.ndim)]) for pdm in pdms]
@@ -321,15 +315,16 @@ class _DMRGSingleStateSolver:
             return rdms[0]
         return pack_sd_rdm(rdms) if packed else tuple(rdms)
 
-    def _npdms(self, left_root, right_root, order, spin_resolved):
+    def _npdms(self, bra_solver, left_root, right_root, order, spin_resolved):
         """
-        Compute the block2 PDMs between two roots: the spin-summed one, or the spin
-        blocks for this state's Ms, in MPS chain order.
+        Compute the block2 PDMs between root left_root of bra_solver and root right_root
+        of this worker: the spin-summed one, or the spin blocks for this state's Ms, in
+        MPS chain order. The driver is set up for this worker's state.
         """
         from pyblock2.driver.core import SymmetryTypes
 
         driver = self._make_driver()
-        tags = [self._root_tags[left_root], self._root_tags[right_root]]
+        tags = [bra_solver._root_tags[left_root], self._root_tags[right_root]]
         bra, ket = [driver.load_mps(tag, nroots=1) for tag in tags]
         if spin_resolved:
             # Take the Ms component of each root into a non-spin-adapted MPS. block2
@@ -357,7 +352,7 @@ class _DMRGSingleStateSolver:
             for mps in (bra, ket):
                 mps.iscale(1 / np.sqrt(driver.expectation(mps, identity, mps)))
         pdms = driver.get_npdm(
-            ket, pdm_type=order, bra=None if left_root == right_root else bra
+            ket, pdm_type=order, bra=None if tags[0] == tags[1] else bra
         )
         return list(pdms) if spin_resolved else [pdms]
 
@@ -422,18 +417,17 @@ class _DMRGSingleStateSolver:
 
     def reset_eigensolver(self, guess=None):
         """
-        Start the next run from a random MPS, with a newly chosen orbital ordering,
-        rather than from the previous MPS. ``guess`` is ignored.
+        Start the next run from a random MPS, with an orbital ordering the solver
+        chooses again, rather than from the previous MPS. ``guess`` is ignored.
         """
         self._has_mps = False
+        self._order = None
 
     def cleanup(self):
-        """Remove the scratch directory."""
-        if self._scratch is not None:
-            shutil.rmtree(self._scratch, ignore_errors=True)
-            self._scratch = None
+        """Forget the MPS, whose files the solver removes with its scratch directory."""
         self._root_tags = []
         self._has_mps = False
+        self._order = None
 
 
 @dataclass
@@ -470,8 +464,7 @@ class DMRGSolver(CIBase):
 
     _rdm_orders: ClassVar[tuple[int, ...]] = (1, 2, 3)
     _rdm_spin_types: ClassVar[tuple[str, ...]] = ("sd", "sf")
-    # each state has its own MPS, so there are no RDMs between roots of different states
-    _rdm_cross_state_orders: ClassVar[tuple[int, ...]] = ()
+    _rdm_cross_state_orders: ClassVar[tuple[int, ...]] = (1,)
     _cumulant_orders: ClassVar[tuple[int, ...]] = (2, 3)
     _cumulant_spin_types: ClassVar[tuple[str, ...]] = ("sf",)
 
@@ -482,6 +475,62 @@ class DMRGSolver(CIBase):
                 "'Install block2 for DMRG' in the Forte2 quickstart."
             )
         super().__post_init__()
+        self._scratch = None
+
+    def _startup(self):
+        if self._scratch is None:
+            if self.dmrg_params.scratch is not None:
+                os.makedirs(self.dmrg_params.scratch, exist_ok=True)
+            self._scratch = tempfile.mkdtemp(
+                prefix="forte2_dmrg_", dir=self.dmrg_params.scratch
+            )
+            # Remove it when the solver is garbage-collected or Python exits
+            weakref.finalize(self, shutil.rmtree, self._scratch, ignore_errors=True)
+        super()._startup()
+
+    def _extra_worker_kwargs(self, index, state):
+        return {"scratch": self._scratch, "tag_prefix": f"S{index}-"}
+
+    def run(self):
+        if self.first_run:
+            self._startup()
+            self.first_run = False
+        # Before a cold start, choose one orbital ordering for every state's MPS
+        if self.sub_solvers[0]._order is None:
+            order = self._choose_orbital_ordering()
+            for dmrg_solver in self.sub_solvers:
+                dmrg_solver._order = order
+        return super().run()
+
+    def _choose_orbital_ordering(self):
+        """Choose the active orbital at each site of the MPS chain."""
+        from pyblock2.driver.core import DMRGDriver, SymmetryTypes
+
+        p = self.dmrg_params
+        if p.orbital_ordering == "original" or self.norb == 0:
+            logger.log("Using original orbital ordering", self.log_level)
+            return np.arange(self.norb)
+        ints = self.sub_solvers[0].ints
+        driver = DMRGDriver(
+            stack_mem=p.stack_memory << 20,
+            scratch=self._scratch,
+            symm_type=SymmetryTypes.SU2,
+            n_threads=cpp_helpers.get_num_threads(),
+        )
+        order = np.asarray(
+            driver.orbital_reordering(
+                np.asarray(ints.H),
+                # block2 takes chemist-notation integrals, (pq|rs) = <pr|qs>
+                np.asarray(ints.V).transpose(0, 2, 1, 3),
+                method=p.orbital_ordering,
+            )
+        )
+        logger.log(
+            f"Using orbital ordering {order} (active space relative indexing), "
+            f"generated with the '{p.orbital_ordering}' algorithm",
+            self.log_level,
+        )
+        return order
 
     def make_rdm(
         self,
@@ -493,10 +542,11 @@ class DMRGSolver(CIBase):
         packed: bool = True,
     ):
         """
-        RDM of the given order and representation for two absolute DMRG roots of the
-        same state. See ``_DMRGSingleStateSolver.make_rdm``.
+        RDM of the given order and representation for two absolute DMRG roots. Requests
+        between roots of different states are only supported at order=1. See
+        ``_DMRGSingleStateSolver.make_rdm``.
         """
-        left_state, _, left_root_in_state, right_root_in_state, spin_type = (
+        left_state, right_state, left_root_in_state, right_root_in_state, spin_type = (
             self._validate_rdm_inputs(
                 left_root,
                 right_root,
@@ -507,12 +557,29 @@ class DMRGSolver(CIBase):
                 self._rdm_cross_state_orders,
             )
         )
-        return self.sub_solvers[left_state].make_rdm(
+        left_solver = self.sub_solvers[left_state]
+        right_solver = self.sub_solvers[right_state]
+        if left_state == right_state:
+            return right_solver.make_rdm(
+                left_root_in_state,
+                right_root_in_state,
+                order=order,
+                spin_type=spin_type,
+                packed=packed,
+            )
+        if (
+            spin_type == "sf"
+            and left_solver.state.multiplicity != right_solver.state.multiplicity
+        ):
+            # A spin-free operator doesn't connect states of different total spin
+            return np.zeros((self.norb, self.norb))
+        return right_solver._rdm(
+            left_solver,
             left_root_in_state,
             right_root_in_state,
-            order=order,
-            spin_type=spin_type,
-            packed=packed,
+            order,
+            spin_type,
+            packed,
         )
 
     def get_convergence_status(self):
@@ -536,6 +603,8 @@ class DMRGSolver(CIBase):
         return [[] for _ in range(self.sa_info.nroots_sum)]
 
     def cleanup(self):
-        """Remove the scratch directories of the sub-solvers."""
+        """Remove the scratch directory with the MPS of every state."""
         for dmrg_solver in self.sub_solvers:
             dmrg_solver.cleanup()
+        if self._scratch is not None:
+            shutil.rmtree(self._scratch, ignore_errors=True)
