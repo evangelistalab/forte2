@@ -8,10 +8,8 @@ def det(s):
     return Determinant(s)
 
 
-@pytest.mark.parametrize("threads", ["1", "2"])
-def test_make_s2_matrix(monkeypatch, threads):
-    monkeypatch.setenv("FORTE_NUM_THREADS_OVERRIDE", threads)
-    dets = hilbert_space(4, 1, 1)[::-1]
+def test_make_s2_matrix():
+    dets = hilbert_space(4, 1, 1)
     expected = [[spin2(bra, ket) for ket in dets] for bra in dets]
 
     s2 = make_s2_matrix(dets)

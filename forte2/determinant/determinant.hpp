@@ -467,6 +467,14 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     };
 
+    /// @brief Test whether any alpha or beta orbital with index norb or above is occupied.
+    /// @param norb the orbital index to test from
+    /// @return true if at least one occupied alpha or beta orbital has index >= norb
+    bool bit_set_after(size_t norb) const noexcept {
+        return BitArray<N>::bit_set_after(norb, storage_words_per_spin) ||
+               BitArray<N>::bit_set_after(beta_storage_offset + norb);
+    }
+
     /// @brief Return the number of orbitals in which both alpha and beta are occupied (number of
     /// alpha/beta pairs).
     /// @return the number of alpha/beta pairs

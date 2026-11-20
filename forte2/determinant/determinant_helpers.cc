@@ -241,9 +241,8 @@ np_matrix make_s2_matrix(const std::vector<Determinant>& dets) {
 np_matrix make_hamiltonian_matrix(const std::vector<Determinant>& dets,
                                   const SlaterRules& slater_rules) {
     // Check that all determinants occupy orbitals within the range of the SlaterRules integrals
-    const auto in_range = [norb = slater_rules.norb()](size_t p) { return p < norb; };
     for (const auto& det : dets) {
-        if (!det.for_each_a_occ(in_range) || !det.for_each_b_occ(in_range)) {
+        if (det.bit_set_after(slater_rules.norb())) {
             throw std::invalid_argument("A determinant occupies an orbital outside the range of "
                                         "the SlaterRules integrals.");
         }
@@ -255,13 +254,12 @@ np_matrix make_hamiltonian_matrix(const std::vector<Determinant>& dets,
 
 np_matrix_complex make_hamiltonian_matrix(const std::vector<Determinant>& dets,
                                           const RelSlaterRules& slater_rules) {
-    const auto in_range = [nspinor = slater_rules.nspinor()](size_t p) { return p < nspinor; };
     for (const auto& det : dets) {
         if (det.count_beta() != 0) {
             throw std::invalid_argument("RelSlaterRules requires determinants with an empty "
                                         "beta string.");
         }
-        if (!det.for_each_a_occ(in_range)) {
+        if (det.bit_set_after(slater_rules.nspinor())) {
             throw std::invalid_argument("A determinant occupies a spinor outside the range of "
                                         "the RelSlaterRules integrals.");
         }

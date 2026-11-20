@@ -28,6 +28,7 @@ template <size_t N> class StringImpl : public BitArray<N> {
     using BitArray<N>::is_disjoint_from;
     using BitArray<N>::find_first_one;
     using BitArray<N>::find_last_one;
+    using BitArray<N>::bit_set_after;
     using BitArray<N>::clear;
     using BitArray<N>::for_each_set_bit;
     using BitArray<N>::find_set_bits;

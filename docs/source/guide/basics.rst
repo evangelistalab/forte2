@@ -61,8 +61,6 @@ To run the whole chain, call ``run`` on its last method::
 
 To use a relativistic Hamiltonian, see :doc:`relativistic`.
 
-For examples of building matrices in a determinant basis, see :doc:`determinants`.
-
 Parallelism
 -----------
 
