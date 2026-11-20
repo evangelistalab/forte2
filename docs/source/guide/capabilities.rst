@@ -30,7 +30,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Two-component CI for relativistic Hamiltonians
   * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
   * Overlaps between one- or two-component CI wavefunctions that differ in orbitals, geometry, or basis set [10]_ [11]_
-  * Spin-adapted density matrix renormalization group (DMRG) through block2, with state averaging and point-group symmetry [12]_. This requires block2, which isn't installed with Forte2 (see :ref:`install-block2`).
+  * Spin-adapted density matrix renormalization group (DMRG) through block2, with state averaging, point-group symmetry, spin-free and spin-dependent RDMs up to third order, and DMRG-SCF [12]_. This requires block2, which isn't installed with Forte2 (see :ref:`install-block2`).
   
 * Multi-configuration self-consistent field (MCSCF) methods
   

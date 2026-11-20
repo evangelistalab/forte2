@@ -2,6 +2,7 @@ from collections import OrderedDict
 
 import numpy as np
 
+from forte2.lib import cpp_helpers
 from forte2.lib.ci_helpers import CIStrings
 from forte2.state import MOSpace, StateAverageInfo
 from forte2.helpers import logger
@@ -471,6 +472,76 @@ def make_3cumulant_so(gamma1, gamma2, gamma3):
     )
 
     return l3
+
+
+def pack_sd_rdm(blocks):
+    """
+    Pack full spin-dependent RDM blocks into the layout ``make_rdm`` returns by default.
+
+    Parameters
+    ----------
+    blocks : tuple[NDArray, ...]
+        The full blocks: (a, b), (aa, ab, bb), or (aaa, aab, abb, bbb).
+
+    Returns
+    -------
+    tuple[NDArray, ...]
+        The blocks with every same-spin index pair or triplet packed over p > q or
+        p > q > r: aa and bb have shape (npair, npair), aaa and bbb (ntriplet, ntriplet),
+        aab (npair, norb, npair, norb), and abb (norb, npair, norb, npair). The 1-RDM and
+        the ab block stay full.
+    """
+    if len(blocks) == 2:
+        return tuple(blocks)
+    if len(blocks) == 3:
+        aa, ab, bb = blocks
+        return (
+            cpp_helpers.tensor4_to_packed_tensor4(aa),
+            ab,
+            cpp_helpers.tensor4_to_packed_tensor4(bb),
+        )
+    aaa, aab, abb, bbb = blocks
+    return (
+        cpp_helpers.tensor6_to_packed_tensor6(aaa),
+        cpp_helpers.tensor6_to_packed_aab_tensor6(aab),
+        cpp_helpers.tensor6_to_packed_abb_tensor6(abb),
+        cpp_helpers.tensor6_to_packed_tensor6(bbb),
+    )
+
+
+def unpack_sd_rdm(blocks, norb):
+    """
+    Expand the spin-dependent RDM blocks that ``make_rdm`` returns by default into full
+    tensors. This is the inverse of ``pack_sd_rdm``.
+
+    Parameters
+    ----------
+    blocks : tuple[NDArray, ...]
+        The packed blocks: (a, b), (aa, ab, bb), or (aaa, aab, abb, bbb).
+    norb : int
+        The number of active orbitals.
+
+    Returns
+    -------
+    tuple[NDArray, ...]
+        The full blocks.
+    """
+    if len(blocks) == 2:
+        return tuple(blocks)
+    if len(blocks) == 3:
+        aa, ab, bb = blocks
+        return (
+            cpp_helpers.packed_tensor4_to_tensor4(aa),
+            ab,
+            cpp_helpers.packed_tensor4_to_tensor4(bb),
+        )
+    aaa, aab, abb, bbb = blocks
+    return (
+        cpp_helpers.packed_tensor6_to_tensor6(aaa, norb),
+        cpp_helpers.packed_aab_tensor6_to_tensor6(aab),
+        cpp_helpers.packed_abb_tensor6_to_tensor6(abb),
+        cpp_helpers.packed_tensor6_to_tensor6(bbb, norb),
+    )
 
 
 def make_cumulant_from_rdms(solver, root, *, order, spin_type):

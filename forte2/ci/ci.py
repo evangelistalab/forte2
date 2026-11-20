@@ -22,6 +22,7 @@ from .ci_utils import (
     pretty_print_gas_info,
     validate_single_state_rdm,
     make_cumulant_from_rdms,
+    unpack_sd_rdm,
 )
 
 
@@ -494,6 +495,7 @@ class _CISingleStateSolver:
         *,
         order: Literal[1, 2, 3],
         spin_type: Literal["sd", "sf"],
+        packed: bool = True,
     ):
         """
         Make the RDM of the given order and representation for two CI roots.
@@ -509,6 +511,9 @@ class _CISingleStateSolver:
         spin_type : str
             "sd" (spin-dependent) or "sf" (spin-free). The aliases "spin_dependent",
             "spin-dependent", "spin_free", and "spin-free" are also accepted.
+        packed : bool, optional, default=True
+            For spin_type=sd, if True, the same-spin index pairs and triplets are packed
+            (see ``pack_sd_rdm``); if False, every block is a full tensor.
 
         Returns
         -------
@@ -534,22 +539,24 @@ class _CISingleStateSolver:
         sb = self.ci_sigma_builder
         if spin_type == "sd":
             if order == 1:
-                return (
+                rdms = (
                     sb.a_1rdm(left_ci_vec_det, right_ci_vec_det),
                     sb.b_1rdm(left_ci_vec_det, right_ci_vec_det),
                 )
-            if order == 2:
-                return (
+            elif order == 2:
+                rdms = (
                     sb.aa_2rdm(left_ci_vec_det, right_ci_vec_det),
                     sb.ab_2rdm(left_ci_vec_det, right_ci_vec_det),
                     sb.bb_2rdm(left_ci_vec_det, right_ci_vec_det),
                 )
-            return (
-                sb.aaa_3rdm(left_ci_vec_det, right_ci_vec_det),
-                sb.aab_3rdm(left_ci_vec_det, right_ci_vec_det),
-                sb.abb_3rdm(left_ci_vec_det, right_ci_vec_det),
-                sb.bbb_3rdm(left_ci_vec_det, right_ci_vec_det),
-            )
+            else:
+                rdms = (
+                    sb.aaa_3rdm(left_ci_vec_det, right_ci_vec_det),
+                    sb.aab_3rdm(left_ci_vec_det, right_ci_vec_det),
+                    sb.abb_3rdm(left_ci_vec_det, right_ci_vec_det),
+                    sb.bbb_3rdm(left_ci_vec_det, right_ci_vec_det),
+                )
+            return rdms if packed else unpack_sd_rdm(rdms, self.norb)
         # spin_type == "sf"
         if order == 1:
             return sb.sf_1rdm(left_ci_vec_det, right_ci_vec_det)
@@ -729,6 +736,7 @@ class CISolver(CIBase):
         *,
         order: Literal[1, 2, 3],
         spin_type: Literal["sd", "sf"],
+        packed: bool = True,
     ):
         """
         Make the RDM of the given order and representation for two absolute CI roots.
@@ -745,6 +753,9 @@ class CISolver(CIBase):
         spin_type : str
             "sd" (spin-dependent) or "sf" (spin-free). The aliases "spin_dependent",
             "spin-dependent", "spin_free", and "spin-free" are also accepted.
+        packed : bool, optional, default=True
+            For spin_type=sd, if True, the same-spin index pairs and triplets are packed
+            (see ``pack_sd_rdm``); if False, every block is a full tensor.
 
         Returns
         -------
@@ -769,6 +780,7 @@ class CISolver(CIBase):
                 right_root_in_state,
                 order=order,
                 spin_type=spin_type,
+                packed=packed,
             )
         # Cross-state: the validator above only lets this fall through when order == 1.
         left_solver = self.sub_solvers[left_state]

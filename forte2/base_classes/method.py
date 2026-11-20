@@ -9,11 +9,9 @@ class Method(ABC):
     # these are therefore only checked against "provides"
     requires: set[str] = field(default_factory=set, init=False)
     # attributes this method requires the parent method to have, keyed by name.
-    # A value of None checks existence only, 
+    # A value of None checks existence only,
     # any other value additionally checks for equality.
-    requires_attrs: dict[str, object | None] = field(
-        default_factory=dict, init=False
-    )
+    requires_attrs: dict[str, object | None] = field(default_factory=dict, init=False)
     # set of attributes that this method provides to downstream methods
     provides: set[str] = field(default_factory=set, init=False)
     # Flags that all methods need to have

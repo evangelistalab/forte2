@@ -3,7 +3,6 @@ from typing import Any
 from numpy.typing import NDArray
 import scipy as sp
 from forte2.base_classes import ActiveSpaceDriver
-from forte2.lib import cpp_helpers
 
 
 class MutualCorrelationAnalysis:
@@ -12,7 +11,7 @@ class MutualCorrelationAnalysis:
 
     Parameters
     ----------
-    driver : forte2 driver object of type ActiveSpaceDriver 
+    driver : forte2 driver object of type ActiveSpaceDriver
         The object from which to extract the RDMs. This should be a driver that owns a solver (`CI`, `MCOptimizer`).
     root : int, optional
         The root index for which to perform the analysis. Default is 0.
@@ -42,11 +41,9 @@ class MutualCorrelationAnalysis:
 
     - make_rdm(root, order=1, spin_type="sd") -> tuple[NDArray, NDArray]
             Returns (γa, γb) spin-dependent 1-RDMs with shape (norb, norb) each.
-    - make_rdm(root, order=2, spin_type="sd") -> tuple[NDArray, NDArray, NDArray]
-            Returns (γaa, γab, γbb) spin-dependent 2-RDMs.
-            γaa and γbb are packed (lower-triangular pair indices) and are
-            converted to full (norb, norb, norb, norb) tensors via
-            `cpp_helpers.packed_tensor4_to_tensor4`. γab is already full with shape
+    - make_rdm(root, order=2, spin_type="sd", packed=False)
+      -> tuple[NDArray, NDArray, NDArray]
+            Returns (γaa, γab, γbb) spin-dependent 2-RDMs, each with shape
             (norb, norb, norb, norb).
 
     Derived tensors and outputs:
@@ -71,7 +68,9 @@ class MutualCorrelationAnalysis:
 
         # check that a driver is passed before attempting to extract properties
         if not isinstance(driver, ActiveSpaceDriver):
-            raise TypeError("driver must be an ActiveSpaceDriver, for example, forte2.CI or forte2.MCOptimizer")
+            raise TypeError(
+                "driver must be an ActiveSpaceDriver, for example, forte2.CI or forte2.MCOptimizer"
+            )
 
         self.active_mo_indices = driver.mo_space.active_indices[:]
 
@@ -84,11 +83,7 @@ class MutualCorrelationAnalysis:
         self.Γ1 = γa + γb
 
         # extract the spin-dependent 2-RDM from the solver
-        γaa, γab, γbb = sub_solver.make_rdm(root, order=2, spin_type="sd")
-
-        # convert packed 2-RDMs to full tensors (only the aa and bb components are packed)
-        γaa = cpp_helpers.packed_tensor4_to_tensor4(γaa)
-        γbb = cpp_helpers.packed_tensor4_to_tensor4(γbb)
+        γaa, γab, γbb = sub_solver.make_rdm(root, order=2, spin_type="sd", packed=False)
 
         # convert the spin-dependent 2-RDMs to cumulants
         self.λaa = (
