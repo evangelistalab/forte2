@@ -435,6 +435,25 @@ template <size_t N> class BitArray {
         return ui64_bit_not_found;
     }
 
+    /// @brief Test whether any bit with index in [n, end * bits_per_word) is set.
+    /// end is a word index, not a bit index.
+    /// @return true if at least one bit at index n or above, before word end, is set
+    constexpr bool bit_set_after(size_t n, size_t end = nwords_) const noexcept {
+        size_t k = whichword(n);
+        if (k >= end) {
+            return false;
+        }
+        if (words_[k] >> whichbit(n)) {
+            return true;
+        }
+        while (++k < end) {
+            if (words_[k] != word_t(0)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// @brief Apply a callable to each bit set to one, in ascending bit-index order.
     /// The callable may return either void or a bool-like value. Void callables always continue.
     /// Bool callables continue when they return true and stop early when they return false.

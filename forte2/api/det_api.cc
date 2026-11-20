@@ -277,6 +277,20 @@ void export_determinant_helpers_api(nb::module_& sub_m) {
     sub_m.def(
         "spin2", [](const Determinant& d1, const Determinant& d2) { return spin2(d1, d2); },
         "Compute the S^2 value between two determinants");
+
+    sub_m.def("make_s2_matrix", &make_s2_matrix, "dets"_a,
+              "Build the S^2 matrix in the given determinant order.");
+
+    sub_m.def("make_hamiltonian_matrix",
+              nb::overload_cast<const det_vec&, const SlaterRules&>(&make_hamiltonian_matrix),
+              "dets"_a, "slater_rules"_a,
+              "Build the Hamiltonian matrix in the given determinant "
+              "order using Slater rules (real case, restricted orbitals).");
+    sub_m.def("make_hamiltonian_matrix",
+              nb::overload_cast<const det_vec&, const RelSlaterRules&>(&make_hamiltonian_matrix),
+              "dets"_a, "slater_rules"_a,
+              "Build the complex Hermitian Hamiltonian matrix in the given spinor determinant "
+              "order. Spinor occupations must be stored in the alpha string.");
 }
 
 void export_slater_rules_api(nb::module_& sub_m) {

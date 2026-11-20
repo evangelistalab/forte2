@@ -8,5 +8,6 @@ User guide
     relativistic
     symmetry
     integrals
+    determinants
     rdms
     gradients

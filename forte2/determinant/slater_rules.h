@@ -29,6 +29,9 @@ class SlaterRules {
 
     // ==> Class Interface <==
 
+    /// @return The number of spatial orbitals.
+    std::size_t norb() const noexcept { return norb_; }
+
     /// @brief (Re)initialize the integrals used by this object, e.g. to reuse it across CI
     /// iterations without reconstructing it. Any of scalar_energy/one_electron_integrals/
     /// two_electron_integrals left as nullopt keeps its current value.
