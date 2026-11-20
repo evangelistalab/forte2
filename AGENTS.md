@@ -41,7 +41,10 @@ contract between links in the chain as three attributes set in `__post_init__`:
 
 `_register_parent_method` enforces all three at bind time (`__call__`), so incompatible pipelines fail
 at construction rather than mid-run. MO coefficients travel as an `MO` value object (`base_classes/mo.py`),
-reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`.
+reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`. `self.mos.occupations` holds the
+reference-determinant occupations (alpha and beta arrays for spatial MOs, one array for spinors);
+the SCF sets them, `copy`/`permute`/`to_spinorbital_basis` carry them, and the active-space drivers
+set them to `None`.
 
 #### Solvers and drivers
 

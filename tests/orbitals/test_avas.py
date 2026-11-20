@@ -621,6 +621,12 @@ def test_avas_cas_specification_rohf():
     ci = CI(ci_solver)(avas)
     ci.run()
     assert ci.E_ci[0] == approx(eref)
+    # ms = -1/2 leaves the singly occupied orbital in the beta set
+    assert [occ[5:8].tolist() for occ in scf.mos.occupations] == [[1, 0, 0], [1, 1, 0]]
+    assert [occ.tolist() for occ in avas.mos.occupations] == [
+        occ.tolist() for occ in scf.mos.occupations
+    ]
+    assert ci.mos.occupations is None
 
 
 def test_avas_cas_specification_rhf():

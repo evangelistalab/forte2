@@ -169,10 +169,17 @@ class SCFBase(Method):
         return C
 
     def _guess_occupations(self):
-        """Occupations of a supplied guess, whose occupied orbitals come first."""
-        index = np.arange(self.C[0].shape[1])
+        """Occupations of a supplied guess, one array per orbital set."""
+        occupations = self._reference_occupations()
         if len(self.C) == 1:
-            return [(index < self.na).astype(float) + (index < self.nb)]
+            return [sum(occupations)]
+        return occupations
+
+    def _reference_occupations(self):
+        """Occupations of each spin, or of the spinors; the occupied orbitals come first."""
+        index = np.arange(self.C[0].shape[1])
+        if self.two_component:
+            return [(index < self.nel).astype(float)]
         return [(index < n).astype(float) for n in (self.na, self.nb)]
 
     def _eigh(self, F):
@@ -325,7 +332,13 @@ class SCFBase(Method):
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
         self._post_process()
-        self.mos = MO(self.C, self.two_component, self.irrep_labels, self.irrep_indices)
+        self.mos = MO(
+            self.C,
+            self.two_component,
+            self.irrep_labels,
+            self.irrep_indices,
+            occupations=self._reference_occupations(),
+        )
 
         self.executed = True
         return self

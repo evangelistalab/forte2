@@ -48,6 +48,8 @@ class ActiveSpaceDriver:
 
         self.system = self.ci_solver.system
         self.mos = self.ci_solver.mos
+        # orbitals downstream of a correlated calculation have no reference determinant
+        self.mos.occupations = None
         self.mo_space = self.ci_solver.mo_space
         self.dtype = self.ci_solver.dtype
 
