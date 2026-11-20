@@ -2,7 +2,7 @@ import numpy as np
 
 from forte2.lib import ints
 from forte2.system import System
-from forte2.helpers import invsqrt_matrix, logger
+from forte2.helpers import invsqrt_matrix
 from forte2.symmetry import real_sph_to_j_adapted
 
 
@@ -16,6 +16,10 @@ class IAO:
         The system for which the IAO is to be calculated.
     C_occ : NDArray
         The occupied molecular orbital coefficients.
+    j_adapt : bool, optional, default=False
+        If True, the IAOs are built in the j-adapted spinor basis.
+    minao_basis : Basis, optional
+        The minimal basis the IAOs are built from. Defaults to ``system.minao_basis``.
 
     Attributes
     ----------
@@ -27,19 +31,66 @@ class IAO:
     JCTC 2013, 9, 4834-4843
     """
 
-    def __init__(self, system: System, C_occ: np.ndarray, j_adapt=False):
+    def __init__(
+        self, system: System, C_occ: np.ndarray, j_adapt=False, minao_basis=None
+    ):
         self.system = system
         self.C_occ = C_occ.copy()
         self.j_adapt = j_adapt
+        self.minao_basis = system.minao_basis if minao_basis is None else minao_basis
         self.C_iao = self._make_iao(self.C_occ)
         self.nocc = C_occ.shape[1]
+
+    @classmethod
+    def from_mos(cls, system, mos, mo_space=None, minao_basis=None):
+        """
+        Builds the IAOs of the occupied orbitals in a set of MOs.
+
+        If ``mo_space`` is given, its frozen core, core, and active orbitals count as
+        occupied. Otherwise, the orbitals occupied in the reference determinant of
+        ``mos`` do.
+
+        Parameters
+        ----------
+        system : System
+            The system the MOs belong to.
+        mos : MO
+            The restricted MOs.
+        mo_space : MOSpace, optional
+            The MO space that defines the occupied orbitals.
+        minao_basis : Basis, optional
+            The minimal basis the IAOs are built from. Defaults to ``system.minao_basis``.
+
+        Returns
+        -------
+        IAO
+            The IAOs of the occupied orbitals.
+
+        Raises
+        ------
+        ValueError
+            If the MOs aren't restricted, or if neither ``mo_space`` nor the reference
+            occupations of ``mos`` define the occupied orbitals.
+        """
+        if not mos.restricted:
+            raise ValueError("IAO.from_mos needs restricted MOs.")
+        if mo_space is not None:
+            occupied = mo_space.docc_indices + mo_space.active_indices
+        elif mos.occupations is not None:
+            occupied = np.flatnonzero(sum(mos.occupations)).tolist()
+        else:
+            raise ValueError(
+                "The MOs have no reference occupations and no MO space is given, so "
+                "the occupied orbitals are unknown."
+            )
+        return cls(system, mos.C[0][:, occupied], minao_basis=minao_basis)
 
     def _make_iao(self, C):
         basis = self.system.basis
         nbf = C.shape[0]
-        minao_basis = self.system.minao_basis
+        minao_basis = self.minao_basis
         if minao_basis is None:
-            raise ValueError("No minao_basis found in the system.")
+            raise ValueError("No minao_basis given, and the System has none.")
 
         if self.j_adapt:
             U1a, U1b = real_sph_to_j_adapted(basis)
@@ -62,6 +113,12 @@ class IAO:
             _S12 = U1a.T.conj() @ self.S12 @ U2a
             _S12 += U1b.T.conj() @ self.S12 @ U2b
             self.S12 = _S12
+
+        if C.shape[1] > self.S2.shape[0]:
+            raise ValueError(
+                f"IAOs from {self.S2.shape[0]} minimal basis functions can't span "
+                f"{C.shape[1]} orbitals. Use a larger minimal basis."
+            )
 
         S1_inv = np.linalg.pinv(self.S1, hermitian=True)
         S2_inv = np.linalg.pinv(self.S2, hermitian=True)
@@ -113,6 +170,38 @@ class IAO:
         # due to the non-orthogonality of the AOs
         return self.C_iao.T @ (S @ sf_1rdm_ao @ S) @ self.C_iao
 
+    def charge_matrices(self, C):
+        """
+        Compute the IAO charge matrix of each atom for a set of orbitals.
+
+        Parameters
+        ----------
+        C : NDArray
+            The orbital coefficients, shape (nbf, norb). The orbitals must lie in the
+            span of the IAOs.
+
+        Returns
+        -------
+        NDArray
+            The charge matrices, shape (natom, norb, norb). Element (A, i, j) is the
+            overlap of orbitals i and j restricted to the IAOs of atom A.
+
+        Raises
+        ------
+        ValueError
+            If the IAOs don't represent the orbitals.
+        """
+        if self.j_adapt:
+            raise NotImplementedError
+        X = self.C_iao.T @ self.S1 @ C
+        if not np.allclose(self.C_iao @ X, C, rtol=0, atol=1e-8):
+            raise ValueError(
+                "The IAOs don't represent the orbitals. The IAOs span the orbitals they "
+                "were built from, and a minimal set of valence-like orbitals beyond them."
+            )
+        atom_slices = [slice(*x) for x in self.minao_basis.center_first_and_last]
+        return np.array([X[sl].T @ X[sl] for sl in atom_slices])
+
 
 def _orthogonalize(C, S):
     """
@@ -125,83 +214,3 @@ def _orthogonalize(C, S):
     X = C.T.conj() @ S @ C
     X_invsqrt, *_ = invsqrt_matrix(X)
     return C @ X_invsqrt
-
-
-class IBO(IAO):
-    """
-    Class to represent the intrinsic bond orbital basis.
-
-    Parameters
-    ----------
-    system : System
-        The system for which the IBO is to be calculated.
-    C_occ : NDArray
-        The occupied molecular orbital coefficients.
-    maxiter : int, optional, default=10
-        The maximum number of iterations for the IBO optimization.
-    g_tol : float, optional, default=1e-8
-        The RMS gradient convergence criterion for the IBO optimization.
-
-    Notes
-    -----
-    There are typos in the original paper, specifically for the Aij and Bij elements.
-    See the corrected paper at
-    http://www.iboview.org/bin/iao_preprint.pdf
-    also see the reference implementation at
-    https://sites.psu.edu/knizia/software/
-    """
-
-    def __init__(self, system: System, C_occ: np.ndarray, maxiter=10, g_tol=1e-8):
-        super().__init__(system, C_occ)
-        self.maxiter = maxiter
-        self.g_tol = g_tol
-        self.C_ibo = self._make_ibo()
-
-    def _make_ibo(self):
-        # Occupied MO coefficients in the IAO basis
-        # shape (nminao, nocc)
-        C_occ_iao = self.C_iao.T @ self.S1 @ self.C_occ
-        center_first_and_last = self.system.minao_basis.center_first_and_last
-        natoms = self.system.natoms
-
-        ibo_iter = 0
-
-        while ibo_iter < self.maxiter:
-            grad = 0.0
-            for i in range(self.nocc):
-                for j in range(i):
-                    # Bij is the gradient, Aij is the approximate Hessian
-                    Aij = 0
-                    Bij = 0
-                    for iatom in range(natoms):
-                        sl = slice(*center_first_and_last[iatom])
-                        Qii = np.dot(C_occ_iao[sl, i], C_occ_iao[sl, i])
-                        Qjj = np.dot(C_occ_iao[sl, j], C_occ_iao[sl, j])
-                        Qij = np.dot(C_occ_iao[sl, i], C_occ_iao[sl, j])
-                        Aij -= Qii**4 + Qjj**4
-                        Aij += 6 * (Qii**2 + Qjj**2) * Qij**2
-                        Aij += Qii**3 * Qjj + Qii * Qjj**3
-                        Bij += 4 * Qij * (Qii**3 - Qjj**3)
-                    grad += Bij**2
-                    phi_ij = 0.25 * np.arctan2(Bij, -Aij)
-                    i_new = (
-                        np.cos(phi_ij) * C_occ_iao[:, i]
-                        + np.sin(phi_ij) * C_occ_iao[:, j]
-                    )
-                    j_new = (
-                        -np.sin(phi_ij) * C_occ_iao[:, i]
-                        + np.cos(phi_ij) * C_occ_iao[:, j]
-                    )
-                    C_occ_iao[:, i] = i_new.copy()
-                    C_occ_iao[:, j] = j_new.copy()
-            if np.sqrt(grad) < self.g_tol:
-                logger.log_info1(f"\nIBO converged after {ibo_iter} iterations.")
-                break
-            ibo_iter += 1
-        else:
-            raise RuntimeError(
-                f"IBO did not converge after {self.maxiter} iterations. Change `maxiter` or `g_tol`."
-            )
-
-        # (nbf, nminao) @ (nminao, nocc) = (nbf, nocc)
-        return self.C_iao @ C_occ_iao
