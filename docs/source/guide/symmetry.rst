@@ -145,5 +145,8 @@ AVAS subspace or the ASET fragment breaks the symmetry, for example a subspace o
 equivalent atoms, they raise an error. In that case, use a subspace that the symmetry operations
 map onto itself, or use ``symmetry=False``.
 
+Orbital localization breaks point-group symmetry, so ``Localizer`` raises an error for orbitals that
+span more than one irrep.
+
 MCSCF mixes only orbitals of the same irrep. To select CI states of one irrep, pass its Cotton index
 to ``State``, for example ``State(nel=14, multiplicity=1, ms=0.0, symmetry=0)``.
