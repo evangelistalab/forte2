@@ -10,10 +10,12 @@ pytestmark = pytest.mark.skipif(not BLOCK2_AVAILABLE, reason="block2 is not inst
 
 
 def _dmrg_params(scratch, orbital_ordering="fiedler", twosite_to_onesite=None):
-    # Six sites, so a bond dimension of a few hundred is exact
+    # Six sites, so a bond dimension of a few hundred is exact, and perturbative noise
+    # can't move a solve off an excited state it lands on
     return DMRGParams(
         bond_dims=[200] * 4 + [400] * 4,
         noises=[1e-4] * 4 + [1e-6] * 2 + [0.0],
+        noise_type="DensityMatrix",
         davidson_tols=[1e-12] * 8,
         n_sweeps=12,
         twosite_to_onesite=twosite_to_onesite,
@@ -74,8 +76,36 @@ def test_dmrgscf_n2_vs_casscf(tmp_path):
     assert e_rdm == approx_abs(mc.E_ci[0], 1e-6)
 
 
-def test_dmrg_state_averaged_h2o_with_symmetry(tmp_path):
-    # Active orbitals span the A1, B1, and B2 irreps of C2v
+def test_dmrgscf_two_orbitals(tmp_path):
+    # With two sites, the wavefunction center sits at both ends of the chain, and
+    # one-site sweeps are skipped
+    xyz = """
+    H 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    """
+    state = State(nel=2, multiplicity=1, ms=0.0)
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(states=state, active_orbitals=[0, 1])
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
+    mc.run()
+
+    dmrg_solver = DMRGSolver(
+        states=state,
+        active_orbitals=[0, 1],
+        dmrg_params=_dmrg_params(str(tmp_path), twosite_to_onesite=8),
+    )
+    dmrgscf = MCOptimizer(dmrg_solver, final_orbitals="original")(rhf)
+    dmrgscf.run()
+
+    assert dmrgscf.E_ci[0] == approx(mc.E_ci[0])
+
+
+def test_dmrgscf_state_averaged_h2o_with_symmetry(tmp_path):
+    # Active orbitals span the A1, B1, and B2 irreps of C2v. The DMRG-SCF iterations
+    # restart from the previous, one-site MPS of each state, and the final rotation
+    # to natural orbitals starts from a random MPS again.
     xyz = """
     O 0.0  0.000  0.117
     H 0.0  0.757 -0.469
@@ -103,16 +133,9 @@ def test_dmrg_state_averaged_h2o_with_symmetry(tmp_path):
         core_orbitals=core_orbitals,
         active_orbitals=active_orbitals,
     )
-    ci = CI(ci_solver, final_orbitals="natural")(rhf)
-    ci.run()
+    mc = MCOptimizer(ci_solver, final_orbitals="natural")(rhf)
+    mc.run()
 
-    system = System(
-        xyz=xyz,
-        basis_set="cc-pvdz",
-        auxiliary_basis_set="cc-pvtz-jkfit",
-        symmetry=True,
-    )
-    rhf = RHF(charge=0, e_tol=1e-12)(system)
     dmrg_solver = DMRGSolver(
         states=states,
         nroots=nroots,
@@ -120,11 +143,13 @@ def test_dmrg_state_averaged_h2o_with_symmetry(tmp_path):
         active_orbitals=active_orbitals,
         dmrg_params=_dmrg_params(str(tmp_path), twosite_to_onesite=8),
     )
-    dmrg = CI(dmrg_solver, final_orbitals="natural")(rhf)
-    dmrg.run()
+    dmrgscf = MCOptimizer(dmrg_solver, final_orbitals="natural")(rhf)
+    dmrgscf.run()
 
-    assert dmrg.E_ci == approx(ci.E_ci)
-    assert dmrg.E_avg == approx(ci.E_avg)
+    # Only the average energy is stationary in the orbitals, so individual roots of two
+    # runs converged to the same tolerances can differ by about 1e-7
+    assert dmrgscf.E_avg == approx(mc.E_avg)
+    assert dmrgscf.E_ci == approx_abs(mc.E_ci, 1e-6)
     np.testing.assert_allclose(dmrg_solver.nat_occs, ci_solver.nat_occs, atol=1e-5)
     np.testing.assert_allclose(
         dmrg_solver.nat_occs_avg, ci_solver.nat_occs_avg, atol=1e-5
