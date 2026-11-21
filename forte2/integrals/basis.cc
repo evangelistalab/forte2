@@ -103,26 +103,23 @@ std::string shell_label(int l, int idx) {
         {"py", "pz", "px"},
         {"dxy", "dyz", "dz2", "dxz", "dx2-y2"},
         {"fy(3x2-y2)", "fxyz", "fyz2", "fz3", "fxz2", "fz(x2-y2)", "fx(x2-3y2)"}};
-    static const std::vector<std::string> general_labels{"s", "p", "d", "f", "g", "h",
-                                                         "i", "j", "k", "l", "m", "n"};
+    static const std::string general_labels{"spdfghijklmn"};
     // Validate that the provided indices are within the expected ranges.
     if (l < 0) {
         throw std::out_of_range("Invalid angular momentum index: " + std::to_string(l));
     }
-    if (idx < 0) {
+    if (l >= static_cast<int>(general_labels.size())) {
+        throw std::out_of_range("Angular momentum " + std::to_string(l) +
+                                " exceeds maximum shell labels.");
+    }
+    if (idx < 0 or idx > 2 * l) {
         throw std::out_of_range("Invalid index for angular momentum " + std::to_string(l) + ": " +
                                 std::to_string(idx));
     }
     if (l < static_cast<int>(labels.size()) and idx < static_cast<int>(labels[l].size())) {
         return labels[l][idx];
     }
-    // general_labels only defines labels up to l = general_labels.size() - 1;
-    // guard the fallback so l beyond that raises instead of reading past the end.
-    if (l >= static_cast<int>(general_labels.size())) {
-        throw std::out_of_range("Angular momentum " + std::to_string(l) +
-                                " exceeds defined shell labels.");
-    }
-    return general_labels[l] + "(" + std::to_string(idx) + ")";
+    return std::string(1, general_labels[l]) + "(" + std::to_string(idx) + ")";
 }
 
 } // namespace forte2
