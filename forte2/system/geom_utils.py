@@ -4,7 +4,75 @@ import numpy as np
 
 from forte2.helpers import logger
 from forte2.symmetry import rotation_mat, PGSymmetryDetector
-from forte2.data import ATOM_DATA, ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR
+from forte2.data import (
+    ATOM_DATA,
+    ATOM_SYMBOL_TO_Z,
+    ANGSTROM_TO_BOHR,
+    Z_TO_ATOM_SYMBOL,
+)
+
+
+def coords_to_atoms(atomic_charges, coordinates, unit="bohr"):
+    """
+    Build a parsed atom list from atomic numbers and Cartesian coordinates.
+
+    Parameters
+    ----------
+    atomic_charges : array_like
+        Atomic numbers, shape ``(natoms,)``.
+    coordinates : array_like
+        Cartesian coordinates, shape ``(natoms, 3)``.
+    unit : str, optional, default="bohr"
+        The unit of `coordinates`, either "bohr" or "angstrom".
+
+    Returns
+    -------
+    list[list[int, NDArray]]
+        A list of ``[atomic number, coordinates]`` pairs, in Bohr.
+    """
+    if unit not in ("bohr", "angstrom"):
+        raise ValueError(f"unit must be 'bohr' or 'angstrom', but got {unit}.")
+
+    atomic_charges = np.asarray(atomic_charges, dtype=int).reshape(-1)
+    coordinates = np.asarray(coordinates, dtype=float)
+    expected_shape = (atomic_charges.size, 3)
+    if coordinates.shape != expected_shape:
+        raise ValueError(
+            f"Expected coordinates of shape {expected_shape}, got {coordinates.shape}."
+        )
+
+    conv = 1.0 if unit == "bohr" else ANGSTROM_TO_BOHR
+    return [[int(Z), xyz * conv] for Z, xyz in zip(atomic_charges, coordinates)]
+
+
+def coords_to_xyz(atomic_charges, coordinates):
+    """
+    Format atomic numbers and Cartesian coordinates as an XYZ geometry string.
+
+    Parameters
+    ----------
+    atomic_charges : array_like
+        Atomic numbers, shape ``(natoms,)``.
+    coordinates : array_like
+        Cartesian coordinates, shape ``(natoms, 3)``.
+
+    Returns
+    -------
+    str
+        An XYZ geometry string, one atom per line.
+    """
+    atomic_charges = np.asarray(atomic_charges, dtype=int).reshape(-1)
+    coordinates = np.asarray(coordinates, dtype=float)
+    expected_shape = (atomic_charges.size, 3)
+    if coordinates.shape != expected_shape:
+        raise ValueError(
+            f"Expected coordinates of shape {expected_shape}, got {coordinates.shape}."
+        )
+
+    return "\n".join(
+        f"{Z_TO_ATOM_SYMBOL[int(Z)]} {xyz[0]:.16f} {xyz[1]:.16f} {xyz[2]:.16f}"
+        for Z, xyz in zip(atomic_charges, coordinates)
+    )
 
 
 def parse_geometry(geom, unit):
@@ -256,13 +324,23 @@ class GeometryHelper:
         if self.symmetry:
             com_atomic_positions = self.atomic_positions - self.center_of_mass[None, :]
             sym_detector = PGSymmetryDetector(
-                self.inertia_matrix, com_atomic_positions, self.atomic_charges
+                self.inertia_matrix,
+                com_atomic_positions,
+                self.atomic_charges,
+                self.atomic_masses,
+                tol=self.tol,
             )
             sym_detector.run()
             self.prinrot = sym_detector.prinrot
             self.point_group = sym_detector.pg_name
+            self.atom_map = sym_detector.atom_map
             logger.log_info1(f"Detected point group: {self.point_group}")
             self.prin_atomic_positions = sym_detector.prin_atomic_positions
+            if sym_detector.max_displacement > 1e-10:
+                logger.log_warning(
+                    f"Symmetrized the geometry to {self.point_group}; the largest atomic "
+                    f"displacement is {sym_detector.max_displacement:.2e} bohr."
+                )
 
             # Overwrite original inputted atomic positions with principal atomic positions
             self.atomic_positions = self.prin_atomic_positions.copy()
@@ -275,6 +353,7 @@ class GeometryHelper:
             self.prinrot = np.eye(3)
             self.prin_atomic_positions = self.atomic_positions.copy()
             self.point_group = "C1"
+            self.atom_map = {"E": np.arange(self.natoms)}
             logger.log_info1(
                 "Point group symmetry detection not performed. Running in C1 symmetry."
             )

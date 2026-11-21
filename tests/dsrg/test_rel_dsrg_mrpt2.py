@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, MCOptimizer, RelCISolver, AVAS, X2CParams
+from forte2 import AVAS, CI, GHF, MCOptimizer, RelCISolver, System, X2CParams
+from forte2.base_classes import CIParams
 from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
@@ -221,6 +222,16 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
+        387.5233440732472, rel=1e-4
+    )
+
+    # diagonalizing hbar should reproduce most recent relaxed energy
+    hbar0 = dsrg.hbar0
+    hbar1 = dsrg.hbar1_canon
+    hbar2 = dsrg.hbar2_canon
+    ci_solver.set_ints(hbar0, hbar1, hbar2)
+    ci_solver.run()
+    assert (ci_solver.E[5] - ci_solver.E[4]) * EH_TO_WN == pytest.approx(
         387.5233440732472, rel=1e-4
     )
 

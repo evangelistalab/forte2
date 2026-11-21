@@ -1,8 +1,10 @@
-import itertools
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from abc import ABC
-from typing import Literal, get_args
+from typing import Literal, get_args, get_type_hints, get_origin
 
+import numpy as np
+
+from forte2.data.atom_data import LIGHT_SPEED
 from forte2.lib.det import Determinant
 
 
@@ -27,6 +29,23 @@ class ParamsBase(ABC):
         new_instance = type(self)(**fields)
         return new_instance
 
+    def __post_init__(self):
+        self._validate_literals()
+
+    def _validate_literals(self):
+        """Check every Literal-annotated field against the values its annotation allows."""
+        hints = get_type_hints(type(self))
+        for f in fields(type(self)):
+            t = hints[f.name]
+            if get_origin(t) is Literal:
+                allowed_args = get_args(t)
+                value = getattr(self, f.name)
+                if value not in allowed_args:
+                    raise ValueError(
+                        f"{type(self).__name__}.{f.name} must be one of {allowed_args}, "
+                        f"but got {value!r}."
+                    )
+
     @classmethod
     def is_valid_input(cls, *args, **kwargs):
         try:
@@ -40,6 +59,7 @@ class ParamsBase(ABC):
 class X2CParams(ParamsBase):
     """
     Parameters for the exact two-component (X2C) relativistic Hamiltonian.
+    ``X2CParams()`` (all defaults) means no X2C transformation.
 
     Parameters
     ----------
@@ -48,8 +68,9 @@ class X2CParams(ParamsBase):
             - None
             - "sf": Spin-free (scalar) X2C.
             - "so": Spin-orbit (two-component) X2C.
-    x2c_model : str, optional, default="1e"
-        The decoupling model used to build the X2C Hamiltonian. Options are:
+    x2c_model : str | None, optional, default=None
+        The decoupling model used to build the X2C Hamiltonian; "1e" if
+        ``x2c_type`` is set and this is left as None. Options are:
             - None
             - "1e": One-electron X2C (bare-nucleus decoupling).
             - "sap": Superposition of atomic potentials X2C.
@@ -62,36 +83,38 @@ class X2CParams(ParamsBase):
             - "dc": Dirac-Coulomb scaling.
             - "dcb": Dirac-Coulomb-Breit scaling.
             - "row-dependent": Row-dependent scaling.
+    skip_picture_change : bool, optional, default=False
+        If True, evaluate one-electron property operators without the picture change
+        correction. Individual property calls can override this.
+    light_speed : float, optional, default=LIGHT_SPEED
+        The speed of light in atomic units used by the X2C transformation and its
+        gradient. Scalar-relativistic and spin-orbit effects scale as
+        ``1 / light_speed**2``, so changing it tunes their strength; the
+        nonrelativistic limit is ``light_speed -> inf``. The SNSO factors are not
+        rescaled with it.
     """
 
     x2c_type: Literal[None, "sf", "so"] = None
-    x2c_model: Literal[None, "1e", "sap"] = "1e"
+    x2c_model: Literal[None, "1e", "sap"] = None
     snso_type: Literal[None, "boettger", "dc", "dcb", "row-dependent"] = None
+    skip_picture_change: bool = False
+    light_speed: float = LIGHT_SPEED
 
     def __post_init__(self):
-        valid_types = get_args(self.__annotations__["x2c_type"])
-        valid_models = get_args(self.__annotations__["x2c_model"])
-        valid_snso = get_args(self.__annotations__["snso_type"])
+        super().__post_init__()
 
-        if self.x2c_type not in valid_types:
-            raise ValueError(
-                f"x2c_type must be one of {valid_types}, but got {self.x2c_type!r}."
-            )
-        if self.x2c_model not in valid_models:
-            raise ValueError(
-                f"x2c_model must be one of {valid_models}, but got {self.x2c_model!r}."
-            )
-        if self.snso_type not in valid_snso:
-            raise ValueError(
-                f"snso_type must be one of {valid_snso}, but got {self.snso_type!r}."
-            )
-
-        if self.x2c_type == None and (self.x2c_model or self.snso_type):
+        if self.x2c_type is None and (self.x2c_model or self.snso_type):
             raise ValueError("x2c_model and snso_type must be None if x2c_type is None")
 
-        if self.x2c_type is not None and self.x2c_model == None:
-            raise ValueError("x2c_model must be set if x2c_type isn't None")
+        if self.x2c_type is not None and self.x2c_model is None:
+            self.x2c_model = "1e"
 
+        if not (np.isfinite(self.light_speed) and self.light_speed > 0):
+            raise ValueError(
+                f"light_speed must be positive and finite, but got {self.light_speed}."
+            )
+        if self.x2c_type is None and self.light_speed != LIGHT_SPEED:
+            raise ValueError("light_speed only affects X2C; set x2c_type as well.")
 
         # SNSO scaling only makes sense for so, 1e.
         if self.snso_type is not None and not (
@@ -101,6 +124,7 @@ class X2CParams(ParamsBase):
                 "snso_type is only valid when x2c_type == 'so' and x2c_model == '1e', "
                 f"but got x2c_type={self.x2c_type!r}, x2c_model={self.x2c_model!r}."
             )
+
 
 @dataclass
 class DavidsonLiuParams(ParamsBase):
@@ -134,6 +158,7 @@ class DavidsonLiuParams(ParamsBase):
     r_tol: float = 1e-6
 
     def __post_init__(self):
+        super().__post_init__()
         if self.collapse_per_root < 1:
             raise ValueError(
                 f"Davidson-Liu solver: collapse_per_root ({self.collapse_per_root}) must be greater than or equal to 1."
@@ -169,19 +194,11 @@ class CIParams(ParamsBase):
         An energy shift, used to find roots around a specific energy. If None, no shift is applied.
     """
 
-    ci_algorithm: str = "hz"
+    ci_algorithm: Literal[
+        "hz", "harrison-zarrabian", "kh", "knowles-handy", "exact", "sparse"
+    ] = "hz"
     ci_builder_memory: int = 1024
     energy_shift: float = None
-
-    def __post_init__(self):
-        assert self.ci_algorithm.lower() in [
-            "hz",
-            "harrison-zarrabian",
-            "kh",
-            "knowles-handy",
-            "exact",
-            "sparse",
-        ], "ci_algorithm must be one of 'hz', 'kh', 'exact', or 'sparse'."
 
 
 @dataclass
@@ -205,12 +222,16 @@ class SelectedCIParams(ParamsBase):
         The number of occupied orbitals to consider when generating guess determinants.
     guess_vir_window: int, optional, default=2
         The number of virtual orbitals to consider when generating guess determinants.
-    num_threads: int, optional, default=4
-        The number of threads to use for parallel selection and diagonalization.
-    ci_algorithm: str, optional, default="sparse"
-        The algorithm used for the CI diagonalization. Options are "exact" and "sparse".
+    ci_algorithm: str, optional, default="iterative"
+        The algorithm used for the CI diagonalization. Options are "exact" and "iterative".
+        "iterative" runs a Davidson-Liu solve whose sigma build is the C++
+        `SelectedCIHelper`/`RelSelectedCIHelper`; "exact" builds and diagonalizes the
+        dense Hamiltonian via `SlaterRules`.
     num_batches_per_thread: int, optional, default=4
         The number of batches of determinants to process per thread during selection and diagonalization.
+        The number of threads is determined automatically from the environment (affinity mask,
+        `OMP_NUM_THREADS`, `OMP_THREAD_LIMIT`, `SLURM_CPUS_PER_TASK`); set `FORTE_NUM_THREADS_OVERRIDE`
+        to override it.
     do_spin_penalty: bool, optional, default=True
         Whether to apply a spin penalty to the Hamiltonian to enforce correct spin symmetry.
     guess_dets: list[Determinant], optional
@@ -254,31 +275,29 @@ class SelectedCIParams(ParamsBase):
     e_tol: float = 1e-8
     var_threshold: float = 5e-4
     pt2_threshold: float = 1e-8
-    selection_algorithm: str = "hbci"
+    selection_algorithm: Literal["hbci", "hbci_ref"] = "hbci"
     guess_occ_window: int = 2
     guess_vir_window: int = 2
-    num_threads: int = 4
-    ci_algorithm: str = "sparse"
+    ci_algorithm: Literal["iterative", "exact"] = "iterative"
     num_batches_per_thread: int = 4
     do_spin_penalty: bool = True
     guess_dets: list[Determinant] = field(default_factory=list)
     pinned_guess_dets: list[Determinant] = field(default_factory=list)
     frozen_creation: list[int] = field(default_factory=list)
     frozen_annihilation: list[int] = field(default_factory=list)
-    screening_criterion: str = "hbci"
-    energy_correction: str = "pt2"
+    screening_criterion: Literal["hbci", "ehbci"] = "hbci"
+    energy_correction: Literal["variational", "pt2"] = "pt2"
     energy_shift: float = None
-    pt2_regularizer: str = "none"
+    pt2_regularizer: Literal["none", "shift", "dsrg"] = "none"
     pt2_regularizer_strength: float = 0.0
 
     def __post_init__(self):
-        if self.ci_algorithm.lower() not in ["exact", "sparse"]:
-            raise ValueError("ci_algorithm must be 'exact' or 'sparse'")
-        if self.selection_algorithm.lower() not in ["hbci", "hbci_ref"]:
-            raise ValueError("selection_algorithm must be 'hbci' or 'hbci_ref'")
-        if self.screening_criterion.lower() not in ["hbci", "ehbci"]:
-            raise ValueError("screening_criterion must be 'hbci' or 'ehbci'")
-        if self.energy_correction.lower() not in ["variational", "pt2"]:
-            raise ValueError("energy_correction must be 'variational' or 'pt2'")
-        if self.pt2_regularizer.lower() not in ["none", "shift", "dsrg"]:
-            raise ValueError("pt2_regularizer must be 'none', 'shift', or 'dsrg'")
+        super().__post_init__()
+        if self.var_threshold < 0:
+            raise RuntimeError(
+                f"var_threshold cannot be negative, got {self.var_threshold}"
+            )
+        if self.pt2_threshold < 0:
+            raise RuntimeError(
+                f"pt2_threshold cannot be negative, got {self.pt2_threshold}"
+            )

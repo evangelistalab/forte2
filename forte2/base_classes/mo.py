@@ -55,13 +55,13 @@ class MO:
                 raise ValueError(
                     f"Length of irrep_labels[{i}] and irrep_indices[{i}] must match number of MOs ({self.nmo}), but got {len(labels)} and {len(indices)}."
                 )
-            
+
     @property
     def Ca(self):
         if self.spinorbital:
             raise ValueError("Ca is not defined for generalized MO objects.")
         return self.C[0]
-    
+
     @property
     def Cb(self):
         if self.spinorbital:
@@ -70,13 +70,12 @@ class MO:
             return self.C[0]
         else:
             return self.C[1]
-        
+
     @property
     def Cso(self):
         if not self.spinorbital:
             raise ValueError("Cso is only defined for generalized MO objects.")
         return self.C[0]
-
 
     def copy(self):
         return self.__class__(
@@ -121,4 +120,38 @@ class MO:
             spinorbital=True,
             irrep_labels=list_spatial_to_spinor(self.irrep_labels),
             irrep_indices=list_spatial_to_spinor(self.irrep_indices),
+        )
+
+    def permute(self, perm):
+        """
+        Apply a permutation to the MO coefficients and irrep labels and indices.
+
+        Parameters
+        ----------
+        perm : list_like[int]
+            The old index of the MO placed in each new slot, i.e., ``C_new = C_old[:, perm]``.
+            Must have length `nmo` and contain each index exactly once.
+            e.g., [0,3,1,2] moves the fourth MO to the second slot, second to third, and third to fourth.
+
+        Returns
+        -------
+        MO
+            A new MO object with the permuted orbitals.
+        """
+
+        perm = np.asarray(perm, dtype=int)
+        if len(perm) != self.nmo:
+            raise ValueError(
+                f"perm must have length nmo ({self.nmo}), but got length {len(perm)}."
+            )
+        if set(perm.tolist()) != set(range(self.nmo)):
+            raise ValueError(
+                f"perm must contain each index in range({self.nmo}) exactly once, but got {perm.tolist()}."
+            )
+
+        return self.__class__(
+            C=[arr[:, perm] for arr in self.C],
+            spinorbital=self.spinorbital,
+            irrep_labels=[[labels[i] for i in perm] for labels in self.irrep_labels],
+            irrep_indices=[[ind[i] for i in perm] for ind in self.irrep_indices],
         )

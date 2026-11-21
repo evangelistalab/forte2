@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from forte2 import System, State, MCOptimizer
+from forte2 import MCOptimizer, State, System
 from forte2.scf import RHF
 from forte2.sci import SelectedCISolver
 from forte2.helpers.comparisons import approx
@@ -47,7 +47,6 @@ def test_sciscf_n2_multiple_roots(
             screening_criterion="hbci",
             guess_occ_window=2,
             guess_vir_window=2,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         die_if_not_converged=False,

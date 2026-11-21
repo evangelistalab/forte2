@@ -295,7 +295,7 @@ def mutual_correlation_plot(
 if __name__ == "__main__":
     from forte2.system import System
     from forte2.scf.rhf import RHF
-    from forte2.ci.ci import CI
+    from forte2.ci.ci import CI, CISolver
     from forte2.state import State
     from forte2.props.mutual_correlation import MutualCorrelationAnalysis
 
@@ -308,7 +308,10 @@ if __name__ == "__main__":
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
-        State(system=system, multiplicity=1, ms=0.0), active_orbitals=list(range(10))
+        CISolver(
+            State(system=system, multiplicity=1, ms=0.0),
+            active_orbitals=list(range(10)),
+        )
     )(rhf)
     ci.run()
 

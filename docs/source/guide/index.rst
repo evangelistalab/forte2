@@ -5,4 +5,8 @@ User guide
 
     basics
     capabilities
+    relativistic
+    symmetry
     integrals
+    rdms
+    gradients

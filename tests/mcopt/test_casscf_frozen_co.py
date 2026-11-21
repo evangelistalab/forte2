@@ -1,4 +1,4 @@
-from forte2 import System, AVAS, MCOptimizer, State, RHF, CISolver
+from forte2 import AVAS, CISolver, MCOptimizer, RHF, State, System
 from forte2.helpers.comparisons import approx
 from forte2.base_classes import CIParams
 

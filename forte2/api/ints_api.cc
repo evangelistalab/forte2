@@ -1,7 +1,4 @@
-#if __cplusplus >= 202002L
-// C++20 or later
 #include <format>
-#endif
 
 #include <libint2.hpp>
 #include <libint2/shell.h>
@@ -106,7 +103,6 @@ void export_shell_api(nb::module_& sub_m) {
             "embed_normalization_into_coefficients"_a = true,
             "Construct a shell from the angular momentum (l) and a list of exponents and "
             "coefficients.")
-#if __cplusplus >= 202002L
         // C++20 or later
         .def("__repr__",
              [](const libint2::Shell& s) {
@@ -121,7 +117,6 @@ void export_shell_api(nb::module_& sub_m) {
                  }
                  return str;
              })
-#endif
         .def_prop_ro(
             "size", [](libint2::Shell& s) { return s.size(); },
             "The number of basis functions in the shell (e.g., for l = 2, size = 5).")
@@ -538,6 +533,10 @@ void export_libcint_compute_api(nb::module_& sub_m) {
               "in spinor basis.");
     sub_m.def("cint_int1e_r_sph", &cint_int1e_r_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
               "Compute the dipole integral matrix using libcint in spherical harmonics.");
+    sub_m.def(
+        "cint_int1e_sprsp_sph", &cint_int1e_sprsp_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
+        "Compute the small component of the dipole integral matrix using libcint in spherical "
+        "harmonics.");
     sub_m.def("cint_int2c2e_sph", &cint_int2c2e_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
               "Compute the two-center two-electron integral matrix using libcint in spherical "
               "harmonics.");

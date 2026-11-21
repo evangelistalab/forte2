@@ -5,9 +5,8 @@ from numpy.typing import NDArray
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
-from .scf_utils import minao_initial_guess, core_initial_guess
+from .scf_utils import sap_guess_hamiltonian
 
 
 @dataclass
@@ -31,11 +30,11 @@ class RHF(SCFBase):
         assert self.nel % 2 == 0, "RHF requires an even number of electrons."
         self.ms = 0
         self.na = self.nb = self.nel // 2
+        self._set_occupation_constraints()
 
     def _build_fock(self, H, fock_builder, S):
-        J = fock_builder.build_J(self.D)[0]
-        K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
-        F = H + 2.0 * J - K
+        J, K = fock_builder.build_JK([self.C[0][:, : self.na]])
+        F = H + 2.0 * J[0] - K[0]
         return [F], [F]
 
     def _build_density_matrix(self):
@@ -49,13 +48,14 @@ class RHF(SCFBase):
     def _initial_guess(self, H, guess_type="minao"):
         match guess_type:
             case "minao":
-                C = minao_initial_guess(self.system, H)
+                H_guess = sap_guess_hamiltonian(self.system, H)
             case "hcore":
-                C = core_initial_guess(self.system, H)
+                H_guess = H
             case _:
                 raise RuntimeError(f"Unknown initial guess type: {guess_type}")
-
-        return [C]
+        # GHF borrows this method; its own _eigh expects j-adapted Fock matrices.
+        eps, C, irreps = SCFBase._eigh(self, H_guess)
+        return [eps], [C], [irreps]
 
     def _build_ao_grad(self, S, F):
         ao_grad = F[0] @ self.D[0] @ S - S @ self.D[0] @ F[0]
@@ -64,10 +64,6 @@ class RHF(SCFBase):
 
     def _energy(self, H, F):
         return np.sum(self.D[0] * (H + F[0]))
-
-    def _diagonalize_fock(self, F):
-        eps, C = self._eigh(F[0])
-        return [eps], [C]
 
     def _spin(self, S):
         return self.ms * (self.ms + 1)
@@ -89,11 +85,11 @@ class RHF(SCFBase):
         return [diis.update(F[0], AO_grad)]
 
     def _apply_level_shift(self, F, S):
-        if self.level_shift is None or self.level_shift < 1e-4:
+        if self._current_level_shift is None or self._current_level_shift < 1e-4:
             return F
         D_vir = S - S @ self.D[0] @ S
 
-        return [F[0] + self.level_shift * D_vir]
+        return [F[0] + self._current_level_shift * D_vir]
 
     def _get_occupation(self):
         self.ndocc = self.na
@@ -142,16 +138,3 @@ class RHF(SCFBase):
         basis_info.print_ao_composition(
             self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
         )
-
-    def _assign_orbital_symmetries(self):
-        S = self._get_overlap()
-        mosym = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[0],
-            self.eps[0],
-        )
-        mosym.run()
-        self.irrep_labels = [mosym.labels]
-        self.irrep_indices = [mosym.irrep_indices]

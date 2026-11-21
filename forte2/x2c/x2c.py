@@ -12,7 +12,6 @@ from forte2.helpers import (
 )
 from forte2.system.build_basis import build_sap_potential_basis, decontract_basis
 
-LIGHT_SPEED = 137.03599917697
 SAP_BASIS_NAME = "sap_grasp_large"
 ROW_Z_START = np.array([1, 3, 11, 19, 37, 55, 87])
 
@@ -44,7 +43,7 @@ class X2CHelper:
     Implementation follows the general algorithm of J. Chem. Phys. 135, 084114 (2011),
     but adopts some numerical tricks from J. Chem. Phys. 131, 031104 (2009), especially
     for the spin-orbit case. See also PySCF's x2c module for reference. When
-    ``system.x2c_model == "sap"``, the decoupling
+    ``system.x2c.x2c_model == "sap"``, the decoupling
     transformation follows the SAP-X2C
     Hamiltonian of Surjuse and Valeev, J. Chem. Theory Comput. 22, 3443--3452 (2026),
     https://doi.org/10.1021/acs.jctc.6c00032.
@@ -53,9 +52,10 @@ class X2CHelper:
     def __init__(self, system):
         self.system = system
         self.overlap_ortho_rtol = system.overlap_ortho_rtol
-        self.x2c_type = system.x2c_type
-        self.x2c_model = system.x2c_model
-        self.snso_type = system.snso_type
+        self.x2c_type = system.x2c.x2c_type
+        self.x2c_model = system.x2c.x2c_model
+        self.snso_type = system.x2c.snso_type
+        self.light_speed = system.x2c.light_speed
 
         logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
@@ -166,14 +166,162 @@ class X2CHelper:
 
         return compute_hcore_gradient(self, density)
 
-    @staticmethod
-    def _build_nesc_matrix(T, V, W, X):
+    def electric_dipole_moment(self, origin=None):
+        """
+        Compute the electric dipole moment integrals with picture change correction.
+
+        Parameters
+        ----------
+        origin : array-like, optional
+            The origin for the dipole operator. If None, defaults to [0, 0, 0].
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected electric dipole moment integrals along
+            the x, y, z directions, in the contracted basis.
+        """
+        # the large-large (mu_ll) and small-small (mu_ss) dipole integrals are
+        # built in the decontracted basis, matching the basis in which X and R
+        # were constructed by hcore_x2c().
+        if self.x2c_type == "sf":
+            _, *mu_ll = integrals.emultipole1(self.system, self.xbasis, origin=origin)
+            # only the spin-free (identity) part of the small-component dipole
+            # is needed for the spin-free case: components [x, I2], [y, I2], [z, I2]
+            mu_ss = integrals.cint_sprsp(self.system, self.xbasis, origin=origin)[
+                [3, 7, 11]
+            ]
+            mu_ss = mu_ss * (0.25 / self.light_speed**2)
+            mu_ss = list(mu_ss)
+        else:  # so
+            _, *mu_ll = integrals.emultipole1(self.system, self.xbasis, origin=origin)
+            mu_ll = [block_diag_2x2(mu) for mu in mu_ll]
+            mu_ss_so = integrals.cint_sprsp(self.system, self.xbasis, origin=origin)
+            mu_ss_so = mu_ss_so * (0.25 / self.light_speed**2)
+            # [x, y, z, I2] spin components for each Cartesian dipole direction
+            mu_ss = [
+                i_sigma_dot(mu_ss_so[3], *mu_ss_so[:3]),
+                i_sigma_dot(mu_ss_so[7], *mu_ss_so[4:7]),
+                i_sigma_dot(mu_ss_so[11], *mu_ss_so[8:11]),
+            ]
+
+        mu_pc = self.picture_change_even_operator(mu_ll, mu_ss)
+
+        # project back to the contracted basis
+        proj = self._get_projection_matrix()
+        return [proj.conj().T @ mu_pc_i @ proj for mu_pc_i in mu_pc]
+
+    def picture_change_even_operator(self, ints_LL, ints_SS):
+        """
+        Apply the picture change correction to integrals of an even operator, i.e.,
+        one of the form [[M^LL, 0], [0, M^SS]]. Most "non-relativistic" property
+        operators are even operators.
+
+        Parameters
+        ----------
+        ints_LL : list[NDArray]
+            The integrals corresponding to the large-large matrix block, in the
+            (block-diagonalized, for the spin-orbit case) decontracted basis.
+        ints_SS : list[NDArray]
+            The integrals corresponding to the small-small matrix block, in the
+            same basis as ``ints_LL``.
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected integrals in the (non-orthogonal)
+            decontracted basis.
+
+        Notes
+        -----
+        This operation is identical to the decoupling transformation of the 1e
+        Dirac Hamiltonian: we compute R^+ M_NESC R, where M_NESC = M^LL + X^+ M^SS X.
+        Because X and R are built in the orthonormal basis (see hcore_x2c), the
+        input integrals are first transformed into that basis with Xorth and the
+        result is transformed back with Xorthm1, mirroring how the core
+        Hamiltonian is handled.
+        """
+        assert hasattr(self, "X") and hasattr(self, "R"), (
+            "The X2C transformation has not been executed yet; "
+            "call hcore_x2c() before requesting picture-change-corrected properties."
+        )
+        assert len(ints_LL) == len(
+            ints_SS
+        ), "ints_LL and ints_SS must have the same length."
+
+        # X and R live in the orthonormal basis, so bring the operator integrals
+        # into that basis, apply the decoupling, then return to the AO basis.
+        Xorth, Xorthm1 = self._get_Xorth()
+        res = []
+        for M_LL, M_SS in zip(ints_LL, ints_SS):
+            M_LL_o = Xorth.conj().T @ M_LL @ Xorth
+            M_SS_o = Xorth.conj().T @ M_SS @ Xorth
+            M_NESC = M_LL_o + self.X.conj().T @ M_SS_o @ self.X
+            M_pc = self.R.conj().T @ M_NESC @ self.R
+            res.append(Xorthm1.conj().T @ M_pc @ Xorthm1)
+        return res
+
+    def picture_change_odd_operator(self, ints_LS, ints_SL=None):
+        """
+        Apply the picture change correction to integrals of an odd operator, i.e.,
+        one of the form [[0, M^LS], [M^SL, 0]]. Operators that couple the large and
+        small components, such as magnetic property operators, are odd operators.
+
+        Parameters
+        ----------
+        ints_LS : list[NDArray]
+            The integrals corresponding to the large-small matrix block, in the
+            (block-diagonalized, for the spin-orbit case) decontracted basis.
+            Any prefactor required by the small-component metric (typically
+            :math:`1/2c`) must already be folded in, as for ``ints_SS`` in
+            :meth:`picture_change_even_operator`.
+        ints_SL : list[NDArray], optional
+            The integrals corresponding to the small-large matrix block, in the
+            same basis as ``ints_LS``. If None, the operator is assumed Hermitian
+            and each block is taken as the conjugate transpose of ``ints_LS``.
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected integrals in the (non-orthogonal)
+            decontracted basis.
+
+        Notes
+        -----
+        The picture change correction of a general operator is
+        R^+ (M^LL + M^LS X + X^+ M^SL + X^+ M^SS X) R. For an odd operator the
+        diagonal blocks vanish, leaving R^+ (M^LS X + X^+ M^SL) R. As in
+        :meth:`picture_change_even_operator`, the integrals are transformed into the
+        orthonormal basis that X and R are built in and the result is transformed
+        back.
+        """
+        assert hasattr(self, "X") and hasattr(self, "R"), (
+            "The X2C transformation has not been executed yet; "
+            "call hcore_x2c() before requesting picture-change-corrected properties."
+        )
+        if ints_SL is None:
+            ints_SL = [M_LS.conj().T for M_LS in ints_LS]
+        assert len(ints_LS) == len(
+            ints_SL
+        ), "ints_LS and ints_SL must have the same length."
+
+        Xorth, Xorthm1 = self._get_Xorth()
+        res = []
+        for M_LS, M_SL in zip(ints_LS, ints_SL):
+            M_LS_o = Xorth.conj().T @ M_LS @ Xorth
+            M_SL_o = Xorth.conj().T @ M_SL @ Xorth
+            M_NESC = M_LS_o @ self.X + self.X.conj().T @ M_SL_o
+            M_pc = self.R.conj().T @ M_NESC @ self.R
+            res.append(Xorthm1.conj().T @ M_pc @ Xorthm1)
+        return res
+
+    def _build_nesc_matrix(self, T, V, W, X):
         return (
             T @ X
             + X.conj().T @ T
             - X.conj().T @ T @ X
             + V
-            + (0.25 / LIGHT_SPEED**2) * X.conj().T @ W @ X
+            + (0.25 / self.light_speed**2) * X.conj().T @ W @ X
         )
 
     def _get_projection_matrix(self):
@@ -225,11 +373,11 @@ class X2CHelper:
         D = np.zeros((north * 2,) * 2, dtype=dtype)
         M = np.zeros((north * 2,) * 2, dtype=dtype)
         D[:north, :north] = V
-        D[north:, north:] = (0.25 / LIGHT_SPEED**2) * W - T
+        D[north:, north:] = (0.25 / self.light_speed**2) * W - T
         D[:north, north:] = T
         D[north:, :north] = T
         M[:north, :north] = S
-        M[north:, north:] = (0.5 / LIGHT_SPEED**2) * T
+        M[north:, north:] = (0.5 / self.light_speed**2) * T
         return scipy.linalg.eigh(D, M)
 
     def _get_decoupling_matrix(self, c_dirac):
@@ -243,7 +391,7 @@ class X2CHelper:
         This implementation follows eqs 26-34 of J. Chem. Phys. 131, 031104 (2009),
         which avoids doing matrix inversions and leads to a more numerically stable transformation.
         """
-        S_tilde = S + (0.5 / LIGHT_SPEED**2) * self.X.conj().T @ T @ self.X
+        S_tilde = S + (0.5 / self.light_speed**2) * self.X.conj().T @ T @ self.X
         # S is guaranteed to be identity in the orthonormal basis
         # so we just need to compute the inverse square root of S_tilde
         # the tolerance used here isn't self.overlap_ortho_rtol because we're already in the

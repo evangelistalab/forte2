@@ -105,7 +105,7 @@ class ThreadJoiner {
 /// @brief Get the number of threads to use for parallel execution
 /// FORTE_NUM_THREADS_OVERRIDE is used if set/valid.
 /// Otherwise, the smallest set value among
-/// {   physical cores,
+/// {   std::thread::hardware_concurrency() (logical CPUs, including SMT/hyperthreads),
 ///     # of CPUs in affinity mask,
 ///     OMP_NUM_THREADS,
 ///     OMP_THREAD_LIMIT,

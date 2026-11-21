@@ -496,47 +496,4 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
     return rdm_sf;
 }
 
-np_tensor6 CISigmaBuilder::compute_sf_3cumulant(np_vector C_left, np_vector C_right) const {
-    // Compute the spin-free 1-RDM
-    auto sf_1rdm = compute_sf_1rdm(C_left, C_right);
-    // Compute the spin-free 2-RDM
-    auto sf_2rdm = compute_sf_2rdm(C_left, C_right);
-    // Compute the spin-free 3-RDM (this will hold the cumulant)
-    auto L3 = compute_sf_3rdm(C_left, C_right);
-
-    auto G1_v = sf_1rdm.view();
-    auto G2_v = sf_2rdm.view();
-    auto L3_v = L3.view();
-
-    const auto norb = lists_.norb();
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s) {
-                    for (size_t t{0}; t < norb; ++t) {
-                        for (size_t u{0}; u < norb; ++u) {
-                            L3_v(p, q, r, s, t, u) += -G1_v(p, s) * G2_v(q, r, t, u) -
-                                                      G1_v(q, t) * G2_v(p, r, s, u) -
-                                                      G1_v(r, u) * G2_v(p, q, s, t) +
-                                                      0.5 * G1_v(p, t) * G2_v(q, r, s, u) +
-                                                      0.5 * G1_v(p, u) * G2_v(q, r, t, s) +
-                                                      0.5 * G1_v(q, s) * G2_v(p, r, t, u) +
-                                                      0.5 * G1_v(q, u) * G2_v(p, r, s, t) +
-                                                      0.5 * G1_v(r, s) * G2_v(p, q, u, t) +
-                                                      0.5 * G1_v(r, t) * G2_v(p, q, s, u) +
-                                                      2.0 * G1_v(p, s) * G1_v(q, t) * G1_v(r, u) -
-                                                      G1_v(p, s) * G1_v(q, u) * G1_v(r, t) -
-                                                      G1_v(p, u) * G1_v(q, t) * G1_v(r, s) -
-                                                      G1_v(p, t) * G1_v(q, s) * G1_v(r, u) +
-                                                      0.5 * G1_v(p, t) * G1_v(q, u) * G1_v(r, s) +
-                                                      0.5 * G1_v(p, u) * G1_v(q, s) * G1_v(r, t);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return L3;
-}
-
 } // namespace forte2

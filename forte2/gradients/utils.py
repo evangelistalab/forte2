@@ -150,35 +150,3 @@ def compute_gradient(
     gradient += flat_to_atom_gradient(integrals.coulomb_3c_deriv(system, W3), natoms)
     gradient += flat_to_atom_gradient(integrals.coulomb_2c_deriv(system, W2), natoms)
     return gradient
-
-
-def build_metric_inverted_three_center(system):
-    r"""Computes the three-center integrals with the Coulomb metric inverse applied.
-
-    Compute the quantity :math:`Z^{P}_{\mu\nu}` defined as:
-
-    .. math::
-        Z^{P}_{\mu\nu}
-        =
-        \sum_{Q} M^{-1}_{PQ} (Q|\mu\nu).
-
-    Parameters
-    ----------
-    system : System
-        The system for which to compute the metric-inverted three-center integrals.
-
-    Returns
-    -------
-    NDArray
-        Metric-inverted three-center integrals with shape ``(naux, nbasis, nbasis)``.
-    """
-    J = integrals.coulomb_3c(system, system.auxiliary_basis, system.basis, system.basis)
-    M = integrals.coulomb_2c(system, system.auxiliary_basis, system.auxiliary_basis)
-    return apply_inverse_metric(system, M, J)
-
-
-def apply_inverse_metric(system, M, J):
-    """Apply the density fitting metric inverse to a three-center tensor."""
-    rhs = J.reshape(J.shape[0], -1)
-    result = compute_Am1y(M, rhs, system.df_ortho_rtol)
-    return result.reshape(J.shape)

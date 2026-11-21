@@ -75,7 +75,7 @@ is migrated when loaded, but the former constructor keywords are removed.
 | Current | Proposed canonical | Notes |
 |---|---|---|
 | `final_orbitals` | `final_orbital_basis` | Values: `original`, `semicanonical`. |
-| `ci_algorithm` values `hz`, `kh` | `ci_solver` values `harrison_zarrabian`, `knowles_handy`, `exact`, `sparse` | Keep short aliases accepted. |
+| `ci_algorithm` values `hz`, `kh` | `ci_solver` values `harrison_zarrabian`, `knowles_handy`, `exact`, `sparse` | Keep short aliases accepted. `CIParams` only — `SelectedCIParams.ci_algorithm` is a separate option whose values are `exact`/`iterative`, and its `sparse` is *not* the same algorithm. |
 | `active_frozen_orbitals` | `frozen_active_orbitals` | Make naming parallel with core/virtual variants. |
 | `do_transition_dipole` | `compute_transition_dipole` | Prefer verb that implies action. |
 | `ci_maxiter` | `ci_max_iterations` | Optional readability upgrade. |

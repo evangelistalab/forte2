@@ -1,4 +1,4 @@
-from forte2 import System, CI, State, UHF
+from forte2 import CI, CISolver, State, System, UHF
 from forte2.helpers.comparisons import approx
 
 
@@ -14,9 +14,11 @@ def test_uhf_ci_1():
     hf = UHF(charge=0, ms=1.0)(system)
     # CI only takes the alpha MOs from UHF, but since we're doing FCI, it shouldn't matter
     ci = CI(
-        states=State(nel=2, system=system, multiplicity=1, ms=0.0),
-        active_orbitals=system.nmo,
-        nroots=1,
+        CISolver(
+            states=State(nel=2, system=system, multiplicity=1, ms=0.0),
+            active_orbitals=system.nmo,
+            nroots=1,
+        )
     )(hf)
     ci.run()
-    assert ci.E[0] == approx(-1.1306920385)
+    assert ci.E_ci[0] == approx(-1.1306920385)

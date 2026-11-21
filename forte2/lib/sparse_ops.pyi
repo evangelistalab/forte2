@@ -345,13 +345,13 @@ def sparse_operator(list: Sequence[tuple[SQOperatorString, complex]]) -> SparseO
 def new_product(arg0: SparseOperator, arg1: SparseOperator, /) -> SparseOperator: ...
 
 @overload
-def sparse_operator_hamiltonian(scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], screen_thresh: float = 1e-12) -> SparseOperator:
+def sparse_operator_hamiltonian(scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], screen_thresh: float = 1e-12) -> SparseOperator: ...
+
+@overload
+def sparse_operator_hamiltonian(scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], screen_thresh: float = 1e-12) -> SparseOperator:
     """
     Create a SparseOperator object representing the second quantized Hamiltonian.
     """
-
-@overload
-def sparse_operator_hamiltonian(scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], screen_thresh: float = 1e-12) -> SparseOperator: ...
 
 class SparseOperatorList:
     """A class to represent a list of sparse operators"""
@@ -390,11 +390,11 @@ class SparseOperatorList:
     def __str__(self) -> str: ...
 
     @overload
-    def __getitem__(self, arg: int, /) -> complex:
-        """Get the coefficient of a term"""
+    def __getitem__(self, arg: int, /) -> complex: ...
 
     @overload
-    def __getitem__(self, arg: str, /) -> complex: ...
+    def __getitem__(self, arg: str, /) -> complex:
+        """Get the coefficient of a term"""
 
     def __setitem__(self, arg0: int, arg1: complex, /) -> None:
         """Set the coefficient of a term"""

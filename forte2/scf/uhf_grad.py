@@ -23,7 +23,7 @@ def _compute_uhf_gradient(uhf) -> NDArray:
 
     hcore_gradient = (
         uhf.system.x2c_helper.hcore_gradient(D1)
-        if uhf.system.x2c_type is not None
+        if uhf.system.x2c.x2c_type is not None
         else None
     )
     return compute_gradient(

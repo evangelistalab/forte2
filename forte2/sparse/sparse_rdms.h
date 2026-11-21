@@ -1,388 +1,205 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+
 #include "sparse/sparse_state.h"
 
 namespace forte2 {
 
-enum class Spin1 { a, b };
-enum class Spin2 { aa, ab, bb };
-enum class Spin3 { aaa, aab, abb, bbb };
-enum class Spin4 { aaaa, aaab, aabb, abbb, bbbb };
+enum class Accum { Real, Hermitian };
 
-template <Spin1 S>
-np_matrix compute_1rdm(const SparseState& state_left, const SparseState& state_right,
-                       std::size_t norb) {
-    auto g1_ref = make_zeros<nb::numpy, double, 2>({norb, norb});
+/// @brief Convert a spin pattern such as "aab" into a bitmask with bit k set when the index at
+///        position k carries beta spin.
+consteval std::uint32_t spin_mask(std::string_view pattern) {
+    std::uint32_t mask = 0;
+    for (std::size_t k{0}; k < pattern.size(); ++k)
+        if (pattern[k] == 'b')
+            mask |= (1u << k);
+    return mask;
+}
 
+namespace detail {
+
+template <bool IsBeta> inline double destroy_spin(Determinant& J, std::size_t p) {
+    if constexpr (IsBeta)
+        return J.destroy_beta(p);
+    else
+        return J.destroy_alpha(p);
+}
+
+template <bool IsBeta> inline double create_spin(Determinant& J, std::size_t p) {
+    if constexpr (IsBeta)
+        return J.create_beta(p);
+    else
+        return J.create_alpha(p);
+}
+
+/// @brief Apply a^+_{p_0} ... a^+_{p_{N-1}} a_{q_{N-1}} ... a_{q_0} to J in place, where the
+///        creation indices p are idx[0..N) and the annihilation indices q are idx[N..2N).
+/// @return The accumulated sign, or 0 if any operator annihilates the determinant.
+template <int N, std::uint32_t SpinMask, std::size_t... K>
+inline double apply_excitation(Determinant& J, const std::array<std::size_t, 2 * N>& idx,
+                               std::index_sequence<K...>) {
+    constexpr std::size_t rank = N;
+    double sign = 1.0;
+    // at compile time, this unrolls into the equivalent of
+    // for i in range(N): sign *= destroy_spin<isbeta(mask(i))>(J, idx[rank + i]);
+    ((sign *= destroy_spin<((SpinMask >> K) & 1u) != 0>(J, idx[rank + K])), ...);
+    ((sign *= create_spin<((SpinMask >> (rank - 1 - K)) & 1u) != 0>(J, idx[rank - 1 - K])), ...);
+    return sign;
+}
+
+} // namespace detail
+
+/// @brief Compute a reduced density matrix of rank N between two SparseStates.
+/// @tparam N The RDM rank, that is, the number of creation/annihilation operator pairs
+/// @tparam SpinMask The spin pattern as a bitmask; see spin_mask
+/// @tparam A Whether to accumulate a real or a Hermitian RDM
+/// @return gamma[p_0]...[p_{N-1}][q_0]...[q_{N-1}] =
+///         <L| a^+_{p_0} ... a^+_{p_{N-1}} a_{q_{N-1}} ... a_{q_0} |R> as a tensor with 2N
+///         axes of length norb. For N = 2 this reads gamma2[p][q][r][s] =
+///         <L| a^+_p a^+_q a_s a_r |R>, antisymmetric in p <-> q and r <-> s.
+/// @note This is a reference implementation: it visits all norb^(2N) index tuples and every
+///       determinant of the ket, so it is only usable for small cases.
+template <int N, std::uint32_t SpinMask, Accum A>
+auto compute_nrdm(const SparseState& state_left, const SparseState& state_right, std::size_t norb) {
+    static_assert(N >= 1, "the RDM rank must be at least 1");
+    static_assert(SpinMask < (1u << N), "the spin pattern has bits beyond rank N");
+
+    using scalar_t = std::conditional_t<A == Accum::Hermitian, sparse_scalar_t, double>;
+
+    std::array<std::size_t, 2 * N> shape;
+    shape.fill(norb);
+    auto g = make_zeros<nb::numpy, scalar_t, 2 * N>(shape);
+    auto* g_data = g.data();
+    const auto size = math::product(shape);
+
+    std::array<std::size_t, 2 * N> idx{};
     Determinant J;
 
-    for (std::size_t p{0}; p < norb; p++) {
-        for (std::size_t q{0}; q < norb; ++q) {
-            double rdm = 0.0;
-            for (const auto& [I, c_I] : state_right) {
-                J = I;
-                double sign = 1.0;
-                if constexpr (S == Spin1::a) {
-                    sign *= J.destroy_alpha(q);
-                    sign *= J.create_alpha(p);
-                } else {
-                    sign *= J.destroy_beta(q);
-                    sign *= J.create_beta(p);
-                }
-                if (sign != 0) {
-                    auto it = state_left.find(J);
-                    if (it != state_left.end()) {
+    for (std::size_t flat{0}; flat < size; ++flat) {
+        scalar_t rdm = 0.0;
+        for (const auto& [I, c_I] : state_right) {
+            J = I;
+            const double sign =
+                detail::apply_excitation<N, SpinMask>(J, idx, std::make_index_sequence<N>{});
+            if (sign != 0) {
+                auto it = state_left.find(J);
+                if (it != state_left.end()) {
+                    if constexpr (A == Accum::Hermitian) {
+                        rdm += sign * std::conj(it->second) * c_I;
+                    } else {
                         rdm += sign * to_double(it->second * c_I);
                     }
                 }
             }
-            g1_ref(p, q) = rdm;
+        }
+        g_data[flat] = rdm;
+        // bump index up by one with carryover
+        for (std::size_t d = 2 * N; d-- > 0;) {
+            if (++idx[d] < norb)
+                break;
+            idx[d] = 0;
         }
     }
-    return g1_ref;
+    return g;
 }
 
-template <Spin2 S>
-np_tensor4 compute_2rdm(const SparseState& state_left, const SparseState& state_right,
-                        std::size_t norb) {
-    auto g2_ref = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
-    auto g2_view = g2_ref.view();
+// == One-component RDMs ==
 
-    Determinant J;
-
-    for (std::size_t p{0}; p < norb; ++p) {
-        for (std::size_t q{0}; q < norb; ++q) {
-            for (std::size_t r{0}; r < norb; ++r) {
-                for (std::size_t s{0}; s < norb; ++s) {
-                    double rdm = 0.0;
-                    for (const auto& [I, c_I] : state_right) {
-                        J = I;
-                        double sign = 1.0;
-                        if constexpr (S == Spin2::aa) {
-                            sign *= J.destroy_alpha(r);
-                            sign *= J.destroy_alpha(s);
-                            sign *= J.create_alpha(q);
-                            sign *= J.create_alpha(p);
-                        } else if constexpr (S == Spin2::bb) {
-                            sign *= J.destroy_beta(r);
-                            sign *= J.destroy_beta(s);
-                            sign *= J.create_beta(q);
-                            sign *= J.create_beta(p);
-                        } else {
-                            sign *= J.destroy_alpha(r);
-                            sign *= J.destroy_beta(s);
-                            sign *= J.create_beta(q);
-                            sign *= J.create_alpha(p);
-                        }
-                        if (sign != 0) {
-                            auto it = state_left.find(J);
-                            if (it != state_left.end()) {
-                                rdm += sign * to_double(it->second * c_I);
-                            }
-                        }
-                    }
-                    g2_view(p, q, r, s) = rdm;
-                }
-            }
-        }
-    }
-    return g2_ref;
+inline auto compute_a_1rdm(const SparseState& state_left, const SparseState& state_right,
+                           std::size_t norb) {
+    return compute_nrdm<1, spin_mask("a"), Accum::Real>(state_left, state_right, norb);
 }
 
-template <Spin3 S>
-np_tensor6 compute_3rdm(const SparseState& state_left, const SparseState& state_right,
-                        std::size_t norb) {
-    auto g3_ref = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
-    auto g3_view = g3_ref.view();
-
-    Determinant J;
-
-    for (std::size_t p{0}; p < norb; ++p) {
-        for (std::size_t q{0}; q < norb; ++q) {
-            for (std::size_t r{0}; r < norb; ++r) {
-                for (std::size_t s{0}; s < norb; ++s) {
-                    for (std::size_t t{0}; t < norb; ++t) {
-                        for (std::size_t u{0}; u < norb; ++u) {
-                            double rdm = 0.0;
-                            for (const auto& [I, c_I] : state_right) {
-                                J = I;
-                                double sign = 1.0;
-                                if constexpr (S == Spin3::aaa) {
-                                    sign *= J.destroy_alpha(s);
-                                    sign *= J.destroy_alpha(t);
-                                    sign *= J.destroy_alpha(u);
-                                    sign *= J.create_alpha(r);
-                                    sign *= J.create_alpha(q);
-                                    sign *= J.create_alpha(p);
-                                } else if constexpr (S == Spin3::bbb) {
-                                    sign *= J.destroy_beta(s);
-                                    sign *= J.destroy_beta(t);
-                                    sign *= J.destroy_beta(u);
-                                    sign *= J.create_beta(r);
-                                    sign *= J.create_beta(q);
-                                    sign *= J.create_beta(p);
-                                } else if constexpr (S == Spin3::aab) {
-                                    sign *= J.destroy_alpha(s);
-                                    sign *= J.destroy_alpha(t);
-                                    sign *= J.destroy_beta(u);
-                                    sign *= J.create_beta(r);
-                                    sign *= J.create_alpha(q);
-                                    sign *= J.create_alpha(p);
-                                } else {
-                                    sign *= J.destroy_alpha(s);
-                                    sign *= J.destroy_beta(t);
-                                    sign *= J.destroy_beta(u);
-                                    sign *= J.create_beta(r);
-                                    sign *= J.create_beta(q);
-                                    sign *= J.create_alpha(p);
-                                }
-                                if (sign != 0) {
-                                    auto it = state_left.find(J);
-                                    if (it != state_left.end()) {
-                                        rdm += sign * to_double(it->second * c_I);
-                                    }
-                                }
-                            }
-                            g3_view(p, q, r, s, t, u) = rdm;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return g3_ref;
+inline auto compute_b_1rdm(const SparseState& state_left, const SparseState& state_right,
+                           std::size_t norb) {
+    return compute_nrdm<1, spin_mask("b"), Accum::Real>(state_left, state_right, norb);
 }
 
-template <Spin4 S>
-np_tensor8 compute_4rdm(const SparseState& state_left, const SparseState& state_right,
-                        std::size_t norb) {
-    auto g4_ref =
-        make_zeros<nb::numpy, double, 8>({norb, norb, norb, norb, norb, norb, norb, norb});
-    auto g4_view = g4_ref.view();
-
-    Determinant J;
-
-    for (std::size_t p{0}; p < norb; ++p) {
-        for (std::size_t q{0}; q < norb; ++q) {
-            for (std::size_t r{0}; r < norb; ++r) {
-                for (std::size_t s{0}; s < norb; ++s) {
-                    for (std::size_t t{0}; t < norb; ++t) {
-                        for (std::size_t u{0}; u < norb; ++u) {
-                            for (std::size_t v{0}; v < norb; ++v) {
-                                for (std::size_t w{0}; w < norb; ++w) {
-                                    double rdm = 0.0;
-                                    for (const auto& [I, c_I] : state_right) {
-                                        J = I;
-                                        double sign = 1.0;
-                                        if constexpr (S == Spin4::aaaa) {
-                                            sign *= J.destroy_alpha(t);
-                                            sign *= J.destroy_alpha(u);
-                                            sign *= J.destroy_alpha(v);
-                                            sign *= J.destroy_alpha(w);
-                                            sign *= J.create_alpha(s);
-                                            sign *= J.create_alpha(r);
-                                            sign *= J.create_alpha(q);
-                                            sign *= J.create_alpha(p);
-                                        } else if constexpr (S == Spin4::bbbb) {
-                                            sign *= J.destroy_beta(t);
-                                            sign *= J.destroy_beta(u);
-                                            sign *= J.destroy_beta(v);
-                                            sign *= J.destroy_beta(w);
-                                            sign *= J.create_beta(s);
-                                            sign *= J.create_beta(r);
-                                            sign *= J.create_beta(q);
-                                            sign *= J.create_beta(p);
-                                        } else if constexpr (S == Spin4::aaab) {
-                                            sign *= J.destroy_alpha(t);
-                                            sign *= J.destroy_alpha(u);
-                                            sign *= J.destroy_alpha(v);
-                                            sign *= J.destroy_beta(w);
-                                            sign *= J.create_beta(s);
-                                            sign *= J.create_alpha(r);
-                                            sign *= J.create_alpha(q);
-                                            sign *= J.create_alpha(p);
-                                        } else if constexpr (S == Spin4::aabb) {
-                                            sign *= J.destroy_alpha(t);
-                                            sign *= J.destroy_alpha(u);
-                                            sign *= J.destroy_beta(v);
-                                            sign *= J.destroy_beta(w);
-                                            sign *= J.create_beta(s);
-                                            sign *= J.create_beta(r);
-                                            sign *= J.create_alpha(q);
-                                            sign *= J.create_alpha(p);
-                                        } else {
-                                            sign *= J.destroy_alpha(t);
-                                            sign *= J.destroy_beta(u);
-                                            sign *= J.destroy_beta(v);
-                                            sign *= J.destroy_beta(w);
-                                            sign *= J.create_beta(s);
-                                            sign *= J.create_beta(r);
-                                            sign *= J.create_beta(q);
-                                            sign *= J.create_alpha(p);
-                                        }
-                                        if (sign != 0) {
-                                            auto it = state_left.find(J);
-                                            if (it != state_left.end()) {
-                                                rdm += sign * to_double(it->second * c_I);
-                                            }
-                                        }
-                                    }
-                                    g4_view(p, q, r, s, t, u, v, w) = rdm;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return g4_ref;
+inline auto compute_aa_2rdm(const SparseState& state_left, const SparseState& state_right,
+                            std::size_t norb) {
+    return compute_nrdm<2, spin_mask("aa"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_a_1rdm(const SparseState& state_left, const SparseState& state_right,
-                    std::size_t norb) {
-    return compute_1rdm<Spin1::a>(state_left, state_right, norb);
+inline auto compute_ab_2rdm(const SparseState& state_left, const SparseState& state_right,
+                            std::size_t norb) {
+    return compute_nrdm<2, spin_mask("ab"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_b_1rdm(const SparseState& state_left, const SparseState& state_right,
-                    std::size_t norb) {
-    return compute_1rdm<Spin1::b>(state_left, state_right, norb);
+inline auto compute_bb_2rdm(const SparseState& state_left, const SparseState& state_right,
+                            std::size_t norb) {
+    return compute_nrdm<2, spin_mask("bb"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_aa_2rdm(const SparseState& state_left, const SparseState& state_right,
-                     std::size_t norb) {
-    return compute_2rdm<Spin2::aa>(state_left, state_right, norb);
+inline auto compute_aaa_3rdm(const SparseState& state_left, const SparseState& state_right,
+                             std::size_t norb) {
+    return compute_nrdm<3, spin_mask("aaa"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_ab_2rdm(const SparseState& state_left, const SparseState& state_right,
-                     std::size_t norb) {
-    return compute_2rdm<Spin2::ab>(state_left, state_right, norb);
+inline auto compute_aab_3rdm(const SparseState& state_left, const SparseState& state_right,
+                             std::size_t norb) {
+    return compute_nrdm<3, spin_mask("aab"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_bb_2rdm(const SparseState& state_left, const SparseState& state_right,
-                     std::size_t norb) {
-    return compute_2rdm<Spin2::bb>(state_left, state_right, norb);
+inline auto compute_abb_3rdm(const SparseState& state_left, const SparseState& state_right,
+                             std::size_t norb) {
+    return compute_nrdm<3, spin_mask("abb"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_aaa_3rdm(const SparseState& state_left, const SparseState& state_right,
-                      std::size_t norb) {
-    return compute_3rdm<Spin3::aaa>(state_left, state_right, norb);
+inline auto compute_bbb_3rdm(const SparseState& state_left, const SparseState& state_right,
+                             std::size_t norb) {
+    return compute_nrdm<3, spin_mask("bbb"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_aab_3rdm(const SparseState& state_left, const SparseState& state_right,
-                      std::size_t norb) {
-    return compute_3rdm<Spin3::aab>(state_left, state_right, norb);
+inline auto compute_aaaa_4rdm(const SparseState& state_left, const SparseState& state_right,
+                              std::size_t norb) {
+    return compute_nrdm<4, spin_mask("aaaa"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_abb_3rdm(const SparseState& state_left, const SparseState& state_right,
-                      std::size_t norb) {
-    return compute_3rdm<Spin3::abb>(state_left, state_right, norb);
+inline auto compute_aaab_4rdm(const SparseState& state_left, const SparseState& state_right,
+                              std::size_t norb) {
+    return compute_nrdm<4, spin_mask("aaab"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_bbb_3rdm(const SparseState& state_left, const SparseState& state_right,
-                      std::size_t norb) {
-    return compute_3rdm<Spin3::bbb>(state_left, state_right, norb);
+inline auto compute_aabb_4rdm(const SparseState& state_left, const SparseState& state_right,
+                              std::size_t norb) {
+    return compute_nrdm<4, spin_mask("aabb"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_aaaa_4rdm(const SparseState& state_left, const SparseState& state_right,
-                       std::size_t norb) {
-    return compute_4rdm<Spin4::aaaa>(state_left, state_right, norb);
+inline auto compute_abbb_4rdm(const SparseState& state_left, const SparseState& state_right,
+                              std::size_t norb) {
+    return compute_nrdm<4, spin_mask("abbb"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_aaab_4rdm(const SparseState& state_left, const SparseState& state_right,
-                       std::size_t norb) {
-    return compute_4rdm<Spin4::aaab>(state_left, state_right, norb);
+inline auto compute_bbbb_4rdm(const SparseState& state_left, const SparseState& state_right,
+                              std::size_t norb) {
+    return compute_nrdm<4, spin_mask("bbbb"), Accum::Real>(state_left, state_right, norb);
 }
 
-auto compute_aabb_4rdm(const SparseState& state_left, const SparseState& state_right,
-                       std::size_t norb) {
-    return compute_4rdm<Spin4::aabb>(state_left, state_right, norb);
-}
-
-auto compute_abbb_4rdm(const SparseState& state_left, const SparseState& state_right,
-                       std::size_t norb) {
-    return compute_4rdm<Spin4::abbb>(state_left, state_right, norb);
-}
-
-auto compute_bbbb_4rdm(const SparseState& state_left, const SparseState& state_right,
-                       std::size_t norb) {
-    return compute_4rdm<Spin4::bbbb>(state_left, state_right, norb);
-}
-
-// == Complex (two-component) RDMs ==
+// == Two-component RDMs ==
 //
-// The relativistic (two-component) selected CI stores every active electron in the alpha
-// string (the beta string is empty), so only the alpha 1-RDM and the alpha-alpha 2-RDM are
-// needed. Unlike the real versions above (which drop the imaginary part via to_double and do
-// NOT conjugate the bra), these overloads accumulate the full complex value and conjugate the
-// left (bra) coefficient so the resulting RDMs are Hermitian. This matches the convention of
-// RelCISigmaBuilder::compute_1rdm / compute_2rdm (see rel_ci_sigma_builder_rdm.cc), so that
-// gamma1[p,q] = <L| a^+_p a_q |R> and gamma2[p,q,r,s] = <L| a^+_p a^+_q a_s a_r |R>.
+// The relativistic (two-component) CI stores every active electron in the alpha string, so the
+// spin pattern is all-alpha and the indices are spinors rather than spatial orbitals. These
+// accumulate Hermitian RDMs, unlike the one-component versions above.
 
-/// @brief Compute the complex alpha 1-RDM between two SparseStates
-/// @return gamma1[p][q] = <L| a^+_p a_q |R> as a complex (norb, norb) matrix
-inline np_matrix_complex compute_a_1rdm_complex(const SparseState& state_left,
-                                                const SparseState& state_right, std::size_t norb) {
-    auto g1 = make_zeros<nb::numpy, sparse_scalar_t, 2>({norb, norb});
-    auto g1_v = g1.view();
-
-    Determinant J;
-    for (std::size_t p{0}; p < norb; ++p) {
-        for (std::size_t q{0}; q < norb; ++q) {
-            sparse_scalar_t rdm = 0.0;
-            for (const auto& [I, c_I] : state_right) {
-                J = I;
-                double sign = 1.0;
-                sign *= J.destroy_alpha(q);
-                sign *= J.create_alpha(p);
-                if (sign != 0) {
-                    auto it = state_left.find(J);
-                    if (it != state_left.end()) {
-                        rdm += sign * std::conj(it->second) * c_I;
-                    }
-                }
-            }
-            g1_v(p, q) = rdm;
-        }
-    }
-    return g1;
+inline auto compute_1rdm_2c(const SparseState& state_left, const SparseState& state_right,
+                            std::size_t norb) {
+    return compute_nrdm<1, spin_mask("a"), Accum::Hermitian>(state_left, state_right, norb);
 }
 
-/// @brief Compute the complex alpha-alpha 2-RDM between two SparseStates
-/// @return gamma2[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R> as a complex (norb, norb, norb, norb)
-///         tensor (full, antisymmetric in p<->q and r<->s)
-inline np_tensor4_complex compute_aa_2rdm_complex(const SparseState& state_left,
-                                                  const SparseState& state_right,
-                                                  std::size_t norb) {
-    auto g2 = make_zeros<nb::numpy, sparse_scalar_t, 4>({norb, norb, norb, norb});
-    auto g2_v = g2.view();
+inline auto compute_2rdm_2c(const SparseState& state_left, const SparseState& state_right,
+                            std::size_t norb) {
+    return compute_nrdm<2, spin_mask("aa"), Accum::Hermitian>(state_left, state_right, norb);
+}
 
-    Determinant J;
-    for (std::size_t p{0}; p < norb; ++p) {
-        for (std::size_t q{0}; q < norb; ++q) {
-            for (std::size_t r{0}; r < norb; ++r) {
-                for (std::size_t s{0}; s < norb; ++s) {
-                    sparse_scalar_t rdm = 0.0;
-                    for (const auto& [I, c_I] : state_right) {
-                        J = I;
-                        double sign = 1.0;
-                        sign *= J.destroy_alpha(r);
-                        sign *= J.destroy_alpha(s);
-                        sign *= J.create_alpha(q);
-                        sign *= J.create_alpha(p);
-                        if (sign != 0) {
-                            auto it = state_left.find(J);
-                            if (it != state_left.end()) {
-                                rdm += sign * std::conj(it->second) * c_I;
-                            }
-                        }
-                    }
-                    g2_v(p, q, r, s) = rdm;
-                }
-            }
-        }
-    }
-    return g2;
+inline auto compute_3rdm_2c(const SparseState& state_left, const SparseState& state_right,
+                            std::size_t norb) {
+    return compute_nrdm<3, spin_mask("aaa"), Accum::Hermitian>(state_left, state_right, norb);
 }
 
 } // namespace forte2
