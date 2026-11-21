@@ -113,67 +113,82 @@ class DSRG_MRPT2(DSRGBase):
         ints["E"] = cas_energy_given_RDMs(
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
         )
-        #  ["vvaa", "aacc", "avca", "avac", "vaaa", "aaca", "aaaa"]
-        # Save blocks of spinorbital basis B tensor
-        B_mo = dict()
-        C_core = self._C_semican[:, self.core]
-        C_actv = self._C_semican[:, self.actv]
-        C_virt = self._C_semican[:, self.virt]
-        B_mo["cc"] = self.fock_builder.B_tensor_gen_block(C_core, C_core)
-        B_mo["ac"] = self.fock_builder.B_tensor_gen_block(C_actv, C_core)
-        B_mo["vc"] = self.fock_builder.B_tensor_gen_block(C_virt, C_core)
-        B_mo["aa"] = self.fock_builder.B_tensor_gen_block(C_actv, C_actv)
-        B_mo["va"] = self.fock_builder.B_tensor_gen_block(C_virt, C_actv)
-
         ints["V"] = dict()
-        ints["V"]["vvaa"] = np.einsum(
-            "Bau,Bbv->abuv",
-            B_mo["va"],
-            B_mo["va"],
-            optimize=True,
-        )
-        ints["V"]["aacc"] = np.einsum(
-            "Bui,Bvj->uvij",
-            B_mo["ac"],
-            B_mo["ac"],
-            optimize=True,
-        )
-        ints["V"]["avca"] = np.einsum(
-            "Bui,Bav->uaiv",
-            B_mo["ac"],
-            B_mo["va"],
-            optimize=True,
-        )
-        ints["V"]["avac"] = np.einsum(
-            "Buv,Bai->uavi",
-            B_mo["aa"],
-            B_mo["vc"],
-            optimize=True,
-        )
-        ints["V"]["vaaa"] = np.einsum(
-            "Bav,Bux->auvx",
-            B_mo["va"],
-            B_mo["aa"],
-            optimize=True,
-        )
-        ints["V"]["aaca"] = np.einsum(
-            "Bui,Bvx->uvix",
-            B_mo["ac"],
-            B_mo["aa"],
-            optimize=True,
-        )
-        ints["V"]["aaaa"] = np.einsum(
-            "Bux,Bvy->uvxy",
-            B_mo["aa"],
-            B_mo["aa"],
-            optimize=True,
-        )
+        if getattr(self.fock_builder, "has_dense_tei", False):
+            V_corr = self.fock_builder.two_electron_integrals_block(self._C_semican)
+            c, a, v = self.core, self.actv, self.virt
+            ints["V"]["vvaa"] = np.ascontiguousarray(V_corr[v, v, a, a])
+            ints["V"]["aacc"] = np.ascontiguousarray(V_corr[a, a, c, c])
+            ints["V"]["avca"] = np.ascontiguousarray(V_corr[a, v, c, a])
+            ints["V"]["avac"] = np.ascontiguousarray(V_corr[a, v, a, c])
+            ints["V"]["vaaa"] = np.ascontiguousarray(V_corr[v, a, a, a])
+            ints["V"]["aaca"] = np.ascontiguousarray(V_corr[a, a, c, a])
+            ints["V"]["aaaa"] = np.ascontiguousarray(V_corr[a, a, a, a])
+            ints["V"]["vvcc"] = np.ascontiguousarray(V_corr[v, v, c, c])
+            ints["V"]["vvac"] = np.ascontiguousarray(V_corr[v, v, a, c])
+            ints["V"]["vacc"] = np.ascontiguousarray(V_corr[v, a, c, c])
+            ints["B"] = None
+        else:
+            #  ["vvaa", "aacc", "avca", "avac", "vaaa", "aaca", "aaaa"]
+            # Save blocks of spinorbital basis B tensor
+            B_mo = dict()
+            C_core = self._C_semican[:, self.core]
+            C_actv = self._C_semican[:, self.actv]
+            C_virt = self._C_semican[:, self.virt]
+            B_mo["cc"] = self.fock_builder.B_tensor_gen_block(C_core, C_core)
+            B_mo["ac"] = self.fock_builder.B_tensor_gen_block(C_actv, C_core)
+            B_mo["vc"] = self.fock_builder.B_tensor_gen_block(C_virt, C_core)
+            B_mo["aa"] = self.fock_builder.B_tensor_gen_block(C_actv, C_actv)
+            B_mo["va"] = self.fock_builder.B_tensor_gen_block(C_virt, C_actv)
 
-        # These are used in on-the-fly energy/Hbar computations
-        ints["B"] = dict()
-        ints["B"]["ac"] = B_mo["ac"].transpose(2, 1, 0).copy()
-        ints["B"]["vc"] = B_mo["vc"].transpose(2, 1, 0).copy()
-        ints["B"]["va"] = B_mo["va"].transpose(1, 2, 0).copy()
+            ints["V"]["vvaa"] = np.einsum(
+                "Bau,Bbv->abuv",
+                B_mo["va"],
+                B_mo["va"],
+                optimize=True,
+            )
+            ints["V"]["aacc"] = np.einsum(
+                "Bui,Bvj->uvij",
+                B_mo["ac"],
+                B_mo["ac"],
+                optimize=True,
+            )
+            ints["V"]["avca"] = np.einsum(
+                "Bui,Bav->uaiv",
+                B_mo["ac"],
+                B_mo["va"],
+                optimize=True,
+            )
+            ints["V"]["avac"] = np.einsum(
+                "Buv,Bai->uavi",
+                B_mo["aa"],
+                B_mo["vc"],
+                optimize=True,
+            )
+            ints["V"]["vaaa"] = np.einsum(
+                "Bav,Bux->auvx",
+                B_mo["va"],
+                B_mo["aa"],
+                optimize=True,
+            )
+            ints["V"]["aaca"] = np.einsum(
+                "Bui,Bvx->uvix",
+                B_mo["ac"],
+                B_mo["aa"],
+                optimize=True,
+            )
+            ints["V"]["aaaa"] = np.einsum(
+                "Bux,Bvy->uvxy",
+                B_mo["aa"],
+                B_mo["aa"],
+                optimize=True,
+            )
+
+            # These are used in on-the-fly energy/Hbar computations
+            ints["B"] = dict()
+            ints["B"]["ac"] = B_mo["ac"].transpose(2, 1, 0).copy()
+            ints["B"]["vc"] = B_mo["vc"].transpose(2, 1, 0).copy()
+            ints["B"]["va"] = B_mo["va"].transpose(1, 2, 0).copy()
 
         ints["eps"] = dict()
         ints["eps"]["c"] = self.eps[self.core].copy()
@@ -596,6 +611,19 @@ class DSRG_MRPT2(DSRGBase):
     def _compute_pt2_energy_ccvv(self):
         # This computes the following contribution to the energy:
         # E += +0.250 * np.einsum("ijab,ijab->", T2["ccvv"], V["ccvv"], optimize=True)
+        if self.ints["B"] is None:
+            if self.ncore == 0 or self.nvirt == 0:
+                return 0.0
+            ec = self.ints["eps"]["c"]
+            ev = self.ints["eps"]["v"]
+            V_vvcc = self.ints["V"]["vvcc"]
+            T2 = V_vvcc.transpose(2, 3, 0, 1).copy()
+            compute_t2_block(T2, ec, ec, ev, ev, self.flow_param)
+            S2 = 2.0 * T2 - T2.swapaxes(2, 3)
+            Vtilde = V_vvcc.copy()
+            renormalize_V_block(Vtilde, ev, ev, ec, ec, self.flow_param)
+            return float(np.einsum("efmn,mnef->", Vtilde, S2, optimize=True))
+
         E = 0.0
         cvB = self.ints["B"]["vc"]
 
@@ -627,6 +655,25 @@ class DSRG_MRPT2(DSRGBase):
         return E
 
     def _compute_pt2_energy_cavv(self, form_hbar=False):
+        if self.ints["B"] is None:
+            if self.ncore == 0 or self.nact == 0 or self.nvirt == 0:
+                return 0.0
+            ec = self.ints["eps"]["c"]
+            ea = self.ints["eps"]["a"]
+            ev = self.ints["eps"]["v"]
+            V_vvac = self.ints["V"]["vvac"]
+            T2 = V_vvac.transpose(2, 3, 0, 1).copy()
+            compute_t2_block(T2, ea, ec, ev, ev, self.flow_param)
+            S2 = 2.0 * T2 - T2.swapaxes(2, 3)
+            Vtilde = V_vvac.copy()
+            renormalize_V_block(Vtilde, ev, ev, ea, ec, self.flow_param)
+            C1 = np.einsum("umef,efvm->uv", S2, Vtilde, optimize=True)
+            if form_hbar:
+                self.hbar_aa_df += C1
+            return float(
+                np.einsum("uv,uv->", C1, self.cumulants["gamma1"], optimize=True)
+            )
+
         E = 0.0
         vaB = self.ints["B"]["va"]
         cvB = self.ints["B"]["vc"]
@@ -665,6 +712,25 @@ class DSRG_MRPT2(DSRGBase):
         return E
 
     def _compute_pt2_energy_ccav(self, form_hbar=False):
+        if self.ints["B"] is None:
+            if self.ncore == 0 or self.nact == 0 or self.nvirt == 0:
+                return 0.0
+            ec = self.ints["eps"]["c"]
+            ea = self.ints["eps"]["a"]
+            ev = self.ints["eps"]["v"]
+            V_vacc = self.ints["V"]["vacc"]
+            T2 = V_vacc.transpose(2, 3, 0, 1).copy()
+            compute_t2_block(T2, ec, ec, ev, ea, self.flow_param)
+            S2 = 2.0 * T2 - T2.swapaxes(0, 1)
+            Vtilde = V_vacc.copy()
+            renormalize_V_block(Vtilde, ev, ea, ec, ec, self.flow_param)
+            C1 = np.einsum("eumn,mnev->uv", Vtilde, S2, optimize=True)
+            if form_hbar:
+                self.hbar_aa_df -= C1
+            return float(
+                np.einsum("uv,uv->", C1, self.cumulants["eta1"], optimize=True)
+            )
+
         E = 0.0
 
         cvB = self.ints["B"]["vc"]

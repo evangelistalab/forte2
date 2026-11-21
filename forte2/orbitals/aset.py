@@ -8,7 +8,7 @@ from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.system.basis_utils import BasisInfo
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import block_diag_2x2, block_eigh
-from forte2.base_classes import Method
+from forte2.base_classes import ActiveSpaceDriver, Method
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 from forte2.orbitals.final_orbitals import FinalOrbitals
@@ -31,10 +31,12 @@ class ASET(Method):
         Method for choosing the embedding cutoff. Options include "threshold", "num_of_orbitals".
     cutoff : float, optional, default = 0.5
         Projector eigenvalue for simple threshold methods.
-    num_A_occ : int, optional, default=0
-        Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-    num_A_vir : int, optional, default=0
-        Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
+    num_A_occ : int | None, optional, default=0
+        Number of occupied orbitals assigned to fragment A when ``cutoff_method`` is
+        ``"num_of_orbitals"``. If ``None``, occupied orbitals fall back to ``cutoff``.
+    num_A_vir : int | None, optional, default=0
+        Number of virtual orbitals assigned to fragment A when ``cutoff_method`` is
+        ``"num_of_orbitals"``. If ``None``, virtual orbitals fall back to ``cutoff``.
 
     Notes
     -----
@@ -62,8 +64,8 @@ class ASET(Method):
     frozen_virtual_orbitals: int | list[int] = None
     cutoff_method: str = "threshold"
     cutoff: float = 0.5
-    num_A_occ: int = 0
-    num_A_vir: int = 0
+    num_A_occ: int | None = 0
+    num_A_vir: int | None = 0
 
     executed: bool = field(default=False, init=False)
     final_orbitals: FinalOrbitals = field(default="semicanonical", init=False)
@@ -71,13 +73,14 @@ class ASET(Method):
     def __post_init__(self):
         self._regex = r"^([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)??$"
         self._check_parameters()
-        self.requires = {"system", "mos", "mo_space"}
+        self.requires = {"system", "mos"}
         self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, parent_method):
         assert isinstance(
-            parent_method, forte2.mcopt.MCOptimizer
-        ), f"Parent method must be MCSCF, got {type(parent_method)}"
+            parent_method,
+            (ActiveSpaceDriver, forte2.scf.RHF, forte2.scf.ROHF),
+        ), f"Parent method must be MCOptimizer, CI, RHF, or ROHF, got {type(parent_method)}"
         self._register_parent_method(parent_method)
         return self
 
@@ -86,7 +89,26 @@ class ASET(Method):
             self.parent_method.run()
         self.system = self.parent_method.system
         self.mos = self.parent_method.mos.copy()
-        self.mo_space = self.parent_method.mo_space
+        nmo = self.mos.C[0].shape[1]
+        if isinstance(self.parent_method, ActiveSpaceDriver):
+            self.mo_space = self.parent_method.mo_space
+            self._g1 = self.parent_method.ci_solver.make_average_rdm(1)
+        elif isinstance(self.parent_method, forte2.scf.RHF):
+            self.mo_space = MOSpace(
+                nmo=nmo,
+                core_orbitals=list(range(self.parent_method.ndocc)),
+                active_orbitals=[],
+            )
+            self._g1 = np.zeros((0, 0))
+        elif isinstance(self.parent_method, forte2.scf.ROHF):
+            nd = self.parent_method.ndocc
+            ns = self.parent_method.nsocc
+            self.mo_space = MOSpace(
+                nmo=nmo,
+                core_orbitals=list(range(nd)),
+                active_orbitals=list(range(nd, nd + ns)),
+            )
+            self._g1 = np.eye(ns)
         self.mo_space = self.mo_space.update_frozen_orbitals(
             self.frozen_core_orbitals, self.frozen_virtual_orbitals
         )
@@ -112,14 +134,14 @@ class ASET(Method):
         logger.log_info1(
             f"Cutoff method: {self.cutoff_method} \nCutoff value: {self.cutoff}"
         )
-        self.fragment = self._parse_fragment(self.fragment)
+        self.fragment_atoms = self._parse_fragment(self.fragment)
         self.P_ao_frag = self._make_fragment_projector()
-        self.executed = True
         self.partition = self._make_embedding()
         self._print_embedding_info(**self.partition)
         logger.log_info1("\nMO space is updated.")
         self._update_mo_space_from_partition()
         logger.log_info1("\nASET procedure completed.")
+        self.executed = True
 
         return self
 
@@ -132,11 +154,20 @@ class ASET(Method):
         if self.cutoff_method == "threshold":
             assert (
                 self.cutoff > 0 and self.cutoff < 1
-            ), f"threshold must be in [0, 1], got {self.cutoff}"
+            ), f"threshold must be in (0, 1), got {self.cutoff}"
         elif self.cutoff_method == "num_of_orbitals":
-            assert (
-                self.num_A_occ >= 0 and self.num_A_vir >= 0
-            ), f"Number of occupied and virtual orbitals in Fragment A must be non-negative, got {self.num_A_occ}, {self.num_A_vir}"
+            if self.num_A_occ is None or self.num_A_vir is None:
+                assert (
+                    self.cutoff > 0 and self.cutoff < 1
+                ), f"threshold must be in (0, 1), got {self.cutoff}"
+            if self.num_A_occ is not None:
+                assert (
+                    self.num_A_occ >= 0
+                ), f"Number of occupied orbitals in Fragment A must be non-negative, got {self.num_A_occ}"
+            if self.num_A_vir is not None:
+                assert (
+                    self.num_A_vir >= 0
+                ), f"Number of virtual orbitals in Fragment A must be non-negative, got {self.num_A_vir}"
 
     def _parse_fragment(self, frag_str: str | list[str]) -> list[int]:
         """
@@ -227,7 +258,7 @@ class ASET(Method):
 
         # 2. Collect ao indices in fragment
         frag_ao_indices = []
-        for atom_idx in self.fragment:
+        for atom_idx in self.fragment_atoms:
             # atomic number for this atom
             Z_i = int(self.system.atoms[atom_idx][0])
 
@@ -267,6 +298,45 @@ class ASET(Method):
             P_ao_frag = block_diag_2x2(P_ao_frag)
 
         return P_ao_frag
+
+    @staticmethod
+    def _canonicalize_projector_nullspace(
+        vals: np.ndarray,
+        U: np.ndarray,
+        h: np.ndarray,
+        C_block: np.ndarray,
+        F_ao: np.ndarray,
+        tol: float,
+        ascending: bool,
+        null_tol: float = 1e-10,
+    ) -> tuple[np.ndarray, np.ndarray, list[int]]:
+        """
+        Canonicalize the degenerate zero-eigenvalue null space of a projector block
+        using the generalized Fock matrix.
+
+        Returns the updated rotation matrix ``U``, irrep array ``h``, and priority
+        index list (non-null orbitals ordered by descending projector eigenvalue,
+        followed by null-space orbitals ordered by Fock energy).
+        """
+        nonnull_pos = [k for k, v in enumerate(vals) if v >= null_tol]
+        null_pos = [k for k, v in enumerate(vals) if v < null_tol]
+        nonnull_pos.sort(key=lambda k: vals[k], reverse=True)
+        if not null_pos:
+            return U, h, nonnull_pos
+
+        C_null = C_block @ U[:, null_pos]
+        F_null = C_null.conj().T @ F_ao @ C_null
+        h_null = h[null_pos]
+        f_vals, U_f, h_f = block_eigh(F_null, h_null, atol=0.0, rtol=tol, sort=True)
+        if not ascending:
+            U_f = U_f[:, ::-1]
+            h_f = h_f[::-1]
+
+        U_out = U.copy()
+        h_out = h.copy()
+        U_out[:, null_pos] = U_out[:, null_pos] @ U_f
+        h_out[null_pos] = h_f
+        return U_out, h_out, nonnull_pos + null_pos
 
     def _make_embedding(self):
         """
@@ -312,12 +382,62 @@ class ASET(Method):
         # resort the virtual eigenvalue/eigenvector pairs, and their irreps with them
         lv_vals = lv_vals[::-1]
         Uv = Uv[:, ::-1]
-        irreps[core_inds] = h_o
-        irreps[virt_inds] = h_v[::-1]
+        h_v = h_v[::-1]
 
-        # Sort the eigenvalue/eigenvector pairs by eigenvalue in descending order
-        occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
-        vir_pairs = sorted(zip(virt_inds, lv_vals), key=lambda x: x[1], reverse=True)
+        # When cutoff_method="num_of_orbitals" requests more fragment orbitals than the
+        # numerical rank of the fragment projector, canonicalize the degenerate zero-eigenvalue
+        # null space with the generalized Fock matrix so the A/B cut is deterministic and
+        # minimizes off-diagonal F_{A,B} couplings (crucial for smooth ASET(2) PESs).
+        null_tol = 1e-10
+        need_occ_null = (
+            self.cutoff_method == "num_of_orbitals"
+            and self.num_A_occ is not None
+            and self.num_A_occ > int(np.sum(lo_vals >= null_tol))
+            and np.any(lo_vals < null_tol)
+        )
+        need_vir_null = (
+            self.cutoff_method == "num_of_orbitals"
+            and self.num_A_vir is not None
+            and self.num_A_vir > int(np.sum(lv_vals >= null_tol))
+            and np.any(lv_vals < null_tol)
+        )
+        occ_order = sorted(range(len(core_inds)), key=lambda k: lo_vals[k], reverse=True)
+        vir_order = sorted(range(len(virt_inds)), key=lambda k: lv_vals[k], reverse=True)
+        if need_occ_null or need_vir_null:
+            F_ao = self.system.fock_builder.build_generalized_fock(
+                C_core=C_contig[:, self.mo_space.docc],
+                C_act=C_contig[:, self.mo_space.actv],
+                g1=self._g1,
+            )
+            if need_occ_null:
+                Uo, h_o, occ_order = self._canonicalize_projector_nullspace(
+                    lo_vals,
+                    Uo,
+                    h_o,
+                    C[:, core_inds],
+                    F_ao,
+                    tol=tol,
+                    ascending=False,
+                    null_tol=null_tol,
+                )
+            if need_vir_null:
+                Uv, h_v, vir_order = self._canonicalize_projector_nullspace(
+                    lv_vals,
+                    Uv,
+                    h_v,
+                    C[:, virt_inds],
+                    F_ao,
+                    tol=tol,
+                    ascending=True,
+                    null_tol=null_tol,
+                )
+
+        irreps[core_inds] = h_o
+        irreps[virt_inds] = h_v
+
+        # Ordered (global_mo_idx, projector_eigenvalue) lists
+        occ_pairs = [(core_inds[k], lo_vals[k]) for k in occ_order]
+        vir_pairs = [(virt_inds[k], lv_vals[k]) for k in vir_order]
 
         # Apply the unitary transformations to the occupied and virtual blocks of C
         C[:, core_inds] = C[:, core_inds] @ Uo
@@ -334,27 +454,35 @@ class ASET(Method):
                 (index_A_vir if v > self.cutoff else index_B_vir).append(i)
 
         elif self.cutoff_method == "num_of_orbitals":
-            for rank, (glob_i, v) in enumerate(occ_pairs):
-                if rank < self.num_A_occ:
-                    index_A_occ.append(glob_i)
-                else:
-                    index_B_occ.append(glob_i)
-                    if v > 0.5:
-                        logger.log_info1(
-                            f"Warning! Occupied orbital {glob_i} has eigenvalue {v:8.6f} "
-                            "and is assigned to B."
-                        )
+            if self.num_A_occ is None:
+                for i, v in occ_pairs:
+                    (index_A_occ if v > self.cutoff else index_B_occ).append(i)
+            else:
+                for rank, (glob_i, v) in enumerate(occ_pairs):
+                    if rank < self.num_A_occ:
+                        index_A_occ.append(glob_i)
+                    else:
+                        index_B_occ.append(glob_i)
+                        if v > 0.5:
+                            logger.log_info1(
+                                f"Warning! Occupied orbital {glob_i} has eigenvalue {v:8.6f} "
+                                "and is assigned to B."
+                            )
 
-            for rank, (glob_i, v) in enumerate(vir_pairs):
-                if rank < self.num_A_vir:
-                    index_A_vir.append(glob_i)
-                else:
-                    index_B_vir.append(glob_i)
-                    if v > 0.5:
-                        logger.log_info1(
-                            f"Warning! Virtual orbital {glob_i} has eigenvalue {v:8.6f} "
-                            "and is assigned to B."
-                        )
+            if self.num_A_vir is None:
+                for i, v in vir_pairs:
+                    (index_A_vir if v > self.cutoff else index_B_vir).append(i)
+            else:
+                for rank, (glob_i, v) in enumerate(vir_pairs):
+                    if rank < self.num_A_vir:
+                        index_A_vir.append(glob_i)
+                    else:
+                        index_B_vir.append(glob_i)
+                        if v > 0.5:
+                            logger.log_info1(
+                                f"Warning! Virtual orbital {glob_i} has eigenvalue {v:8.6f} "
+                                "and is assigned to B."
+                            )
         index_A_occ.sort()
         index_B_occ.sort()
         index_A_vir.sort()
@@ -363,7 +491,7 @@ class ASET(Method):
         # Semi-canonicalize the blocks
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
-        g1 = self.parent_method.ci_solver.make_average_rdm(1)
+        g1 = self._g1
         emb_space = EmbeddingMOSpace(
             nmo=self.nmo,
             frozen_core_orbitals=frozen_core_inds,
@@ -374,6 +502,7 @@ class ASET(Method):
             B_virtual_orbitals=index_B_vir,
             frozen_virtual_orbitals=frozen_virt_inds,
         )
+        self.emb_space = emb_space
 
         # Copy the orbitals into embedding contiguous order
         C_emb = C[:, emb_space.orig_to_contig].copy()
@@ -385,6 +514,7 @@ class ASET(Method):
             irrep_indices=irreps[emb_space.orig_to_contig],
         )
         semican.semi_canonicalize(g1=g1, C_contig=C_emb)
+        self.semican = semican
 
         # Replace the original orbitals with the semi-canonicalized ones in the original order
         self.mos.C[0] = semican.C_semican[:, emb_space.contig_to_orig].copy()
