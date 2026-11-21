@@ -1,6 +1,36 @@
+import os
+from pathlib import Path
+import shlex
+import shutil
+import subprocess
+
 import pytest
 from forte2 import MOSpace, State
 from forte2.lib.ci_helpers import CIStrings
+
+
+def test_hole_list_rejects_unsupported_substitution_type():
+    compiler = shlex.split(os.environ.get("CXX", "c++"))
+    if not compiler or shutil.which(compiler[0]) is None:
+        pytest.skip("a C++ compiler is required to check template instantiation")
+
+    # Explicit instantiation exercises the private template directly.
+    source = """
+#include "ci/ci_strings.h"
+
+using UnsupportedList = std::map<forte2::HListKey, std::vector<int>>;
+template const std::vector<int>&
+forte2::CIStrings::lookup_hole_list<UnsupportedList, int>(
+    const UnsupportedList&, int, std::size_t, int) const;
+"""
+    include_dir = Path(__file__).resolve().parents[2] / "forte2"
+    command = compiler + [
+        "-std=c++23", "-I", str(include_dir), "-x", "c++", "-fsyntax-only", "-"
+    ]
+    result = subprocess.run(command, input=source, capture_output=True, text=True)
+
+    assert result.returncode != 0, "Unsupported type compiled successfully"
+    assert "Unsupported hole substitution type" in result.stderr, result.stderr
 
 
 def test_ci_strings_input():
