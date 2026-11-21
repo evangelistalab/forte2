@@ -18,6 +18,7 @@ from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.orbitals import FinalOrbitals
+from forte2.symmetry.sym_utils import COTTON_LABELS
 from .ci_utils import (
     pretty_print_gas_info,
     validate_single_state_rdm,
@@ -94,6 +95,7 @@ class _CISingleStateSolver:
 
     def __post_init__(self):
         self.norb = self.mo_space.nactv
+        self.nirrep = len(COTTON_LABELS[self.ints.system.point_group])
         self.ncore = self.mo_space.ncore + self.mo_space.nfrozen_core
         self.ngas = self.mo_space.ngas
         self.gas_min = self.state.gas_min
@@ -133,6 +135,7 @@ class _CISingleStateSolver:
         return CIStrings(
             _nactel_a,
             _nactel_b,
+            self.nirrep,
             self.state.symmetry,
             self.active_orbsym,
             self.gas_min,

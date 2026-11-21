@@ -82,9 +82,9 @@ class DeterminantVector:
         """Remove first occurrence of `arg`."""
 
 class CIStrings:
-    def __init__(self, na: int, nb: int, symmetry: int, orbital_symmetry: Sequence[Sequence[int]], gas_min: Sequence[int], gas_max: Sequence[int]) -> None:
+    def __init__(self, na: int, nb: int, nirrep: int, symmetry: int, orbital_symmetry: Sequence[Sequence[int]], gas_min: Sequence[int], gas_max: Sequence[int]) -> None:
         """
-        Initialize the CIStrings with number of alpha and beta electrons, symmetry, orbital symmetry, minimum and maximum number of electrons in each GAS space
+        Initialize CIStrings with the electron counts, number of point-group irreps, state symmetry, orbital symmetries, and occupation bounds for each GAS space.
         """
 
     @property

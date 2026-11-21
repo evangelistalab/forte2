@@ -40,7 +40,7 @@ def _random_complex_integrals(rng, norb, symmetric_H):
 @pytest.mark.parametrize("symmetric_H", [True, False])
 def test_real_sigma_build_against_sparse_ops(algorithm, symmetric_H):
     norb = 6
-    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
+    lists = CIStrings(2, 2, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(0)
     H, V = _random_real_integrals(rng, norb, symmetric_H)
     E = 0.37
@@ -63,7 +63,7 @@ def test_real_sigma_build_against_sparse_ops(algorithm, symmetric_H):
 @pytest.mark.parametrize("symmetric_H", [True, False])
 def test_complex_sigma_build_against_sparse_ops(symmetric_H):
     norb = 12
-    lists = CIStrings(4, 0, 0, [[0] * norb], [], [])
+    lists = CIStrings(4, 0, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(0)
     H, V = _random_complex_integrals(rng, norb, symmetric_H)
     E = 0.37
@@ -89,7 +89,7 @@ def test_sigma_one_two_electron_sum_to_hamiltonian(algorithm, symmetric_H):
     """sigma_one_electron(basis) + sigma_two_electron(basis) == Hamiltonian(basis),
     including a non-symmetric H (the case our biorthogonalization generator needs)."""
     norb = 6
-    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
+    lists = CIStrings(2, 2, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(0)
     H, V = _random_real_integrals(rng, norb, symmetric_H)
     E = 0.37
@@ -115,7 +115,7 @@ def test_sigma_one_electron_matches_hamiltonian_with_zero_V():
     CI-vector transform (a one-body orbital-rotation generator, not a real
     Hamiltonian)."""
     norb = 5
-    lists = CIStrings(2, 3, 0, [[0] * norb], [], [])
+    lists = CIStrings(2, 3, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(1)
     H = rng.normal(size=(norb, norb))  # deliberately not symmetrized
     V = np.zeros((norb, norb, norb, norb))
@@ -136,7 +136,7 @@ def test_set_hamiltonian_matches_fresh_builder(algorithm):
     """Swapping in a new (same-norb) Hamiltonian via set_Hamiltonian must give
     identical results to constructing a fresh builder with that Hamiltonian."""
     norb = 6
-    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
+    lists = CIStrings(2, 2, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(2)
     H_a, V_a = _random_real_integrals(rng, norb, symmetric_H=True)
     H_b, V_b = _random_real_integrals(rng, norb, symmetric_H=False)
@@ -157,7 +157,7 @@ def test_set_hamiltonian_matches_fresh_builder(algorithm):
 
 def test_rel_sigma_one_two_electron_sum_to_hamiltonian():
     norb = 5
-    lists = CIStrings(3, 0, 0, [[0] * norb], [], [])
+    lists = CIStrings(3, 0, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(3)
     H, V = _random_complex_integrals(rng, norb, symmetric_H=True)
     E = -0.11
@@ -179,7 +179,7 @@ def test_rel_sigma_one_two_electron_sum_to_hamiltonian():
 
 def test_rel_sigma_one_electron_matches_hamiltonian_with_zero_V():
     norb = 5
-    lists = CIStrings(3, 0, 0, [[0] * norb], [], [])
+    lists = CIStrings(3, 0, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(4)
     H = rng.normal(size=(norb, norb)) + 1j * rng.normal(
         size=(norb, norb)
@@ -199,7 +199,7 @@ def test_rel_sigma_one_electron_matches_hamiltonian_with_zero_V():
 
 def test_rel_set_hamiltonian_matches_fresh_builder():
     norb = 5
-    lists = CIStrings(3, 0, 0, [[0] * norb], [], [])
+    lists = CIStrings(3, 0, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(5)
     H_a, V_a = _random_complex_integrals(rng, norb, symmetric_H=True)
     H_b, V_b = _random_complex_integrals(rng, norb, symmetric_H=True)
@@ -222,7 +222,7 @@ def test_kh_set_hamiltonian_requires_h_and_v_together():
     """Knowles-Handy's h_kh mixes H and V, and neither is cached between calls, so
     set_Hamiltonian must reject H-only or V-only updates and accept H-and-V-together."""
     norb = 6
-    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
+    lists = CIStrings(2, 2, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(6)
     H_a, V_a = _random_real_integrals(rng, norb, symmetric_H=True)
     H_b, V_b = _random_real_integrals(rng, norb, symmetric_H=False)

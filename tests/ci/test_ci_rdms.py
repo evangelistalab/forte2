@@ -318,7 +318,7 @@ def test_ci_rdm_validation():
 def test_ci_rdms_respect_small_builder_memory_across_composite_hole_chunks():
     """Low-memory composite-hole chunks must agree with an unchunked contraction."""
     norb = 12
-    lists = CIStrings(2, 5, 0, [[0] * norb], [], [])
+    lists = CIStrings(2, 5, 1, 0, [[0] * norb], [], [])
     H = np.zeros((norb, norb))
     V = np.zeros((norb, norb, norb, norb))
     low_memory_builder = CISigmaBuilder(lists, 0.0, H, V, 0)
@@ -352,7 +352,7 @@ def test_ci_rdms_respect_small_builder_memory_across_composite_hole_chunks():
 def test_ci_builder_memory_reconfiguration_is_retry_safe():
     """A failed cached-buffer request must not corrupt a later sigma build."""
     norb = 6
-    lists = CIStrings(2, 2, 0, [[0] * norb], [], [])
+    lists = CIStrings(2, 2, 1, 0, [[0] * norb], [], [])
     H = np.diag(np.linspace(-1.0, 1.0, norb))
     V = np.zeros((norb, norb, norb, norb))
     builder = CISigmaBuilder(lists, 0.25, H, V, 0, "hz")
