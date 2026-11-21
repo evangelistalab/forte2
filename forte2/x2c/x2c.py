@@ -6,6 +6,7 @@ from forte2.helpers import (
     logger,
     block_diag_2x2,
     i_sigma_dot,
+    sigma_dot,
     canonical_orth,
     invsqrt_matrix,
     print_metric_info,
@@ -60,6 +61,7 @@ class X2CHelper:
         logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
         self.xbasis = decontract_basis(system.basis)
+        self._spin_operator = None
 
         self.proj = scipy.linalg.solve(
             integrals.overlap(self.system, self.xbasis),
@@ -140,6 +142,9 @@ class X2CHelper:
         # build the transformation matrix R
         self.R = self._get_transformation_matrix(S, T)
 
+        # the picture-change correction of any property is tied to this X and R
+        self._spin_operator = None
+
         # build the Foldy-Wouthuysen Hamiltonian
         h_fw = self._build_foldy_wouthuysen_hamiltonian(T, V, W)
 
@@ -211,6 +216,46 @@ class X2CHelper:
         proj = self._get_projection_matrix()
         return [proj.conj().T @ mu_pc_i @ proj for mu_pc_i in mu_pc]
 
+    def spin_operator(self):
+        r"""
+        Compute the spin operator matrices with picture change correction.
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected :math:`\hat{s}_x`, :math:`\hat{s}_y`, and
+            :math:`\hat{s}_z` matrices in the two-component contracted basis, each of
+            shape (2 * nbf, 2 * nbf).
+
+        Notes
+        -----
+        The four-component spin operators :math:`\hat{\Sigma}_k` are even operators.
+        In the RKB representation, the LL block is :math:`\sigma_k S / 2` and
+        the SS block is :math:`(\sigma\cdot\hat{p}) \sigma_k (\sigma\cdot\hat{p}) / (8 c^2)`.
+        """
+        if self._spin_operator is not None:
+            return self._spin_operator
+
+        nbf = len(self.xbasis)
+        ovlp = integrals.overlap(self.system, self.xbasis)
+        # (sigma.p) sigma_k (sigma.p) as [k][sigma_j]; the four I2 blocks vanish
+        ss = integrals.cint_spsigmasp(self.system, self.xbasis).reshape(3, 4, nbf, nbf)
+        # 1/2 from s_k = sigma_k / 2, 1/(4 c^2) from the small-component metric
+        fac = 0.5 * 0.25 / self.light_speed**2
+        zero = np.zeros_like(ovlp)
+
+        ints_LL, ints_SS = [], []
+        for k in range(3):
+            comp = [zero] * 3
+            comp[k] = 0.5 * ovlp
+            ints_LL.append(sigma_dot(*comp))
+            ints_SS.append(fac * sigma_dot(*ss[k, :3]))
+        s_pc = self.picture_change_even_operator(ints_LL, ints_SS)
+        proj = block_diag_2x2(self.proj)
+        self._spin_operator = [proj.conj().T @ s @ proj for s in s_pc]
+
+        return self._spin_operator
+
     def picture_change_even_operator(self, ints_LL, ints_SS):
         """
         Apply the picture change correction to integrals of an even operator, i.e.,
@@ -221,7 +266,9 @@ class X2CHelper:
         ----------
         ints_LL : list[NDArray]
             The integrals corresponding to the large-large matrix block, in the
-            (block-diagonalized, for the spin-orbit case) decontracted basis.
+            (block-diagonalized, for the spin-orbit case) decontracted basis. For
+            ``x2c_type == "sf"`` they may also be two-component, in which case the
+            spin-free decoupling acts on each spin block alike.
         ints_SS : list[NDArray]
             The integrals corresponding to the small-small matrix block, in the
             same basis as ``ints_LL``.
@@ -252,12 +299,15 @@ class X2CHelper:
         # X and R live in the orthonormal basis, so bring the operator integrals
         # into that basis, apply the decoupling, then return to the AO basis.
         Xorth, Xorthm1 = self._get_Xorth()
+        X, R = self.X, self.R
+        if ints_LL[0].shape[0] == 2 * Xorth.shape[0]:
+            Xorth, Xorthm1, X, R = map(block_diag_2x2, (Xorth, Xorthm1, X, R))
         res = []
         for M_LL, M_SS in zip(ints_LL, ints_SS):
             M_LL_o = Xorth.conj().T @ M_LL @ Xorth
             M_SS_o = Xorth.conj().T @ M_SS @ Xorth
-            M_NESC = M_LL_o + self.X.conj().T @ M_SS_o @ self.X
-            M_pc = self.R.conj().T @ M_NESC @ self.R
+            M_NESC = M_LL_o + X.conj().T @ M_SS_o @ X
+            M_pc = R.conj().T @ M_NESC @ R
             res.append(Xorthm1.conj().T @ M_pc @ Xorthm1)
         return res
 

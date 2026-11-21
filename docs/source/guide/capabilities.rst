@@ -28,6 +28,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Spin-adapted CI (CSF basis) for non-relativistic Hamiltonians
   * Support for generalized active spaces (GAS) / occupation-restricted multiple active spaces (ORMAS)
   * Two-component CI for relativistic Hamiltonians
+  * Spin expectation values for two-component CI, with picture change correction of the spin operator
   * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
   * Overlaps between one- or two-component CI wavefunctions that differ in orbitals, geometry, or basis set [10]_ [11]_
   
