@@ -304,7 +304,7 @@ class CIStrings {
             } else if constexpr (std::is_same_v<T, H3StringSubstitution>) {
                 return empty_3h_list;
             } else {
-                throw std::runtime_error("Unsupported HList type");
+                static_assert(false, "Unsupported hole substitution type");
             }
         }
         return map_ref.at(key);
