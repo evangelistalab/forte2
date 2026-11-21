@@ -64,8 +64,8 @@ Irrep labels and indices follow Cotton ordering:
      - ``a``
 
 .. note::
-   Methods that rebuild the ``System`` at displaced geometries, such as ``FDGradient`` and
-   ``GeometryOptimizer``, need ``symmetry=False``.
+   Methods that rebuild the ``System`` at displaced geometries, such as
+   ``FiniteDifference`` and ``GeometryOptimizer``, need ``symmetry=False``.
 
 Symmetry in Hartree-Fock
 ------------------------

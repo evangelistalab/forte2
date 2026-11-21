@@ -490,6 +490,8 @@ Every factor except the rotation is exact, and the rotation is accurate to the T
 \end{enumerate}
 It requires the same numbers of core and active orbitals on both sides, since \cref{sec:construct} pairs core with core and active with active, and the complete CAS determinant space, since $\bvec{U}_{\bvec{A}}$ and $\bvec{V}_{\bvec{A}}$ mix every active orbital and would move amplitude out of a GAS- or symmetry-restricted space.
 It raises an error otherwise, and for a singular $\SMO_{\bvec{C}\bvec{C}'}$ or $\bar{\bvec{S}}^{\mathrm{MO}}_{\bvec{A}\bvec{A}'}$.
+With \texttt{algorithm="auto"}, the default, \texttt{ci\_overlap} falls back to the naive algorithm in all these cases.
+\texttt{ci\_overlap\_matrix} computes the overlaps of every pair of roots at once: steps 1 and 2 depend only on the orbitals, and step 3 transforms the CI vectors of each sub-solver together.
 
 \section{Rotating CI vectors}
 \label{sec:rotation}
@@ -518,12 +520,11 @@ The tests check properties that hold independently of the implementation, for bo
 \label{sec:limitations}
 
 \begin{itemize}
-\item For GAS spaces, \texttt{algorithm="naive"} is needed, because the biorthogonal algorithm handles only CAS spaces.
+\item For GAS spaces, forte2 falls back to the naive algorithm, because the biorthogonal algorithm handles only CAS spaces.
 Malmqvist's Sec.~V extends the construction to GAS spaces.
 \item Tight core orbitals follow their nuclei, so their mutual overlap decays steeply with displacement.
 Plasser \emph{et al.} discard them (Eq.~21); forte2 doesn't.
-\item Overlaps are computed one pair of states at a time.
-Orthogonalizing the overlap matrix of two sets of states (Plasser \emph{et al.}, Eqs.~25--26) isn't implemented.
+\item Orthogonalizing the overlap matrix of two sets of states (Plasser \emph{et al.}, Eqs.~25--26) isn't implemented.
 \item CI vectors aren't truncated (Plasser \emph{et al.}, Sec.~3.2), which matters only for expansions much larger than CAS.
 \item Malmqvist's Sec.~IV replaces the exponential with an exact sequence of single-orbital transformations from an LU factorization, at about $2\Nact$ one-electron passes per vector.
 \item A two-component wavefunction can't be compared with a nonrelativistic one.
@@ -543,7 +544,7 @@ Modules are in \texttt{forte2/orbitals}.}
 Function & Section \\
 \hline
 \texttt{mo\_overlap} (\texttt{orbital\_overlap.py}) & \cref{eq:smo} \\
-\texttt{ci\_overlap} (\texttt{wavefunction\_overlap.py}) &
+\texttt{ci\_overlap}, \texttt{ci\_overlap\_matrix} (\texttt{wavefunction\_overlap.py}) &
  \cref{sec:lowdin,sec:algorithm} \\
 \texttt{biorthogonalize\_casscf\_orbitals} (\texttt{wavefunction\_overlap.py})
  & \cref{sec:construct} \\
