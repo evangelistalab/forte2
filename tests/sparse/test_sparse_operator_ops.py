@@ -1,5 +1,6 @@
 import numpy as np
 from forte2.lib import sparse_ops
+from forte2.lib.det import Determinant
 from forte2.lib.sparse_ops import SparseOperator
 
 # Description:
@@ -162,6 +163,17 @@ def test_sparse_operator_ops_2():
     C = A.commutator(B)
     C_test = sparse_ops.sparse_operator([("[2a+ 1a-]", 0.6), ("[1a+ 2a-]", -0.6)])
     assert C == C_test
+
+
+def test_sparse_scalar_arithmetic_preserves_operands():
+    determinant = Determinant("a")
+    state = sparse_ops.SparseState(determinant, 1 + 2j)
+    op = sparse_ops.sparse_operator("[]", 1 + 2j)
+
+    assert 2 * (state * 3) == sparse_ops.SparseState(determinant, 6 + 12j)
+    assert state == sparse_ops.SparseState(determinant, 1 + 2j)
+    assert -(op * 4) / 2 == sparse_ops.sparse_operator("[]", -2 - 4j)
+    assert op == sparse_ops.sparse_operator("[]", 1 + 2j)
 
 
 def test_sparse_operator_commutator():
