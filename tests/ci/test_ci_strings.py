@@ -19,6 +19,16 @@ def test_ci_strings_input():
         ci_strings = CIStrings(1, 1, 0, [0], [], [])
 
 
+def test_ci_strings_empty_active_space():
+    ci_strings = CIStrings(0, 0, 0, [[]], [], [])
+
+    assert ci_strings.ngas_spaces == 1
+    assert ci_strings.gas_alpha_occupations == [[0] * 6]
+    assert ci_strings.gas_beta_occupations == [[0] * 6]
+    assert ci_strings.gas_occupations == [(0, 0)]
+    assert ci_strings.ndet == 1
+
+
 def test_ci_strings_singlet():
     # Create a State object
     state = State(nel=10, multiplicity=1, ms=0.0, gas_min=[1, 4, 2], gas_max=[2, 4, 3])
