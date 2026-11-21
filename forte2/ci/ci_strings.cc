@@ -1,7 +1,8 @@
 #include <algorithm>
-#include <numeric>
-#include <cmath>
 #include <iostream>
+#include <numeric>
+#include <stdexcept>
+#include <string>
 
 #include "helpers/printing.hpp"
 
@@ -23,16 +24,20 @@ template <typename Func> void debug(Func func) {
     }
 }
 
-CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
+CIStrings::CIStrings(size_t na, size_t nb, int nirrep, int symmetry,
                      const std::vector<std::vector<int>>& orbital_symmetry,
                      const std::vector<int>& gas_min, const std::vector<int>& gas_max)
-    : na_(na), nb_(nb), symmetry_(symmetry), orbital_symmetry_(orbital_symmetry), gas_min_(gas_min),
-      gas_max_(gas_max) {
+    : na_(na), nb_(nb), nirrep_(nirrep), symmetry_(symmetry), orbital_symmetry_(orbital_symmetry),
+      gas_min_(gas_min), gas_max_(gas_max) {
     startup();
 }
 
 void CIStrings::startup() {
     // sanity checks
+    if (orbital_symmetry_.size() > max_active_spaces) {
+        throw std::invalid_argument("CIStrings: At most " + std::to_string(max_active_spaces) +
+                                    " GAS spaces are supported.");
+    }
     if ((gas_min_.size() > orbital_symmetry_.size()) or
         gas_max_.size() > orbital_symmetry_.size()) {
         throw std::invalid_argument(
@@ -42,25 +47,26 @@ void CIStrings::startup() {
             std::to_string(orbital_symmetry_.size()) + ")");
     }
 
-    // set the number of GAS spaces and the number of correlated MOs
-    ngas_spaces_ = orbital_symmetry_.size();
-    nirrep_ = 1;
-    {
-        norb_ = 0;
-        for (const auto& space : orbital_symmetry_) {
-            const auto space_size = space.size();
-
-            gas_size_.push_back(space_size);
-
-            std::vector<size_t> gasn_mos(space_size);
-            std::iota(gasn_mos.begin(), gasn_mos.end(), norb_);
-            gas_mos_.push_back(gasn_mos);
-
-            for (const auto& s : space) {
-                nirrep_ = std::max(nirrep_, static_cast<size_t>(std::abs(s + 1)));
+    // Set up the orbital indices of each GAS.
+    norb_ = 0;
+    for (const auto& space : orbital_symmetry_) {
+        const auto space_size = space.size();
+        for (const auto s : space) {
+            if (s < 0 || s >= nirrep_) {
+                throw std::invalid_argument(
+                    "CIStrings: Orbital irreps must be non-negative and less than nirrep.");
             }
-            norb_ += space_size;
         }
+
+        gas_size_.push_back(space_size);
+        auto& gasn_mos = gas_mos_.emplace_back(space_size);
+        std::iota(gasn_mos.begin(), gasn_mos.end(), norb_);
+        norb_ += space_size;
+    }
+    // Treat an omitted GAS list as one empty active space.
+    if (gas_size_.empty()) {
+        gas_size_.push_back(0);
+        gas_mos_.emplace_back();
     }
 
     // Generate the allowed GAS occupation patterns for alpha and beta string
@@ -74,7 +80,7 @@ void CIStrings::startup() {
     // Initialize the string class object. The string class is a combination of the irrep and GAS
     // occupation.
     string_class_ =
-        std::make_shared<StringClass>(symmetry_, orbital_symmetry_, gas_alpha_occupations_,
+        std::make_shared<StringClass>(symmetry_, nirrep_, orbital_symmetry_, gas_alpha_occupations_,
                                       gas_beta_occupations_, gas_occupations_);
 
     // Build the string lists that satisfy the GAS constraints and the corresponding addressers

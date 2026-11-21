@@ -7,7 +7,8 @@
 namespace forte2 {
 class StringClass {
   public:
-    StringClass(size_t symmetry, const std::vector<std::vector<int>>& orbital_symmetry,
+    StringClass(size_t symmetry, size_t nirrep,
+                const std::vector<std::vector<int>>& orbital_symmetry,
                 const std::vector<std::array<int, 6>>& alpha_occupation,
                 const std::vector<std::array<int, 6>>& beta_occupation,
                 const std::vector<std::pair<size_t, size_t>>& occupations);

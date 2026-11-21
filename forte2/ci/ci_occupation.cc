@@ -110,33 +110,13 @@ get_ci_occupation_patterns(size_t na, size_t nb, const std::vector<int>& occ_min
     occupation_t min_occ{};
     occupation_t space_size{};
 
-    size_t num_spaces = 0;
-    for (size_t n = 0; n < max_active_spaces; n++) {
-        size_t space_n_size = n < gas_size.size() ? gas_size[n] : 0;
-        if (space_n_size) {
-            // find the largest possible number of electrons in this space
-            int max_e_number = std::min(space_n_size * 2, na + nb);
-            // but if we can read its value, do so and make sure this number is within the bounds
-            if (occ_max.size() > n) {
-                max_e_number = std::min(occ_max[n], max_e_number);
-            }
-            // find the smallest possible number of electrons in this space
-            size_t min_e_number = 0;
-            // but if we can read its value, do so
-            if (occ_min.size() > n) {
-                min_e_number = occ_min[n];
-            }
-            max_occ[n] = max_e_number;
-            min_occ[n] = min_e_number;
-            space_size[n] = space_n_size;
-            num_spaces += 1;
-        }
-    }
-    // the exception that breaks the rule
-    if (num_spaces == 0) {
-        std::vector<occupation_t> empty_occ(1, occupation_t{});
-        std::vector<std::pair<size_t, size_t>> empty_pairs(1, {0, 0});
-        return std::make_tuple(1, empty_occ, empty_occ, empty_pairs);
+    // Keep empty GAS slots so the bounds and occupation arrays refer to the same spaces.
+    const size_t num_spaces = gas_size.size();
+    for (size_t n = 0; n < num_spaces; n++) {
+        space_size[n] = gas_size[n];
+        const int capacity = std::min(2 * static_cast<size_t>(gas_size[n]), na + nb);
+        max_occ[n] = n < occ_max.size() ? std::min(occ_max[n], capacity) : capacity;
+        min_occ[n] = n < occ_min.size() ? occ_min[n] : 0;
     }
     return generate_ormas_occupations(na, nb, min_occ, max_occ, space_size, num_spaces);
 }

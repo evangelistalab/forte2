@@ -1,22 +1,80 @@
 import pytest
 from forte2 import MOSpace, State
 from forte2.lib.ci_helpers import CIStrings
+from forte2.lib.det import Determinant
 
 
 def test_ci_strings_input():
     # negative number of electrons
     with pytest.raises(ValueError):
-        ci_strings = CIStrings(-1, 0, 0, [[]], [], [])
+        ci_strings = CIStrings(-1, 0, 1, 0, [[]], [], [])
 
     with pytest.raises(ValueError):
-        ci_strings = CIStrings(-1, -1, 0, [[]], [], [])
+        ci_strings = CIStrings(-1, -1, 1, 0, [[]], [], [])
 
     with pytest.raises(ValueError):
-        ci_strings = CIStrings(1, -1, 0, [[]], [], [])
+        ci_strings = CIStrings(1, -1, 1, 0, [[]], [], [])
 
     # wrong type (list instead of list[list]) for orbital_symmetry
     with pytest.raises(TypeError):
-        ci_strings = CIStrings(1, 1, 0, [0], [], [])
+        ci_strings = CIStrings(1, 1, 1, 0, [0], [], [])
+
+    for orbital_irrep in (-1, 2):
+        with pytest.raises(ValueError, match="Orbital irreps must be non-negative"):
+            CIStrings(1, 0, 2, 0, [[orbital_irrep]], [], [])
+
+
+@pytest.mark.parametrize("orbital_symmetry", [[], [[]], [[], []]])
+def test_ci_strings_empty_active_space(orbital_symmetry):
+    vacuum = CIStrings(0, 0, 1, 0, orbital_symmetry, [], [])
+    assert vacuum.gas_size == [0] * max(1, len(orbital_symmetry))
+    assert list(vacuum.make_determinants()) == [Determinant.zero()]
+
+    with_electrons = CIStrings(1, 0, 1, 0, orbital_symmetry, [], [])
+    assert with_electrons.ndet == 0
+
+
+@pytest.mark.parametrize("empty_slot", [0, 1, 2])
+def test_ci_strings_preserves_empty_gas_slot(empty_slot):
+    orbital_symmetry = [[0], [0]]
+    orbital_symmetry.insert(empty_slot, [])
+    ci_strings = CIStrings(1, 1, 1, 0, orbital_symmetry, [], [])
+
+    assert ci_strings.ngas_spaces == 3
+    assert ci_strings.gas_size == [len(space) for space in orbital_symmetry]
+    assert set(ci_strings.make_determinants()) == {
+        Determinant(occupation) for occupation in ("20", "02", "ab", "ba")
+    }
+
+
+def test_ci_strings_gas_bounds_with_empty_slot():
+    after_empty = CIStrings(1, 1, 1, 0, [[0], [], [0]], [0, 0, 2], [0, 0, 2])
+    assert list(after_empty.make_determinants()) == [Determinant("02")]
+
+    impossible = CIStrings(1, 1, 1, 0, [[0], []], [0, 1], [])
+    assert impossible.ndet == 0
+
+
+def test_ci_strings_gas_space_limit():
+    assert CIStrings(1, 0, 1, 0, [[0]] * 6, [], []).ndet == 6
+    with pytest.raises(ValueError, match="At most 6 GAS spaces"):
+        CIStrings(1, 0, 1, 0, [[0]] * 7, [], [])
+
+
+@pytest.mark.parametrize("na, nb, expected", [(1, 1, ("ab", "ba")), (2, 0, ("aa",))])
+def test_ci_strings_product_irrep_missing_from_orbitals(na, nb, expected):
+    ci_strings = CIStrings(na, nb, 4, 3, [[1], [2]], [], [])
+
+    assert set(ci_strings.make_determinants()) == {Determinant(det) for det in expected}
+
+
+def test_ci_strings_unreachable_target_irrep():
+    assert CIStrings(1, 0, 4, 3, [[0]], [], []).ndet == 0
+
+
+def test_ci_strings_target_irrep_outside_range():
+    with pytest.raises(ValueError, match="Target symmetry is outside the irrep range"):
+        CIStrings(1, 0, 2, 3, [[0]], [], [])
 
 
 def test_ci_strings_singlet():
@@ -35,6 +93,7 @@ def test_ci_strings_singlet():
     ci_strings = CIStrings(
         state.na - mospace.ncore,
         state.nb - mospace.ncore,
+        1,
         state.symmetry,
         orbital_symmetry,
         state.gas_min,
@@ -66,6 +125,7 @@ def test_ci_strings_triplet():
     ci_strings = CIStrings(
         state.na - mospace.ncore,
         state.nb - mospace.ncore,
+        1,
         state.symmetry,
         orbital_symmetry,
         state.gas_min,
@@ -107,6 +167,7 @@ def test_ci_strings_symmetry_uses_all_set_bits():
     ci_strings = CIStrings(
         3,
         3,
+        4,
         target_symmetry,
         orbital_symmetry,
         [1, 1, 1, 1, 1, 1],

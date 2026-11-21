@@ -18,12 +18,13 @@ class CIStrings {
     /// @brief The CIStrings constructor
     /// @param na the number of alpha electrons
     /// @param nb the number of beta electrons
+    /// @param nirrep the number of irreps in the point group (a positive power of two)
     /// @param symmetry the symmetry of the state we are building
     /// @param orbital_symmetry a vector of vectors storing the symmetry of the orbitals in each GAS
     /// space
     /// @param gas_min the minimum number of electrons in each GAS space
     /// @param gas_max the maximum number of electrons in each GAS space
-    CIStrings(size_t na, size_t nb, int symmetry,
+    CIStrings(size_t na, size_t nb, int nirrep, int symmetry,
               const std::vector<std::vector<int>>& orbital_symmetry,
               const std::vector<int>& gas_min, const std::vector<int>& gas_max);
 
@@ -176,12 +177,12 @@ class CIStrings {
     size_t na_;
     /// The number of beta electrons
     size_t nb_;
+    /// The number of irreps
+    const int nirrep_;
     /// The symmetry of the state
     const int symmetry_;
     /// The symmetry of the orbitals
     const std::vector<std::vector<int>> orbital_symmetry_;
-    /// The number of irreps
-    size_t nirrep_;
     /// The total number of correlated molecular orbitals
     size_t norb_;
     /// The symmetry of the correlated molecular orbitals
