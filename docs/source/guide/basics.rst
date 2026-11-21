@@ -61,6 +61,32 @@ To run the whole chain, call ``run`` on its last method::
 
 To use a relativistic Hamiltonian, see :doc:`relativistic`.
 
+Exporting orbitals
+------------------
+
+Once a method has been run, you can export its orbitals for visualization in any program that reads Molden files (Molden, Jmol, VibeMol, IboView, ...)::
+
+    forte2.write_molden(rhf, "rhf.molden")
+    forte2.write_molden(casscf, "casscf.molden")
+
+This works for SCF references (RHF, ROHF, UHF), orbital-rotation methods such as AVAS and ASET, and active-space drivers (``CI``, ``MCOptimizer``).
+Each orbital carries its symmetry label, an energy and an occupation:
+
+* SCF: orbital energies, and occupations from the SCF density.
+* AVAS, ASET: the reference Fock diagonal, and the nominal (0, 1 or 2) occupations of the reference they rotate.
+* CI, MCOptimizer: the diagonal of the generalized Fock matrix; 2 for core orbitals, the diagonal of the state-averaged 1-RDM for active orbitals (the natural occupation numbers when ``final_orbitals="natural"``), and 0 for virtual orbitals.
+
+To write any other set of orbitals, for example localized orbitals, pass the ``System`` and the coefficients.
+``forte2.molden_string`` returns the same text without writing a file::
+
+    forte2.write_molden(rhf.system, "localized.molden", C=C_loc, occupations=occ)
+    text = forte2.molden_string(casscf)
+
+Molden files cover real, one-component orbitals with shells up to g.
+For two-component orbitals, or for grid-based visualization, write cube files::
+
+    forte2.write_orbital_cubes(rhf.system, rhf.mos.C[0], indices=[0, 1, 2], filepath="cubes")
+
 Parallelism
 -----------
 

@@ -30,6 +30,7 @@ from .orbitals import (
     ASET,
     write_orbital_cubes,
     write_molden,
+    molden_string,
     SpinorUpcaster,
 )
 from .mcopt import MCOptimizer
