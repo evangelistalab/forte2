@@ -203,7 +203,7 @@ def test_sci_ne_core_ionized():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
 
-    ci_strings = CIStrings(5, 4, 0, [[0], [0] * 13], [1], [1])
+    ci_strings = CIStrings(5, 4, 1, 0, [[0], [0] * 13], [1], [1])
     guess_dets = ci_strings.make_determinants()
 
     rhf = RHF(charge=0, e_tol=1e-10)(system)
@@ -726,7 +726,7 @@ def test_sci_water_core_excited():
     system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0)(system)
 
-    ci_strings = CIStrings(5, 5, 0, [[0], [0], [0] * 11], [1, 2], [1, 2])
+    ci_strings = CIStrings(5, 5, 1, 0, [[0], [0], [0] * 11], [1, 2], [1, 2])
     guess_dets = ci_strings.make_determinants()
 
     ci = CI(
@@ -913,7 +913,7 @@ def test_sci_1tdm_water_core_excited_and_gs():
 
     # the singly core-excited determinants make the largest contributions
     # to the final state, so we can use a large set here
-    ci_strings_s = CIStrings(5, 5, 0, [[0], [0], [0] * 11], [1, 2], [1, 2])
+    ci_strings_s = CIStrings(5, 5, 1, 0, [[0], [0], [0] * 11], [1, 2], [1, 2])
     gas_guess_dets = ci_strings_s.make_determinants()
     # if the doubly core-excited determinants are included together with the
     # singles, they will almost certainly be filtered out by the initial guess routine

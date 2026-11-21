@@ -6,6 +6,54 @@ from forte2.system.build_basis import BSE_AVAILABLE
 from forte2.base_classes import CIParams, DavidsonLiuParams
 
 
+def test_gasci_rhf_knowles_handy_with_symmetry():
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        unit="bohr",
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=True,
+    )
+    rhf = RHF(charge=0, e_tol=1e-12)(system).run()
+
+    # The two orbitals in the first GAS have different irreps, but either can be doubly occupied.
+    assert rhf.mos.irrep_indices[0][0] != rhf.mos.irrep_indices[0][1]
+    energies = []
+    for algorithm in ("exact", "kh"):
+        ci = CI(
+            CISolver(
+                states=State(
+                    nel=2, multiplicity=1, ms=0.0, gas_min=[2, 0], gas_max=[2, 0]
+                ),
+                active_orbitals=[[0, 1], [2]],
+                ci_params=CIParams(ci_algorithm=algorithm),
+            )
+        )(rhf).run()
+        energies.append(ci.E_ci[0])
+
+    assert energies[0] == approx(-1.131454012199)
+    assert energies[1] == approx(energies[0])
+
+
+def test_ci_target_irrep_absent_from_active_space():
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        unit="bohr",
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=True,
+    )
+    rhf = RHF(charge=0)(system).run()
+    assert rhf.mos.irrep_indices[0][0] == 0
+
+    ci = CISolver(
+        states=State(nel=2, multiplicity=1, ms=0.0, symmetry=1),
+        active_orbitals=[0],
+    )(rhf)
+    with pytest.raises(ValueError, match="No determinants could be generated"):
+        ci.run()
+
+
 def test_gasci_rhf_1():
     xyz = f"""
     H 0.0 0.0 0.0

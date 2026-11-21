@@ -57,6 +57,7 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
         return CIStrings(
             _nactel,
             0,
+            self.nirrep,
             self.state.symmetry,
             self.active_orbsym,
             self.state.gas_min,
