@@ -52,14 +52,14 @@ class RelCISigmaBuilder {
     /// @param spin_adapt_full_preconditioner If true, use the exact diagonal elements,
     ///        otherwise use approximate diagonal elements.
     /// @return The diagonal elements of the Hamiltonian matrix
-    np_vector_complex form_Hdiag(const std::vector<Determinant>& dets) const;
+    np_vector_complex form_Hdiag(const std::vector<SpinorDeterminant>& dets) const;
 
     /// @brief Compute the Hamiltonian matrix element between two determinants
     /// @param dets The list of determinants
     /// @param I The index of the first determinant
     /// @param J The index of the second determinant
     /// @return The Hamiltonian matrix element <I|H|J>
-    std::complex<double> slater_rules(const std::vector<Determinant>& dets, size_t I,
+    std::complex<double> slater_rules(const std::vector<SpinorDeterminant>& dets, size_t I,
                                       size_t J) const;
 
     /// @brief Apply the Hamiltonian to the wave function

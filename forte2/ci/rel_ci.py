@@ -3,6 +3,7 @@ from typing import ClassVar, Literal
 import numpy as np
 
 from forte2.lib import sparse_ops
+from forte2.lib.det import Determinant
 from forte2.lib.sparse_ops import SparseState
 from forte2.lib.ci_helpers import (
     CIStrings,
@@ -71,7 +72,7 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
         # no spin adaptation for 2c: the determinant basis is the variational basis
         self.ndet = self.ci_strings.ndet
         self.basis_size = self.ndet
-        self.dets = self.ci_strings.make_determinants()
+        self.dets = self.ci_strings.make_spinor_determinants()
         self.b_det = np.zeros((self.ndet,), dtype=self.dtype)
         self.sigma_det = np.zeros((self.ndet,), dtype=self.dtype)
 
@@ -86,16 +87,19 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
                 self.ints.V,
                 1e-100,
             )
+            # TODO: dets contain SpinorDeterminants, 
+            # Sparse class only works with Determinants for now
+            sparse_dets = [d.to_determinant() for d in self.dets]
 
             def sigma_builder(basis_block, sigma_block):
                 nstate = basis_block.shape[1]
                 for istate in range(nstate):
                     psi = SparseState(
-                        {d: c for d, c in zip(self.dets, basis_block[:, istate])}
+                        {d: c for d, c in zip(sparse_dets, basis_block[:, istate])}
                     )
                     Hpsi = sparse_ops.apply_op(ham, psi, screen_thresh=1e-100)
-                    for idet in range(self.ndet):
-                        sigma_block[idet, istate] = Hpsi[self.dets[idet]]
+                    for idet, d in enumerate(sparse_dets):
+                        sigma_block[idet, istate] = Hpsi[d]
 
             return sigma_builder
 
@@ -225,6 +229,9 @@ class RelCISolver(RelCIBase):
     """
 
     orbital_rotation_invariant: ClassVar[bool] = True
+    # TODO: lift the 64-spinor restriction
+    # this restriction is due to the use of CIStrings in RelCISolver
+    _max_nspinor: ClassVar[int] = Determinant.maxnorb
 
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     ci_params: CIParams = field(default_factory=CIParams)

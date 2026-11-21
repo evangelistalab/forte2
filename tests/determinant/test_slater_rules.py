@@ -1,8 +1,16 @@
+import itertools
+
 import numpy as np
 import pytest
 
 from forte2 import RHF, System
-from forte2.lib.det import Determinant, SlaterRules, RelSlaterRules, hilbert_space
+from forte2.lib.det import (
+    Determinant,
+    SpinorDeterminant,
+    SlaterRules,
+    RelSlaterRules,
+    hilbert_space,
+)
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
 from forte2.ci.rel_ci import _RelCISingleStateSolver
@@ -44,6 +52,17 @@ def _symmetric_integrals(norb, seed=12345):
         v, v.transpose(3, 2, 1, 0)
     ), "Two-electron integrals do not have p<->s, q<->r symmetry"
     return h, v
+
+
+def _spinor_determinants(nspinor, nel):
+    """All determinants of nel electrons in nspinor spinors."""
+    dets = []
+    for occ in itertools.combinations(range(nspinor), nel):
+        d = SpinorDeterminant.zero()
+        for p in occ:
+            d.set(p, True)
+        dets.append(d)
+    return dets
 
 
 def _random_determinants(norb, nalpha, nbeta, ndets, seed=67890):
@@ -213,7 +232,7 @@ def test_rel_slater_rules_update_integrals_partial_update_keeps_other_arguments(
         v_b if which == "V" else v_a,
     )
 
-    dets = _random_determinants(nspinor, 3, 0, ndets=5)
+    dets = _spinor_determinants(nspinor, 3)
     for det in dets:
         assert reused.energy(det) == approx(fresh.energy(det))
 
@@ -234,7 +253,7 @@ def test_rel_slater_rules_update_integrals_nspinor_change_requires_h_and_v_toget
 
     rsr.update_integrals(nspinor_b, 0.2, h_b, v_b)
     fresh = RelSlaterRules(nspinor_b, 0.2, h_b, v_b)
-    for det in _random_determinants(nspinor_b, 3, 0, ndets=5):
+    for det in _spinor_determinants(nspinor_b, 3):
         assert rsr.energy(det) == approx(fresh.energy(det))
 
 
@@ -246,7 +265,7 @@ def test_rel_slater_rules_copies_integrals_not_aliases():
     h, v = _random_hermitian_integrals(nspinor, seed=3)
     rsr = RelSlaterRules(nspinor, 0.1, h, v)
 
-    dets = _random_determinants(nspinor, 3, 0, ndets=5)
+    dets = _spinor_determinants(nspinor, 3)
     energies_before = [rsr.energy(det) for det in dets]
 
     h[:] = 0.0
@@ -418,7 +437,7 @@ def test_slater_rules_1_complex():
         norb, ints.E, ints.H.astype(complex), ints.V.astype(complex)
     )
 
-    dets = hilbert_space(norb, scf.na + scf.nb, 0)
+    dets = _spinor_determinants(norb, scf.na + scf.nb)
 
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
@@ -480,7 +499,7 @@ def test_slater_rules_2_complex():
     nca = scf.na - len(core_orbitals) // 2
     ncb = scf.nb - len(core_orbitals) // 2
 
-    dets = hilbert_space(norb, nca + ncb, 0)
+    dets = _spinor_determinants(norb, nca + ncb)
 
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
@@ -531,7 +550,7 @@ def test_slater_rules_3_complex():
     h2 = h2 + h2.transpose(3, 2, 1, 0).conj()
 
     slater_rules = RelSlaterRules(norb, 0.0, h1, h2)
-    dets = hilbert_space(norb, 8, 0)
+    dets = _spinor_determinants(norb, 8)
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
         # no triangular loop: explicitly construct both i,j and j,i to check Hermiticity
@@ -584,7 +603,7 @@ def test_slater_rules_4_complex_antisym():
     # h2 is already antisymmetric (<pq||rs>). RelSlaterRules and the CI solver
     # antisymmetrize it, doubling it, hence the factor of 0.5
     slater_rules = RelSlaterRules(norb, 0.0, h1, 0.5 * h2)
-    dets = hilbert_space(norb, 8, 0)
+    dets = _spinor_determinants(norb, 8)
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
         # no triangular loop: explicitly construct both i,j and j,i to check Hermiticity

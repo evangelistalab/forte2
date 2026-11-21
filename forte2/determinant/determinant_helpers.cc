@@ -5,41 +5,6 @@
 
 namespace forte2 {
 
-std::pair<String, double> create_single_excitation(const String& str, size_t i, size_t a) {
-    String new_str = str;
-    double sign = new_str.destroy(i);
-    sign *= new_str.create(a);
-    return {new_str, sign};
-}
-
-std::pair<String, double> create_double_excitation(const String& str, size_t i, size_t j, size_t a,
-                                                   size_t b) {
-    String new_str = str;
-    double sign = new_str.destroy(i);
-    sign *= new_str.destroy(j);
-    sign *= new_str.create(b);
-    sign *= new_str.create(a);
-    return {new_str, sign};
-}
-
-std::pair<String, double> create_single_excitation_unchecked(const String& str, size_t i,
-                                                             size_t a) {
-    String new_str = str;
-    double sign = new_str.destroy_unchecked(i);
-    sign *= new_str.create_unchecked(a);
-    return {new_str, sign};
-}
-
-std::pair<String, double> create_double_excitation_unchecked(const String& str, size_t i, size_t j,
-                                                             size_t a, size_t b) {
-    String new_str = str;
-    double sign = new_str.destroy_unchecked(i);
-    sign *= new_str.destroy_unchecked(j);
-    sign *= new_str.create_unchecked(b);
-    sign *= new_str.create_unchecked(a);
-    return {new_str, sign};
-}
-
 std::pair<Determinant, double> create_single_a_excitation(const Determinant& det, size_t i,
                                                           size_t a) {
     Determinant new_det = det;

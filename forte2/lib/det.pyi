@@ -86,6 +86,67 @@ class Determinant:
     def str(self, n: int = 64) -> str:
         """Get the string representation of the Slater determinant"""
 
+class SpinorDeterminant:
+    @overload
+    def __init__(self, arg: SpinorDeterminant) -> None: ...
+
+    @overload
+    def __init__(self, occ: str) -> None:
+        """
+        Build a spinor determinant from a string of 0s and 1s (character p is spinor p)
+        """
+
+    @staticmethod
+    def zero() -> SpinorDeterminant:
+        """Create a spinor determinant with no electrons"""
+
+    maxnspinor: Final[int] = ...
+    """The maximum number of spinors"""
+
+    def __eq__(self, arg: SpinorDeterminant, /) -> bool:
+        """Check if two spinor determinants are equal"""
+
+    def __lt__(self, arg: SpinorDeterminant, /) -> bool:
+        """Check if a spinor determinant is less than another"""
+
+    def __hash__(self) -> int:
+        """Get the hash of the spinor determinant"""
+
+    def __repr__(self) -> str:
+        """Occupation string up to the last occupied spinor"""
+
+    def get(self, p: int) -> bool:
+        """Is spinor p occupied?"""
+
+    def set(self, p: int, value: bool) -> None:
+        """Set the occupation of spinor p"""
+
+    def create(self, p: int) -> float:
+        """
+        Apply a creation operator on spinor p and return the sign, or 0 if occupied
+        """
+
+    def destroy(self, p: int) -> float:
+        """
+        Apply an annihilation operator on spinor p and return the sign, or 0 if empty
+        """
+
+    def slater_sign(self, p: int) -> float:
+        """Parity sign of the occupied spinors below p"""
+
+    def count(self) -> int:
+        """Count the number of electrons"""
+
+    def str(self, n: int = 128) -> str:
+        """Occupation string of the first n spinors"""
+
+    def to_determinant(self) -> Determinant:
+        """The same bits as a Determinant, for use as a SparseState key"""
+
+    @staticmethod
+    def from_determinant(d: Determinant) -> SpinorDeterminant:
+        """The SparseState key d as a spinor determinant"""
+
 class Configuration:
     @overload
     def __init__(self) -> None:
@@ -177,9 +238,9 @@ class RelSlaterRules:
     def update_integrals(self, nspinor: int, scalar_energy: float | None = None, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))] | None = None, two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))] | None = None) -> None:
         """Update the integrals used in evaluating Slater rules."""
 
-    def energy(self, arg: Determinant, /) -> float: ...
+    def energy(self, arg: SpinorDeterminant, /) -> float: ...
 
-    def energies(self, dets: Sequence[Determinant]) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+    def energies(self, dets: Sequence[SpinorDeterminant]) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
         """Compute the energies of a vector of determinants"""
 
-    def slater_rules(self, lhs: Determinant, rhs: Determinant) -> complex: ...
+    def slater_rules(self, lhs: SpinorDeterminant, rhs: SpinorDeterminant) -> complex: ...
