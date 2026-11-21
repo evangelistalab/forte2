@@ -147,6 +147,7 @@ def test_sparse_operator():
     # test ordering: 0a+ 0b+ 0a- 0b- |2> = -|2>
     sop = SparseOperator()
     sop.add("[0a+ 0b+ 0a- 0b-]", 1.0, allow_reordering=True)
+    assert sop.coefficient("[0a+ 0b+ 0b- 0a-]") == -1.0
     dtest = det("20")
     ref = SparseState({dtest: 1.0})
     wfn = apply_op(sop, ref)
