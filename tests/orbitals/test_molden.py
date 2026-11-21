@@ -13,11 +13,26 @@ import re
 import numpy as np
 import pytest
 
-from forte2 import AVAS, CI, CISolver, GHF, MCOptimizer, ROHF, RHF, State, System, UHF
+from forte2 import (
+    ASET,
+    AVAS,
+    CI,
+    CISolver,
+    DSRG_MRPT2,
+    GHF,
+    MCOptimizer,
+    ROHF,
+    RHF,
+    State,
+    System,
+    UHF,
+)
+from forte2.base_classes import Method
 from forte2.helpers.comparisons import approx
 from forte2.lib import ints
 from forte2.orbitals import molden_string, write_molden
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
+from forte2.system.basis_utils import SPH_LABELS
 
 WATER = """
 O 0.000000000000  0.000000000000 -0.061664597388
@@ -232,6 +247,51 @@ def test_molden_identity_basis_through_g_shells():
     _assert_molden_matches(system, C, text)
 
 
+def test_molden_ao_order_follows_molden_convention():
+    """Explicit AO order: Molden writes p as (x, y, z) and pure shells as
+    m = 0, +1, -1, +2, -2, ...; Forte2 stores m = -l..+l (Libint/CCA)."""
+    system = System(
+        xyz="Ne 0 0 0", basis_set="cc-pvtz", auxiliary_basis_set="def2-universal-jkfit"
+    )
+    parsed = _parse_molden(molden_string(system, C=np.eye(system.nbf)))
+    # With C = 1, Molden AO j carries the Forte2 AO whose MO has its 1 in row j.
+    forte2_ao = np.argmax(np.abs(parsed["C"]), axis=1)
+    forte2_labels = []
+    for ishell in range(system.basis.nshells):
+        forte2_labels += SPH_LABELS[system.basis[ishell].l]
+    molden_labels = [forte2_labels[i] for i in forte2_ao]
+    expected = {
+        0: ["s"],
+        1: ["px", "py", "pz"],
+        2: ["dz2", "dxz", "dyz", "dx2-y2", "dxy"],
+        3: ["fz3", "fxz2", "fyz2", "fz(x2-y2)", "fxyz", "fx(x2-3y2)", "fy(3x2-y2)"],
+    }
+    offset = 0
+    for _, l, _, _ in parsed["shells"]:
+        assert molden_labels[offset : offset + 2 * l + 1] == expected[l]
+        offset += 2 * l + 1
+    assert {l for _, l, _, _ in parsed["shells"]} == {0, 1, 2, 3}
+
+
+def test_molden_gto_shells_are_normalized():
+    """Reconstruct each contracted shell's self-overlap from the [GTO] section.
+
+    Molden coefficients multiply normalized primitives, whose overlap is
+    (2 sqrt(a b) / (a + b))^(l + 3/2); Forte2's AOs are normalized, so every
+    written contraction must be too.
+    """
+    system = System(
+        xyz="Ne 0.31 -0.22 0.13\nHe 1.45 0.71 -0.93",
+        basis_set="cc-pvqz",
+        auxiliary_basis_set="def2-universal-jkfit",
+    )
+    parsed = _parse_molden(molden_string(system, C=np.eye(system.nbf)))
+    for _, l, alpha, coef in parsed["shells"]:
+        a, b = np.meshgrid(alpha, alpha, indexing="ij")
+        overlap = (2 * np.sqrt(a * b) / (a + b)) ** (l + 1.5)
+        assert coef @ overlap @ coef == approx(1.0)
+
+
 @pytest.mark.parametrize(
     "xyz, basis",
     [(WATER, "cc-pvdz"), (HOCL_TILTED, "cc-pvtz")],
@@ -292,6 +352,25 @@ def test_molden_rohf_occupations(tmp_path):
     assert sum(occ) == approx(rohf.na + rohf.nb)
 
 
+def _generalized_fock_energies(method):
+    """Diagonal of F = h + J[D] - K[D]/2 in the final orbitals, built from the
+    final orbitals and 1-RDM through one AO density D = 2 C_core C_core^T +
+    C_act g1 C_act^T (independently of the writer's Semicanonicalizer path)."""
+    system, C, mo_space = method.system, method.mos.C[0], method.mo_space
+    occ, U = np.linalg.eigh(np.asarray(method.make_average_rdm(1)))
+    factor = np.hstack(
+        [
+            np.sqrt(2.0) * C[:, mo_space.docc_indices],
+            C[:, mo_space.active_indices] @ U * np.sqrt(np.clip(occ, 0.0, None)),
+        ]
+    )
+    fock_builder = system.fock_builder
+    J = fock_builder.build_J([factor @ factor.T])[0]
+    K = fock_builder.build_K([factor])[0]
+    F = system.ints_hcore() + J - 0.5 * K
+    return np.einsum("mi,mn,ni->i", C, F, C)
+
+
 def _cyclopropene_chain(final_orbitals="semicanonical"):
     system = System(
         xyz=CYCLOPROPENE, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit"
@@ -337,6 +416,7 @@ def test_molden_mcoptimizer(final_orbitals):
     assert occ.sum() == approx(rhf.nel)
     if final_orbitals == "natural":
         assert occ[mc.mo_space.active_indices] == approx(np.linalg.eigvalsh(g1)[::-1])
+    assert [m["ene"] for m in mos] == approx(_generalized_fock_energies(mc))
 
     if final_orbitals == "semicanonical":
         # Independent path: the semicanonicalizer's own eigenvalues.
@@ -352,6 +432,26 @@ def test_molden_mcoptimizer(final_orbitals):
         semi.semi_canonicalize(g1=g1, C_contig=mc.mos.C[0][:, o2c].copy())
         expected = semi.eps_semican[np.asarray(mc.mo_space.contig_to_orig)]
         assert [m["ene"] for m in mos] == approx(expected)
+
+
+@pytest.mark.parametrize("final_orbitals", ["original", "natural"])
+def test_molden_mcoptimizer_without_orbital_rotations(final_orbitals):
+    """All orbitals active: no nonredundant rotations, so the optimizer's own
+    Fock matrix may never be built. Energies must still come out right."""
+    system = System(
+        xyz="H 0 0 0\nH 0 0 0.74",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-jkfit",
+    )
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
+    mc = MCOptimizer(
+        CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1]),
+        final_orbitals=final_orbitals,
+    )(rhf)
+    mc.run()
+    parsed = _assert_molden_matches(system, mc.mos.C[0], molden_string(mc))
+    assert [m["ene"] for m in parsed["mos"]] == approx(_generalized_fock_energies(mc))
+    assert sum(m["occup"] for m in parsed["mos"]) == approx(2.0)
 
 
 def test_molden_ci_driver():
@@ -370,6 +470,34 @@ def test_molden_ci_driver():
     parsed = _assert_molden_matches(system, ci.mos.C[0], molden_string(ci))
     occ = np.array([m["occup"] for m in parsed["mos"]])
     assert occ[ci.mo_space.active_indices] == approx(np.diag(ci.make_average_rdm(1)))
+
+
+def _without_title(text):
+    return re.sub(r"\[Title\]\n[^\n]*\n", "", text)
+
+
+def test_molden_solver_matches_its_driver():
+    """A solver shares its driver's orbitals and RDMs, so it writes the same file."""
+    _, _, mc = _cyclopropene_chain()
+    assert _without_title(molden_string(mc.ci_solver)) == _without_title(
+        molden_string(mc)
+    )
+
+
+def test_molden_rejects_methods_downstream_of_correlated_calculations():
+    """ASET and DSRG orbitals derive from CASSCF; projecting them onto the SCF
+    density would give meaningless occupations, so the writer refuses."""
+    _, _, mc = _cyclopropene_chain()
+    aset = ASET(fragment=["C1-3"])(mc)
+    aset.run()
+    dsrg = DSRG_MRPT2(flow_param=0.5)(mc)
+    dsrg.run()
+    for method in (aset, dsrg):
+        with pytest.raises(NotImplementedError, match="derive from a correlated"):
+            molden_string(method)
+    # The orbitals can still be written explicitly.
+    text = molden_string(aset.system, C=aset.mos.C[0])
+    _assert_molden_matches(aset.system, aset.mos.C[0], text)
 
 
 def test_molden_system_with_unrestricted_arrays():
@@ -456,3 +584,78 @@ def test_molden_rejects_spinorbitals():
     ghf.run()
     with pytest.raises(NotImplementedError, match="2ccube"):
         molden_string(ghf)
+
+
+@pytest.fixture(scope="module")
+def water_sto3g():
+    return System(
+        xyz=WATER, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs, error, match",
+    [
+        ({"C": [np.eye(7)] * 3}, ValueError, "one coefficient matrix or"),
+        ({"C": [np.eye(7), np.eye(7)[:, :4]]}, ValueError, "same shape"),
+        ({"C": np.eye(14)}, ValueError, "Two-component orbitals"),
+        ({"C": np.eye(7), "energies": [np.zeros(7)] * 2}, ValueError, "one block per"),
+        (
+            {"C": np.eye(7), "occupations": np.zeros(5)},
+            ValueError,
+            "Expected 7 occupations",
+        ),
+        (
+            {"C": np.eye(7), "symmetries": ["a1"] * 5},
+            ValueError,
+            "one label per orbital",
+        ),
+        ({"C": np.eye(7) * (1 + 1e-3j)}, NotImplementedError, "Complex-valued"),
+    ],
+    ids=[
+        "three-blocks",
+        "ragged",
+        "two-component",
+        "energy-blocks",
+        "occupation-shape",
+        "labels",
+        "complex",
+    ],
+)
+def test_molden_rejects_malformed_arrays(water_sto3g, kwargs, error, match):
+    with pytest.raises(error, match=match):
+        molden_string(water_sto3g, **kwargs)
+
+
+def test_molden_accepts_numerically_real_complex_coefficients(water_sto3g):
+    C = np.eye(water_sto3g.nbf) + 1e-14j
+    assert molden_string(water_sto3g, C=C) == molden_string(water_sto3g, C=C.real)
+
+
+def test_molden_rejects_shells_beyond_g():
+    system = System(
+        xyz="Ne 0 0 0", basis_set="cc-pv5z", auxiliary_basis_set="def2-universal-jkfit"
+    )
+    with pytest.raises(NotImplementedError, match="up to g"):
+        molden_string(system, C=np.eye(system.nbf))
+
+
+class _OrbitalsOnly(Method):
+    """A method that provides orbitals but no way to define their occupations."""
+
+    def __call__(self, upstream):
+        return self
+
+    def run(self):
+        return self
+
+
+def test_molden_rejects_methods_without_occupations(water_sto3g):
+    rhf = RHF(charge=0)(water_sto3g)
+    rhf.run()
+    method = _OrbitalsOnly()
+    method.provides = {"system", "mos"}
+    method.system, method.mos = rhf.system, rhf.mos
+    method.two_component, method.executed = False, True
+    with pytest.raises(NotImplementedError, match="does not know the occupations"):
+        molden_string(method)

@@ -69,12 +69,14 @@ Once a method has been run, you can export its orbitals for visualization in any
     forte2.write_molden(rhf, "rhf.molden")
     forte2.write_molden(casscf, "casscf.molden")
 
-This works for SCF references (RHF, ROHF, UHF), orbital-rotation methods such as AVAS and ASET, and active-space drivers (``CI``, ``MCOptimizer``).
+This works for SCF references (RHF, ROHF, UHF), AVAS, and active-space drivers and solvers (``CI``, ``MCOptimizer``, ``CISolver``, ...).
 Each orbital carries its symmetry label, an energy and an occupation:
 
 * SCF: orbital energies, and occupations from the SCF density.
-* AVAS, ASET: the reference Fock diagonal, and the nominal (0, 1 or 2) occupations of the reference they rotate.
-* CI, MCOptimizer: the diagonal of the generalized Fock matrix; 2 for core orbitals, the diagonal of the state-averaged 1-RDM for active orbitals (the natural occupation numbers when ``final_orbitals="natural"``), and 0 for virtual orbitals.
+* AVAS: the reference Fock diagonal, and the nominal (0, 1 or 2) occupations of the SCF reference it rotates.
+* CI, MCOptimizer and their solvers: the diagonal of the generalized Fock matrix; 2 for core orbitals, the diagonal of the state-averaged 1-RDM for active orbitals (the natural occupation numbers when ``final_orbitals="natural"``), and 0 for virtual orbitals.
+
+Methods whose orbitals derive from a correlated calculation by other means, such as ``ASET`` and ``DSRG_MRPT2``, are not supported directly; write the orbitals of the underlying ``MCOptimizer`` instead, or pass the coefficients explicitly as shown below.
 
 To write any other set of orbitals, for example localized orbitals, pass the ``System`` and the coefficients.
 ``forte2.molden_string`` returns the same text without writing a file::
