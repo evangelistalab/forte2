@@ -20,6 +20,10 @@ Here are some examples of how to obtain the most common integrals. First one nee
 
 The ``system`` object will now contain parsed geometry under ``atoms``, the basis set under ``basis``, the auxiliary basis set under ``auxiliary_basis``, and the minimal atomic basis set under ``minao_basis``.
 
+``forte2.lib.ints.shell_label(l, idx)`` labels a spherical shell function in Libint2 order.
+It accepts angular momenta ``0`` through ``11`` and zero-based indices ``0`` through ``2*l``.
+Out-of-range values raise ``IndexError``.
+
 There are two ways of obtaining integrals: using the ``forte2.lib.ints`` module (direct C++ API calls to Libint2 and libcint), or using the ``forte2.integrals`` module (Python wrappers around the C++ API calls). The two ways are equivalent, but the latter can be more user-friendly.
 
 Getting integrals through ``forte2.lib.ints`` can be achieved as follows::

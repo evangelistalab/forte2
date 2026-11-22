@@ -1,4 +1,7 @@
+import pytest
+
 from forte2.lib import ints
+from forte2.system.basis_utils import MAX_L, get_shell_label
 
 
 def test_basis_properties():
@@ -19,12 +22,18 @@ def test_basis_properties():
     assert basis.max_nbasis == 5
 
 
+def test_shell_labels_match_spherical_harmonic_order():
+    for l in range(MAX_L + 1):
+        indices = range(2 * l + 1)
+        assert [ints.shell_label(l, idx) for idx in indices] == [
+            get_shell_label(l, idx) for idx in indices
+        ]
+
+
 def test_shell_label_out_of_range_raises():
     # Regression: shell_label validated l < 0 but not the upper bound, so
     # general_labels[l] was an out-of-bounds vector read (UB) for l beyond the
     # defined labels (l >= 12).
-    import pytest
-
     # Defined labels: explicit s..f, general s..n (l = 0..11).
     assert ints.shell_label(11, 0) == "n(0)"
     assert ints.shell_label(4, 0) == "g(0)"
@@ -34,3 +43,7 @@ def test_shell_label_out_of_range_raises():
         ints.shell_label(12, 0)
     with pytest.raises(Exception):
         ints.shell_label(-1, 0)
+    with pytest.raises(IndexError, match="Invalid index for angular momentum 3"):
+        ints.shell_label(3, -1)
+    with pytest.raises(IndexError, match="Invalid index for angular momentum 3"):
+        ints.shell_label(3, 7)
