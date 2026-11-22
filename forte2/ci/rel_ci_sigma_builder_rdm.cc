@@ -1,6 +1,5 @@
-#include <iostream>
+#include <algorithm>
 
-#include "helpers/timer.hpp"
 #include "helpers/np_matrix_functions.h"
 #include "helpers/np_vector_functions.h"
 #include "helpers/indexing.hpp"
@@ -70,217 +69,89 @@ np_matrix_complex RelCISigmaBuilder::compute_so_1rdm(np_vector_complex C_left,
     return rdm;
 }
 
-np_tensor4_complex RelCISigmaBuilder::compute_so_2rdm(np_vector_complex C_left,
-                                                      np_vector_complex C_right) const {
-    Spin spin = Spin::Alpha; // placeholder spin
+template <typename GetHoleList, typename OrbitalIndex>
+void RelCISigmaBuilder::contract_spinor_rdm(np_vector_complex C_left, np_vector_complex C_right,
+                                            std::complex<double>* rdm_data,
+                                            const CIOrbitalIrrepBlocks& orbitals,
+                                            const StringAddress& holes, GetHoleList get_hole_list,
+                                            OrbitalIndex orbital_index) const {
+    if (lists_.ndet() == 0)
+        return;
 
-    const auto na = lists_.na();
-    const size_t norb = lists_.norb();
+    const auto Cl_span = vector::as_span<std::complex<double>>(C_left);
+    const auto Cr_span = vector::as_span<std::complex<double>>(C_right);
+    CIIrrepRDM rdm_blocks(orbitals, rdm_data);
 
-    // if there are less than two orbitals or two electrons, return an empty matrix
-    if (norb < 2 || na < 2) {
-        return make_zeros<nb::numpy, std::complex<double>, 4>({norb, norb, norb, norb});
-    }
-
-    // calculate the number of pairs of orbitals p > q
-    const size_t npairs = (norb * (norb - 1)) / 2;
-    auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({npairs, npairs});
-
-    auto Cl_span = vector::as_span<std::complex<double>>(C_left);
-    auto Cr_span = vector::as_span<std::complex<double>>(C_right);
-
-    auto rdm_data = rdm.data();
-
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
-
-    int num_2h_classes = is_alpha(spin) ? lists_.alpha_address_2h()->nclasses()
-                                        : lists_.beta_address_2h()->nclasses();
-
-    // The contraction gamma[pq,rs] = sum_K sum_idx sign_K sign_L conj(C_L[I,idx]) C_R[J,idx]
-    // can be reformulated into a matrix product over the composite index c = (K, idx)
-    // We gather the (conjugated/signed) left coefficients into B_L[pq, c] and the
-    // (signed) right coefficients into the transposed B_R[c, rs], then accumulate
-    // gamma += B_L * B_R via a single zgemm per K-chunk.
-    for (int class_K = 0; class_K < num_2h_classes; ++class_K) {
-        const size_t maxK = is_alpha(spin) ? lists_.alpha_address_2h()->strpcls(class_K)
-                                           : lists_.beta_address_2h()->strpcls(class_K);
-        if (maxK == 0)
+    for (int class_K = 0; class_K < holes.nclasses(); ++class_K) {
+        const size_t maxK = holes.strpcls(class_K);
+        // The beta string is the vacuum, so each column is just one alpha hole string.
+        const auto& block = orbitals.for_intermediate(lists_, class_K, 0);
+        const size_t nrows = block.size();
+        if (maxK == 0 || nrows == 0)
             continue;
 
-        // loop over blocks of matrix C
-        for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
+        auto [Kblock_left, Kblock_right, K_chunk_size] = get_Kblock_spans(nrows, maxK);
+        for (size_t K_start = 0; K_start < maxK;) {
+            const size_t K_size = std::min(K_chunk_size, maxK - K_start);
+            std::fill_n(Kblock_left.begin(), nrows * K_size, 0.0);
+            std::fill_n(Kblock_right.begin(), nrows * K_size, 0.0);
 
-            if (lists_.block_size(nI) == 0)
-                continue;
-
-            const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
-            if (maxL == 0)
-                continue;
-
-            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ia, class_Ib);
-
-            // B_L is npairs x dimKL, B_R^T is dimKL x npairs; both fit in a Kblock buffer.
-            auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(npairs * maxL, maxK);
-
-            for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                // The string class on which we don't act must be the same for I and J
-                if ((is_alpha(spin) and (class_Ib != class_Jb)) or
-                    (is_beta(spin) and (class_Ia != class_Ja)))
+            // Gather all determinant classes into the same K-blocks to include transitions
+            // between GAS occupation patterns in one GEMM per chunk.
+            for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
+                if (lists_.block_size(nI) == 0)
                     continue;
-                if (lists_.block_size(nJ) == 0)
-                    continue;
-
-                auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
-
-                for (size_t K_start = 0; K_start < maxK; K_start += K_chunk_size) {
-                    const size_t K_end = std::min(K_start + K_chunk_size, maxK);
-                    const size_t K_size = K_end - K_start;
-                    const size_t dimKL = K_size * maxL;
-
-                    // B_L[pq, c] with c = K*maxL + idx, leading dim dimKL
-                    std::fill_n(Kblock1.begin(), npairs * dimKL, 0.0);
-                    // B_R^T[c, rs], leading dim npairs
-                    std::fill_n(Kblock2.begin(), dimKL * npairs, 0.0);
-
-                    for (size_t K = 0; K < K_size; ++K) {
-                        const auto& Kllist =
-                            is_alpha(spin)
-                                ? lists_.get_alpha_2h_list(class_K, K_start + K, class_Ia)
-                                : lists_.get_beta_2h_list(class_K, K_start + K, class_Ib);
-                        const auto& Krlist =
-                            is_alpha(spin)
-                                ? lists_.get_alpha_2h_list(class_K, K_start + K, class_Ja)
-                                : lists_.get_beta_2h_list(class_K, K_start + K, class_Jb);
-                        for (const auto& [sign_K, p, q, I] : Kllist) {
-                            const size_t pq_index = pair_index_gt(p, q);
-                            const double sgn = static_cast<double>(sign_K);
-                            const auto* src = tl.data() + I * maxL;
-                            auto* dst = Kblock1.data() + pq_index * dimKL + K * maxL;
-                            for (size_t idx{0}; idx < maxL; ++idx)
-                                dst[idx] += sgn * std::conj(src[idx]);
-                        }
-                        for (const auto& [sign_L, r, s, J] : Krlist) {
-                            const size_t rs_index = pair_index_gt(r, s);
-                            const double sgn = static_cast<double>(sign_L);
-                            const auto* src = tr.data() + J * maxL;
-                            auto* dst = Kblock2.data() + (K * maxL) * npairs + rs_index;
-                            for (size_t idx{0}; idx < maxL; ++idx)
-                                dst[idx * npairs] += sgn * src[idx];
-                        }
+                const size_t offset = lists_.block_offset(nI);
+                for (size_t K = 0; K < K_size; ++K) {
+                    for (const auto& sub :
+                         (lists_.*get_hole_list)(class_K, K_start + K, class_Ia)) {
+                        const size_t row = orbitals.local_row(orbital_index(sub));
+                        const double sign = static_cast<double>(sub.sign);
+                        const size_t det_index = offset + sub.J;
+                        Kblock_left[row * K_size + K] += sign * std::conj(Cl_span[det_index]);
+                        Kblock_right[K * nrows + row] += sign * Cr_span[det_index];
                     }
-
-                    // gamma[pq,rs] += sum_c B_L[pq,c] B_R^T[c,rs]
-                    matrix_product('N', 'N', npairs, npairs, dimKL, 1.0, Kblock1.data(), dimKL,
-                                   Kblock2.data(), npairs, 1.0, rdm_data, npairs);
                 }
             }
+
+            // The left K-block stores conjugated bra rows by hole columns.
+            // The right K-block stores hole rows by ket columns.
+            matrix_product('N', 'N', nrows, nrows, K_size, 1.0, Kblock_left.data(), K_size,
+                           Kblock_right.data(), nrows, 1.0, rdm_blocks.data(block), nrows);
+            K_start += K_size;
         }
     }
+    rdm_blocks.unpack();
+}
 
+np_tensor4_complex RelCISigmaBuilder::compute_so_2rdm(np_vector_complex C_left,
+                                                      np_vector_complex C_right) const {
+    const size_t norb = lists_.norb();
+    if (norb < 2 || lists_.na() < 2)
+        return make_zeros<nb::numpy, std::complex<double>, 4>({norb, norb, norb, norb});
+
+    const size_t npairs = norb * (norb - 1) / 2;
+    auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({npairs, npairs});
+    contract_spinor_rdm(C_left, C_right, rdm.data(), spinor_pairs_, *lists_.alpha_address_2h(),
+                        &CIStrings::get_alpha_2h_list, [](const H2StringSubstitution& sub) {
+                            return pair_index_gt(sub.p, sub.q);
+                        });
     return matrix::packed_tensor4_to_tensor4<std::complex<double>>(rdm);
 }
 
 np_tensor6_complex RelCISigmaBuilder::compute_so_3rdm(np_vector_complex C_left,
                                                       np_vector_complex C_right) const {
-    Spin spin = Spin::Alpha; // placeholder spin
-    const auto na = lists_.na();
-    const auto nb = lists_.nb();
-    const auto norb = lists_.norb();
-
-    // if there are less than three orbitals or 3 electrons, return an empty matrix
-    if (norb < 3 || na < 3) {
+    const size_t norb = lists_.norb();
+    if (norb < 3 || lists_.na() < 3)
         return make_zeros<nb::numpy, std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
-    }
 
-    const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
+    const size_t ntriplets = norb * (norb - 1) * (norb - 2) / 6;
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({ntriplets, ntriplets});
-
-    auto Cl_span = vector::as_span<std::complex<double>>(C_left);
-    auto Cr_span = vector::as_span<std::complex<double>>(C_right);
-
-    auto rdm_data = rdm.data();
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
-
-    int num_3h_classes = is_alpha(spin) ? lists_.alpha_address_3h()->nclasses()
-                                        : lists_.beta_address_3h()->nclasses();
-
-    // Same GEMM reformulation as compute_2rdm, over triplets p>q>r / s>t>u and the 3-hole K
-    // classes: gamma[pqr,stu] += sum_c B_L[pqr,c] B_R^T[c,stu] with c = (K, idx).
-    for (int class_K = 0; class_K < num_3h_classes; ++class_K) {
-        const size_t maxK = is_alpha(spin) ? lists_.alpha_address_3h()->strpcls(class_K)
-                                           : lists_.beta_address_3h()->strpcls(class_K);
-        if (maxK == 0)
-            continue;
-
-        // loop over blocks of matrix C
-        for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-            if (lists_.block_size(nI) == 0)
-                continue;
-
-            const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
-            if (maxL == 0)
-                continue;
-
-            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ia, class_Ib);
-
-            // B_L is ntriplets x dimKL, B_R^T is dimKL x ntriplets.
-            auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(ntriplets * maxL, maxK);
-
-            for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                // The string class on which we don't act must be the same for I and J
-                if ((is_alpha(spin) and (class_Ib != class_Jb)) or
-                    (is_beta(spin) and (class_Ia != class_Ja)))
-                    continue;
-                if (lists_.block_size(nJ) == 0)
-                    continue;
-
-                auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
-
-                for (size_t K_start = 0; K_start < maxK; K_start += K_chunk_size) {
-                    const size_t K_end = std::min(K_start + K_chunk_size, maxK);
-                    const size_t K_size = K_end - K_start;
-                    const size_t dimKL = K_size * maxL;
-
-                    std::fill_n(Kblock1.begin(), ntriplets * dimKL, 0.0);
-                    std::fill_n(Kblock2.begin(), dimKL * ntriplets, 0.0);
-
-                    for (size_t K = 0; K < K_size; ++K) {
-                        const auto& Kllist =
-                            is_alpha(spin)
-                                ? lists_.get_alpha_3h_list(class_K, K_start + K, class_Ia)
-                                : lists_.get_beta_3h_list(class_K, K_start + K, class_Ib);
-                        const auto& Krlist =
-                            is_alpha(spin)
-                                ? lists_.get_alpha_3h_list(class_K, K_start + K, class_Ja)
-                                : lists_.get_beta_3h_list(class_K, K_start + K, class_Jb);
-                        for (const auto& [sign_K, p, q, r, I] : Kllist) {
-                            const size_t pqr_index = triplet_index_gt(p, q, r);
-                            const double sgn = static_cast<double>(sign_K);
-                            const auto* src = tl.data() + I * maxL;
-                            auto* dst = Kblock1.data() + pqr_index * dimKL + K * maxL;
-                            for (size_t idx{0}; idx < maxL; ++idx)
-                                dst[idx] += sgn * std::conj(src[idx]);
-                        }
-                        for (const auto& [sign_L, s, t, u, J] : Krlist) {
-                            const size_t stu_index = triplet_index_gt(s, t, u);
-                            const double sgn = static_cast<double>(sign_L);
-                            const auto* src = tr.data() + J * maxL;
-                            auto* dst = Kblock2.data() + (K * maxL) * ntriplets + stu_index;
-                            for (size_t idx{0}; idx < maxL; ++idx)
-                                dst[idx * ntriplets] += sgn * src[idx];
-                        }
-                    }
-
-                    matrix_product('N', 'N', ntriplets, ntriplets, dimKL, 1.0, Kblock1.data(),
-                                   dimKL, Kblock2.data(), ntriplets, 1.0, rdm_data, ntriplets);
-                }
-            }
-        }
-    }
+    const auto triplets = CIOrbitalIrrepBlocks::spinor_triplets(lists_);
+    contract_spinor_rdm(C_left, C_right, rdm.data(), triplets, *lists_.alpha_address_3h(),
+                        &CIStrings::get_alpha_3h_list, [](const H3StringSubstitution& sub) {
+                            return triplet_index_gt(sub.p, sub.q, sub.r);
+                        });
 
     auto rdm_full =
         make_zeros<nb::numpy, std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});

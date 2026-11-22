@@ -38,9 +38,13 @@ def _random_complex_integrals(rng, norb, symmetric_H):
 
 @pytest.mark.parametrize("algorithm", ["kh", "hz"])
 @pytest.mark.parametrize("symmetric_H", [True, False])
-def test_real_sigma_build_against_sparse_ops(algorithm, symmetric_H):
+@pytest.mark.parametrize("with_symmetry", [False, True], ids=["C1", "C2v"])
+def test_real_sigma_build_against_sparse_ops(algorithm, symmetric_H, with_symmetry):
     norb = 6
-    lists = CIStrings(2, 2, 1, 0, [[0] * norb], [], [])
+    if with_symmetry:
+        lists = CIStrings(2, 2, 4, 3, [[0, 2, 1], [3, 0, 1]], [2], [2])
+    else:
+        lists = CIStrings(2, 2, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(0)
     H, V = _random_real_integrals(rng, norb, symmetric_H)
     E = 0.37
@@ -61,9 +65,13 @@ def test_real_sigma_build_against_sparse_ops(algorithm, symmetric_H):
 
 
 @pytest.mark.parametrize("symmetric_H", [True, False])
-def test_complex_sigma_build_against_sparse_ops(symmetric_H):
+@pytest.mark.parametrize("with_symmetry", [False, True], ids=["C1", "C2v"])
+def test_complex_sigma_build_against_sparse_ops(symmetric_H, with_symmetry):
     norb = 12
-    lists = CIStrings(4, 0, 1, 0, [[0] * norb], [], [])
+    if with_symmetry:
+        lists = CIStrings(4, 0, 4, 3, [[0, 2, 1, 3, 0, 1]] * 2, [2], [2])
+    else:
+        lists = CIStrings(4, 0, 1, 0, [[0] * norb], [], [])
     rng = np.random.default_rng(0)
     H, V = _random_complex_integrals(rng, norb, symmetric_H)
     E = 0.37
