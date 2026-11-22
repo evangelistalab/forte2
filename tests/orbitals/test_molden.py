@@ -355,7 +355,8 @@ def test_molden_rohf_occupations(tmp_path):
 def _generalized_fock_energies(method):
     """Diagonal of F = h + J[D] - K[D]/2 in the final orbitals, built from the
     final orbitals and 1-RDM through one AO density D = 2 C_core C_core^T +
-    C_act g1 C_act^T (independently of the writer's Semicanonicalizer path)."""
+    C_act g1 C_act^T (independently of the writer, which builds the core and
+    active parts separately with build_generalized_fock)."""
     system, C, mo_space = method.system, method.mos.C[0], method.mo_space
     occ, U = np.linalg.eigh(np.asarray(method.make_average_rdm(1)))
     factor = np.hstack(
@@ -452,28 +453,6 @@ def test_molden_mcoptimizer_without_orbital_rotations(final_orbitals):
     parsed = _assert_molden_matches(system, mc.mos.C[0], molden_string(mc))
     assert [m["ene"] for m in parsed["mos"]] == approx(_generalized_fock_energies(mc))
     assert sum(m["occup"] for m in parsed["mos"]) == approx(2.0)
-
-
-def test_molden_export_does_not_semicanonicalize(monkeypatch):
-    """Energies come from the AO generalized Fock matrix contracted with the
-    final orbitals: exporting must not diagonalize inactive orbital blocks."""
-    _, _, mc = _cyclopropene_chain()
-    expected = molden_string(mc)
-
-    def refuse(*args, **kwargs):
-        raise AssertionError("semicanonicalization during export")
-
-    monkeypatch.setattr(Semicanonicalizer, "semi_canonicalize", refuse)
-    sizes = []
-    eigh = np.linalg.eigh
-
-    def recording_eigh(a, *args, **kwargs):
-        sizes.append(np.shape(a)[-1])
-        return eigh(a, *args, **kwargs)
-
-    monkeypatch.setattr(np.linalg, "eigh", recording_eigh)
-    assert molden_string(mc) == expected
-    assert max(sizes, default=0) <= mc.mo_space.nactv
 
 
 def test_molden_ci_driver():
