@@ -50,8 +50,6 @@ from forte2.scf.scf_base import SCFBase
 from forte2.system import System
 from forte2.system.basis_utils import AM_LABELS, ml_from_shell_index_cca
 
-from .semicanonicalizer import Semicanonicalizer
-
 __all__ = ["write_molden", "molden_string"]
 
 MAX_MOLDEN_L = 4
@@ -463,23 +461,19 @@ def _active_space_data(method, C):
 
 
 def _generalized_fock_diagonal(method, C, g1) -> np.ndarray:
+    """Diagonal of the generalized Fock matrix in the orbitals ``C``.
+
+    The AO matrix is built once from the core orbitals and the active 1-RDM and
+    contracted with ``C``; no orbital blocks are diagonalized.
+    """
     mo_space = method.mo_space
-    orig_to_contig = np.asarray(mo_space.orig_to_contig, dtype=int)
-    contig_to_orig = np.asarray(mo_space.contig_to_orig, dtype=int)
-    irrep_indices = np.asarray(method.mos.irrep_indices[0], dtype=int)
-    semi = Semicanonicalizer(
-        mo_space=mo_space,
-        system=_spatial_system(method.system),
-        irrep_indices=irrep_indices[orig_to_contig],
-        mix_inactive=False,
-        mix_active=False,
-        do_active=False,
+    fock_builder = _spatial_system(method.system).fock_builder
+    F = fock_builder.build_generalized_fock(
+        C_core=C[:, np.asarray(mo_space.docc_indices, dtype=int)],
+        C_act=C[:, np.asarray(mo_space.active_indices, dtype=int)],
+        g1=g1,
     )
-    # semi.fock is built in the input basis; the rotation it then computes is
-    # not used.
-    semi.semi_canonicalize(g1=g1, C_contig=C[:, orig_to_contig].copy())
-    diagonal = np.real_if_close(np.diag(semi.fock)).astype(float)
-    return diagonal[contig_to_orig]
+    return np.real_if_close(np.einsum("mi,mn,ni->i", C, F, C)).astype(float)
 
 
 def _spatial_system(system):

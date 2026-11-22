@@ -454,6 +454,28 @@ def test_molden_mcoptimizer_without_orbital_rotations(final_orbitals):
     assert sum(m["occup"] for m in parsed["mos"]) == approx(2.0)
 
 
+def test_molden_export_does_not_semicanonicalize(monkeypatch):
+    """Energies come from the AO generalized Fock matrix contracted with the
+    final orbitals: exporting must not diagonalize inactive orbital blocks."""
+    _, _, mc = _cyclopropene_chain()
+    expected = molden_string(mc)
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("semicanonicalization during export")
+
+    monkeypatch.setattr(Semicanonicalizer, "semi_canonicalize", refuse)
+    sizes = []
+    eigh = np.linalg.eigh
+
+    def recording_eigh(a, *args, **kwargs):
+        sizes.append(np.shape(a)[-1])
+        return eigh(a, *args, **kwargs)
+
+    monkeypatch.setattr(np.linalg, "eigh", recording_eigh)
+    assert molden_string(mc) == expected
+    assert max(sizes, default=0) <= mc.mo_space.nactv
+
+
 def test_molden_ci_driver():
     system = System(
         xyz=CYCLOPROPENE, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit"
