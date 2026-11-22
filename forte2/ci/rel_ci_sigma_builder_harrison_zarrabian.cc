@@ -65,7 +65,6 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
     // Two-component CI acts only on alpha spinors (nb == 0), so the beta space is the single
     // vacuum string and the opposite-spin spectator count maxL == 1. The [K, L] composite index
     // therefore collapses to just K
-    const size_t norb = lists_.norb();
     if (lists_.na() < 1)
         return;
 
@@ -84,9 +83,14 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
             if (lists_.block_size(nI) == 0)
                 continue;
 
+            const auto& block = orbital_rows_.for_intermediate(lists_, class_K, class_Ib);
+            const size_t nrows = block.size();
+            if (nrows == 0)
+                continue;
+
             // Grab the temporary buffers that will hold intermediates D(i, K)
             // and return the maximum size of a chunk of K indices
-            auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(norb, maxK);
+            auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(nrows, maxK);
 
             // Grab a span with the C coefficients
             auto tr = gather_block(basis, TR, Spin::Alpha, lists_, class_Ia, class_Ib);
@@ -97,7 +101,7 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
                 // size of the K range, which may be smaller than K_chunk_size
                 const size_t K_size = K_end - K_start;
 
-                std::fill_n(Kblock2.begin(), norb * K_size, 0.0);
+                std::fill_n(Kblock2.begin(), nrows * K_size, 0.0);
 
                 // D(q, K) = <K|a_q|I> C(I)
                 // Parallelize over K: each K writes its own column of Kblock2, so no write race.
@@ -106,13 +110,14 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
                         const auto& Klist =
                             lists_.get_alpha_1h_list(class_K, K_start + K, class_Ia);
                         for (const auto& [sign_K, q, I] : Klist)
-                            Kblock2[q * K_size + K] += static_cast<double>(sign_K) * tr[I];
+                            Kblock2[orbital_rows_.local_row(q) * K_size + K] +=
+                                static_cast<double>(sign_K) * tr[I];
                     }
                 });
 
                 // E(p, K) = sum_q h(p,q) D(q, K)
-                matrix_product('N', 'N', norb, K_size, norb, 1.0, h.data(), norb, Kblock2.data(),
-                               K_size, 0.0, Kblock1.data(), K_size);
+                matrix_product('N', 'N', nrows, K_size, nrows, 1.0, h.data() + block.matrix_offset,
+                               nrows, Kblock2.data(), K_size, 0.0, Kblock1.data(), K_size);
 
                 // sigma(J) += <J|a^+_p|K> E(p, K)
                 for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
@@ -133,7 +138,8 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
                                 // this thread does not own this J
                                 if (J < J_begin || J >= J_end)
                                     continue;
-                                TL[J] += static_cast<double>(sign_K) * Kblock1[p * K_size + K];
+                                TL[J] += static_cast<double>(sign_K) *
+                                         Kblock1[orbital_rows_.local_row(p) * K_size + K];
                             }
                         }
                     });
@@ -149,9 +155,6 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
     if (lists_.na() < 2)
         return;
 
-    const size_t norb = lists_.norb();
-    const size_t npairs = norb * (norb - 1) / 2;
-
     const int num_2h_classes = lists_.alpha_address_2h()->nclasses();
 
     for (int class_K = 0; class_K < num_2h_classes; ++class_K) {
@@ -165,8 +168,13 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
             if (lists_.block_size(nI) == 0)
                 continue;
 
+            const auto& block = spinor_pairs_.for_intermediate(lists_, class_K, class_Ib);
+            const size_t nrows = block.size();
+            if (nrows == 0)
+                continue;
+
             // grab temporary buffers and the maximum size of a chunk of K indices
-            auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(npairs, maxK);
+            auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(nrows, maxK);
 
             auto tr = gather_block(basis, TR, Spin::Alpha, lists_, class_Ia, class_Ib);
 
@@ -176,7 +184,7 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                 // size of the K range, which may be smaller than K_chunk_size
                 const size_t K_size = K_end - K_start;
 
-                std::fill_n(Kblock2.begin(), npairs * K_size, 0.0);
+                std::fill_n(Kblock2.begin(), nrows * K_size, 0.0);
 
                 // D([qs], K) = <K|a_q a_s|I> C(I)
                 // Parallelize over K: each K writes its own column of Kblock2, so no write race.
@@ -185,15 +193,16 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                         const auto& Krlist =
                             lists_.get_alpha_2h_list(class_K, K + K_start, class_Ia);
                         for (const auto& [sign_K, q, s, I] : Krlist) {
-                            const size_t qs_index = pair_index_gt(q, s);
+                            const size_t qs_index = spinor_pairs_.local_row(pair_index_gt(q, s));
                             Kblock2[qs_index * K_size + K] += static_cast<double>(sign_K) * tr[I];
                         }
                     }
                 });
 
                 // E([pr], K) = sum_{qs} v([pr],[qs]) D([qs], K)
-                matrix_product('N', 'N', npairs, K_size, npairs, 1.0, v_pr_qs.data(), npairs,
-                               Kblock2.data(), K_size, 0.0, Kblock1.data(), K_size);
+                matrix_product('N', 'N', nrows, K_size, nrows, 1.0,
+                               v_pr_qs.data() + block.matrix_offset, nrows, Kblock2.data(), K_size,
+                               0.0, Kblock1.data(), K_size);
 
                 for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                     if (class_Ib != class_Jb)
@@ -213,7 +222,8 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                                 // this thread does now own this J
                                 if (J < J_begin || J >= J_end)
                                     continue;
-                                const size_t pr_index = pair_index_gt(p, r);
+                                const size_t pr_index =
+                                    spinor_pairs_.local_row(pair_index_gt(p, r));
                                 TL[J] +=
                                     static_cast<double>(sign_K) * Kblock1[pr_index * K_size + K];
                             }

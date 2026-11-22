@@ -1,6 +1,5 @@
 #include <iostream>
 #include <iomanip>
-#include <limits>
 #include <string>
 
 #include "helpers/timer.hpp"
@@ -32,8 +31,11 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
 
     if (algorithm == "kh" or algorithm == "knowles-handy") {
         algorithm_ = CIAlgorithm::Knowles_Handy;
+        excitation_pairs_.emplace(CIOrbitalIrrepBlocks::pairs_with_diagonal(lists));
     } else if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
         algorithm_ = CIAlgorithm::Harrison_Zarrabian;
+        orbital_rows_.emplace(CIOrbitalIrrepBlocks::orbitals(lists));
+        same_spin_pairs_.emplace(CIOrbitalIrrepBlocks::strict_pairs(lists));
     } else {
         throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
     }
@@ -73,28 +75,6 @@ void CISigmaBuilder::set_memory(int mb) {
     // release the Kblock1_ and Kblock2_ buffers to free up memory
     free_std_vector_memory(Kblock1_);
     free_std_vector_memory(Kblock2_);
-}
-
-size_t CISigmaBuilder::max_composite_hole_dimension(const StringAddress& alpha_address,
-                                                    const StringAddress& beta_address,
-                                                    std::string_view rdm_name) {
-    size_t max_alpha = 0;
-    for (int class_Ka = 0; class_Ka < alpha_address.nclasses(); ++class_Ka) {
-        max_alpha = std::max(max_alpha, alpha_address.strpcls(class_Ka));
-    }
-
-    size_t max_beta = 0;
-    for (int class_Kb = 0; class_Kb < beta_address.nclasses(); ++class_Kb) {
-        max_beta = std::max(max_beta, beta_address.strpcls(class_Kb));
-    }
-
-    if ((max_alpha == 0) or (max_beta == 0))
-        return 0;
-    if (max_alpha > std::numeric_limits<size_t>::max() / max_beta) {
-        throw std::overflow_error("The composite " + std::string(rdm_name) +
-                                  " hole dimension is too large.");
-    }
-    return max_alpha * max_beta;
 }
 
 void CISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<np_matrix> H,
@@ -154,48 +134,25 @@ void CISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<np_m
 }
 
 void CISigmaBuilder::update_h_hz(np_matrix& H) {
-    const size_t norb = lists_.norb();
-    h_hz.resize(norb * norb);
     auto h = H.view();
-    for (size_t p = 0; p < norb; ++p) {
-        for (size_t q = 0; q < norb; ++q) {
-            h_hz[p * norb + q] = h(p, q);
-        }
-    }
+    orbital_rows_->pack_matrix(h_hz, [&](size_t p, size_t q) { return h(p, q); });
 }
 
 void CISigmaBuilder::update_v_hz(np_tensor4& V) {
-    const size_t norb = lists_.norb();
-    const size_t norb2 = norb * norb;
-    const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
-    v_pr_qs.resize(norb2 * norb2);
-    v_pr_qs_a.resize(npairs * npairs);
     auto v = V.view();
-
-    // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs
-    for (size_t p = 0; p < norb; ++p) {
-        for (size_t r = 0; r < norb; ++r) {
-            const auto pr_index = p * norb + r;
-            for (size_t q = 0; q < norb; ++q) {
-                for (size_t s = 0; s < norb; ++s) {
-                    const auto qs_index = q * norb + s;
-                    v_pr_qs[pr_index * norb2 + qs_index] = v(p, r, q, s);
-                }
-            }
-        }
-    }
-    // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs_a with p > r and q > s
-    for (int p = 1; p < norb; ++p) {
-        for (int r = 0; r < p; ++r) {
-            const auto pr_index = (p * (p - 1)) / 2 + r;
-            for (int q = 1; q < norb; ++q) {
-                for (int s = 0; s < q; ++s) {
-                    const auto qs_index = pair_index_gt(q, s);
-                    v_pr_qs_a[pr_index * npairs + qs_index] = v(p, r, q, s) - v(p, r, s, q);
-                }
-            }
-        }
-    }
+    const auto inv_pair_index_gen = [norb = lists_.norb()](size_t row) {
+        return std::pair{row / norb, row % norb};
+    };
+    opposite_spin_pairs_.pack_pair_matrix(v_pr_qs, inv_pair_index_gen, [&](auto pr, auto qs) {
+        const auto [p, r] = pr;
+        const auto [q, s] = qs;
+        return v(p, r, q, s);
+    });
+    same_spin_pairs_->pack_pair_matrix(v_pr_qs_a, inv_pair_index_gt<size_t>, [&](auto pr, auto qs) {
+        const auto [p, r] = pr;
+        const auto [q, s] = qs;
+        return v(p, r, q, s) - v(p, r, s, q);
+    });
 }
 
 void CISigmaBuilder::update_h_kh(np_matrix& H, np_tensor4& V) {
@@ -214,25 +171,19 @@ void CISigmaBuilder::update_h_kh(np_matrix& H, np_tensor4& V) {
 }
 
 void CISigmaBuilder::update_v_kh(np_tensor4& V) {
-    const size_t norb = lists_.norb();
-    const size_t ngeqpairs = (norb * (norb + 1)) / 2; // Number of pairs (p, r) with p >= r
-    v_ijkl_hk.resize(ngeqpairs * ngeqpairs);
     auto v = V.view();
-
-    // Loop over all pairs (i, j) and (k, l) to fill v_ijkl_hk with i >= j and k >= l
-    for (size_t i = 0; i < norb; ++i) {
-        for (size_t j = 0; j <= i; ++j) {
-            const auto ij_index = pair_index_geq(i, j);
-            for (size_t k = 0; k < norb; ++k) {
-                for (size_t l = 0; l <= k; ++l) {
-                    const auto kl_index = pair_index_geq(k, l);
-                    double dij = (i == j ? 2 : 1);
-                    double dkl = (k == l ? 2 : 1);
-                    v_ijkl_hk[ij_index * ngeqpairs + kl_index] = v(i, k, j, l) / (dij * dkl);
-                }
-            }
-        }
-    }
+    const auto inv_pair_index_geq = [](size_t row) {
+        // (i,j) with i >= j has the same index as (i+1,j) in the strict layout.
+        const auto [i_plus_one, j] = inv_pair_index_gt(row);
+        return std::pair{i_plus_one - 1, j};
+    };
+    excitation_pairs_->pack_pair_matrix(v_ijkl_hk, inv_pair_index_geq, [&](auto ij, auto kl) {
+        const auto [i, j] = ij;
+        const auto [k, l] = kl;
+        const double dij = i == j ? 2.0 : 1.0;
+        const double dkl = k == l ? 2.0 : 1.0;
+        return v(i, k, j, l) / (dij * dkl);
+    });
 }
 
 void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {

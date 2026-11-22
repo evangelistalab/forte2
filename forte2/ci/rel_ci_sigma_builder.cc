@@ -103,35 +103,17 @@ void RelCISigmaBuilder::set_Hamiltonian(std::optional<double> E, std::optional<n
 }
 
 void RelCISigmaBuilder::update_h_hz(np_matrix_complex& H) {
-    const size_t norb = lists_.norb();
-    h_hz.resize(norb * norb);
     auto h = H.view();
-    for (size_t p = 0; p < norb; ++p) {
-        for (size_t q = 0; q < norb; ++q) {
-            h_hz[p * norb + q] = h(p, q);
-        }
-    }
+    orbital_rows_.pack_matrix(h_hz, [&](size_t p, size_t q) { return h(p, q); });
 }
 
 void RelCISigmaBuilder::update_v_hz(np_tensor4_complex& V) {
-    const size_t norb = lists_.norb();
-    const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
-    v_pr_qs.resize(npairs * npairs);
     auto v = V.view();
-
-    // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs with p > r and q > s.
-    // V is given in physicist's notation <pq|rs> and antisymmetrized here on the fly.
-    for (int p = 1; p < norb; ++p) {
-        for (int r = 0; r < p; ++r) {
-            const auto pr_index = (p * (p - 1)) / 2 + r;
-            for (int q = 1; q < norb; ++q) {
-                for (int s = 0; s < q; ++s) {
-                    const auto qs_index = pair_index_gt(q, s);
-                    v_pr_qs[pr_index * npairs + qs_index] = v(p, r, q, s) - v(p, r, s, q);
-                }
-            }
-        }
-    }
+    spinor_pairs_.pack_pair_matrix(v_pr_qs, inv_pair_index_gt<size_t>, [&](auto pr, auto qs) {
+        const auto [p, r] = pr;
+        const auto [q, s] = qs;
+        return v(p, r, q, s) - v(p, r, s, q);
+    });
 }
 
 void RelCISigmaBuilder::Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const {
