@@ -1,8 +1,24 @@
-from forte2.lib.det import Determinant, hilbert_space
+import numpy as np
+import pytest
+
+from forte2.lib.det import Determinant, hilbert_space, make_s2_matrix, spin2
 
 
 def det(s):
     return Determinant(s)
+
+
+def test_make_s2_matrix():
+    dets = hilbert_space(4, 1, 1)
+    expected = [[spin2(bra, ket) for ket in dets] for bra in dets]
+
+    s2 = make_s2_matrix(dets)
+
+    np.testing.assert_array_equal(s2, expected)
+    np.testing.assert_allclose(
+        np.linalg.eigvalsh(s2), [0.0] * 10 + [2.0] * 6, atol=1e-12
+    )
+    assert make_s2_matrix([]).shape == (0, 0)
 
 
 def test_determinant_hilbert_space():

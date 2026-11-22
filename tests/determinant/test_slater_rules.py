@@ -1,13 +1,20 @@
 import numpy as np
 import pytest
 
-from forte2 import RHF, System
-from forte2.lib.det import Determinant, SlaterRules, RelSlaterRules, hilbert_space
+from forte2 import RHF, System, CISolver, CI, GHF
+from forte2.lib.det import (
+    Determinant,
+    SlaterRules,
+    RelSlaterRules,
+    hilbert_space,
+    make_hamiltonian_matrix,
+    make_s2_matrix,
+)
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
 from forte2.ci.rel_ci import _RelCISingleStateSolver
 from forte2.state import MOSpace, State
-from forte2.base_classes import DavidsonLiuParams
+from forte2.base_classes import DavidsonLiuParams, CIParams
 
 
 def _determinant(alpha_occ, beta_occ):
@@ -339,6 +346,88 @@ def test_slater_rules_matches_reference_for_fock_space():
             expected = _reference_slater_rule(norb, 0.37, h, v, lhs, rhs)
             found = slater_rules.slater_rules(lhs, rhs)
             assert found == approx(expected)
+
+
+def test_make_hamiltonian_matrix():
+    norb = 4
+    h, v = _symmetric_integrals(norb)
+    rules = SlaterRules(norb, 0.37, h, v)
+    dets = hilbert_space(norb, 2, 1)
+    expected = [[rules.slater_rules(bra, ket) for ket in dets] for bra in dets]
+
+    matrix = make_hamiltonian_matrix(dets, rules)
+
+    np.testing.assert_allclose(matrix, expected, atol=1e-12)
+    np.testing.assert_array_equal(matrix, matrix.T)
+    assert make_hamiltonian_matrix([], rules).shape == (0, 0)
+
+
+def test_make_hamiltonian_matrix_agrees_with_ci():
+    "HF (6e, 5o), there are 9 triplet A1 roots"
+    xyz = "H 0 0 0; F 0 0 1"
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        symmetry=True,
+    )
+    scf = RHF(charge=0)(system)
+    ci_solver = CISolver(
+        states=State(system=system, multiplicity=3, ms=0.0, symmetry=0),
+        ci_params=CIParams(ci_algorithm="exact"),
+        nroots=9,
+        core_orbitals=2,
+        active_orbitals=5,  # (6e, 5o), F 2p, 3s; H 1s
+    )
+    ci = CI(ci_solver)(scf)
+    ci.run()
+
+    ints = ci_solver.sub_solvers[0].ints
+    slater_rules = SlaterRules(5, ints.E, ints.H, ints.V)
+    dets = ci_solver.sub_solvers[0].dets
+    H_dense = make_hamiltonian_matrix(dets, slater_rules)
+    S2_dense = make_s2_matrix(dets)
+    evals, evecs = np.linalg.eigh(H_dense)
+    S2_per_root = np.einsum("ip,ij,jp->p", evecs, S2_dense, evecs, optimize=True)
+    assert evals[np.abs(S2_per_root - 2) < 1e-10] == approx(ci.E_ci)
+
+
+@pytest.mark.parametrize("occupation", ["0a", "0b"])
+def test_make_hamiltonian_matrix_rejects_out_of_range_orbitals(occupation):
+    rules = SlaterRules(1, 0.0, np.zeros((1, 1)), np.zeros((1, 1, 1, 1)))
+    with pytest.raises(
+        ValueError, match="outside the range of the SlaterRules integrals"
+    ):
+        make_hamiltonian_matrix([Determinant(occupation)], rules)
+
+
+def test_make_hamiltonian_matrix_spinors():
+    nspinor = 6
+    h, v = _random_hermitian_integrals(nspinor, seed=31)
+    rules = RelSlaterRules(nspinor, 0.37, h, v)
+    dets = hilbert_space(nspinor, 3, 0)
+    expected = [[rules.slater_rules(bra, ket) for ket in dets] for bra in dets]
+
+    matrix = make_hamiltonian_matrix(dets, rules)
+
+    assert matrix.dtype == np.complex128
+    assert np.any(np.abs(matrix.imag) > 1e-12)
+    np.testing.assert_allclose(matrix, expected, atol=1e-12, rtol=0.0)
+    np.testing.assert_array_equal(matrix, matrix.conj().T)
+    empty = make_hamiltonian_matrix([], rules)
+    assert empty.shape == (0, 0)
+    assert empty.dtype == np.complex128
+
+
+@pytest.mark.parametrize(
+    "occupation, message",
+    [("b", "empty beta string"), ("0a", "spinor outside the range")],
+)
+def test_make_hamiltonian_matrix_rejects_invalid_spinors(occupation, message):
+    h, v = _random_hermitian_integrals(1, seed=31)
+    rules = RelSlaterRules(1, 0.0, h, v)
+    with pytest.raises(ValueError, match=message):
+        make_hamiltonian_matrix([Determinant(occupation)], rules)
 
 
 def test_slater_rules_1():

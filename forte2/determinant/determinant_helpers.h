@@ -3,12 +3,12 @@
 #include <vector>
 
 #include "determinant/determinant.h"
-
-namespace psi {
-class Matrix;
-} // namespace psi
+#include "helpers/ndarray.h"
 
 namespace forte2 {
+
+class RelSlaterRules;
+class SlaterRules;
 
 /// @brief Create a single excitation from orbital i to orbital a
 /// @param str The original string
@@ -93,19 +93,25 @@ std::pair<Determinant, double> create_double_bb_excitation(const Determinant& de
 std::pair<Determinant, double> create_double_ab_excitation(const Determinant& det, size_t i,
                                                            size_t j, size_t a, size_t b);
 
-/// @brief Build the S^2 operator matrix in the given basis of determinants (multithreaded)
-/// @param dets A vector of determinants
-/// @return A matrix of size (num_dets, num_dets) with the S^2 operator matrix
-// std::shared_ptr<psi::Matrix> make_s2_matrix(const std::vector<Determinant>& dets);
-
-/// @brief Build the Hamiltonian operator matrix in the given basis of determinants
-/// (multithreaded)
-/// @param dets A vector of determinants
-/// @param as_ints A pointer to the ActiveSpaceIntegrals object
+/// @brief Build the Hamiltonian matrix in the given determinant basis (real case, restricted
+/// orbitals)
+/// @param dets The determinant basis, in matrix row and column order
+/// @param slater_rules The Slater rules evaluator for the restricted orbital integrals
 /// @return A matrix of size (num_dets, num_dets) with the Hamiltonian operator matrix
-// std::shared_ptr<psi::Matrix> make_hamiltonian_matrix(const std::vector<Determinant>& dets,
-//                                                      std::shared_ptr<ActiveSpaceIntegrals>
-//                                                      as_ints);
+np_matrix make_hamiltonian_matrix(const std::vector<Determinant>& dets,
+                                  const SlaterRules& slater_rules);
+
+/// @brief Build the Hermitian Hamiltonian matrix in the given spinor determinant basis.
+/// @param dets The determinant basis in matrix order, with spinors occupied in the alpha string
+/// @param slater_rules The Slater rules evaluator for the spinor integrals
+/// @return A complex matrix of size (num_dets, num_dets)
+np_matrix_complex make_hamiltonian_matrix(const std::vector<Determinant>& dets,
+                                          const RelSlaterRules& slater_rules);
+
+/// @brief Build the S^2 operator matrix in the given basis of determinants (restricted orbitals)
+/// @param dets The determinant basis, in matrix row and column order
+/// @return A matrix of size (num_dets, num_dets) with the S^2 operator matrix
+np_matrix make_s2_matrix(const std::vector<Determinant>& dets);
 
 /// @brief Generate all strings of n orbitals and k electrons in each irrep
 /// @param n The number of orbitals
