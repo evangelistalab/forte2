@@ -1,9 +1,6 @@
 #include <algorithm>
-#include <format>
-#include <string>
-#include <iostream>
-
-#include "helpers/printing.hpp"
+#include <iterator>
+#include <utility>
 
 #include "ci_occupation.h"
 
@@ -97,7 +94,8 @@ generate_ormas_occupations(size_t na, size_t nb, const occupation_t& min_occ,
     std::vector<std::pair<size_t, size_t>> occupation_pairs;
     recursive_ormas_generation(na, nb, min_occ, max_occ, space_size, num_spaces, 0, alpha_occ,
                                beta_occ, alpha_occupations, beta_occupations, occupation_pairs);
-    return std::make_tuple(num_spaces, alpha_occupations, beta_occupations, occupation_pairs);
+    return std::make_tuple(num_spaces, std::move(alpha_occupations), std::move(beta_occupations),
+                           std::move(occupation_pairs));
 }
 
 std::tuple<size_t, std::vector<occupation_t>, std::vector<occupation_t>,
@@ -132,230 +130,12 @@ get_ci_occupation_patterns(size_t na, size_t nb, const std::vector<int>& occ_min
             num_spaces += 1;
         }
     }
-    // the exception that breaks the rule
+    // An empty active space still has one zero occupation for each spin.
     if (num_spaces == 0) {
-        std::vector<occupation_t> empty_occ(1, occupation_t{});
-        std::vector<std::pair<size_t, size_t>> empty_pairs(1, {0, 0});
-        return std::make_tuple(1, empty_occ, empty_occ, empty_pairs);
+        return {1, std::vector<occupation_t>(1), std::vector<occupation_t>(1),
+                std::vector<std::pair<size_t, size_t>>{{0, 0}}};
     }
     return generate_ormas_occupations(na, nb, min_occ, max_occ, space_size, num_spaces);
-}
-
-std::tuple<std::vector<occupation_t>, std::vector<occupation_t>,
-           std::vector<std::pair<size_t, size_t>>>
-generate_gas_occupations(int na, int nb, const occupation_t& min_occ, const occupation_t& max_occ,
-                         const occupation_t& gas_size) {
-    std::vector<occupation_t> gas_alpha_occupations;
-    std::vector<occupation_t> gas_beta_occupations;
-    std::vector<std::pair<size_t, size_t>> gas_occupations;
-
-    for (int gas6_na = std::max(0, min_occ[5] - gas_size[5]);
-         gas6_na <= std::min(max_occ[5], gas_size[5]); gas6_na++) {
-        for (int gas6_nb = std::max(0, min_occ[5] - gas6_na);
-             gas6_nb <= std::min(max_occ[5] - gas6_na, gas_size[5]); gas6_nb++) {
-            for (int gas5_na = std::max(0, min_occ[4] - gas_size[4]);
-                 gas5_na <= std::min(max_occ[4], gas_size[4]); gas5_na++) {
-                for (int gas5_nb = std::max(0, min_occ[4] - gas5_na);
-                     gas5_nb <= std::min(max_occ[4] - gas5_na, gas_size[4]); gas5_nb++) {
-                    for (int gas4_na = std::max(0, min_occ[3] - gas_size[3]);
-                         gas4_na <= std::min(max_occ[3], gas_size[3]); gas4_na++) {
-                        for (int gas4_nb = std::max(0, min_occ[3] - gas4_na);
-                             gas4_nb <= std::min(max_occ[3] - gas4_na, gas_size[3]); gas4_nb++) {
-                            for (int gas3_na = std::max(0, min_occ[2] - gas_size[2]);
-                                 gas3_na <= std::min(max_occ[2], gas_size[2]); gas3_na++) {
-                                for (int gas3_nb = std::max(0, min_occ[2] - gas3_na);
-                                     gas3_nb <= std::min(max_occ[2] - gas3_na, gas_size[2]);
-                                     gas3_nb++) {
-                                    for (int gas2_na = std::max(0, min_occ[1] - gas_size[1]);
-                                         gas2_na <= std::min(max_occ[1], gas_size[1]); gas2_na++) {
-                                        for (int gas2_nb = std::max(0, min_occ[1] - gas2_na);
-                                             gas2_nb <= std::min(max_occ[1] - gas2_na, gas_size[1]);
-                                             gas2_nb++) {
-                                            int gas1_na = na - gas2_na - gas3_na - gas4_na -
-                                                          gas5_na - gas6_na;
-                                            int gas1_nb = nb - gas2_nb - gas3_nb - gas4_nb -
-                                                          gas5_nb - gas6_nb;
-                                            int gas1_max = std::max(gas1_na, gas1_nb);
-                                            int gas1_min = std::min(gas1_na, gas1_nb);
-                                            int gas1_total = gas1_na + gas1_nb;
-                                            if (gas1_total <= max_occ[0] and
-                                                gas1_max <= gas_size[0] and gas1_min >= 0 and
-                                                gas1_total >= min_occ[0]) {
-                                                std::array<int, 6> alpha_occ = {gas1_na, gas2_na,
-                                                                                gas3_na, gas4_na,
-                                                                                gas5_na, gas6_na};
-                                                std::array<int, 6> beta_occ = {gas1_nb, gas2_nb,
-                                                                               gas3_nb, gas4_nb,
-                                                                               gas5_nb, gas6_nb};
-                                                // check if alpha_occ is contained in
-                                                // gas_alpha_occupations, if not, add it and
-                                                // grab its index, otherwise grab its index
-                                                size_t alpha_index;
-                                                if (auto alpha_it = std::find(
-                                                        gas_alpha_occupations.begin(),
-                                                        gas_alpha_occupations.end(), alpha_occ);
-                                                    alpha_it == gas_alpha_occupations.end()) {
-                                                    gas_alpha_occupations.push_back(alpha_occ);
-                                                    alpha_index = gas_alpha_occupations.size() - 1;
-                                                } else {
-                                                    alpha_index = std::distance(
-                                                        gas_alpha_occupations.begin(), alpha_it);
-                                                }
-                                                // check if beta_occ is contained in
-                                                // gas_beta_occupations, if not, add it and
-                                                // grab its index, otherwise grab its index
-                                                size_t beta_index;
-                                                if (auto beta_it = std::find(
-                                                        gas_beta_occupations.begin(),
-                                                        gas_beta_occupations.end(), beta_occ);
-                                                    beta_it == gas_beta_occupations.end()) {
-                                                    gas_beta_occupations.push_back(beta_occ);
-                                                    beta_index = gas_beta_occupations.size() - 1;
-                                                } else {
-                                                    beta_index = std::distance(
-                                                        gas_beta_occupations.begin(), beta_it);
-                                                }
-                                                gas_occupations.push_back(
-                                                    std::make_pair(alpha_index, beta_index));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return std::make_tuple(gas_alpha_occupations, gas_beta_occupations, gas_occupations);
-}
-
-std::tuple<size_t, std::vector<std::array<int, 6>>, std::vector<std::array<int, 6>>,
-           std::vector<std::pair<size_t, size_t>>>
-get_gas_occupation(size_t na, size_t nb, const std::vector<int>& gas_min,
-                   const std::vector<int>& gas_max, const std::vector<int>& gas_size) {
-    std::vector<std::array<int, 6>> gas_alpha_occupations;
-    std::vector<std::array<int, 6>> gas_beta_occupations;
-    std::vector<std::pair<size_t, size_t>> gas_occupations;
-
-    // The minimum and maximum number of electrons in each gas
-    std::vector<int> gas_min_el(6, 0);
-    std::vector<int> gas_max_el(6, 0);
-    std::vector<int> gas_size_el(6, 0);
-
-    size_t num_gas_spaces = 0;
-    for (size_t n = 0; n < 6; n++) {
-        size_t gasn_size = n < gas_size.size() ? gas_size[n] : 0;
-        if (gasn_size) {
-            gas_size_el[n] = gasn_size;
-            // define max_e_number to be the largest possible number of electrons in the
-            // GASn
-            int max_e_number = std::min(gasn_size * 2, na + nb);
-            // but if we can read its value, do so
-            if (gas_max.size() > n) {
-                // If the defined maximum number of electrons exceed number of orbitals,
-                // redefine the maximum number of electrons
-                max_e_number = std::min(gas_max[n], max_e_number);
-            }
-            gas_max_el[n] = max_e_number;
-
-            // define min_e_number to be the smallest possible number of electrons in the
-            // GASn
-            size_t min_e_number = 0;
-            // but if we can read its value, do so
-            if (gas_min.size() > n) {
-                min_e_number = gas_min[n];
-            }
-            gas_min_el[n] = min_e_number;
-            num_gas_spaces += 1;
-        }
-    }
-
-    for (int gas6_na = std::max(0, gas_min_el[5] - gas_size_el[5]);
-         gas6_na <= std::min(gas_max_el[5], gas_size_el[5]); gas6_na++) {
-        for (int gas6_nb = std::max(0, gas_min_el[5] - gas6_na);
-             gas6_nb <= std::min(gas_max_el[5] - gas6_na, gas_size_el[5]); gas6_nb++) {
-            for (int gas5_na = std::max(0, gas_min_el[4] - gas_size_el[4]);
-                 gas5_na <= std::min(gas_max_el[4], gas_size_el[4]); gas5_na++) {
-                for (int gas5_nb = std::max(0, gas_min_el[4] - gas5_na);
-                     gas5_nb <= std::min(gas_max_el[4] - gas5_na, gas_size_el[4]); gas5_nb++) {
-                    for (int gas4_na = std::max(0, gas_min_el[3] - gas_size_el[3]);
-                         gas4_na <= std::min(gas_max_el[3], gas_size_el[3]); gas4_na++) {
-                        for (int gas4_nb = std::max(0, gas_min_el[3] - gas4_na);
-                             gas4_nb <= std::min(gas_max_el[3] - gas4_na, gas_size_el[3]);
-                             gas4_nb++) {
-                            for (int gas3_na = std::max(0, gas_min_el[2] - gas_size_el[2]);
-                                 gas3_na <= std::min(gas_max_el[2], gas_size_el[2]); gas3_na++) {
-                                for (int gas3_nb = std::max(0, gas_min_el[2] - gas3_na);
-                                     gas3_nb <= std::min(gas_max_el[2] - gas3_na, gas_size_el[2]);
-                                     gas3_nb++) {
-                                    for (int gas2_na = std::max(0, gas_min_el[1] - gas_size_el[1]);
-                                         gas2_na <= std::min(gas_max_el[1], gas_size_el[1]);
-                                         gas2_na++) {
-                                        for (int gas2_nb = std::max(0, gas_min_el[1] - gas2_na);
-                                             gas2_nb <=
-                                             std::min(gas_max_el[1] - gas2_na, gas_size_el[1]);
-                                             gas2_nb++) {
-                                            int gas1_na = na - gas2_na - gas3_na - gas4_na -
-                                                          gas5_na - gas6_na;
-                                            int gas1_nb = nb - gas2_nb - gas3_nb - gas4_nb -
-                                                          gas5_nb - gas6_nb;
-                                            int gas1_max = std::max(gas1_na, gas1_nb);
-                                            int gas1_min = std::min(gas1_na, gas1_nb);
-                                            int gas1_total = gas1_na + gas1_nb;
-                                            if (gas1_total <= gas_max_el[0] and
-                                                gas1_max <= gas_size_el[0] and gas1_min >= 0 and
-                                                gas1_total >= gas_min_el[0]) {
-                                                std::array<int, 6> alpha_occ = {gas1_na, gas2_na,
-                                                                                gas3_na, gas4_na,
-                                                                                gas5_na, gas6_na};
-                                                std::array<int, 6> beta_occ = {gas1_nb, gas2_nb,
-                                                                               gas3_nb, gas4_nb,
-                                                                               gas5_nb, gas6_nb};
-                                                // check if alpha_occ is contained in
-                                                // gas_alpha_occupations, if not, add it and
-                                                // grab its index, otherwise grab its index
-                                                size_t alpha_index;
-                                                if (auto alpha_it = std::find(
-                                                        gas_alpha_occupations.begin(),
-                                                        gas_alpha_occupations.end(), alpha_occ);
-                                                    alpha_it == gas_alpha_occupations.end()) {
-                                                    gas_alpha_occupations.push_back(alpha_occ);
-                                                    alpha_index = gas_alpha_occupations.size() - 1;
-                                                } else {
-                                                    alpha_index = std::distance(
-                                                        gas_alpha_occupations.begin(), alpha_it);
-                                                }
-                                                // check if beta_occ is contained in
-                                                // gas_beta_occupations, if not, add it and
-                                                // grab its index, otherwise grab its index
-                                                size_t beta_index;
-                                                if (auto beta_it = std::find(
-                                                        gas_beta_occupations.begin(),
-                                                        gas_beta_occupations.end(), beta_occ);
-                                                    beta_it == gas_beta_occupations.end()) {
-                                                    gas_beta_occupations.push_back(beta_occ);
-                                                    beta_index = gas_beta_occupations.size() - 1;
-                                                } else {
-                                                    beta_index = std::distance(
-                                                        gas_beta_occupations.begin(), beta_it);
-                                                }
-                                                gas_occupations.push_back(
-                                                    std::make_pair(alpha_index, beta_index));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return std::make_tuple(num_gas_spaces, gas_alpha_occupations, gas_beta_occupations,
-                           gas_occupations);
 }
 
 std::vector<std::array<int, 6>>
