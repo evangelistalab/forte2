@@ -259,7 +259,7 @@ std::pair<SQOperatorString, double> make_sq_operator_string_from_list(const op_t
         // auxiliary indices so that we can keep track of the permutation of the operators and their
         // sign
         std::vector<size_t> idx(creation_alpha_orb_vec.size());
-        std::iota(idx.begin(), idx.end(), 0);
+        std::iota(idx.begin(), idx.end(), 0uz);
         std::stable_sort(idx.begin(), idx.end(), [&creation_alpha_orb_vec](size_t i1, size_t i2) {
             return compare_ops(creation_alpha_orb_vec[i1], creation_alpha_orb_vec[i2]);
         });
