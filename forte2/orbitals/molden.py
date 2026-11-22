@@ -36,6 +36,7 @@ rejected rather than given SCF-derived values. Their orbitals can still be
 written by passing the ``System`` and explicit arrays.
 """
 
+import copy
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -468,7 +469,7 @@ def _generalized_fock_diagonal(method, C, g1) -> np.ndarray:
     irrep_indices = np.asarray(method.mos.irrep_indices[0], dtype=int)
     semi = Semicanonicalizer(
         mo_space=mo_space,
-        system=method.system,
+        system=_spatial_system(method.system),
         irrep_indices=irrep_indices[orig_to_contig],
         mix_inactive=False,
         mix_active=False,
@@ -479,6 +480,24 @@ def _generalized_fock_diagonal(method, C, g1) -> np.ndarray:
     semi.semi_canonicalize(g1=g1, C_contig=C[:, orig_to_contig].copy())
     diagonal = np.real_if_close(np.diag(semi.fock)).astype(float)
     return diagonal[contig_to_orig]
+
+
+def _spatial_system(system):
+    """``system`` as seen by an already-run spatial (one-component) method.
+
+    Binding a two-component method such as GHF sets ``two_component`` on a
+    shared System in place, which changes ``ints_hcore()`` and the J/K builds of
+    its Fock builder. In that case return a shallow copy with the flag cleared
+    and its own shallow copy of the Fock builder: the shared System is not
+    mutated, and the copies reuse the existing three-index integrals.
+    """
+    if not system.two_component:
+        return system
+    spatial = copy.copy(system)
+    spatial.two_component = False
+    spatial.fock_builder = copy.copy(system.fock_builder)
+    spatial.fock_builder.system = spatial
+    return spatial
 
 
 # --------------------------------------------------------------------------- #

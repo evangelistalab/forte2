@@ -559,19 +559,41 @@ def test_molden_argument_combinations():
         molden_string(rhf, C=rhf.mos.C[0])
 
 
-def test_molden_rhf_on_system_shared_with_ghf():
-    """Binding GHF flips the shared System's two_component flag in place; the
-    already-run RHF still writes, because the writer checks the method's flag."""
+def _shared_system_method(kind, system):
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
+    if kind == "rhf":
+        rhf.run()
+        return rhf
+    avas = AVAS(
+        subspace=["C(2p)"],
+        subspace_pi_planes=[["C1-3"]],
+        selection_method="total",
+        num_active=3,
+    )(rhf)
+    solver = CISolver(State(nel=rhf.nel, multiplicity=1, ms=0.0))
+    method = (MCOptimizer if kind == "mcoptimizer" else CI)(solver)(avas)
+    method.run()
+    return method
+
+
+@pytest.mark.parametrize("kind", ["rhf", "mcoptimizer", "ci"])
+def test_molden_method_on_system_shared_with_ghf(kind):
+    """Binding GHF flips the shared System's two_component flag in place. An
+    already-run spatial method must still export the same file, in its own
+    representation, without the export touching the shared System."""
     system = System(
-        xyz="H 0 0 0\nH 0 0 0.74",
+        xyz=CYCLOPROPENE,
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-jkfit",
     )
-    rhf = RHF(charge=0)(system)
-    rhf.run()
+    method = _shared_system_method(kind, system)
+    before = molden_string(method)
+    fock_builder = system.fock_builder
     GHF(charge=0)(system)
     assert system.two_component
-    _assert_molden_matches(system, rhf.mos.C[0], molden_string(rhf))
+    assert molden_string(method) == before
+    assert system.two_component and system.fock_builder is fock_builder
+    assert fock_builder.system is system
 
 
 def test_molden_rejects_spinorbitals():
