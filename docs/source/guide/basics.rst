@@ -84,6 +84,15 @@ To write any other set of orbitals, for example localized orbitals, pass the ``S
     forte2.write_molden(rhf.system, "localized.molden", C=C_loc, occupations=occ)
     text = forte2.molden_string(casscf)
 
+Explicit coefficient arrays must contain at least one orbital, and all supplied
+coefficients, energies, and occupations must be finite.
+
+Unrestricted exports use a single ``[MO]`` section by default. When loading into
+PySCF, use ``forte2.write_molden(uhf, "uhf.molden", split_spin_blocks=True)``
+to write one section per spin. PySCF requires this layout when the total number
+of alpha and beta orbitals equals the number of AO basis functions. Use the
+default layout for readers that expect a single section.
+
 Molden files cover real, one-component orbitals with shells up to g.
 For two-component orbitals, or for grid-based visualization, write cube files::
 

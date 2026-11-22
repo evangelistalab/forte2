@@ -96,7 +96,7 @@ def write_molden(source, path="orbitals.molden", **kwargs) -> Path:
         Destination path.
     **kwargs
         Passed to :func:`molden_string` (``C``, ``energies``, ``occupations``,
-        ``symmetries``, ``title``).
+        ``symmetries``, ``title``, ``split_spin_blocks``).
 
     Returns
     -------
@@ -116,6 +116,7 @@ def molden_string(
     occupations=None,
     symmetries=None,
     title=None,
+    split_spin_blocks=False,
 ) -> str:
     """
     Return molecular orbitals as Molden-format text.
@@ -125,16 +126,21 @@ def molden_string(
     source : Method or System
         An executed Forte2 method, or a ``System``. See :func:`write_molden`.
     C : ndarray or list of ndarray, optional
-        Required with a ``System`` and not allowed with a method. Real AO-basis
-        coefficients, shape ``(nbf, nmo)``. Pass one array for restricted
-        orbitals or ``[C_alpha, C_beta]`` for unrestricted ones.
+        Required with a ``System`` and not allowed with a method. Finite real
+        AO-basis coefficients, shape ``(nbf, nmo)`` with at least one orbital.
+        Pass one array for restricted orbitals or ``[C_alpha, C_beta]`` for
+        unrestricted ones.
     energies, occupations : ndarray or list of ndarray, optional
-        Per-orbital values with the same block structure as ``C``. Default to
-        zero.
+        Finite real per-orbital values with the same block structure as ``C``.
+        Default to zero.
     symmetries : list of str or list of list of str, optional
         Per-orbital symmetry labels. Default to ``"A"``.
     title : str, optional
         Text of the ``[Title]`` section.
+    split_spin_blocks : bool, optional, default=False
+        Write a separate ``[MO]`` section for each spin block. PySCF needs this
+        layout when the total number of alpha and beta orbitals equals the
+        number of AOs. The default single section follows the Molden format.
 
     Returns
     -------
@@ -146,6 +152,9 @@ def molden_string(
     TypeError
         If ``source`` is neither a method nor a system, or if orbital arrays
         are combined with a method.
+    ValueError
+        If coefficients or per-orbital data are empty, nonfinite, or have an
+        invalid shape.
     RuntimeError
         If the method has not been run or does not provide orbitals.
     NotImplementedError
@@ -162,7 +171,7 @@ def molden_string(
     lines += _atoms_section(system)
     lines += _pure_shell_tags(basis)
     lines += _gto_section(system)
-    lines += _mo_section(blocks, _molden_ao_order(basis))
+    lines += _mo_sections(blocks, _molden_ao_order(basis), split_spin_blocks)
     return "\n".join(lines) + "\n"
 
 
@@ -312,15 +321,18 @@ def _coefficients(C, system, full_space) -> np.ndarray:
         raise ValueError(
             f"MO coefficients must have shape (nbf={system.nbf}, nmo), got {C.shape}.{hint}"
         )
+    if C.shape[1] == 0:
+        raise ValueError("MO coefficients must contain at least one orbital.")
     if full_space and C.shape[1] != system.nmo:
         raise RuntimeError("The MO coefficient matrix must span the full MO space.")
-    if np.iscomplexobj(C):
-        if np.abs(C.imag).max() > _IMAG_TOL:
-            raise NotImplementedError(
-                "Complex-valued orbitals cannot be written in Molden format."
-            )
-        C = C.real
-    return np.asarray(C, dtype=float)
+    C = np.asarray(C, dtype=complex if np.iscomplexobj(C) else float)
+    if not np.isfinite(C).all():
+        raise ValueError("MO coefficients must contain only finite values.")
+    if np.iscomplexobj(C) and np.abs(C.imag).max() > _IMAG_TOL:
+        raise NotImplementedError(
+            "Complex-valued orbitals cannot be written in Molden format."
+        )
+    return C.real
 
 
 def _irrep_labels(labels, nmo) -> list[str]:
@@ -333,16 +345,21 @@ def _value_blocks(values, name, nblocks, nmo) -> list[np.ndarray]:
     """Per-orbital values for each block; zeros when not given."""
     if values is None:
         return [np.zeros(nmo) for _ in range(nblocks)]
-    blocks = [values] if np.ndim(values[0]) == 0 else list(values)
+    blocks = [values] if not len(values) or np.ndim(values[0]) == 0 else list(values)
     if len(blocks) != nblocks:
         raise ValueError(f"{name} must have one block per coefficient matrix.")
     out = []
     for block in blocks:
-        block = np.asarray(block, dtype=float)
+        block = np.asarray(block)
         if block.shape != (nmo,):
             raise ValueError(
                 f"Expected {nmo} {name} per block, got shape {block.shape}."
             )
+        if np.iscomplexobj(block):
+            raise ValueError(f"{name} must contain only real values.")
+        block = block.astype(float, copy=False)
+        if not np.isfinite(block).all():
+            raise ValueError(f"{name} must contain only finite values.")
         out.append(block)
     return out
 
@@ -351,7 +368,11 @@ def _symmetry_blocks(symmetries, nblocks, nmo) -> list[list[str]]:
     """Per-orbital symmetry labels for each block; ``"A"`` when not given."""
     if symmetries is None:
         return [["A"] * nmo for _ in range(nblocks)]
-    blocks = [symmetries] if isinstance(symmetries[0], str) else symmetries
+    blocks = (
+        [symmetries]
+        if len(symmetries) and isinstance(symmetries[0], str)
+        else symmetries
+    )
     blocks = [list(block) for block in blocks]
     if len(blocks) != nblocks or any(len(block) != nmo for block in blocks):
         raise ValueError("symmetries must provide one label per orbital and block.")
@@ -606,9 +627,11 @@ def _gto_section(system) -> list[str]:
     return lines
 
 
-def _mo_section(blocks, ao_order) -> list[str]:
-    lines = ["[MO]"]
+def _mo_sections(blocks, ao_order, split_spin_blocks) -> list[str]:
+    lines = []
     for block in blocks:
+        if not lines or split_spin_blocks:
+            lines.append("[MO]")
         C = block.C[ao_order, :]
         for imo in range(C.shape[1]):
             lines += [

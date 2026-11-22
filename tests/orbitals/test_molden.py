@@ -523,6 +523,65 @@ def test_molden_system_with_unrestricted_arrays():
     assert np.abs(test - ref).max() / np.abs(ref).max() < 1e-9
 
 
+@pytest.fixture(scope="module")
+def water_sto3g():
+    return System(
+        xyz=WATER, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+
+def test_molden_split_spin_blocks(water_sto3g):
+    C = np.eye(water_sto3g.nbf)
+    Ca, Cb = C[:, :2], C[:, 2:4]
+    default = molden_string(water_sto3g, C=[Ca, Cb])
+    split = molden_string(water_sto3g, C=[Ca, Cb], split_spin_blocks=True)
+    header, alpha, beta = split.split("[MO]\n")
+
+    assert default == f"{header}[MO]\n{alpha}{beta}"
+    assert [line for line in alpha.splitlines() if line.startswith("Spin=")] == [
+        "Spin= Alpha"
+    ] * Ca.shape[1]
+    assert [line for line in beta.splitlines() if line.startswith("Spin=")] == [
+        "Spin= Beta"
+    ] * Cb.shape[1]
+    assert molden_string(water_sto3g, C=Ca, split_spin_blocks=True) == molden_string(
+        water_sto3g, C=Ca
+    )
+
+
+@pytest.mark.parametrize("explicit_arrays", [False, True], ids=["uhf", "arrays"])
+def test_molden_pyscf_round_trip_with_square_unrestricted_coefficients(
+    tmp_path, explicit_arrays
+):
+    pyscf_molden = pytest.importorskip("pyscf.tools.molden")
+    system = System(
+        xyz="H 0 0 0\nH 0 0 0.74",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-jkfit",
+        overlap_ortho_rtol=0.5,
+    )
+    uhf = UHF(charge=1, ms=0.5)(system)
+    uhf.run()
+    assert system.nbf == 2 * system.nmo == 2
+    occupations = [[1.0], [0.0]]
+    source, kwargs = uhf, {}
+    if explicit_arrays:
+        source = system
+        kwargs = {"C": uhf.mos.C, "energies": uhf.eps, "occupations": occupations}
+
+    path = write_molden(
+        source, tmp_path / "uhf.molden", split_spin_blocks=True, **kwargs
+    )
+    _, energies, coefficients, loaded_occupations, _, spins = pyscf_molden.load(
+        str(path)
+    )
+
+    np.testing.assert_allclose(coefficients, uhf.mos.C, atol=1e-12)
+    np.testing.assert_allclose(energies, uhf.eps, atol=1e-12)
+    np.testing.assert_allclose(loaded_occupations, occupations, atol=1e-12)
+    assert list(map(list, spins)) == [["ALPHA"], ["BETA"]]
+
+
 # --------------------------------------------------------------------------- #
 # Errors
 # --------------------------------------------------------------------------- #
@@ -609,13 +668,6 @@ def test_molden_rejects_spinorbitals():
         molden_string(ghf)
 
 
-@pytest.fixture(scope="module")
-def water_sto3g():
-    return System(
-        xyz=WATER, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit"
-    )
-
-
 @pytest.mark.parametrize(
     "kwargs, error, match",
     [
@@ -634,6 +686,22 @@ def water_sto3g():
             "one label per orbital",
         ),
         ({"C": np.eye(7) * (1 + 1e-3j)}, NotImplementedError, "Complex-valued"),
+        ({"C": np.empty((7, 0))}, ValueError, "at least one orbital"),
+        ({"C": np.full((7, 1), np.nan)}, ValueError, "coefficients.*finite"),
+        (
+            {"C": np.full((7, 1), complex(1.0, np.inf))},
+            ValueError,
+            "coefficients.*finite",
+        ),
+        ({"C": np.eye(7), "energies": [np.inf] * 7}, ValueError, "energies.*finite"),
+        (
+            {"C": [np.eye(7)] * 2, "occupations": [np.zeros(7), [np.nan] * 7]},
+            ValueError,
+            "occupations.*finite",
+        ),
+        ({"C": np.eye(7), "energies": np.ones(7, dtype=complex)}, ValueError, "real"),
+        ({"C": np.eye(7), "occupations": []}, ValueError, "Expected 7 occupations"),
+        ({"C": np.eye(7), "symmetries": []}, ValueError, "one label per orbital"),
     ],
     ids=[
         "three-blocks",
@@ -643,6 +711,14 @@ def water_sto3g():
         "occupation-shape",
         "labels",
         "complex",
+        "empty-orbitals",
+        "nonfinite-coefficients",
+        "nonfinite-imaginary-coefficients",
+        "nonfinite-energy",
+        "nonfinite-beta-occupation",
+        "complex-energy",
+        "empty-occupations",
+        "empty-labels",
     ],
 )
 def test_molden_rejects_malformed_arrays(water_sto3g, kwargs, error, match):
