@@ -4,7 +4,7 @@ import pytest
 from forte2 import System, RHF, CI, CISolver, State
 from forte2.base_classes import CIParams
 from forte2.helpers.comparisons import approx
-from forte2.lib.ci_helpers import CISigmaBuilder, CIStrings
+from forte2.lib.ci_helpers import CISigmaBuilder, CIStrings, RelCISigmaBuilder
 from forte2.lib import rdms
 from rdm_debug_utils import sparse_state_from_ci_vector
 from forte2.ci.ci_utils import (
@@ -79,6 +79,54 @@ def _pack_abb_3rdm(full, norb):
         q_idx[None, None, None, :],
         r_idx[None, None, None, :],
     ]
+
+
+@pytest.mark.parametrize("spinor", [False, True], ids=["real", "complex"])
+def test_symmetry_blocked_rdms_against_sparse_ops(spinor):
+    norb = 6
+    orbitals = [[1, 0, 3], [0, 2, 1]]
+    if spinor:
+        lists = CIStrings(4, 0, 4, 3, orbitals, [2], [2])
+        builder_cls = RelCISigmaBuilder
+        dtype = complex
+    else:
+        lists = CIStrings(3, 3, 4, 3, orbitals, [3], [3])
+        builder_cls = CISigmaBuilder
+        dtype = float
+
+    h = np.zeros((norb, norb), dtype=dtype)
+    v = np.zeros((norb,) * 4, dtype=dtype)
+    builder = builder_cls(lists, 0.0, h, v, 0, "hz")
+    rng = np.random.default_rng(206)
+    coeffs = rng.normal(size=(2, lists.ndet)).astype(dtype)
+    if spinor:
+        coeffs += 1j * rng.normal(size=coeffs.shape)
+    cl, cr = coeffs
+    dets = lists.make_determinants()
+    left = sparse_state_from_ci_vector(dets, cl)
+    right = sparse_state_from_ci_vector(dets, cr)
+
+    if spinor:
+        expectations = (
+            (builder.so_2rdm, rdms.compute_2rdm_2c(left, right, norb)),
+            (builder.so_3rdm, rdms.compute_3rdm_2c(left, right, norb)),
+        )
+    else:
+        expectations = (
+            (builder.ab_2rdm, rdms.compute_ab_2rdm(left, right, norb)),
+            (
+                builder.aab_3rdm,
+                _pack_aab_3rdm(rdms.compute_aab_3rdm(left, right, norb), norb),
+            ),
+            (
+                builder.abb_3rdm,
+                _pack_abb_3rdm(rdms.compute_abb_3rdm(left, right, norb), norb),
+            ),
+        )
+
+    for build, expected in expectations:
+        assert np.any(expected)
+        np.testing.assert_allclose(build(cl, cr), expected, rtol=1e-12, atol=1e-12)
 
 
 def compare_rdms(ci):
@@ -347,6 +395,41 @@ def test_ci_rdms_respect_small_builder_memory_across_composite_hole_chunks():
         np.testing.assert_allclose(
             low_memory_rdm, reference_rdm, rtol=1e-12, atol=1e-12
         )
+
+
+def test_spinor_rdms_match_across_hole_chunks():
+    norb = 12
+    lists = CIStrings(8, 0, 1, 0, [[0] * norb], [], [])
+    h = np.zeros((norb, norb), dtype=complex)
+    v = np.zeros((norb,) * 4, dtype=complex)
+    builder = RelCISigmaBuilder(lists, 0.0, h, v, 0, "hz")
+    rng = np.random.default_rng(207)
+    coeffs = rng.normal(size=(2, lists.ndet)) + 1j * rng.normal(size=(2, lists.ndet))
+    cl, cr = coeffs / np.linalg.norm(coeffs, axis=1, keepdims=True)
+
+    for build in (builder.so_2rdm, builder.so_3rdm):
+        builder.set_memory(64)
+        expected = build(cl, cr)
+        # One MiB splits the hole-string dimension into several GEMMs.
+        builder.set_memory(1)
+        np.testing.assert_allclose(build(cl, cr), expected, rtol=1e-12, atol=1e-12)
+
+
+def test_spinor_rdms_with_empty_determinant_space():
+    norb = 4
+    # The fully occupied determinant has irrep 1, so the irrep 0 space is empty.
+    lists = CIStrings(4, 0, 2, 0, [[0, 0, 0, 1]], [], [])
+    assert lists.ndet == 0
+    h = np.zeros((norb, norb), dtype=complex)
+    v = np.zeros((norb,) * 4, dtype=complex)
+    builder = RelCISigmaBuilder(lists, 0.0, h, v, 0, "hz")
+    builder.set_memory(0)
+    coefficients = np.empty(0, dtype=complex)
+
+    for rank, build in ((2, builder.so_2rdm), (3, builder.so_3rdm)):
+        rdm = build(coefficients, coefficients)
+        assert rdm.shape == (norb,) * (2 * rank)
+        assert not np.any(rdm)
 
 
 def test_ci_builder_memory_reconfiguration_is_retry_safe():

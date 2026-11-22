@@ -110,6 +110,8 @@ class RelCISigmaBuilder {
     CIAlgorithm algorithm_ = CIAlgorithm::Harrison_Zarrabian;
     /// @brief The CIStrings object containing the determinant classes and their properties
     const CIStrings& lists_;
+    const CIOrbitalIrrepBlocks orbital_rows_ = CIOrbitalIrrepBlocks::orbitals(lists_);
+    const CIOrbitalIrrepBlocks spinor_pairs_ = CIOrbitalIrrepBlocks::strict_pairs(lists_);
     /// @brief The scalar energy
     double E_;
     /// @brief Object for computing the energy and Slater determinants
@@ -168,6 +170,13 @@ class RelCISigmaBuilder {
 
     std::tuple<std::span<std::complex<double>>, std::span<std::complex<double>>, size_t>
     get_Kblock_spans(size_t nrows, size_t ncols) const;
+
+    /// Contract a spinor density over shared hole strings and restore canonical orbital order.
+    template <typename GetHoleList, typename OrbitalIndex>
+    void contract_spinor_rdm(np_vector_complex C_left, np_vector_complex C_right,
+                             std::complex<double>* rdm_data, const CIOrbitalIrrepBlocks& orbitals,
+                             const StringAddress& holes, GetHoleList get_hole_list,
+                             OrbitalIndex orbital_index) const;
 };
 
 [[nodiscard]] std::span<std::complex<double>> gather_block(std::span<std::complex<double>> source,

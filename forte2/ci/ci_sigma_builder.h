@@ -12,6 +12,7 @@
 #include "helpers/spin.h"
 
 #include "ci/ci_strings.h"
+#include "ci/ci_orbital_blocks.h"
 #include "determinant/slater_rules.h"
 #include "determinant/ci_spin_adapter.h"
 
@@ -271,6 +272,11 @@ class CISigmaBuilder {
     CIAlgorithm algorithm_ = CIAlgorithm::Knowles_Handy; // Default to Knowles-Handy algorithm
     /// @brief The CIStrings object containing the determinant classes and their properties
     const CIStrings& lists_;
+    // Both algorithms use ordered pairs for the opposite-spin 2-RDM.
+    const CIOrbitalIrrepBlocks opposite_spin_pairs_ = CIOrbitalIrrepBlocks::ordered_pairs(lists_);
+    std::optional<CIOrbitalIrrepBlocks> orbital_rows_;
+    std::optional<CIOrbitalIrrepBlocks> same_spin_pairs_;
+    std::optional<CIOrbitalIrrepBlocks> excitation_pairs_;
     /// @brief The scalar energy
     double E_;
     /// @brief Object for computing the energy and Slater determinants
@@ -371,13 +377,12 @@ class CISigmaBuilder {
     size_t acquire_local_Kblock_buffers(std::vector<double>& Kblock1, std::vector<double>& Kblock2,
                                         size_t nrows, size_t ncols) const;
 
-    /// @brief Find the largest product of class sizes in two hole-string address spaces.
-    /// @param alpha_address Alpha hole-string address space.
-    /// @param beta_address Beta hole-string address space.
-    /// @param rdm_name RDM name used to identify an overflowing dimension.
-    static size_t max_composite_hole_dimension(const StringAddress& alpha_address,
-                                               const StringAddress& beta_address,
-                                               std::string_view rdm_name);
+    /// Contract signed left and right K-blocks over the shared alpha/beta hole strings.
+    template <typename Gather>
+    void contract_mixed_spin_rdm(np_vector C_left, np_vector C_right, double* rdm_data,
+                                 const CIOrbitalIrrepBlocks& orbitals,
+                                 const StringAddress& alpha_holes, const StringAddress& beta_holes,
+                                 std::string_view rdm_name, Gather gather) const;
 };
 
 [[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,

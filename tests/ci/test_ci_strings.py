@@ -29,6 +29,11 @@ def test_ci_strings_empty_active_space(orbital_symmetry):
     vacuum = CIStrings(0, 0, 1, 0, orbital_symmetry, [], [])
     assert vacuum.gas_size == [0] * max(1, len(orbital_symmetry))
     assert list(vacuum.make_determinants()) == [Determinant.zero()]
+    assert vacuum.ngas_spaces == max(1, len(orbital_symmetry))
+    assert vacuum.gas_alpha_occupations == [[0] * 6]
+    assert vacuum.gas_beta_occupations == [[0] * 6]
+    assert vacuum.gas_occupations == [(0, 0)]
+    assert vacuum.ndet == 1
 
     with_electrons = CIStrings(1, 0, 1, 0, orbital_symmetry, [], [])
     assert with_electrons.ndet == 0
@@ -75,16 +80,6 @@ def test_ci_strings_unreachable_target_irrep():
 def test_ci_strings_target_irrep_outside_range():
     with pytest.raises(ValueError, match="Target symmetry is outside the irrep range"):
         CIStrings(1, 0, 2, 3, [[0]], [], [])
-
-
-def test_ci_strings_empty_active_space():
-    ci_strings = CIStrings(0, 0, 0, [[]], [], [])
-
-    assert ci_strings.ngas_spaces == 1
-    assert ci_strings.gas_alpha_occupations == [[0] * 6]
-    assert ci_strings.gas_beta_occupations == [[0] * 6]
-    assert ci_strings.gas_occupations == [(0, 0)]
-    assert ci_strings.ndet == 1
 
 
 def test_ci_strings_singlet():
