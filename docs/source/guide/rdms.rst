@@ -16,6 +16,35 @@ Both methods take a ``spin_type`` argument that selects the representation:
 The spelled-out forms are also accepted: ``spin_dependent`` or ``spin-dependent``,
 ``spin_free`` or ``spin-free``, and ``spin_orbital``, ``spin-orbital``, or ``spinorbital``.
 
+Spin-dependent RDMs come back as ``(a, b)`` at order 1, ``(aa, ab, bb)`` at order 2, and
+``(aaa, aab, abb, bbb)`` at order 3. By default, each group of same-spin indices is packed,
+because an RDM is antisymmetric under exchanging any two of them:
+
+.. list-table:: Packed spin-dependent RDM blocks
+   :header-rows: 1
+   :widths: 20 40 40
+
+   * - Block
+     - Packed shape
+     - Elements
+   * - ``aa``, ``bb``
+     - ``(npair, npair)``
+     - ``[pq, rs]`` for :math:`p > q` and :math:`r > s`
+   * - ``aaa``, ``bbb``
+     - ``(ntriplet, ntriplet)``
+     - ``[pqr, stu]`` for :math:`p > q > r` and :math:`s > t > u`
+   * - ``aab``
+     - ``(npair, norb, npair, norb)``
+     - ``[pq, r, st, u]`` for :math:`p > q` and :math:`s > t`
+   * - ``abb``
+     - ``(norb, npair, norb, npair)``
+     - ``[p, qr, s, tu]`` for :math:`q > r` and :math:`t > u`
+
+The 1-RDM and the ``ab`` block are full tensors. To get every block as a full tensor, pass
+``packed=False``, for example ``make_rdm(0, order=2, spin_type="sd", packed=False)``. The
+functions ``pack_sd_rdm`` and ``unpack_sd_rdm`` in ``forte2.ci.ci_utils`` convert between the
+two layouts.
+
 Which orders and spin types are available depends on the solver. The drivers, ``CI`` and
 ``MCOptimizer``, forward both methods to their ``ci_solver``, so the tables that follow also
 describe a CI or MCSCF calculation built on a given solver.
@@ -74,9 +103,9 @@ describe a CI or MCSCF calculation built on a given solver.
 RDM capabilities
 ----------------
 
-Pass two roots to ``make_rdm`` to get a transition RDM instead of a state RDM. In the CI solvers,
-roots that belong to the same ``State`` support transition RDMs at every order the solver
-implements; roots that belong to different states are more restricted.
+Pass two roots to ``make_rdm`` to get a transition RDM instead of a state RDM. Roots that belong
+to the same ``State`` support transition RDMs at every order the solver implements; roots that
+belong to different states are more restricted.
 
 .. list-table:: RDM capabilities of the active-space solvers
    :header-rows: 1
@@ -108,10 +137,10 @@ implements; roots that belong to different states are more restricted.
      - All orders
      - Not supported
    * - ``DMRGSolver``
-     - 1, 2
-     - ``sf``
-     - Not supported
-     - Not supported
+     - 1, 2, 3
+     - ``sd``, ``sf``
+     - All orders
+     - Order 1
 
 A transition RDM between two states also requires the two states to have the same number of alpha
 and beta electrons.
@@ -144,7 +173,7 @@ transition counterpart.
      - 2
      - ``so``
    * - ``DMRGSolver``
-     - 2
+     - 2, 3
      - ``sf``
 
 To get a state-averaged cumulant, call ``make_average_cumulant(order)`` instead. Cumulants are

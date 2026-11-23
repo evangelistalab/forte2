@@ -10,6 +10,7 @@ from rdm_debug_utils import sparse_state_from_ci_vector
 from forte2.ci.ci_utils import (
     make_2cumulant_sf,
     make_3cumulant_sf,
+    pack_sd_rdm,
 )
 
 
@@ -144,6 +145,18 @@ def compare_rdms(ci):
         check(f"aab_3rdm({l},{r})", aab3, _pack_aab_3rdm(aab3_ref, norb))
         check(f"abb_3rdm({l},{r})", abb3, _pack_abb_3rdm(abb3_ref, norb))
         check(f"bbb_3rdm({l},{r})", bbb3, _pack_sss_3rdm(bbb3_ref, norb))
+
+        # The full layout, and packing the full references into the default layout
+        for order, refs in [
+            (2, (aa2_ref, ab2_ref, bb2_ref)),
+            (3, (aaa3_ref, aab3_ref, abb3_ref, bbb3_ref)),
+        ]:
+            full = ci_solver.make_rdm(l, r, order=order, spin_type="sd", packed=False)
+            packed = ci_solver.make_rdm(l, r, order=order, spin_type="sd")
+            for i, (block, ref) in enumerate(zip(full, refs)):
+                check(f"full sd {order}-RDM block {i} ({l},{r})", block, ref)
+            for i, (block, ref) in enumerate(zip(pack_sd_rdm(refs), packed)):
+                check(f"packed sd {order}-RDM block {i} ({l},{r})", block, ref)
 
     # Cumulants, checked at the same-state pairs only (no cross-state 2-/3-RDM support).
     for root in (0, 1):

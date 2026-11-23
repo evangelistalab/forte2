@@ -20,6 +20,7 @@ from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
     validate_single_state_rdm,
     make_cumulant_from_rdms,
+    unpack_sd_rdm,
 )
 
 
@@ -772,6 +773,7 @@ class _SelectedCISingleStateSolver:
         *,
         order: Literal[1, 2],
         spin_type: Literal["sd", "sf"],
+        packed: bool = True,
     ):
         """
         Make the RDM of the given order and representation for two CI roots.
@@ -787,6 +789,9 @@ class _SelectedCISingleStateSolver:
         spin_type : str
             "sd" (spin-dependent) or "sf" (spin-free). The aliases "spin_dependent",
             "spin-dependent", "spin_free", and "spin-free" are also accepted.
+        packed : bool, optional, default=True
+            For spin_type=sd, if True, the same-spin index pairs are packed (see
+            ``pack_sd_rdm``); if False, every block is a full tensor.
 
         Returns
         -------
@@ -811,11 +816,12 @@ class _SelectedCISingleStateSolver:
                 return helper.a_1rdm(left_root, right_root), helper.b_1rdm(
                     left_root, right_root
                 )
-            return (
+            rdms = (
                 helper.aa_2rdm(left_root, right_root),
                 helper.ab_2rdm(left_root, right_root),
                 helper.bb_2rdm(left_root, right_root),
             )
+            return rdms if packed else unpack_sd_rdm(rdms, self.norb)
         # spin_type == "sf"
         if order == 1:
             return helper.sf_1rdm(left_root, right_root)
@@ -1080,6 +1086,7 @@ class SelectedCISolver(CIBase):
         *,
         order: Literal[1, 2],
         spin_type: Literal["sd", "sf"],
+        packed: bool = True,
     ):
         """
         Make the RDM of the given order and representation for two absolute CI roots.
@@ -1096,6 +1103,9 @@ class SelectedCISolver(CIBase):
         spin_type : str
             "sd" (spin-dependent) or "sf" (spin-free). The aliases "spin_dependent",
             "spin-dependent", "spin_free", and "spin-free" are also accepted.
+        packed : bool, optional, default=True
+            For spin_type=sd, if True, the same-spin index pairs are packed (see
+            ``pack_sd_rdm``); if False, every block is a full tensor.
 
         Returns
         -------
@@ -1120,6 +1130,7 @@ class SelectedCISolver(CIBase):
                 right_root_in_state,
                 order=order,
                 spin_type=spin_type,
+                packed=packed,
             )
         # Cross-state: the validator above only lets this fall through when order == 1.
         left_helper = self.sub_solvers[left_state].sci_helper
