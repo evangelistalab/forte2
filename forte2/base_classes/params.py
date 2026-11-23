@@ -214,7 +214,17 @@ class DMRGParams(ParamsBase):
     bond_dims : list[int], optional, default=[250] * 4 + [500] * 4
         The MPS bond dimension of each sweep.
     noises : list[float], optional, default=[1e-4] * 4 + [1e-5] * 4 + [0.0]
-        The perturbative noise of each sweep.
+        The noise of each sweep.
+    noise_type : str, optional, default="ReducedPerturbativeCollected"
+        The block2 noise method:
+
+        - "ReducedPerturbativeCollected", "ReducedPerturbative", "Perturbative": noise
+          from the Hamiltonian acting on the wavefunction. It vanishes at an exact
+          eigenstate, so in an active space small enough for DMRG to solve exactly, a
+          solve can stay on an excited state.
+        - "Wavefunction": random noise on the wavefunction, within its current blocks.
+        - "DensityMatrix": random noise on the reduced density matrix, so no state of a
+          bond is dropped. Use it for active spaces that DMRG solves exactly.
     davidson_tols : list[float], optional, default=[1e-10] * 8
         The Davidson convergence threshold of each sweep, on the squared residual norm.
     n_sweeps : int, optional, default=20
@@ -244,6 +254,13 @@ class DMRGParams(ParamsBase):
 
     bond_dims: list[int] = field(default_factory=lambda: [250] * 4 + [500] * 4)
     noises: list[float] = field(default_factory=lambda: [1e-4] * 4 + [1e-5] * 4 + [0.0])
+    noise_type: Literal[
+        "ReducedPerturbativeCollected",
+        "ReducedPerturbative",
+        "Perturbative",
+        "Wavefunction",
+        "DensityMatrix",
+    ] = "ReducedPerturbativeCollected"
     davidson_tols: list[float] = field(default_factory=lambda: [1e-10] * 8)
     n_sweeps: int = 20
     twosite_to_onesite: int = None
