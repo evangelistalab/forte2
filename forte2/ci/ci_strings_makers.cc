@@ -113,15 +113,6 @@ VOListMap2 make_vo_list2(const StringList& strings,
                          const std::shared_ptr<StringAddress>& I_addresser,
                          const std::shared_ptr<StringAddress>& J_addresser) {
     VOListMap2 list;
-    auto nclasses_I = I_addresser->nclasses();
-    auto nclasses_J = J_addresser->nclasses();
-    for (size_t class_I = 0; class_I < nclasses_I; ++class_I) {
-        size_t nstr = I_addresser->strpcls(class_I); // ensure that the addresser has all classes
-        for (size_t class_J = 0; class_J < nclasses_J; ++class_J) {
-            list[std::make_pair(class_I, class_J)] =
-                std::vector<std::vector<StringSubstitution2>>(nstr);
-        }
-    }
     const int nmo = I_addresser->nbits();
     for (int p = 0; p < nmo; p++) {
         for (int q = 0; q < nmo; q++) {
@@ -147,12 +138,13 @@ void make_vo2(const StringList& strings, const std::shared_ptr<StringAddress>& I
                     J[p] = true;
                     if (auto it = J_addresser->find(J); it != J_addresser->end()) {
                         const auto& [add_J, class_J] = it->second;
-                        auto& list_IJ = list[std::make_pair(class_I, class_J)];
+                        const auto key = std::make_pair(class_I, class_J);
+                        auto entry = list.try_emplace(key, I_addresser->strpcls(class_I)).first;
                         // cast sign to integer and scale if diagonal
                         double scaled_sign = sign * (p == q ? 2. : 1.);
                         // use a single index for (p, q)
                         size_t pq = static_cast<size_t>(pair_index_geq(p, q));
-                        list_IJ[add_I].push_back(StringSubstitution2(scaled_sign, pq, add_J));
+                        entry->second[add_I].push_back(StringSubstitution2(scaled_sign, pq, add_J));
                     }
                 }
             }
@@ -181,15 +173,6 @@ H1List2 make_1h_list2(const StringList& strings, std::shared_ptr<StringAddress> 
     if (n == 0)
         return list; // if n is 0, return an empty list
 
-    auto nclasses_1h = addresser_1h->nclasses();
-    auto nclasses = addresser->nclasses();
-    for (size_t h = 0; h < nclasses_1h; ++h) {
-        size_t nstr_1h = addresser_1h->strpcls(h); // ensure that the addresser_1h has all classes
-        for (size_t h2 = 0; h2 < nclasses; ++h2) {
-            list[std::make_pair(h, h2)] = std::vector<std::vector<H1StringSubstitution>>(nstr_1h);
-        }
-    }
-
     if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
         for (const auto& string_class : strings) {
             for (const auto& I : string_class) {
@@ -202,7 +185,9 @@ H1List2 make_1h_list2(const StringList& strings, std::shared_ptr<StringAddress> 
                         if (auto it = addresser_1h->find(J); it != addresser_1h->end()) {
                             const auto& [add_J, class_J] = it->second;
                             std::pair<size_t, size_t> I_tuple(class_J, class_I);
-                            list[I_tuple][add_J].push_back(H1StringSubstitution(sign, p, add_I));
+                            auto entry =
+                                list.try_emplace(I_tuple, addresser_1h->strpcls(class_J)).first;
+                            entry->second[add_J].push_back(H1StringSubstitution(sign, p, add_I));
                         }
                     }
                 }

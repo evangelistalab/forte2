@@ -93,8 +93,11 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
     const int num_class_Kb = lists_.beta_address_1h1p()->nclasses();
 
     // Loop over the Ka and Kb string classes of the D([qs],[Ka Kb]) matrix
-    for (size_t class_Ka = 0; class_Ka < num_class_Ka; ++class_Ka) {
-        for (size_t class_Kb = 0; class_Kb < num_class_Kb; ++class_Kb) {
+    for (int class_Ka = 0; class_Ka < num_class_Ka; ++class_Ka) {
+        for (int class_Kb = 0; class_Kb < num_class_Kb; ++class_Kb) {
+            if (!lists_.has_excitation_pair_connection(class_Ka, class_Kb))
+                continue;
+
             const auto maxKa = lists_.alpha_address_1h1p()->strpcls(class_Ka);
             const auto maxKb = lists_.beta_address_1h1p()->strpcls(class_Kb);
 

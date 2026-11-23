@@ -207,6 +207,9 @@ void CISigmaBuilder::H2_hz_opposite_spin(std::span<double> basis, std::span<doub
     // loop over blocks of N-2 space
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
         for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
+            if (!lists_.has_one_hole_pair_connection(class_Ka, class_Kb))
+                continue;
+
             const auto maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
             const auto maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
 

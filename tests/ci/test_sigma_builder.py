@@ -10,6 +10,7 @@ from forte2.lib.ci_helpers import (
     RelSelectedCIHelper,
 )
 from forte2.lib import sparse_ops as sop
+from forte2.lib.det import SlaterRules, make_hamiltonian_matrix
 from forte2.helpers.comparisons import approx
 
 
@@ -244,3 +245,35 @@ def test_kh_set_hamiltonian_requires_h_and_v_together():
     fresh_builder.Hamiltonian(basis, sigma_fresh)
 
     np.testing.assert_allclose(sigma_reused, sigma_fresh, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize("algorithm", ["hz", "kh"])
+def test_gas_sigma_with_disconnected_intermediates(algorithm):
+    # GAS2 is full, and GAS1 and GAS3 each hold one electron.
+    lists = CIStrings(5, 5, 0, [[0], [0] * 4, [0] * 6], [1, 8], [1, 8])
+    assert lists.ndet == 12
+    rng = np.random.default_rng(7)
+    norb = 11
+    H, V = _random_real_integrals(rng, norb, symmetric_H=True)
+    E = 0.37
+    builder = CISigmaBuilder(lists, E, H, V, 0, algorithm)
+    basis = rng.normal(size=lists.ndet)
+    sigma = np.zeros_like(basis)
+    builder.Hamiltonian(basis, sigma)
+
+    hamiltonian = make_hamiltonian_matrix(
+        lists.make_determinants(), SlaterRules(norb, E, H, V)
+    )
+    np.testing.assert_allclose(sigma, hamiltonian @ basis, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize("algorithm", ["hz", "kh"])
+def test_empty_gas_sigma_uses_no_workspace(algorithm):
+    # Both electrons are in irrep 0, so the requested irrep has no determinants.
+    lists = CIStrings(1, 1, 1, [[0], [1]], [2, 0], [2, 0])
+    assert lists.ndet == 0
+    builder = CISigmaBuilder(
+        lists, 0.0, np.zeros((2, 2)), np.zeros((2,) * 4), 0, algorithm
+    )
+    builder.set_memory(0)
+    builder.sigma_two_electron(np.empty(0), np.empty(0))

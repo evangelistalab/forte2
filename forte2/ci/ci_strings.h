@@ -143,6 +143,12 @@ class CIStrings {
                                                                              int h_J) const;
     const std::vector<std::vector<H1StringSubstitution>>& get_beta_1h_list2(int h_I, int h_J) const;
 
+    /// Whether one alpha hole and one beta hole can come from the same determinant block.
+    bool has_one_hole_pair_connection(int class_Ka, int class_Kb) const;
+
+    /// Whether an alpha or beta excitation can reach the intermediate string-class pair.
+    bool has_excitation_pair_connection(int class_Ka, int class_Kb) const;
+
     const std::vector<H2StringSubstitution>& get_alpha_2h_list(int h_I, size_t add_I,
                                                                int h_J) const;
     const std::vector<H2StringSubstitution>& get_beta_2h_list(int h_I, size_t add_I, int h_J) const;

@@ -310,6 +310,30 @@ CIStrings::get_beta_1h_list2(int class_I, int class_J) const {
     return empty_1h_list2;
 }
 
+bool CIStrings::has_one_hole_pair_connection(int class_Ka, int class_Kb) const {
+    return std::ranges::any_of(determinant_classes(), [&](const auto& det_class) {
+        const auto& [nI, class_Ia, class_Ib] = det_class;
+        return block_size(nI) != 0 && !get_alpha_1h_list2(class_Ka, class_Ia).empty() &&
+               !get_beta_1h_list2(class_Kb, class_Ib).empty();
+    });
+}
+
+bool CIStrings::has_excitation_pair_connection(int class_Ka, int class_Kb) const {
+    const auto& Ka_occ = gas_alpha_1h1p_occupations()[class_Ka / nirrep_];
+    const auto& Kb_occ = gas_beta_1h1p_occupations()[class_Kb / nirrep_];
+    return std::ranges::any_of(determinant_classes(), [&](const auto& det_class) {
+        const auto& [nI, class_Ia, class_Ib] = det_class;
+        if (block_size(nI) == 0)
+            return false;
+
+        // Each excitation leaves the other spin's GAS occupation unchanged.
+        const bool alpha_spectator = gas_alpha_occupations()[class_Ia / nirrep_] == Ka_occ;
+        const bool beta_spectator = gas_beta_occupations()[class_Ib / nirrep_] == Kb_occ;
+        return (beta_spectator && !get_alpha_vo_list2(class_Ka, class_Ia).empty()) ||
+               (alpha_spectator && !get_beta_vo_list2(class_Kb, class_Ib).empty());
+    });
+}
+
 const std::vector<H2StringSubstitution>& CIStrings::get_alpha_2h_list(int class_I, size_t add_I,
                                                                       int class_J) const {
     return lookup_hole_list<H2List, H2StringSubstitution>(alpha_2h_list, class_I, add_I, class_J);
