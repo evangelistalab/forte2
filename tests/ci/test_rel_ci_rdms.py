@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 
 from forte2 import MOSpace, State
@@ -45,6 +47,7 @@ def setup_ci():
     h2 = h2 + h2.transpose(3, 2, 1, 0).conj()
 
     fakeints = SpinorbitalIntegrals.__new__(SpinorbitalIntegrals)
+    fakeints.system = SimpleNamespace(point_group="C1")
     fakeints.E = 0.0
     fakeints.H = h1
     fakeints.V = h2

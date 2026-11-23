@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -630,6 +632,7 @@ def test_slater_rules_3_complex():
     E = np.linalg.eigvalsh(H)[0]
 
     fakeints = SpinorbitalIntegrals.__new__(SpinorbitalIntegrals)
+    fakeints.system = SimpleNamespace(point_group="C1")
     fakeints.E = 0.0
     fakeints.H = h1
     fakeints.V = h2
@@ -683,6 +686,7 @@ def test_slater_rules_4_complex_antisym():
     E = np.linalg.eigvalsh(H)[0]
 
     fakeints = SpinorbitalIntegrals.__new__(SpinorbitalIntegrals)
+    fakeints.system = SimpleNamespace(point_group="C1")
     fakeints.E = 0.0
     fakeints.H = h1
     fakeints.V = 0.5 * h2

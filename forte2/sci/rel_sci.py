@@ -179,10 +179,10 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
 
         # all electrons in the alpha string (nb=0); GAS constraints come from the State
         if nocc == 0:
-            ci_strings = CIStrings(nel_active, 0, 0, [[0] * nactv], [], [])
+            ci_strings = CIStrings(nel_active, 0, 1, 0, [[0] * nactv], [], [])
         else:
             ci_strings = CIStrings(
-                nel_active, 0, 0, [[0] * nocc, [0] * nactv], [nocc], [nocc]
+                nel_active, 0, 1, 0, [[0] * nocc, [0] * nactv], [nocc], [nocc]
             )
         return ci_strings.make_determinants()
 

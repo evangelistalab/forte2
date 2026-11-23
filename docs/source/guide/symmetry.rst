@@ -147,3 +147,7 @@ map onto itself, or use ``symmetry=False``.
 
 MCSCF mixes only orbitals of the same irrep. To select CI states of one irrep, pass its Cotton index
 to ``State``, for example ``State(nel=14, multiplicity=1, ms=0.0, symmetry=0)``.
+
+Full CI uses the total number of irreps in the system's point group, including irreps absent from
+the active orbitals. When calling the low-level ``CIStrings`` constructor directly, pass this
+count as ``nirrep`` before the target ``symmetry`` argument.

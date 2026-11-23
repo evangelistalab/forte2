@@ -26,7 +26,9 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
 * A flexible configuration interaction (CI) module
   
   * Spin-adapted CI (CSF basis) for non-relativistic Hamiltonians
+  * CI requires a target state irrep that can be formed from the active orbitals.
   * Support for generalized active spaces (GAS) / occupation-restricted multiple active spaces (ORMAS)
+    with up to six GAS slots. An empty slot retains its position in the occupation bounds.
   * Two-component CI for relativistic Hamiltonians
   * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
   * Overlaps between one- or two-component CI wavefunctions that differ in orbitals, geometry, or basis set [10]_ [11]_
