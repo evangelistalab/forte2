@@ -123,11 +123,6 @@ class RelCISigmaBuilder {
 
     // == Class Private Functions/Data ==
 
-    /// @brief Temporary vectors used for gathering and scattering blocks of the CI matrix
-    /// These vectors are allocated when the class is constructed and resized as needed
-    mutable std::vector<std::complex<double>> TR;
-    mutable std::vector<std::complex<double>> TL;
-
     /// @brief Temporary vectors used to store blocks of data of the form
     /// L(op,K,L) = <K|op|I> C_{IL}
     /// where `op` is an operator, K is a state in N, N-1, or N-2 electron strings
@@ -172,22 +167,10 @@ class RelCISigmaBuilder {
     get_Kblock_spans(size_t nrows, size_t ncols) const;
 
     /// Contract a spinor density over shared hole strings and restore canonical orbital order.
-    template <typename GetHoleList, typename OrbitalIndex>
+    template <size_t Rank>
     void contract_spinor_rdm(np_vector_complex C_left, np_vector_complex C_right,
-                             std::complex<double>* rdm_data, const CIOrbitalIrrepBlocks& orbitals,
-                             const StringAddress& holes, GetHoleList get_hole_list,
-                             OrbitalIndex orbital_index) const;
+                             std::complex<double>* rdm_data,
+                             const CIOrbitalIrrepBlocks& orbitals) const;
 };
-
-[[nodiscard]] std::span<std::complex<double>> gather_block(std::span<std::complex<double>> source,
-                                                           std::span<std::complex<double>> dest,
-                                                           Spin spin, const CIStrings& lists,
-                                                           int class_Ia, int class_Ib);
-
-void zero_block(std::span<std::complex<double>> dest, Spin spin, const CIStrings& lists,
-                int class_Ia, int class_Ib);
-
-void scatter_block(std::span<std::complex<double>> source, std::span<std::complex<double>> dest,
-                   Spin spin, const CIStrings& lists, int class_Ia, int class_Ib);
 
 } // namespace forte2

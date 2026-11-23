@@ -290,7 +290,6 @@ class CISigmaBuilder {
     mutable double haaaa_timer_ = 0.0;
     mutable double haabb_timer_ = 0.0;
     mutable double hbbbb_timer_ = 0.0;
-    mutable double rdm1_timer_ = 0.0;
     mutable double rdm2_aa_timer_ = 0.0;
     mutable double rdm2_ab_timer_ = 0.0;
     mutable int build_count_ = 0;
@@ -378,21 +377,9 @@ class CISigmaBuilder {
                                         size_t nrows, size_t ncols) const;
 
     /// Contract signed left and right K-blocks over the shared alpha/beta hole strings.
-    template <typename Gather>
+    template <size_t AlphaRank, size_t BetaRank>
     void contract_mixed_spin_rdm(np_vector C_left, np_vector C_right, double* rdm_data,
-                                 const CIOrbitalIrrepBlocks& orbitals,
-                                 const StringAddress& alpha_holes, const StringAddress& beta_holes,
-                                 std::string_view rdm_name, Gather gather) const;
+                                 const CIOrbitalIrrepBlocks& orbitals) const;
 };
-
-[[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,
-                                             Spin spin, const CIStrings& lists, int class_Ia,
-                                             int class_Ib);
-
-void zero_block(std::span<double> dest, Spin spin, const CIStrings& lists, int class_Ia,
-                int class_Ib);
-
-void scatter_block(std::span<double> source, std::span<double> dest, Spin spin,
-                   const CIStrings& lists, int class_Ia, int class_Ib);
 
 } // namespace forte2

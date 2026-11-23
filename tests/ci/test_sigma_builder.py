@@ -10,6 +10,7 @@ from forte2.lib.ci_helpers import (
     RelSelectedCIHelper,
 )
 from forte2.lib import sparse_ops as sop
+from forte2.lib.det import SlaterRules, make_hamiltonian_matrix
 from forte2.helpers.comparisons import approx
 
 
@@ -252,3 +253,22 @@ def test_kh_set_hamiltonian_requires_h_and_v_together():
     fresh_builder.Hamiltonian(basis, sigma_fresh)
 
     np.testing.assert_allclose(sigma_reused, sigma_fresh, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize("algorithm", ["kh", "hz"])
+def test_gas_sigma_more_than_six_spaces(algorithm):
+    gas = [[0, 1], [], [0], [2], [1, 3], [2], [0, 3], [1]]
+    lower, upper = [0] * 7 + [1], [4, 0, 2, 2, 4, 2, 1, 1]
+    lists = CIStrings(2, 2, 4, 3, gas, lower, upper)
+    norb = sum(map(len, gas))
+    rng = np.random.default_rng(13)
+    H, V = _random_real_integrals(rng, norb, symmetric_H=True)
+    energy = 0.37
+    builder = CISigmaBuilder(lists, energy, H, V, 0, algorithm)
+    basis = rng.normal(size=lists.ndet)
+    sigma = np.empty_like(basis)
+    builder.Hamiltonian(basis, sigma)
+
+    rules = SlaterRules(norb, energy, H, V)
+    expected = make_hamiltonian_matrix(lists.make_determinants(), rules) @ basis
+    np.testing.assert_allclose(sigma, expected, atol=1e-11, rtol=1e-12)

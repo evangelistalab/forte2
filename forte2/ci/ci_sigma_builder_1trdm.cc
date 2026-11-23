@@ -3,7 +3,8 @@
 #include "helpers/np_vector_functions.h"
 
 #include "ci_sigma_builder.h"
-#include "ci_strings_makers.h"
+#include "ci_string_substitutions.h"
+#include "helpers/blas.h"
 
 namespace forte2 {
 
@@ -37,71 +38,80 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
 
     auto rdm_view = rdm.view();
 
-    const auto& alpha_address_left = lists_left.alpha_address();
-    const auto& beta_address_left = lists_left.beta_address();
-    const auto& alpha_address_right = lists_right.alpha_address();
-    const auto& beta_address_right = lists_right.beta_address();
-
-    // Compute the lists that map the strings of the right and left wave functions. We only need
-    // strings for the part that is left untouched by the a^+_p a_q operator.
-    auto string_list = find_string_map(lists_left, lists_right, spin);
-    // Compute the VO lists that map the strings of the right and left wave functions. We only
-    // need strings for the part that is affected by the a^+_p a_q operator.
-    VOListMap vo_list_map = find_ov_string_map(lists_left, lists_right, spin);
+    const auto other = is_alpha(spin) ? Spin::Beta : Spin::Alpha;
+    const auto& active_right = lists_right.strings(spin);
+    const auto& active_left = lists_left.strings(spin);
+    const auto& spectator_right = lists_right.strings(other);
+    const auto& spectator_left = lists_left.strings(other);
+    const bool matching_layout = lists_left.orbital_irreps() == lists_right.orbital_irreps() &&
+                                 lists_left.nirrep() == lists_right.nirrep() &&
+                                 lists_left.gas_size() == lists_right.gas_size();
+    std::vector<LocalStringAddress> right_work(lists_right.ngas_spaces());
+    std::vector<LocalStringAddress> left_work(lists_left.ngas_spaces());
+    occupation_t left_occupation(lists_left.ngas_spaces());
+    std::vector<std::pair<size_t, size_t>> spectator_map;
 
     auto Cl_span = vector::as_span<double>(C_left);
     auto Cr_span = vector::as_span<double>(C_right);
 
-    // Here we compute the RDMs for the case of different irreps
-    // <Ja|a^{+}_p a_q|Ia> CL_{Ja,K} CR_{Ia,K}
+    for (const auto& ket : lists_right.blocks()) {
+        const auto cr = gather_block(Cr_span, std::span(sigmabuilder_right.TR), spin, ket);
+        const auto nr = ket.spectator_size(spin);
+        const auto ir = ket.string_class(spin);
+        const auto sr = ket.spectator_class(spin);
+        for (const auto& bra : lists_left.blocks()) {
+            const auto nl = bra.spectator_size(spin);
+            const auto il = bra.string_class(spin);
+            const auto sl = bra.spectator_class(spin);
 
-    // loop over blocks of matrix C
-    for (const auto& [nI, class_Ia, class_Ib] : lists_right.determinant_classes()) {
-        if (lists_right.block_size(nI) == 0)
-            continue;
-
-        auto tr =
-            gather_block(Cr_span, sigmabuilder_right.TR, spin, lists_right, class_Ia, class_Ib);
-
-        for (const auto& [nJ, class_Ja, class_Jb] : lists_left.determinant_classes()) {
-            // check if the string class on which we don't act is the same for I and J
-            // here we cannot assume that the two classes must coincide. So we just check if
-            // there are elements in the string list for the given pair of classes
-            if (is_alpha(spin)) {
-                if (string_list.count(std::make_pair(class_Ib, class_Jb)) == 0)
+            if (matching_layout) {
+                if (spectator_right.irrep(sr) != spectator_left.irrep(sl) ||
+                    spectator_right.occupation(sr) != spectator_left.occupation(sl))
                     continue;
-            } else {
-                if (string_list.count(std::make_pair(class_Ia, class_Ja)) == 0)
+                const ExcitationSubstitutions substitutions(active_right, ir, active_left, il);
+                if (substitutions.empty())
                     continue;
+                const auto cl = gather_block(Cl_span, std::span(TL), spin, bra);
+                for (size_t i = 0; i < active_right.size(ir); ++i) {
+                    substitutions.for_each_excitation(
+                        i, right_work, [&](auto p, auto q, int sign, size_t j) {
+                            rdm_view(p, q) +=
+                                sign * dot(nr, cl.data() + j * nl, 1, cr.data() + i * nr, 1);
+                        });
+                }
+                continue;
             }
 
-            if (lists_left.block_size(nJ) == 0)
+            // An orbital can belong to different GAS slots in the two states. Decode
+            // one product at a time and use the destination's own address space.
+            spectator_map.clear();
+            for (size_t i = 0; i < nr; ++i) {
+                const auto string = spectator_right.string_at(sr, i, right_work);
+                const auto j = spectator_left.find(string, left_work, left_occupation);
+                if (j && j->string_class == sl)
+                    spectator_map.emplace_back(i, j->rank);
+            }
+            if (spectator_map.empty())
                 continue;
 
-            auto tl = gather_block(Cl_span, TL, spin, lists_left, class_Ja, class_Jb);
-
-            const auto& string_list_block = is_alpha(spin)
-                                                ? string_list[std::make_pair(class_Ib, class_Jb)]
-                                                : string_list[std::make_pair(class_Ia, class_Ja)];
-
-            const auto& pq_vo_list = is_alpha(spin)
-                                         ? vo_list_map[std::make_pair(class_Ia, class_Ja)]
-                                         : vo_list_map[std::make_pair(class_Ib, class_Jb)];
-
-            const size_t maxL_left = is_alpha(spin) ? beta_address_left->strpcls(class_Jb)
-                                                    : alpha_address_left->strpcls(class_Ja);
-
-            const size_t maxL_right = is_alpha(spin) ? beta_address_right->strpcls(class_Ib)
-                                                     : alpha_address_right->strpcls(class_Ia);
-
-            for (const auto& [pq, vo_list] : pq_vo_list) {
-                const auto& [p, q] = pq;
-                double rdm_element = 0.0;
-                for (const auto& [sign, I, J] : vo_list) {
-                    for (const auto& [Ip, Jp] : string_list_block)
-                        rdm_element += sign * tl[J * maxL_left + Jp] * tr[I * maxL_right + Ip];
-                }
-                rdm_view(p, q) += rdm_element;
+            const auto cl = gather_block(Cl_span, std::span(TL), spin, bra);
+            for (size_t i = 0; i < active_right.size(ir); ++i) {
+                const auto string = active_right.string_at(ir, i, right_work);
+                string.for_each_set_bit([&](size_t q) {
+                    auto hole = string;
+                    const auto annihilation = hole.destroy_unchecked(q);
+                    for (size_t p = 0; p < norb; ++p) {
+                        if (hole.get_bit(p))
+                            continue;
+                        auto result = hole;
+                        const auto sign = annihilation * result.create_unchecked(p);
+                        const auto j = active_left.find(result, left_work, left_occupation);
+                        if (!j || j->string_class != il)
+                            continue;
+                        for (const auto& [l, m] : spectator_map)
+                            rdm_view(p, q) += sign * cl[j->rank * nl + m] * cr[i * nr + l];
+                    }
+                });
             }
         }
     }

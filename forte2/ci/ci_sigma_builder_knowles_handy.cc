@@ -8,6 +8,8 @@
 #include "helpers/parallel.h"
 
 #include "ci_sigma_builder.h"
+#include "ci_string_substitutions.h"
+#include "helpers/indexing.hpp"
 
 namespace forte2 {
 
@@ -31,142 +33,160 @@ size_t Kblock_column_capacity(size_t nrows, size_t ncols, size_t memory_size) {
                      static_cast<size_t>(std::numeric_limits<int>::max())});
 }
 
-void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size_t dim2,
-                  size_t dim3);
-void gather_alpha_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                        size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                        std::span<const double> basis, std::span<double> Kblock);
-void gather_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                       size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                       std::span<double> basis, std::span<double> TR, std::span<double> Kblock2);
-void scatter_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                        size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                        std::span<const double> Kblock1, std::span<double> TR,
-                        std::span<double> sigma);
-void scatter_alpha_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                         size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim,
-                         size_t maxKb, std::span<const double> Kblock2, std::span<double> sigma);
+struct ExcitationConnection {
+    const DeterminantBlock& determinant;
+    Spin spin;
+    ExcitationSubstitutions substitutions;
+};
+
+auto excitation_connections(const CIStrings& lists) {
+    std::map<std::pair<int, int>, std::vector<ExcitationConnection>> groups;
+    for (const auto& block : lists.blocks()) {
+        for (const auto spin : {Spin::Alpha, Spin::Beta}) {
+            const auto other = is_alpha(spin) ? Spin::Beta : Spin::Alpha;
+            const auto& spectator = lists.strings(other);
+            const auto& acting = lists.strings(spin);
+            const auto& excited = lists.excited_strings(spin);
+            const int L = block.spectator_class(spin);
+            const int I = block.string_class(spin);
+            const int K_spectator = lists.excited_strings(other)
+                                        .find_class(spectator.occupation(L), spectator.irrep(L))
+                                        .value();
+            const std::span occupation(&acting.occupation(I), 1);
+            for (const auto& candidate : generate_1h1p_occupations(occupation, lists.gas_size())) {
+                const int first_class = excited.find_class(candidate, 0).value();
+                for (int h = 0; h < lists.nirrep(); ++h) {
+                    const int K = first_class + h;
+                    if (excited.size(K) == 0)
+                        continue;
+                    ExcitationSubstitutions substitutions(excited, K, acting, I);
+                    if (substitutions.empty())
+                        continue;
+                    const auto classes =
+                        is_alpha(spin) ? std::pair{K, K_spectator} : std::pair{K_spectator, K};
+                    groups[classes].push_back({block, spin, std::move(substitutions)});
+                }
+            }
+        }
+    }
+    return groups;
+}
+
+/// Visit the spectator slices connected to a tile of D([pq], Ka * beta_size + Kb).
+/// For an alpha excitation the spectator slice is contiguous. For a beta excitation
+/// the CI block and the tile use their respective beta dimensions as strides.
+template <typename Visit>
+void for_each_excitation_slice(const ExcitationConnection& connection, size_t beta_size,
+                               size_t start, size_t width, std::span<LocalStringAddress> work,
+                               Visit&& visit) {
+    const auto& [block, spin, substitutions] = connection;
+    if (is_alpha(spin)) {
+        const auto end = start + width;
+        for (size_t first = start; first < end;) {
+            const size_t local = first % beta_size;
+            const size_t length = std::min(beta_size - local, end - first);
+            substitutions.for_each_excitation(
+                first / beta_size, work, [&](auto p, auto q, int sign, size_t rank) {
+                    visit(pair_index_geq(p, q), sign * (p == q ? 2 : 1), first - start,
+                          block.offset + rank * block.beta_size + local, length, 1, 1);
+                });
+            first += length;
+        }
+    } else {
+        const auto count = std::min(width, beta_size);
+        for (size_t col = 0; col < count; ++col) {
+            const size_t first = start + col;
+            const size_t length = 1 + (width - col - 1) / beta_size;
+            substitutions.for_each_excitation(
+                first % beta_size, work, [&](auto p, auto q, int sign, size_t rank) {
+                    visit(pair_index_geq(p, q), sign * (p == q ? 2 : 1), col,
+                          block.offset + (first / beta_size) * block.beta_size + rank, length,
+                          length == 1 ? 1 : beta_size, length == 1 ? 1 : block.beta_size);
+                });
+        }
+    }
+}
+
 } // namespace
 
 void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, Spin spin) const {
-    size_t norb = lists_.norb();
-    // loop over blocks of matrix C
-    for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-        if (lists_.block_size(nI) == 0)
-            continue;
-        auto Cr = gather_block(basis, TR, spin, lists_, class_Ia, class_Ib);
-
-        for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-            // For alpha operator, the beta string classes of the result must be the same
-            if (is_alpha(spin) and (class_Ib != class_Jb))
+    const auto norb = lists_.norb();
+    const auto& strings = lists_.strings(spin);
+    std::vector<LocalStringAddress> work(lists_.ngas_spaces());
+    for (const auto& input : lists_.blocks()) {
+        const auto spectators = input.spectator_size(spin);
+        const auto right = gather_block(basis, std::span(TR), spin, input);
+        for (const auto& output : lists_.blocks()) {
+            if (input.spectator_class(spin) != output.spectator_class(spin))
                 continue;
-            // For beta operator, the alpha string classes of the result must be the same
-            if (is_beta(spin) and (class_Ia != class_Ja))
-                continue;
-            if (lists_.block_size(nJ) == 0)
+            const int first = input.string_class(spin);
+            const ExcitationSubstitutions substitutions(strings, first, strings,
+                                                        output.string_class(spin));
+            if (substitutions.empty())
                 continue;
 
-            std::fill_n(TL.begin(), lists_.block_size(nJ), 0.0);
-
-            const size_t maxL = is_alpha(spin) ? lists_.beta_address()->strpcls(class_Ib)
-                                               : lists_.alpha_address()->strpcls(class_Ia);
-
-            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alpha_vo_list(class_Ia, class_Ja)
-                                                    : lists_.get_beta_vo_list(class_Ib, class_Jb);
-
-            for (const auto& [pq, vo_list] : pq_vo_list) {
-                const auto& [p, q] = pq;
-                const double Hpq = h_kh[p * norb + q];
-                for (const auto& [sign, I, J] : vo_list) {
-                    add(maxL, sign * Hpq, &Cr[I * maxL], 1, &TL[J * maxL], 1);
-                }
+            auto left = sigma.subspan(output.offset, output.size());
+            if (!is_alpha(spin)) {
+                left = std::span(TL).first(output.size());
+                std::ranges::fill(left, 0.0);
             }
-            scatter_block(TL, sigma, spin, lists_, class_Ja, class_Jb);
+            for (size_t i = 0; i < strings.size(first); ++i) {
+                substitutions.for_each_excitation(i, work, [&](auto p, auto q, int sign, size_t j) {
+                    add(spectators, sign * h_kh[p * norb + q], right.data() + i * spectators, 1,
+                        left.data() + j * spectators, 1);
+                });
+            }
+            if (!is_alpha(spin))
+                scatter_block(left, sigma, spin, output);
         }
     }
 }
 
 void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) const {
-    const auto& excitation_pairs = *excitation_pairs_;
-    const int num_class_Ka = lists_.alpha_address_1h1p()->nclasses();
-    const int num_class_Kb = lists_.beta_address_1h1p()->nclasses();
-
-    // Loop over the Ka and Kb string classes of the D([qs],[Ka Kb]) matrix
-    for (size_t class_Ka = 0; class_Ka < num_class_Ka; ++class_Ka) {
-        for (size_t class_Kb = 0; class_Kb < num_class_Kb; ++class_Kb) {
-            const auto maxKa = lists_.alpha_address_1h1p()->strpcls(class_Ka);
-            const auto maxKb = lists_.beta_address_1h1p()->strpcls(class_Kb);
-
-            const auto& block = excitation_pairs.for_intermediate(lists_, class_Ka, class_Kb);
-            const size_t nrows = block.size();
-            if (maxKa == 0 || maxKb == 0 || nrows == 0)
-                continue;
-
-            // Set the size of the Kb range. Here we process all Kb values.
-            const size_t Kb_start = 0;
-            const size_t Kb_end = maxKb;
-            const size_t Kb_size = Kb_end - Kb_start;
-            const size_t block_dim = nrows * Kb_size;
-
-            // Grab the temporary buffers that will hold intermediates like
-            // D([i>=j],[Ka Kb]) where the indices range as:
-            // - [i>=j] pairs in the required irrep
-            // - Ka in chunks of maximum size Ka_max_size
-            // - Kb in [0, maxKb)
-            // Ka_max_size is the maximum size of the Ka range that we can
-            // process in one go without exceeding the memory limit, set via
-            // the set_memory() function.
-            auto [Kblock1, Kblock2, Ka_max_size] = get_Kblock_spans(block_dim, maxKa);
-
-            // Loop over ranges of Ka indices in chuncks of size Ka_max_size
-            for (size_t Ka_start = 0; Ka_start < maxKa; Ka_start += Ka_max_size) {
-                size_t Ka_end = std::min(Ka_start + Ka_max_size, maxKa);
-                // size of the Ka range, which may be smaller than Ka_max_size
-                size_t Ka_size = Ka_end - Ka_start;
-                // dimensions of the matrix we are going to use for this Ka
-                // chunk
-                const size_t Kdim = Ka_size * Kb_size;
-                // dimension of the D([i<=j],[Ka Kb]) tensor
-                const size_t temp_dim = nrows * Kdim;
-
-                // skip empty blocks
-                if (temp_dim == 0)
-                    continue;
-
-                // zero out the block that will hold the D([i>=j],[Ka Kb]) tensor
-                std::fill_n(Kblock1.begin(), temp_dim, 0.0);
-
-                // alpha contribution to the D matrix D([i>=j],[Ka Kb])
-                gather_alpha_block(lists_, excitation_pairs, class_Ka, class_Kb, Ka_start, Ka_size,
-                                   Kdim, maxKb, basis, std::span{Kblock1.data(), temp_dim});
-
-                // cyclic transpose of the D matrix D([i>=j],[Ka Kb]) to D([i>=j],[Kb Ka])
-                transpose_23(Kblock1, Kblock2, nrows, Ka_size, maxKb);
-
-                // beta contribution to the D matrix D([i>=j],[Kb Ka])
-                gather_beta_block(lists_, excitation_pairs, class_Ka, class_Kb, Ka_start, Ka_size,
-                                  Kdim, maxKb, basis, TR, std::span{Kblock2.data(), temp_dim});
-
-                // matrix-matrix multiplication 0.5 * V([k>=l][i>=j]) * D([i>=j],[Kb Ka])
-                // The result is the matrix E([k>=l],[Kb Ka])
-                // [note that the Ka/Kb indices are still transposed]
-                matrix_product('N', 'N', nrows, Kdim, nrows, 0.5,
-                               v_ijkl_hk.data() + block.matrix_offset, nrows, Kblock2.data(), Kdim,
-                               0.0, Kblock1.data(), Kdim);
-
-                // beta contribution from the matrix E([k>=l],[Kb Ka]) to
-                // sigma([Ib Ia])
-                scatter_beta_block(lists_, excitation_pairs, class_Ka, class_Kb, Ka_start, Ka_size,
-                                   Kdim, maxKb, std::span{Kblock1.data(), temp_dim}, TR, sigma);
-
-                // cyclic transpose of E([k>=l],[Kb Ka]) to E([k>=l],[Ka Kb])
-                transpose_23(Kblock1, Kblock2, nrows, maxKb, Ka_size);
-
-                // alpha contribution from the matrix E([k>=l],[Ka Kb]) to
-                // sigma([Ia Ib])
-                scatter_alpha_block(lists_, excitation_pairs, class_Ka, class_Kb, Ka_start, Ka_size,
-                                    Kdim, maxKb, std::span{Kblock2.data(), temp_dim}, sigma);
+    const auto& alpha = lists_.excited_strings(Spin::Alpha);
+    const auto& beta = lists_.excited_strings(Spin::Beta);
+    std::vector<LocalStringAddress> work(lists_.ngas_spaces());
+    for (const auto& [classes, links] : excitation_connections(lists_)) {
+        const auto [ka, kb] = classes;
+        const auto& block = excitation_pairs_->for_intermediate(lists_, ka, kb);
+        std::vector<size_t> rows;
+        for (const auto& link : links)
+            for (const auto& [p, q, sign] : link.substitutions.orbitals())
+                rows.push_back(pair_index_geq(p, q));
+        const CIOrbitalMatrixBlock<double> matrix(*excitation_pairs_, block, v_ijkl_hk,
+                                                  std::move(rows));
+        const auto nrows = matrix.size();
+        const auto beta_size = beta.size(kb);
+        const auto columns = checked_ci_product(alpha.size(ka), beta_size);
+        const auto [D, E, chunk] = get_Kblock_spans(nrows, columns);
+        for (size_t start = 0; start < columns;) {
+            const size_t width = std::min(chunk, columns - start);
+            std::fill_n(D.begin(), nrows * width, 0.0);
+            for (const auto& link : links) {
+                for_each_excitation_slice(
+                    link, beta_size, start, width, work,
+                    [&](size_t pair, int sign, size_t column, size_t coefficient, size_t length,
+                        size_t column_stride, size_t coefficient_stride) {
+                        const auto row = matrix.row(pair);
+                        add(length, sign, basis.data() + coefficient, coefficient_stride,
+                            D.data() + row * width + column, column_stride);
+                    });
             }
+
+            matrix_product('N', 'N', nrows, width, nrows, 0.5, matrix.data(), nrows, D.data(),
+                           width, 0.0, E.data(), width);
+
+            for (const auto& link : links) {
+                for_each_excitation_slice(
+                    link, beta_size, start, width, work,
+                    [&](size_t pair, int sign, size_t column, size_t coefficient, size_t length,
+                        size_t column_stride, size_t coefficient_stride) {
+                        const auto row = matrix.row(pair);
+                        add(length, sign, E.data() + row * width + column, column_stride,
+                            sigma.data() + coefficient, coefficient_stride);
+                    });
+            }
+            start += width;
         }
     }
 }
@@ -221,173 +241,4 @@ size_t CISigmaBuilder::acquire_local_Kblock_buffers(std::vector<double>& Kblock1
     return cols_chunk_size;
 }
 
-// The following functions are used to gather and scatter blocks of data and
-// are relevant only to this file. They live in the anonymous namespace to
-// avoid polluting the global namespace.
-namespace {
-/// @brief Cyclic multithreaded transpose of indices 2 and 3 of a 3D tensor
-/// in[i][j][k] -> out[i][k][j]
-/// @param in Input tensor as a 1D span
-/// @param out Output tensor as a 1D span
-/// @param dim1 Size of the input first dimension [i]
-/// @param dim2 Size of the input second dimension [j]
-/// @param dim3 Size of the input third dimension [k]
-void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size_t dim2,
-                  size_t dim3) {
-    // Kernel for transposing indices 2 and 3 of a 3D tensor for all i in the
-    // range [i_begin, i_end)
-    auto kernel = [=, &in, &out](size_t i_begin, size_t i_end) {
-        const size_t block_size = dim2 * dim3;
-        for (size_t i = i_begin; i < i_end; ++i) {
-            const double* src = in.data() + i * block_size;
-            double* dst = out.data() + i * block_size;
-            for (size_t j{0}; j < dim2; ++j) {
-                for (size_t k{0}; k < dim3; ++k) {
-                    dst[k * dim2 + j] = src[j * dim3 + k];
-                }
-            }
-        }
-    };
-
-    assert(in.size() == out.size());
-
-    parallel_for_chunked(dim1, kernel);
-}
-
-void gather_alpha_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                        size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                        std::span<const double> basis, std::span<double> Kblock) {
-
-    // An unchanged spectator string must have the same GAS occupation and irrep.
-    const auto nirrep = lists.nirrep();
-    const auto& Kb_occ = lists.gas_beta_1h1p_occupations()[class_Kb / nirrep];
-
-    for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        const auto& Ib_occ = lists.gas_beta_occupations()[class_Ib / nirrep];
-
-        if ((class_Ib % nirrep != class_Kb % nirrep) or (Ib_occ != Kb_occ) or
-            (lists.block_size(nI) == 0))
-            continue;
-
-        // get all Ka/Ia pairs connected to the current class_Ka and class_Ia
-        const auto alpha_vo_list = lists.get_alpha_vo_list2(class_Ka, class_Ia);
-        if (alpha_vo_list.empty())
-            continue;
-
-        size_t maxIb = lists.beta_address()->strpcls(class_Ib);
-        size_t basis_offset = lists.block_offset(nI);
-
-        // add contributions to the Kblock
-        for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
-            const auto& vo_alist = alpha_vo_list[Ka + Ka_start];
-            for (auto const& [sign_ij, ij, Ia] : vo_alist) {
-                size_t K_offset = pairs.local_row(ij) * Kdim + Ka * maxKb;
-                size_t basis_Ia_offset = basis_offset + Ia * maxIb;
-                add(maxKb, sign_ij, &basis[basis_Ia_offset], 1, &Kblock[K_offset], 1);
-            }
-        }
-    }
-}
-
-void gather_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                       size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                       std::span<double> basis, std::span<double> TR, std::span<double> Kblock2) {
-
-    const auto nirrep = lists.nirrep();
-    const auto& Ka_occ = lists.gas_alpha_1h1p_occupations()[class_Ka / nirrep];
-    for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        const auto& Ia_occ = lists.gas_alpha_occupations()[class_Ia / nirrep];
-        if ((class_Ia % nirrep != class_Ka % nirrep) or (Ia_occ != Ka_occ) or
-            (lists.block_size(nI) == 0))
-            continue;
-
-        // get all Kb/Ib pairs connected to the current class_Kb and class_Ib
-        const auto beta_vo_list = lists.get_beta_vo_list2(class_Kb, class_Ib);
-        if (beta_vo_list.empty())
-            continue;
-
-        size_t maxIa = lists.alpha_address()->strpcls(class_Ia);
-
-        // transposes the basis vector into TR
-        auto basis_tr = gather_block(basis, TR, Spin::Beta, lists, class_Ia, class_Ib);
-
-        // add contributions to the Kblock
-        for (size_t Kb = 0; Kb < maxKb; ++Kb) {
-            auto const& vo_blist = beta_vo_list[Kb];
-            for (auto const& [sign_ij, ij, Ib] : vo_blist) {
-                size_t K_offset = pairs.local_row(ij) * Kdim + Kb * Ka_size;
-                size_t basis_Ib_offset = Ib * maxIa + Ka_start;
-                add(Ka_size, sign_ij, &basis_tr[basis_Ib_offset], 1, &Kblock2[K_offset], 1);
-            }
-        }
-    }
-}
-
-void scatter_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                        size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                        std::span<const double> Kblock1, std::span<double> TR,
-                        std::span<double> sigma) {
-    const auto nirrep = lists.nirrep();
-    const auto& Ka_occ = lists.gas_alpha_1h1p_occupations()[class_Ka / nirrep];
-    for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        const auto& Ia_occ = lists.gas_alpha_occupations()[class_Ia / nirrep];
-        if ((class_Ia % nirrep != class_Ka % nirrep) or (Ia_occ != Ka_occ) or
-            (lists.block_size(nI) == 0))
-            continue;
-
-        // get all Kb/Ib pairs connected to the current class_Kb and class_Ib
-        const auto beta_vo_list = lists.get_beta_vo_list2(class_Kb, class_Ib);
-        if (beta_vo_list.empty())
-            continue;
-
-        const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
-
-        // zero out the TR temporary vector for the scatter operation
-        zero_block(TR, Spin::Beta, lists, class_Ia, class_Ib);
-
-        // scatter contributions from the Kblock into the TR vector
-        for (size_t Kb = 0; Kb < maxKb; ++Kb) {
-            const auto& vo_blist = beta_vo_list[Kb];
-            for (const auto& [sign_ij, ij, Ib] : vo_blist) {
-                const size_t K_offset = pairs.local_row(ij) * Kdim + Kb * Ka_size;
-                const size_t sigma_offset = Ib * maxIa + Ka_start;
-                add(Ka_size, sign_ij, &Kblock1[K_offset], 1, &TR[sigma_offset], 1);
-            }
-        }
-
-        // scatter the TR([Kb Ka]) vector to the sigma vector
-        scatter_block(TR, sigma, Spin::Beta, lists, class_Ia, class_Ib);
-    }
-}
-
-void scatter_alpha_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                         size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim,
-                         size_t maxKb, std::span<const double> Kblock2, std::span<double> sigma) {
-    const auto nirrep = lists.nirrep();
-    const auto& Kb_occ = lists.gas_beta_1h1p_occupations()[class_Kb / nirrep];
-    for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        const auto& Ib_occ = lists.gas_beta_occupations()[class_Ib / nirrep];
-        if ((class_Ib % nirrep != class_Kb % nirrep) or (Ib_occ != Kb_occ) or
-            (lists.block_size(nI) == 0))
-            continue;
-        // get all Ia/Ka pairs connected to the current class_Ka and class_Ia
-        const auto alpha_vo_list = lists.get_alpha_vo_list2(class_Ka, class_Ia);
-        if (alpha_vo_list.empty())
-            continue;
-
-        size_t maxIb = lists.beta_address()->strpcls(class_Ib);
-        size_t sigma_offset = lists.block_offset(nI);
-
-        // scatter contributions from the Kblock into the sigma vector
-        for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
-            const auto& vo_alist = alpha_vo_list[Ka + Ka_start];
-            for (auto const& [sign_kl, kl, Ia] : vo_alist) {
-                size_t K_offset = pairs.local_row(kl) * Kdim + Ka * maxKb;
-                size_t sigma_Ia_offset = sigma_offset + Ia * maxIb;
-                add(maxKb, sign_kl, &Kblock2[K_offset], 1, &sigma[sigma_Ia_offset], 1);
-            }
-        }
-    }
-}
-} // namespace
 } // namespace forte2

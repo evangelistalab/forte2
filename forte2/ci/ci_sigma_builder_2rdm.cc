@@ -5,6 +5,7 @@
 #include "helpers/blas.h"
 
 #include "ci_sigma_builder.h"
+#include "ci_hole_contractions.h"
 
 namespace forte2 {
 
@@ -28,63 +29,8 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, S
     if ((is_alpha(spin) and (na < 2)) or (is_beta(spin) and (nb < 2)))
         return rdm;
 
-    auto Cl_span = vector::as_span<double>(C_left);
-    auto Cr_span = vector::as_span<double>(C_right);
-
-    auto rdm_data = rdm.data();
-
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
-
-    int num_2h_classes = is_alpha(spin) ? lists_.alpha_address_2h()->nclasses()
-                                        : lists_.beta_address_2h()->nclasses();
-
-    for (int class_K = 0; class_K < num_2h_classes; ++class_K) {
-        size_t maxK = is_alpha(spin) ? lists_.alpha_address_2h()->strpcls(class_K)
-                                     : lists_.beta_address_2h()->strpcls(class_K);
-
-        // loop over blocks of matrix C
-        for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-            if (lists_.block_size(nI) == 0)
-                continue;
-
-            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ia, class_Ib);
-
-            for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                // The string class on which we don't act must be the same for I and J
-                if ((is_alpha(spin) and (class_Ib != class_Jb)) or
-                    (is_beta(spin) and (class_Ia != class_Ja)))
-                    continue;
-                if (lists_.block_size(nJ) == 0)
-                    continue;
-
-                const size_t maxL = is_alpha(spin) ? beta_address->strpcls(class_Ib)
-                                                   : alpha_address->strpcls(class_Ia);
-                if (maxL > 0) {
-                    // Get a pointer to the correct block of matrix C
-                    auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
-                    for (size_t K{0}; K < maxK; ++K) {
-                        auto& Kllist = is_alpha(spin)
-                                           ? lists_.get_alpha_2h_list(class_K, K, class_Ia)
-                                           : lists_.get_beta_2h_list(class_K, K, class_Ib);
-                        auto& Krlist = is_alpha(spin)
-                                           ? lists_.get_alpha_2h_list(class_K, K, class_Ja)
-                                           : lists_.get_beta_2h_list(class_K, K, class_Jb);
-                        for (const auto& [sign_K, p, q, I] : Kllist) {
-                            const size_t pq_index = pair_index_gt(p, q);
-                            for (const auto& [sign_L, r, s, J] : Krlist) {
-                                const size_t rs_index = pair_index_gt(r, s);
-                                const double rdm_element =
-                                    dot(maxL, tl.data() + I * maxL, 1, tr.data() + J * maxL, 1);
-                                rdm_data[pq_index * npairs + rs_index] +=
-                                    sign_K * sign_L * rdm_element;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    accumulate_same_spin_rdm<2>(lists_, spin, vector::as_span<double>(C_left),
+                                vector::as_span<double>(C_right), TL, TR, rdm.data(), npairs);
     rdm2_aa_timer_ += timer.elapsed_seconds();
     return rdm;
 }

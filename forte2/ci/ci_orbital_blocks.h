@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -37,7 +38,7 @@ class CIOrbitalIrrepBlocks {
     /// Single orbitals, indexed by p.
     static CIOrbitalIrrepBlocks orbitals(const CIStrings& lists) {
         CIOrbitalIrrepBlocks result(lists.nirrep());
-        for (const int irrep : lists.string_class()->mo_sym())
+        for (const int irrep : lists.orbital_irreps())
             result.add_row(irrep);
         result.set_matrix_offsets();
         return result;
@@ -88,8 +89,6 @@ class CIOrbitalIrrepBlocks {
 
     /// Return the row within the irrep block that contains the given canonical index.
     size_t local_row(size_t canonical_index) const { return local_rows_[canonical_index]; }
-    /// Largest block dimension, used to size buffers that must fit any irrep.
-    size_t max_rows() const { return max_rows_; }
     /// Total number of scalar elements in the packed square blocks.
     size_t packed_matrix_size() const { return packed_matrix_size_; }
     /// Whether all rows fit in a single block in canonical order, including an empty layout.
@@ -142,7 +141,7 @@ class CIOrbitalIrrepBlocks {
 
     static CIOrbitalIrrepBlocks make_pairs(const CIStrings& lists, auto end_q) {
         CIOrbitalIrrepBlocks result(lists.nirrep());
-        const auto& irreps = lists.string_class()->mo_sym();
+        const auto& irreps = lists.orbital_irreps();
         for (size_t p = 0; p < irreps.size(); ++p) {
             for (size_t q = 0; q < end_q(p); ++q)
                 result.add_row(irreps[p] ^ irreps[q]);
@@ -153,7 +152,7 @@ class CIOrbitalIrrepBlocks {
 
     static CIOrbitalIrrepBlocks make_triplets(const CIStrings& lists, auto end_q, auto end_r) {
         CIOrbitalIrrepBlocks result(lists.nirrep());
-        const auto& irreps = lists.string_class()->mo_sym();
+        const auto& irreps = lists.orbital_irreps();
         for (size_t p = 0; p < irreps.size(); ++p) {
             for (size_t q = 0; q < end_q(p); ++q) {
                 const int pair_irrep = irreps[p] ^ irreps[q];
@@ -183,6 +182,52 @@ class CIOrbitalIrrepBlocks {
     std::vector<size_t> local_rows_; ///< Maps each canonical index to its local row.
     size_t max_rows_ = 0;
     size_t packed_matrix_size_ = 0;
+};
+
+/// The rows within an orbital irrep that can act on a given intermediate product.
+/// Canonical indices are mapped to the restricted row order. The original packed integral
+/// block is borrowed when every row is active. A subset is packed into a smaller square
+/// matrix using the selected rows on both axes.
+template <typename Scalar> class CIOrbitalMatrixBlock {
+  public:
+    CIOrbitalMatrixBlock(const CIOrbitalIrrepBlocks& layout,
+                         const CIOrbitalIrrepBlocks::Block& block, std::span<const Scalar> matrix,
+                         std::vector<size_t> rows)
+        : layout_(layout) {
+        std::ranges::sort(rows);
+        const auto last = std::unique(rows.begin(), rows.end());
+        rows.erase(last, rows.end());
+        size_ = rows.size();
+
+        const auto full = matrix.subspan(block.matrix_offset, block.size() * block.size());
+        if (size_ == block.size()) {
+            full_block_ = full;
+            return;
+        }
+        row_map_.resize(block.size());
+        for (size_t r = 0; r < size_; ++r) {
+            rows[r] = layout_.local_row(rows[r]);
+            row_map_[rows[r]] = r;
+        }
+        packed_.reserve(size_ * size_);
+        for (const auto r : rows)
+            for (const auto s : rows)
+                packed_.push_back(full[r * block.size() + s]);
+    }
+
+    size_t size() const { return size_; }
+    const Scalar* data() const { return row_map_.empty() ? full_block_.data() : packed_.data(); }
+    size_t row(size_t canonical) const {
+        const auto row = layout_.local_row(canonical);
+        return row_map_.empty() ? row : row_map_[row];
+    }
+
+  private:
+    const CIOrbitalIrrepBlocks& layout_;
+    std::span<const Scalar> full_block_;
+    std::vector<size_t> row_map_;
+    std::vector<Scalar> packed_;
+    size_t size_ = 0;
 };
 
 /// Provide writable irrep blocks for accumulating an RDM with GEMM.

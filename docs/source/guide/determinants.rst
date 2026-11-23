@@ -55,11 +55,16 @@ Generalized active spaces
 ``na``, ``nb``
     The number of alpha and beta electrons.
 
+``nirrep``
+    The total number of irreps in the point group. Use 1 for C1.
+
 ``symmetry``
     The irrep of the determinants.
 
 ``orbital_symmetry``
-    One list per GAS space, holding the irrep of each orbital in that space. Orbitals are numbered consecutively across spaces, and up to six spaces are supported.
+    One list per GAS space, holding the irrep of each orbital in that space. Orbitals are
+    numbered consecutively across spaces. Empty lists preserve their GAS slot in the occupation
+    bounds.
 
 ``gas_min``, ``gas_max``
     The minimum and maximum number of electrons, alpha and beta combined, in each space. An empty list leaves every space unrestricted.
@@ -75,6 +80,7 @@ This example splits four orbitals into two spaces and allows at most one electro
     ci_strings = CIStrings(
         na=2,
         nb=2,
+        nirrep=1,
         symmetry=0,
         orbital_symmetry=[[0, 0], [0, 0]],
         gas_min=[],
@@ -100,6 +106,7 @@ This example places two electrons in orbitals 3 and 4, with orbitals 0 and 1 dou
     ci_strings = CIStrings(
         na=3,
         nb=3,
+        nirrep=1,
         symmetry=0,
         orbital_symmetry=[[0, 0], [0], [0, 0]],
         gas_min=[4, 0, 0],
@@ -126,7 +133,7 @@ To generate spinor determinants, set the number of alpha electrons to the number
     dets = hilbert_space(nmo=4, na=3, nb=0)
 
     ci_strings = CIStrings(
-        na=3, nb=0, symmetry=0, orbital_symmetry=[[0] * 4], gas_min=[], gas_max=[]
+        na=3, nb=0, nirrep=1, symmetry=0, orbital_symmetry=[[0] * 4], gas_min=[], gas_max=[]
     )
     print([d.str(4) for d in ci_strings.make_determinants()])
     # ['|0aaa>', '|a0aa>', '|aa0a>', '|aaa0>']

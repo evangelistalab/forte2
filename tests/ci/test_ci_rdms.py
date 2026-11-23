@@ -506,3 +506,22 @@ def test_sf_cumulants_are_ms_invariant():
                 atol=1e-10,
                 err_msg=f"sf {order}-cumulant differs between ms={ms} and ms={ms_values[0]}",
             )
+
+
+@pytest.mark.parametrize("same_partition", [True, False])
+def test_gas_transition_rdm_product_addresses(same_partition):
+    left = CIStrings(2, 1, 4, 3, [[0, 1], [2, 3]], [1], [2])
+    right_gas = [[0, 1], [2, 3]] if same_partition else [[0], [], [1, 2, 3]]
+    right = CIStrings(2, 1, 4, 0, right_gas, [], [])
+    H = np.zeros((4, 4))
+    V = np.zeros((4, 4, 4, 4))
+    left_builder = CISigmaBuilder(left, 0.0, H, V)
+    right_builder = CISigmaBuilder(right, 0.0, H, V)
+    rng = np.random.default_rng(29)
+    left_vector = rng.normal(size=left.ndet)
+    right_vector = rng.normal(size=right.ndet)
+    bra = sparse_state_from_ci_vector(left.make_determinants(), left_vector)
+    ket = sparse_state_from_ci_vector(right.make_determinants(), right_vector)
+    expected = rdms.compute_a_1rdm(bra, ket, 4) + rdms.compute_b_1rdm(bra, ket, 4)
+    actual = left_builder.sf_1trdm(right_builder, left_vector, right_vector)
+    np.testing.assert_allclose(actual, expected, atol=1e-13)

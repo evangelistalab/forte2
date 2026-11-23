@@ -6,7 +6,8 @@
 #include "helpers/blas.h"
 
 #include "rel_ci_sigma_builder.h"
-#include "ci_sigma_builder.h"
+#include "ci_hole_contractions.h"
+#include "ci_one_rdm.h"
 
 namespace forte2 {
 
@@ -20,105 +21,51 @@ np_matrix_complex RelCISigmaBuilder::compute_so_1rdm(np_vector_complex C_left,
     if (na < 1 || norb < 1)
         return rdm;
 
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
-    auto rdm_view = rdm.view();
-    auto Cl_span = vector::as_span<std::complex<double>>(C_left);
-    auto Cr_span = vector::as_span<std::complex<double>>(C_right);
-
-    // placeholder spin
-    Spin spin = Spin::Alpha;
-
-    // loop over blocks of the right state
-    for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-        if (lists_.block_size(nI) == 0)
-            continue;
-
-        auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ia, class_Ib);
-
-        // loop over blocks of the left state
-        for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-            // The string class on which we don't act must be the same for I and J
-            if ((is_alpha(spin) and (class_Ib != class_Jb)) or
-                (is_beta(spin) and (class_Ia != class_Ja)))
-                continue;
-            if (lists_.block_size(nJ) == 0)
-                continue;
-
-            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ja, class_Jb);
-
-            const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
-
-            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alpha_vo_list(class_Ia, class_Ja)
-                                                    : lists_.get_beta_vo_list(class_Ib, class_Jb);
-
-            for (const auto& [pq, vo_list] : pq_vo_list) {
-                const auto& [p, q] = pq;
-                std::complex<double> rdm_element = 0.0;
-                for (const auto& [sign, I, J] : vo_list) {
-                    // Compute the RDM element contribution
-                    for (size_t idx{0}; idx != maxL; ++idx) {
-                        rdm_element += sign * std::conj(tl[J * maxL + idx]) * tr[I * maxL + idx];
-                    }
-                }
-                rdm_view(p, q) += rdm_element;
-            }
-        }
-    }
+    accumulate_one_rdm<std::complex<double>>(
+        lists_, Spin::Alpha, vector::as_span<std::complex<double>>(C_left),
+        vector::as_span<std::complex<double>>(C_right), {}, {}, rdm.view());
     return rdm;
 }
 
-template <typename GetHoleList, typename OrbitalIndex>
+template <size_t Rank>
 void RelCISigmaBuilder::contract_spinor_rdm(np_vector_complex C_left, np_vector_complex C_right,
                                             std::complex<double>* rdm_data,
-                                            const CIOrbitalIrrepBlocks& orbitals,
-                                            const StringAddress& holes, GetHoleList get_hole_list,
-                                            OrbitalIndex orbital_index) const {
-    if (lists_.ndet() == 0)
+                                            const CIOrbitalIrrepBlocks& orbitals) const {
+    using Scalar = std::complex<double>;
+    const auto left = vector::as_span<Scalar>(C_left);
+    const auto right = vector::as_span<Scalar>(C_right);
+    const auto& holes = lists_.strings(Spin::Alpha, Rank);
+    const auto connections = same_spin_hole_connections<Rank>(lists_, Spin::Alpha);
+    if (connections.empty())
         return;
 
-    const auto Cl_span = vector::as_span<std::complex<double>>(C_left);
-    const auto Cr_span = vector::as_span<std::complex<double>>(C_right);
     CIIrrepRDM rdm_blocks(orbitals, rdm_data);
-
-    for (int class_K = 0; class_K < holes.nclasses(); ++class_K) {
-        const size_t maxK = holes.strpcls(class_K);
-        // The beta string is the vacuum, so each column is just one alpha hole string.
-        const auto& block = orbitals.for_intermediate(lists_, class_K, 0);
-        const size_t nrows = block.size();
-        if (maxK == 0 || nrows == 0)
-            continue;
-
-        auto [Kblock_left, Kblock_right, K_chunk_size] = get_Kblock_spans(nrows, maxK);
-        for (size_t K_start = 0; K_start < maxK;) {
-            const size_t K_size = std::min(K_chunk_size, maxK - K_start);
-            std::fill_n(Kblock_left.begin(), nrows * K_size, 0.0);
-            std::fill_n(Kblock_right.begin(), nrows * K_size, 0.0);
-
-            // Gather all determinant classes into the same K-blocks to include transitions
-            // between GAS occupation patterns in one GEMM per chunk.
-            for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                if (lists_.block_size(nI) == 0)
-                    continue;
-                const size_t offset = lists_.block_offset(nI);
-                for (size_t K = 0; K < K_size; ++K) {
-                    for (const auto& sub :
-                         (lists_.*get_hole_list)(class_K, K_start + K, class_Ia)) {
-                        const size_t row = orbitals.local_row(orbital_index(sub));
-                        const double sign = static_cast<double>(sub.sign);
-                        const size_t det_index = offset + sub.J;
-                        Kblock_left[row * K_size + K] += sign * std::conj(Cl_span[det_index]);
-                        Kblock_right[K * nrows + row] += sign * Cr_span[det_index];
-                    }
+    std::vector<LocalStringAddress> work(lists_.ngas_spaces());
+    for (const auto& [classes, links] : connections) {
+        const auto [hole_class, spectator] = classes;
+        const auto count = holes.size(hole_class);
+        const auto& block = orbitals.for_intermediate(lists_, hole_class, spectator);
+        const auto nrows = block.size();
+        const auto [L, R, chunk] = get_Kblock_spans(nrows, count);
+        for (size_t start = 0; start < count;) {
+            const size_t width = std::min(chunk, count - start);
+            std::fill_n(L.begin(), nrows * width, Scalar{});
+            std::fill_n(R.begin(), nrows * width, Scalar{});
+            for (const auto& [determinant, substitutions] : links) {
+                for (size_t k = 0; k < width; ++k) {
+                    substitutions.for_each_hole_substitution(
+                        start + k, work, [&](const auto& tuple, int phase, size_t rank) {
+                            const auto row = orbitals.local_row(hole_orbital_index(tuple));
+                            const auto index = determinant.offset + rank;
+                            const double sign = phase;
+                            L[row * width + k] = sign * std::conj(left[index]);
+                            R[k * nrows + row] = sign * right[index];
+                        });
                 }
             }
-
-            // The left K-block stores conjugated bra rows by hole columns.
-            // The right K-block stores hole rows by ket columns.
-            matrix_product('N', 'N', nrows, nrows, K_size, 1.0, Kblock_left.data(), K_size,
-                           Kblock_right.data(), nrows, 1.0, rdm_blocks.data(block), nrows);
-            K_start += K_size;
+            matrix_product('N', 'N', nrows, nrows, width, 1.0, L.data(), width, R.data(), nrows,
+                           1.0, rdm_blocks.data(block), nrows);
+            start += width;
         }
     }
     rdm_blocks.unpack();
@@ -132,10 +79,7 @@ np_tensor4_complex RelCISigmaBuilder::compute_so_2rdm(np_vector_complex C_left,
 
     const size_t npairs = norb * (norb - 1) / 2;
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({npairs, npairs});
-    contract_spinor_rdm(C_left, C_right, rdm.data(), spinor_pairs_, *lists_.alpha_address_2h(),
-                        &CIStrings::get_alpha_2h_list, [](const H2StringSubstitution& sub) {
-                            return pair_index_gt(sub.p, sub.q);
-                        });
+    contract_spinor_rdm<2>(C_left, C_right, rdm.data(), spinor_pairs_);
     return matrix::packed_tensor4_to_tensor4<std::complex<double>>(rdm);
 }
 
@@ -148,10 +92,7 @@ np_tensor6_complex RelCISigmaBuilder::compute_so_3rdm(np_vector_complex C_left,
     const size_t ntriplets = norb * (norb - 1) * (norb - 2) / 6;
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({ntriplets, ntriplets});
     const auto triplets = CIOrbitalIrrepBlocks::spinor_triplets(lists_);
-    contract_spinor_rdm(C_left, C_right, rdm.data(), triplets, *lists_.alpha_address_3h(),
-                        &CIStrings::get_alpha_3h_list, [](const H3StringSubstitution& sub) {
-                            return triplet_index_gt(sub.p, sub.q, sub.r);
-                        });
+    contract_spinor_rdm<3>(C_left, C_right, rdm.data(), triplets);
 
     auto rdm_full =
         make_zeros<nb::numpy, std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
