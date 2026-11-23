@@ -23,8 +23,8 @@ Orbital energies and occupations
 Every orbital needs an energy and an occupation. Where they come from depends
 on the method that produced the orbitals:
 
-* SCF references: the orbital energies, and occupations projected from the
-  SCF density matrices.
+* SCF references: the orbital energies or the Fock diagonal in changed
+  orbitals, and occupations projected from the SCF density matrices.
 * Active-space drivers and solvers (``CI``, ``MCOptimizer``, ``CISolver``,
   ...): the generalized-Fock diagonal; 2 for core orbitals, the diagonal of
   the state-averaged 1-RDM for active orbitals, 0 for virtual orbitals.
@@ -46,6 +46,7 @@ import numpy as np
 from forte2.base_classes import ActiveSpaceDriver, ActiveSpaceSolver, Method
 from forte2.data import Z_TO_ATOM_SYMBOL
 from forte2.integrals import overlap
+from forte2.jkbuilder import FockBuilderOTF
 from forte2.scf.scf_base import SCFBase
 from forte2.system import System
 from forte2.system.basis_utils import AM_LABELS, ml_from_shell_index_cca
@@ -156,7 +157,8 @@ def molden_string(
         If coefficients or per-orbital data are empty, nonfinite, or have an
         invalid shape.
     RuntimeError
-        If the method has not been run or does not provide orbitals.
+        If the method has not been run or lacks data for export, or if the
+        shared on-the-fly Fock builder has two-component buffers.
     NotImplementedError
         For two-component or complex orbitals, orbitals derived from a
         correlated calculation by a method other than its driver or solver,
@@ -220,7 +222,7 @@ def _method_blocks(method) -> list[_MoldenBlock]:
     if isinstance(method, SCFBase):
         return _spin_blocks(
             C_blocks,
-            _scf_energies(method, nmo),
+            _scf_energies(method, C_blocks),
             _projected_occupations(method, system, C_blocks),
             symmetries,
         )
@@ -229,9 +231,14 @@ def _method_blocks(method) -> list[_MoldenBlock]:
         # An orbital rotation of an SCF reference, such as AVAS.
         _require_restricted(method, C_blocks)
         scf = _upstream_scf(method)
+        if len(scf.F) != 1:
+            raise NotImplementedError(
+                f"write_molden() supports {type(method).__name__} only on a restricted "
+                "(RHF or ROHF) reference."
+            )
         return _spin_blocks(
             C_blocks,
-            [_fock_diagonal(method, scf, C_blocks[0])],
+            [_fock_diagonal(C_blocks[0], scf.F[0])],
             _projected_occupations(scf, system, C_blocks),
             symmetries,
         )
@@ -384,12 +391,17 @@ def _symmetry_blocks(symmetries, nblocks, nmo) -> list[list[str]]:
 # --------------------------------------------------------------------------- #
 
 
-def _scf_energies(scf, nmo) -> list[np.ndarray]:
-    energies = [
-        np.asarray(np.real_if_close(np.asarray(e)), dtype=float) for e in scf.eps
-    ]
-    if any(e.shape != (nmo,) for e in energies):
-        raise RuntimeError("Orbital energies have invalid shapes.")
+def _scf_energies(scf, C_blocks) -> list[np.ndarray]:
+    """Use SCF eigenvalues for the original orbitals and project F for changed orbitals."""
+    energies = []
+    for C, C_scf, eps, F in zip(C_blocks, scf.C, scf.eps, scf.F, strict=True):
+        if np.array_equal(C, C_scf):
+            energy = np.asarray(np.real_if_close(eps), dtype=float)
+        else:
+            energy = _fock_diagonal(C, F)
+        if energy.shape != (C.shape[1],):
+            raise RuntimeError("Orbital energies have invalid shapes.")
+        energies.append(energy)
     return energies
 
 
@@ -447,14 +459,8 @@ def _project(C, S, D) -> np.ndarray:
     return occ
 
 
-def _fock_diagonal(method, scf, C) -> np.ndarray:
-    """Diagonal of the reference Fock matrix in the orbitals ``C``."""
-    if len(scf.F) != 1:
-        raise NotImplementedError(
-            f"write_molden() supports {type(method).__name__} only on a restricted "
-            "(RHF or ROHF) reference."
-        )
-    F = np.asarray(scf.F[0])
+def _fock_diagonal(C, F) -> np.ndarray:
+    """Diagonal of the AO Fock matrix ``F`` in the orbitals ``C``."""
     return np.real_if_close(np.einsum("mi,mn,ni->i", C, F, C)).astype(float)
 
 
@@ -488,29 +494,47 @@ def _generalized_fock_diagonal(method, C, g1) -> np.ndarray:
     contracted with ``C``; no orbital blocks are diagonalized.
     """
     mo_space = method.mo_space
+    hcore = getattr(method, "Hcore", None)
+    if hcore is None:
+        solver = method.ci_solver if isinstance(method, ActiveSpaceDriver) else method
+        hcore = getattr(solver, "ao_hcore", None)
+    if hcore is None:
+        raise RuntimeError(
+            "The calculation's AO core Hamiltonian is unavailable. Pass method.system "
+            "with C=..., energies=..., occupations=... instead."
+        )
+
     fock_builder = _spatial_system(method.system).fock_builder
     F = fock_builder.build_generalized_fock(
         C_core=C[:, np.asarray(mo_space.docc_indices, dtype=int)],
         C_act=C[:, np.asarray(mo_space.active_indices, dtype=int)],
         g1=g1,
+        hcore=hcore,
     )
-    return np.real_if_close(np.einsum("mi,mn,ni->i", C, F, C)).astype(float)
+    return _fock_diagonal(C, F)
 
 
 def _spatial_system(system):
     """``system`` as seen by an already-run spatial (one-component) method.
 
     Binding a two-component method such as GHF sets ``two_component`` on a
-    shared System in place, which changes ``ints_hcore()`` and the J/K builds of
-    its Fock builder. In that case return a shallow copy with the flag cleared
-    and its own shallow copy of the Fock builder: the shared System is not
-    mutated, and the copies reuse the existing three-index integrals.
+    shared System in place. Use a shallow copy with the flag cleared so the
+    Fock builder computes spatial J/K matrices with the existing integrals.
+    On-the-fly builders can retain complex scratch even after a spatial method
+    clears the System flag.
     """
+    builder = system.fock_builder
+    if isinstance(builder, FockBuilderOTF) and builder.cmplx:
+        raise RuntimeError(
+            "The shared on-the-fly Fock builder has two-component buffers. "
+            "Export the spatial calculation before running a two-component method "
+            "on the same System, or use separate Systems."
+        )
     if not system.two_component:
         return system
     spatial = copy.copy(system)
     spatial.two_component = False
-    spatial.fock_builder = copy.copy(system.fock_builder)
+    spatial.fock_builder = copy.copy(builder)
     spatial.fock_builder.system = spatial
     return spatial
 

@@ -36,6 +36,8 @@ class RestrictedMOIntegrals:
         Nuclear repulsion plus the core energy contribution.
     H : NDArray
         The effective one-electron integrals.
+    ao_hcore : NDArray
+        The AO core Hamiltonian used to build the one-electron integrals.
     V : NDArray
         The two-electron integrals stored in physicist's convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
 
@@ -51,6 +53,7 @@ class RestrictedMOIntegrals:
     orbitals: list[int] | range
     core_orbitals: list[int] | range = field(default_factory=list)
     antisymmetrize: bool = False
+    ao_hcore: NDArray = field(init=False, repr=False, compare=False)
 
     def __post_init__(self):
         self.norb = len(self.orbitals)
@@ -61,7 +64,7 @@ class RestrictedMOIntegrals:
         self.E = self.system.nuclear_repulsion
 
         # build one-electron integrals
-        H_ao = self.system.ints_hcore()
+        self.ao_hcore = H_ao = self.system.ints_hcore()
 
         # one-electron contributions to the one-electron integrals
         self.H = np.einsum("mi,mn,nj->ij", C, H_ao, C)

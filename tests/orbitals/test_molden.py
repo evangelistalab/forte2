@@ -23,12 +23,16 @@ from forte2 import (
     MCOptimizer,
     ROHF,
     RHF,
+    SpinorUpcaster,
     State,
     System,
     UHF,
+    X2CParams,
 )
 from forte2.base_classes import Method
 from forte2.helpers.comparisons import approx
+from forte2.integrals import LIBCINT_AVAILABLE
+from forte2.jkbuilder import FockBuilderOTF
 from forte2.lib import ints
 from forte2.orbitals import molden_string, write_molden
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
@@ -352,6 +356,36 @@ def test_molden_rohf_occupations(tmp_path):
     assert sum(occ) == approx(rohf.na + rohf.nb)
 
 
+@pytest.fixture
+def h2_sto3g():
+    return System(
+        xyz="H 0 0 0\nH 0 0 0.74",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-jkfit",
+    )
+
+
+@pytest.mark.parametrize(
+    "scf_cls, kwargs",
+    [
+        (RHF, {"charge": 0}),
+        (ROHF, {"charge": 1, "ms": 0.5}),
+        (UHF, {"charge": 1, "ms": 0.5}),
+    ],
+    ids=["rhf", "rohf", "uhf"],
+)
+def test_molden_permuted_scf_energies(h2_sto3g, scf_cls, kwargs):
+    scf = scf_cls(**kwargs)(h2_sto3g)
+    scf.run()
+    perm = [1, 0]
+    scf.mos = scf.mos.permute(perm)
+
+    parsed = _parse_molden(molden_string(scf))
+    assert [mo["ene"] for mo in parsed["mos"]] == approx(
+        np.asarray(scf.eps)[:, perm].ravel()
+    )
+
+
 def _generalized_fock_energies(method):
     """Diagonal of F = h + J[D] - K[D]/2 in the final orbitals, built from the
     final orbitals and 1-RDM through one AO density D = 2 C_core C_core^T +
@@ -654,6 +688,58 @@ def test_molden_method_on_system_shared_with_ghf(kind):
     assert molden_string(method) == before
     assert system.two_component and system.fock_builder is fock_builder
     assert fock_builder.system is system
+
+
+def _h2_active_space(driver, system):
+    solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])
+    method = driver(solver, final_orbitals="original")(RHF(charge=0)(system))
+    method.run()
+    return method
+
+
+@pytest.mark.parametrize("driver", [CI, MCOptimizer])
+@pytest.mark.parametrize("x2c_type", ["sf", "so"])
+def test_molden_preserves_active_space_hamiltonian(h2_sto3g, driver, x2c_type):
+    method = _h2_active_space(driver, h2_sto3g)
+    sources = (method, method.ci_solver)
+    before = [molden_string(source) for source in sources]
+
+    override = X2CParams(x2c_model="1e", x2c_type=x2c_type)
+    SpinorUpcaster(x2c_override=override)(method).run()
+
+    assert h2_sto3g.x2c is override
+    assert [molden_string(source) for source in sources] == before
+
+
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "libint2",
+        pytest.param(
+            "libcint",
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="libcint is unavailable"
+            ),
+        ),
+    ],
+)
+def test_molden_rejects_shared_otf_builder_after_ghf_runs(h2_sto3g, backend):
+    system = h2_sto3g
+    system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=5.0, backend=backend)
+    ci = _h2_active_space(CI, system)
+    before = molden_string(ci)
+
+    ghf = GHF(charge=0)(system)
+    assert molden_string(ci) == before
+    ghf.run()
+    error = "on-the-fly Fock builder has two-component buffers"
+    with pytest.raises(RuntimeError, match=error):
+        molden_string(ci)
+
+    RHF(charge=0)(system)
+    assert not system.two_component
+    with pytest.raises(RuntimeError, match=error):
+        molden_string(ci)
 
 
 def test_molden_rejects_spinorbitals():

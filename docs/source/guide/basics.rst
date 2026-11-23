@@ -72,11 +72,16 @@ Once a method has been run, you can export its orbitals for visualization in any
 This works for SCF references (RHF, ROHF, UHF), AVAS, and active-space drivers and solvers (``CI``, ``MCOptimizer``, ``CISolver``, ...).
 Each orbital carries its symmetry label, an energy and an occupation:
 
-* SCF: orbital energies, and occupations from the SCF density.
+* SCF exports orbital energies and occupations from the SCF density. For reordered orbitals, it projects the stored Fock matrix onto the exported orbitals.
 * AVAS: the reference Fock diagonal, and the nominal (0, 1 or 2) occupations of the SCF reference it rotates.
 * CI, MCOptimizer and their solvers: the diagonal of the generalized Fock matrix; 2 for core orbitals, the diagonal of the state-averaged 1-RDM for active orbitals (the natural occupation numbers when ``final_orbitals="natural"``), and 0 for virtual orbitals.
 
 Methods whose orbitals derive from a correlated calculation by other means, such as ``ASET`` and ``DSRG_MRPT2``, are not supported directly; write the orbitals of the underlying ``MCOptimizer`` instead, or pass the coefficients explicitly as shown below.
+
+Active-space export uses the AO Hamiltonian from the calculation, even after a
+later X2C override on the same ``System``. With the on-the-fly Fock builder,
+export the spatial calculation before running a two-component method on the
+same ``System``, or use separate systems for the two calculations.
 
 To write any other set of orbitals, for example localized orbitals, pass the ``System`` and the coefficients.
 ``forte2.molden_string`` returns the same text without writing a file::
