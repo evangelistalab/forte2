@@ -74,11 +74,11 @@ describe a CI or MCSCF calculation built on a given solver.
 RDM capabilities
 ----------------
 
-Pass two roots to ``make_rdm`` to get a transition RDM instead of a state RDM. Roots that belong
-to the same ``State`` support transition RDMs at every order the solver implements; roots that
-belong to different states are more restricted.
+Pass two roots to ``make_rdm`` to get a transition RDM instead of a state RDM. In the CI solvers,
+roots that belong to the same ``State`` support transition RDMs at every order the solver
+implements; roots that belong to different states are more restricted.
 
-.. list-table:: RDM capabilities of the CI solvers
+.. list-table:: RDM capabilities of the active-space solvers
    :header-rows: 1
    :widths: 24 12 16 24 24
 
@@ -107,6 +107,11 @@ belong to different states are more restricted.
      - ``so``
      - All orders
      - Not supported
+   * - ``DMRGSolver``
+     - 1, 2
+     - ``sf``
+     - Not supported
+     - Not supported
 
 A transition RDM between two states also requires the two states to have the same number of alpha
 and beta electrons.
@@ -119,7 +124,7 @@ Cumulant capabilities
 ``make_cumulant`` takes a single root. A cumulant is defined for one state, so there is no
 transition counterpart.
 
-.. list-table:: Cumulant capabilities of the CI solvers
+.. list-table:: Cumulant capabilities of the active-space solvers
    :header-rows: 1
    :widths: 34 33 33
 
@@ -138,6 +143,9 @@ transition counterpart.
    * - ``RelSelectedCISolver``
      - 2
      - ``so``
+   * - ``DMRGSolver``
+     - 2
+     - ``sf``
 
 To get a state-averaged cumulant, call ``make_average_cumulant(order)`` instead. Cumulants are
 nonlinear in the RDMs, so a state-averaged cumulant is built from the state-averaged RDMs rather
