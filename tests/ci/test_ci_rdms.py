@@ -424,9 +424,9 @@ def test_spinor_rdms_with_empty_determinant_space():
     v = np.zeros((norb,) * 4, dtype=complex)
     builder = RelCISigmaBuilder(lists, 0.0, h, v, 0, "hz")
     builder.set_memory(0)
-    coefficients = np.empty(0, dtype=complex)
+    coefficients = np.ndarray((0,), dtype=complex, strides=(0,))
 
-    for rank, build in ((2, builder.so_2rdm), (3, builder.so_3rdm)):
+    for rank, build in ((1, builder.so_1rdm), (2, builder.so_2rdm), (3, builder.so_3rdm)):
         rdm = build(coefficients, coefficients)
         assert rdm.shape == (norb,) * (2 * rank)
         assert not np.any(rdm)

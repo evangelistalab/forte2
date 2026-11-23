@@ -44,28 +44,8 @@ template <size_t Rank> class HoleSubstitutions {
             return;
 
         Orbitals orbitals;
-        const auto group_size = [&](size_t step) {
-            return step + 1 == Rank ? orbitals_.size() : prefixes_[step].size();
-        };
-        const auto append_orbitals = [&](this const auto& self, size_t step, size_t end,
-                                         int irrep) -> void {
-            const auto g = gases_[step];
-            for (size_t p = basis.offsets()[g]; p < std::min(end, basis.offsets()[g + 1]); ++p) {
-                orbitals[step] = static_cast<uint8_t>(p);
-                const int next_irrep = irrep ^ basis.irreps()[p];
-                if (step + 1 == Rank) {
-                    if (next_irrep == 0)
-                        orbitals_.push_back(orbitals);
-                } else {
-                    const size_t first = group_size(step + 1);
-                    self(step + 1, p, next_irrep);
-                    const size_t last = group_size(step + 1);
-                    if (first != last)
-                        prefixes_[step].push_back({orbitals[step], first, last});
-                }
-            }
-        };
-        append_orbitals(0, basis.norb(), holes.irrep(hole_class) ^ strings.irrep(string_class));
+        append_orbitals<0>(orbitals, basis.norb(),
+                           holes.irrep(hole_class) ^ strings.irrep(string_class));
     }
 
     bool empty() const { return orbitals_.empty(); }
@@ -78,8 +58,7 @@ template <size_t Rank> class HoleSubstitutions {
         if (empty())
             return;
         holes_.unrank(hole_class_, hole_rank, coordinates);
-        const size_t count = Rank == 1 ? orbitals_.size() : prefixes_.front().size();
-        visit_creations<0>(0, count, coordinates, gas_sign_, visit);
+        visit_creations<0>(0, level_size<0>(), coordinates, gas_sign_, visit);
     }
 
   private:
@@ -90,6 +69,32 @@ template <size_t Rank> class HoleSubstitutions {
         size_t first;
         size_t last;
     };
+
+    template <size_t Step> size_t level_size() const {
+        if constexpr (Step + 1 == Rank)
+            return orbitals_.size();
+        else
+            return prefixes_[Step].size();
+    }
+
+    template <size_t Step> void append_orbitals(Orbitals& orbitals, size_t end, int irrep) {
+        const auto& basis = holes_.basis();
+        const size_t gas = gases_[Step];
+        for (size_t p = basis.offsets()[gas]; p < std::min(end, basis.offsets()[gas + 1]); ++p) {
+            orbitals[Step] = static_cast<uint8_t>(p);
+            const int next_irrep = irrep ^ basis.irreps()[p];
+            if constexpr (Step + 1 == Rank) {
+                if (next_irrep == 0)
+                    orbitals_.push_back(orbitals);
+            } else {
+                const size_t first = level_size<Step + 1>();
+                append_orbitals<Step + 1>(orbitals, p, next_irrep);
+                const size_t last = level_size<Step + 1>();
+                if (first != last)
+                    prefixes_[Step].push_back({orbitals[Step], first, last});
+            }
+        }
+    }
 
     template <size_t Step, typename Visit>
     void visit_creations(size_t first, size_t last, std::span<LocalStringAddress> coordinates,
