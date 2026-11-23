@@ -9,7 +9,12 @@ from forte2.helpers.comparisons import approx, approx_abs
 pytestmark = pytest.mark.skipif(not BLOCK2_AVAILABLE, reason="block2 is not installed")
 
 
-def _dmrg_params(scratch, orbital_ordering="fiedler", twosite_to_onesite=None):
+def _dmrg_params(
+    scratch=None,
+    orbital_ordering="fiedler",
+    twosite_to_onesite=None,
+    **kwargs,
+):
     # Six sites, so a bond dimension of a few hundred is exact, and perturbative noise
     # can't move a solve off an excited state it lands on
     return DMRGParams(
@@ -21,6 +26,7 @@ def _dmrg_params(scratch, orbital_ordering="fiedler", twosite_to_onesite=None):
         twosite_to_onesite=twosite_to_onesite,
         orbital_ordering=orbital_ordering,
         scratch=scratch,
+        **kwargs,
     )
 
 
@@ -70,7 +76,8 @@ def test_dmrg_rdms_vs_ci(tmp_path):
         nroots=nroots,
         core_orbitals=core_orbitals,
         active_orbitals=active_orbitals,
-        dmrg_params=_dmrg_params(str(tmp_path)),
+        # A shuffled chain checks that the RDMs come back in active-space order
+        dmrg_params=_dmrg_params(str(tmp_path), orbital_ordering=[3, 0, 5, 1, 4, 2]),
     )
     dmrg = CI(dmrg_solver, final_orbitals="original", do_transition_dipole=True)(rhf)
     dmrg.run()
@@ -116,6 +123,19 @@ def test_dmrg_rdms_vs_ci(tmp_path):
     )
     for pair, strength in ci_solver.oscillator_strengths.items():
         assert dmrg_solver.oscillator_strengths[pair] == approx_abs(strength, 1e-6)
+
+    for worker in dmrg_solver.sub_solvers:
+        assert worker._order.tolist() == [3, 0, 5, 1, 4, 2]
+    with pytest.raises(ValueError, match="orbital_ordering"):
+        _dmrg_params(orbital_ordering=[0, 0, 1])
+    short_order = DMRGSolver(
+        states=states[0],
+        core_orbitals=core_orbitals,
+        active_orbitals=active_orbitals,
+        dmrg_params=_dmrg_params(str(tmp_path), orbital_ordering=[0, 1, 2]),
+    )
+    with pytest.raises(ValueError, match="orbital_ordering has 3 indices"):
+        CI(short_order, final_orbitals="original")(rhf).run()
 
 
 def test_dmrgscf_two_orbitals(tmp_path):
@@ -196,3 +216,64 @@ def test_dmrgscf_state_averaged_h2o_with_symmetry(tmp_path):
     np.testing.assert_allclose(
         dmrg_solver.nat_occs_avg, ci_solver.nat_occs_avg, atol=1e-5
     )
+
+
+def test_dmrg_checkpoint_restart(tmp_path, monkeypatch):
+    """Restart a DMRGSCF calculation with one iteration of DMRGCI"""
+    xyz = """
+    O 0.0  0.000  0.117
+    H 0.0  0.757 -0.469
+    H 0.0 -0.757 -0.469
+    """
+    states = [
+        State(nel=10, multiplicity=1, ms=0.0),
+        State(nel=10, multiplicity=3, ms=0.0),
+    ]
+    nroots = [2, 1]
+    core_orbitals = [0]
+    active_orbitals = [1, 2, 3, 4, 5, 6]
+    checkpoint = tmp_path / "checkpoint"
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+
+    dmrg_solver = DMRGSolver(
+        states=states,
+        nroots=nroots,
+        core_orbitals=core_orbitals,
+        active_orbitals=active_orbitals,
+        dmrg_params=_dmrg_params(checkpoint=str(checkpoint)),
+    )
+    dmrgscf = MCOptimizer(dmrg_solver, final_orbitals="original")(rhf)
+    dmrgscf.run()
+    rdm = dmrgscf.make_average_rdm(2)
+    rhf.mos = dmrgscf.mos.copy()
+    order = dmrg_solver.sub_solvers[0]._order.copy()
+    dmrg_solver.cleanup()
+
+    # delete the scratch files to ensure restart from checkpoints
+    for f in checkpoint.glob("*-GS*"):
+        f.unlink()
+
+    # set a mock on DMRGDriver's cold_start method to ensure that it's not called
+    from pyblock2.driver.core import DMRGDriver
+
+    def cold_start(*args, **kwargs):
+        raise AssertionError("the restart did not load the checkpoint")
+
+    monkeypatch.setattr(DMRGDriver, "get_random_mps", cold_start)
+    restart_solver = DMRGSolver(
+        states=states,
+        nroots=nroots,
+        core_orbitals=core_orbitals,
+        active_orbitals=active_orbitals,
+        dmrg_params=_dmrg_params(checkpoint=str(checkpoint), orbital_ordering=order),
+    )
+    restart = CI(restart_solver, final_orbitals="original")(rhf)
+    restart.run()
+
+    assert np.asarray(restart.E) == approx(np.asarray(dmrgscf.E))
+    assert np.abs(restart.make_average_rdm(2) - rdm).max() < 1e-6
+
+    with pytest.raises(ValueError, match="scratch or checkpoint"):
+        _dmrg_params(scratch=str(tmp_path), checkpoint=str(checkpoint))

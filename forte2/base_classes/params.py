@@ -235,11 +235,13 @@ class DMRGParams(ParamsBase):
         two-site sweep.
     tol : float, optional, default=1e-8
         The energy convergence threshold that ends the sweeps early.
-    orbital_ordering : str, optional, default="fiedler"
+    orbital_ordering : str | list[int], optional, default="fiedler"
         The order of the active orbitals along the MPS chain. "fiedler" orders them by the
         Fiedler vector of the exchange integrals, which places strongly coupled orbitals
         close together. "gaopt" refines the Fiedler order with a genetic algorithm, which
-        takes longer. "original" keeps the order of the active space.
+        takes longer. "original" keeps the order of the active space. A list gives the
+        order explicitly, as indices within the active space: ``[2, 0, 1]`` puts the
+        third active orbital on the first site.
     random_seed : int, optional, default=1234
         The seed of block2's random number generator, set before each initial MPS is
         built. It must be positive.
@@ -248,6 +250,13 @@ class DMRGParams(ParamsBase):
     scratch : str, optional, default=None
         The directory in which each solver creates its scratch directory. If None, the
         system temporary directory is used.
+    checkpoint : str, optional, default=None
+        A directory that keeps a copy of each state's MPS after every solve. If it
+        already holds such a copy, the first solve restarts from it. Restarting is best
+        effort: the copy is the MPS of the last completed solve, in that solve's
+        orbitals, and nothing checks that it belongs to the same problem. The solver
+        uses this directory as its scratch directory and never removes it, so give each
+        solver its own. Can't be combined with ``scratch``.
     iprint : int, optional, default=0
         The block2 verbosity level.
     """
@@ -265,10 +274,11 @@ class DMRGParams(ParamsBase):
     n_sweeps: int = 20
     twosite_to_onesite: int = None
     tol: float = 1e-8
-    orbital_ordering: Literal["fiedler", "gaopt", "original"] = "fiedler"
+    orbital_ordering: Literal["fiedler", "gaopt", "original"] | list[int] = "fiedler"
     random_seed: int = 1234
     stack_memory: int = 1024
     scratch: str = None
+    checkpoint: str = None
     iprint: int = 0
 
     def __post_init__(self):
@@ -298,6 +308,25 @@ class DMRGParams(ParamsBase):
             )
         if self.tol <= 0:
             raise ValueError(f"tol must be > 0, got {self.tol}.")
+        if isinstance(self.orbital_ordering, str):
+            if self.orbital_ordering not in ("fiedler", "gaopt", "original"):
+                raise ValueError(
+                    "orbital_ordering must be 'fiedler', 'gaopt', 'original', or a list "
+                    f"of active orbital indices, got {self.orbital_ordering!r}."
+                )
+        else:
+            order = [int(i) for i in self.orbital_ordering]
+            if sorted(order) != list(range(len(order))):
+                raise ValueError(
+                    "An orbital_ordering list must hold each active orbital index from 0 "
+                    f"to {len(order) - 1} once, got {order}."
+                )
+            self.orbital_ordering = order
+        if self.scratch is not None and self.checkpoint is not None:
+            raise ValueError(
+                "Set either scratch or checkpoint: a checkpoint directory is the "
+                "solver's scratch directory."
+            )
         # block2 treats a seed of 0 as a request for a time-based seed
         if self.random_seed < 1:
             raise ValueError(f"random_seed must be >= 1, got {self.random_seed}.")

@@ -102,8 +102,14 @@ class _DMRGSingleStateSolver:
         self._tag = f"{self.tag_prefix}GS"
         # Single-root MPS tags, one per root, used to reload each root for its RDMs
         self._root_tags = []
+        # The copy of the MPS of the last completed solve, kept in a checkpoint
+        self._ckpt_tag = f"{self.tag_prefix}CKPT"
+        # Whether the next run restarts from the checkpoint copy of an earlier solve
+        self._from_checkpoint = self.dmrg_params.checkpoint is not None and (
+            os.path.isfile(os.path.join(self.scratch, f"{self._ckpt_tag}-mps_info.bin"))
+        )
         # Whether the MPS of a previous run is on disk to restart from
-        self._has_mps = False
+        self._has_mps = self._from_checkpoint
         # The active orbital at each site of the MPS chain. The solver sets the same one
         # on all its workers before a cold start, so all states share one chain.
         self._order = None
@@ -170,7 +176,13 @@ class _DMRGSingleStateSolver:
             onesite = twosite_to_onesite is not None and twosite_to_onesite <= start
             if twosite_to_onesite is not None:
                 twosite_to_onesite = None if onesite else twosite_to_onesite - start
-            ket = driver.load_mps(self._tag, nroots=self.nroot)
+            if self._from_checkpoint:
+                # Sweep a copy, so that the checkpoint survives an interrupted solve
+                ket = driver.load_mps(self._ckpt_tag, nroots=self.nroot)
+                ket = driver.copy_mps(ket, self._tag)
+                self._from_checkpoint = False
+            else:
+                ket = driver.load_mps(self._tag, nroots=self.nroot)
             ket, forward = driver.adjust_mps(ket, dot=1 if onesite else 2)
             if ket.n_sites == ket.dot:
                 # adjust_mps takes center 0 to mean the left end, but here it is also
@@ -197,6 +209,8 @@ class _DMRGSingleStateSolver:
             iprint=p.iprint,
         )
         self._has_mps = True
+        if p.checkpoint is not None:
+            driver.copy_mps(ket, self._ckpt_tag)
         last_change = self._last_sweep_change(driver)
         self.converged = last_change is None or last_change < p.tol
 
@@ -421,12 +435,14 @@ class _DMRGSingleStateSolver:
         chooses again, rather than from the previous MPS. ``guess`` is ignored.
         """
         self._has_mps = False
+        self._from_checkpoint = False
         self._order = None
 
     def cleanup(self):
-        """Forget the MPS, whose files the solver removes with its scratch directory."""
+        """Forget the MPS. The solver removes its files unless they are a checkpoint."""
         self._root_tags = []
         self._has_mps = False
+        self._from_checkpoint = False
         self._order = None
 
 
@@ -478,12 +494,14 @@ class DMRGSolver(CIBase):
         self._scratch = None
 
     def _startup(self):
-        if self._scratch is None:
-            if self.dmrg_params.scratch is not None:
-                os.makedirs(self.dmrg_params.scratch, exist_ok=True)
-            self._scratch = tempfile.mkdtemp(
-                prefix="forte2_dmrg_", dir=self.dmrg_params.scratch
-            )
+        p = self.dmrg_params
+        if self._scratch is None and p.checkpoint is not None:
+            os.makedirs(p.checkpoint, exist_ok=True)
+            self._scratch = os.path.abspath(p.checkpoint)
+        elif self._scratch is None:
+            if p.scratch is not None:
+                os.makedirs(p.scratch, exist_ok=True)
+            self._scratch = tempfile.mkdtemp(prefix="forte2_dmrg_", dir=p.scratch)
             # Remove it when the solver is garbage-collected or Python exits
             weakref.finalize(self, shutil.rmtree, self._scratch, ignore_errors=True)
         super()._startup()
@@ -507,6 +525,18 @@ class DMRGSolver(CIBase):
         from pyblock2.driver.core import DMRGDriver, SymmetryTypes
 
         p = self.dmrg_params
+        if not isinstance(p.orbital_ordering, str):
+            if len(p.orbital_ordering) != self.norb:
+                raise ValueError(
+                    f"orbital_ordering has {len(p.orbital_ordering)} indices, but the "
+                    f"active space has {self.norb} orbitals."
+                )
+            logger.log(
+                f"Using orbital ordering {p.orbital_ordering} (active space relative "
+                "indexing), supplied by the user",
+                self.log_level,
+            )
+            return np.asarray(p.orbital_ordering, dtype=int)
         if p.orbital_ordering == "original" or self.norb == 0:
             logger.log("Using original orbital ordering", self.log_level)
             return np.arange(self.norb)
@@ -603,8 +633,8 @@ class DMRGSolver(CIBase):
         return [[] for _ in range(self.sa_info.nroots_sum)]
 
     def cleanup(self):
-        """Remove the scratch directory with the MPS of every state."""
+        """Forget every MPS, and remove the scratch directory unless it is a checkpoint."""
         for dmrg_solver in self.sub_solvers:
             dmrg_solver.cleanup()
-        if self._scratch is not None:
+        if self._scratch is not None and self.dmrg_params.checkpoint is None:
             shutil.rmtree(self._scratch, ignore_errors=True)
