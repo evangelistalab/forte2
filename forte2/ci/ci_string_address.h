@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <map>
 #include <memory>
 #include <optional>
@@ -37,6 +38,26 @@ class GASStringBasis {
         ankerl::unordered_dense::map<String, LocalStringAddress, String::Hash> addresses;
     };
 
+    /// The creation targets for one local string, indexed by its vacant orbitals in order.
+    /// Reuse the row when trying several creation operators on the same string.
+    struct CreationRow {
+        const GASStringBasis& basis;
+        String string;
+        std::span<const size_t> ranks;
+        size_t orbital_start;
+        int irrep;
+
+        /// Set the target local address and return the sign, or zero for an occupied orbital.
+        int create(size_t orbital, LocalStringAddress& target) const {
+            if (string.get_bit(orbital))
+                return 0;
+            const size_t occupied = string.intersection_count(basis.orbital_prefix_[orbital]);
+            const size_t vacancy = orbital - orbital_start - occupied;
+            target = {ranks[vacancy], irrep ^ basis.irreps_[orbital]};
+            return occupied % 2 == 0 ? 1 : -1;
+        }
+    };
+
     GASStringBasis(int nirrep, const std::vector<std::vector<int>>& orbital_symmetry);
 
     void prepare(std::span<const occupation_t> occupations);
@@ -53,10 +74,25 @@ class GASStringBasis {
     const String& mask(size_t gas) const { return masks_[gas]; }
     const Factor& factor(size_t gas, int electrons) const { return *factors_[gas][electrons]; }
 
-    /// Apply a local creation or annihilation, returning its sign or zero if forbidden.
-    /// The caller accounts for the sign from preceding GAS factors.
-    int substitute(size_t gas, int electrons, LocalStringAddress& address, size_t orbital,
-                   bool create) const;
+    CreationRow creation_row(size_t gas, int electrons, LocalStringAddress address) const {
+        const auto& sector = factor(gas, electrons).sectors[address.irrep];
+        const size_t vacancies = sizes_[gas] - electrons;
+        const auto ranks = std::span(sector.creations).subspan(address.rank * vacancies, vacancies);
+        return {*this, sector.strings[address.rank], ranks, offsets_[gas], address.irrep};
+    }
+
+    /// Apply a local annihilation, returning its sign or zero for a vacant orbital.
+    /// The caller accounts for the sign from preceding GAS factors for both operators.
+    int annihilate(size_t gas, int electrons, LocalStringAddress& address, size_t orbital) const {
+        const auto& sector = factor(gas, electrons).sectors[address.irrep];
+        const auto& local = sector.strings[address.rank];
+        if (!local.get_bit(orbital))
+            return 0;
+        const size_t occupied = local.intersection_count(orbital_prefix_[orbital]);
+        address.rank = sector.annihilations[address.rank * electrons + occupied];
+        address.irrep ^= irreps_[orbital];
+        return occupied % 2 == 0 ? 1 : -1;
+    }
 
   private:
     int nirrep_;
@@ -93,8 +129,22 @@ class StringAddress {
     std::optional<int> find_class(const occupation_t& occupation, int irrep) const;
 
     /// Coordinates are ordered by GAS slot and the caller provides ngas() entries.
-    size_t rank(int string_class, std::span<const LocalStringAddress> coordinates) const;
-    void unrank(int string_class, size_t rank, std::span<LocalStringAddress> coordinates) const;
+    /// With one factor, its irrep and local rank are the product irrep and rank.
+    size_t rank(int string_class, std::span<const LocalStringAddress> coordinates) const {
+        if (basis_->ngas() == 1) {
+            assert(coordinates.front().irrep == irrep(string_class));
+            return coordinates.front().rank;
+        }
+        return rank_product(string_class, coordinates);
+    }
+    void unrank(int string_class, size_t rank, std::span<LocalStringAddress> coordinates) const {
+        if (basis_->ngas() == 1) {
+            assert(rank < size(string_class));
+            coordinates.front() = {rank, irrep(string_class)};
+        } else {
+            unrank_product(string_class, rank, coordinates);
+        }
+    }
 
     /// Convert to or from a full active-space string at determinant-facing call sites.
     String string_at(int string_class, size_t rank, std::span<LocalStringAddress> work) const;
@@ -110,6 +160,9 @@ class StringAddress {
     const Product& product(int string_class) const {
         return products_[string_class / basis_->nirrep()];
     }
+    size_t rank_product(int string_class, std::span<const LocalStringAddress> coordinates) const;
+    void unrank_product(int string_class, size_t rank,
+                        std::span<LocalStringAddress> coordinates) const;
 
     std::shared_ptr<const GASStringBasis> basis_;
     std::vector<occupation_t> occupations_;

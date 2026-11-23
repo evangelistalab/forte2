@@ -151,8 +151,8 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
         const auto& block = excitation_pairs_->for_intermediate(lists_, ka, kb);
         std::vector<size_t> rows;
         for (const auto& link : links)
-            for (const auto& [p, q, sign] : link.substitutions.orbitals())
-                rows.push_back(pair_index_geq(p, q));
+            link.substitutions.for_each_orbital_pair(
+                [&](auto p, auto q) { rows.push_back(pair_index_geq(p, q)); });
         const CIOrbitalMatrixBlock<double> matrix(*excitation_pairs_, block, v_ijkl_hk,
                                                   std::move(rows));
         const auto nrows = matrix.size();

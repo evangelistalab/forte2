@@ -98,7 +98,7 @@ template <size_t Rank> size_t hole_orbital_index(const std::array<uint8_t, Rank>
 template <typename Scalar>
 void add_spectator_slice(size_t size, int sign, const Scalar* source, Scalar* target) {
     if (size == 1)
-        *target += Scalar(sign) * *source;
+        *target += static_cast<double>(sign) * *source;
     else
         add(size, Scalar(sign), source, 1, target, 1);
 }

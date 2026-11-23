@@ -25,16 +25,19 @@ ExcitationSubstitutions::ExcitationSubstitutions(const StringAddress& source, in
             return;
     }
     const auto append_pairs = [&](size_t create_gas, size_t annihilate_gas, int sign) {
-        for (size_t p = basis.offsets()[create_gas]; p < basis.offsets()[create_gas + 1]; ++p) {
-            for (size_t q = basis.offsets()[annihilate_gas];
-                 q < basis.offsets()[annihilate_gas + 1]; ++q) {
+        for (size_t q = basis.offsets()[annihilate_gas]; q < basis.offsets()[annihilate_gas + 1];
+             ++q) {
+            const size_t first = creations_.size();
+            for (size_t p = basis.offsets()[create_gas]; p < basis.offsets()[create_gas + 1]; ++p) {
                 if ((basis.irreps()[p] ^ basis.irreps()[q]) != required_irrep)
                     continue;
                 if (create_gas == annihilate_gas && p != q &&
                     source_occ[create_gas] == basis.sizes()[create_gas])
                     continue;
-                orbitals_.push_back({static_cast<uint8_t>(p), static_cast<uint8_t>(q), sign});
+                creations_.push_back(static_cast<uint8_t>(p));
             }
+            if (first != creations_.size())
+                annihilations_.push_back({static_cast<uint8_t>(q), sign, first, creations_.size()});
         }
     };
     if (from == none && to == none) {

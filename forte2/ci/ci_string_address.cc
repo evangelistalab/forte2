@@ -112,23 +112,6 @@ void GASStringBasis::prepare_substitutions() {
     }
 }
 
-int GASStringBasis::substitute(size_t gas, int electrons, LocalStringAddress& address,
-                               size_t orbital, bool create) const {
-    const auto& sector = factor(gas, electrons).sectors[address.irrep];
-    const auto& local = sector.strings[address.rank];
-    if (local.get_bit(orbital) == create)
-        return 0;
-    const size_t occupied = local.intersection_count(orbital_prefix_[orbital]);
-    if (create) {
-        const size_t vacancy = orbital - offsets_[gas] - occupied;
-        address.rank = sector.creations[address.rank * (sizes_[gas] - electrons) + vacancy];
-    } else {
-        address.rank = sector.annihilations[address.rank * electrons + occupied];
-    }
-    address.irrep ^= irreps_[orbital];
-    return occupied % 2 == 0 ? 1 : -1;
-}
-
 StringAddress::StringAddress(std::shared_ptr<const GASStringBasis> basis,
                              std::vector<occupation_t> occupations)
     : basis_(std::move(basis)), occupations_(std::move(occupations)) {
@@ -180,8 +163,8 @@ std::optional<int> StringAddress::find_class(const occupation_t& occupation, int
     return it->second * basis_->nirrep() + h;
 }
 
-size_t StringAddress::rank(int string_class,
-                           std::span<const LocalStringAddress> coordinates) const {
+size_t StringAddress::rank_product(int string_class,
+                                   std::span<const LocalStringAddress> coordinates) const {
     const auto& [factors, counts] = product(string_class);
     const int nirrep = basis_->nirrep();
     int h = irrep(string_class);
@@ -207,8 +190,8 @@ size_t StringAddress::rank(int string_class,
     return address;
 }
 
-void StringAddress::unrank(int string_class, size_t address,
-                           std::span<LocalStringAddress> coordinates) const {
+void StringAddress::unrank_product(int string_class, size_t address,
+                                   std::span<LocalStringAddress> coordinates) const {
     const auto& [factors, counts] = product(string_class);
     const int nirrep = basis_->nirrep();
     int h = irrep(string_class);

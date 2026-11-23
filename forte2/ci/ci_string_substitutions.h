@@ -44,19 +44,28 @@ template <size_t Rank> class HoleSubstitutions {
             return;
 
         Orbitals orbitals;
-        const auto append = [&](this const auto& self, size_t step, size_t end, int irrep) -> void {
-            if (step == Rank) {
-                if (irrep == 0)
-                    orbitals_.push_back(orbitals);
-                return;
-            }
+        const auto group_size = [&](size_t step) {
+            return step + 1 == Rank ? orbitals_.size() : prefixes_[step].size();
+        };
+        const auto append_orbitals = [&](this const auto& self, size_t step, size_t end,
+                                         int irrep) -> void {
             const auto g = gases_[step];
             for (size_t p = basis.offsets()[g]; p < std::min(end, basis.offsets()[g + 1]); ++p) {
                 orbitals[step] = static_cast<uint8_t>(p);
-                self(step + 1, p, irrep ^ basis.irreps()[p]);
+                const int next_irrep = irrep ^ basis.irreps()[p];
+                if (step + 1 == Rank) {
+                    if (next_irrep == 0)
+                        orbitals_.push_back(orbitals);
+                } else {
+                    const size_t first = group_size(step + 1);
+                    self(step + 1, p, next_irrep);
+                    const size_t last = group_size(step + 1);
+                    if (first != last)
+                        prefixes_[step].push_back({orbitals[step], first, last});
+                }
             }
         };
-        append(0, basis.norb(), holes.irrep(hole_class) ^ strings.irrep(string_class));
+        append_orbitals(0, basis.norb(), holes.irrep(hole_class) ^ strings.irrep(string_class));
     }
 
     bool empty() const { return orbitals_.empty(); }
@@ -68,31 +77,49 @@ template <size_t Rank> class HoleSubstitutions {
                                     Visit&& visit) const {
         if (empty())
             return;
-        const auto& basis = holes_.basis();
         holes_.unrank(hole_class_, hole_rank, coordinates);
-        for (const auto& orbitals : orbitals_) {
-            std::array<LocalStringAddress, Rank> saved;
-            size_t step = 0;
-            int sign = gas_sign_;
-            for (; step < Rank; ++step) {
-                auto& factor = coordinates[gases_[step]];
-                saved[step] = factor;
-                const int local =
-                    basis.substitute(gases_[step], electrons_[step], factor, orbitals[step], true);
-                if (local == 0)
-                    break;
-                sign *= local;
-            }
-            if (step == Rank)
-                visit(orbitals, sign, strings_.rank(string_class_, coordinates));
-            while (step > 0) {
-                --step;
-                coordinates[gases_[step]] = saved[step];
-            }
-        }
+        const size_t count = Rank == 1 ? orbitals_.size() : prefixes_.front().size();
+        visit_creations<0>(0, count, coordinates, gas_sign_, visit);
     }
 
   private:
+    /// One shared creation with a range of children at the next level. The last level
+    /// is stored in orbitals_, which also supplies the row support of the contraction.
+    struct CreationPrefix {
+        uint8_t orbital;
+        size_t first;
+        size_t last;
+    };
+
+    template <size_t Step, typename Visit>
+    void visit_creations(size_t first, size_t last, std::span<LocalStringAddress> coordinates,
+                         int sign, Visit& visit) const {
+        const auto& basis = holes_.basis();
+        const size_t gas = gases_[Step];
+        auto& factor = coordinates[gas];
+        const auto before = factor;
+        const auto row = basis.creation_row(gas, electrons_[Step], before);
+        for (size_t i = first; i < last; ++i) {
+            const auto orbital = [&] {
+                if constexpr (Step + 1 == Rank)
+                    return orbitals_[i][Step];
+                else
+                    return prefixes_[Step][i].orbital;
+            }();
+            const int local = row.create(orbital, factor);
+            if (local == 0)
+                continue;
+            if constexpr (Step + 1 == Rank) {
+                visit(orbitals_[i], sign * local, strings_.rank(string_class_, coordinates));
+            } else {
+                const auto& prefix = prefixes_[Step][i];
+                visit_creations<Step + 1>(prefix.first, prefix.last, coordinates, sign * local,
+                                          visit);
+            }
+        }
+        factor = before;
+    }
+
     const StringAddress& holes_;
     const StringAddress& strings_;
     int hole_class_;
@@ -100,24 +127,25 @@ template <size_t Rank> class HoleSubstitutions {
     std::array<size_t, Rank> gases_{};
     std::array<int, Rank> electrons_{};
     int gas_sign_ = 1;
+    std::array<std::vector<CreationPrefix>, Rank - 1> prefixes_;
     std::vector<Orbitals> orbitals_;
 };
 
 /// The a†_p a_q operators connecting two classes in the same GAS orbital layout.
-/// The list stores only the orbital pairs, shared by all source strings in the class.
+/// The orbital pairs are shared by the source strings and grouped by their annihilation.
 class ExcitationSubstitutions {
   public:
-    struct Orbitals {
-        uint8_t p;
-        uint8_t q;
-        int gas_sign;
-    };
-
     ExcitationSubstitutions(const StringAddress& source, int source_class,
                             const StringAddress& target, int target_class);
 
-    bool empty() const { return orbitals_.empty(); }
-    const auto& orbitals() const { return orbitals_; }
+    bool empty() const { return annihilations_.empty(); }
+
+    /// Visit the pairs that can connect the classes, independent of the source string.
+    template <typename Visit> void for_each_orbital_pair(Visit&& visit) const {
+        for (const auto& removal : annihilations_)
+            for (size_t i = removal.first; i < removal.last; ++i)
+                visit(creations_[i], removal.q);
+    }
 
     /// Visit (p, q, sign, rank in the target class), changing only the acted-on factors.
     template <typename Visit>
@@ -128,32 +156,47 @@ class ExcitationSubstitutions {
         const auto& basis = source_.basis();
         const auto& occupation = source_.occupation(source_class_);
         source_.unrank(source_class_, rank, coordinates);
-        for (const auto& [p, q, gas_sign] : orbitals_) {
+        for (const auto& [q, gas_sign, first, last] : annihilations_) {
             const size_t from = basis.gas_of(q);
-            const size_t to = basis.gas_of(p);
             auto& source = coordinates[from];
-            auto& target = coordinates[to];
             const auto saved_source = source;
-            const auto saved_target = target;
-            const int annihilation = basis.substitute(from, occupation[from], source, q, false);
+            const int annihilation = basis.annihilate(from, occupation[from], source, q);
             if (annihilation == 0)
                 continue;
-            const int creation =
-                basis.substitute(to, occupation[to] - (to == from), target, p, true);
-            if (creation != 0)
-                visit(p, q, gas_sign * annihilation * creation,
-                      target_.rank(target_class_, coordinates));
-            source = saved_source;
+
+            const size_t to = basis.gas_of(creations_[first]);
+            const int electrons = occupation[to] - (to == from);
+            auto& target = coordinates[to];
+            // When p and q belong to the same GAS, this includes the annihilation.
+            const auto saved_target = target;
+            const auto row = basis.creation_row(to, electrons, saved_target);
+            for (size_t i = first; i < last; ++i) {
+                const auto p = creations_[i];
+                const int creation = row.create(p, target);
+                if (creation != 0)
+                    visit(p, q, gas_sign * annihilation * creation,
+                          target_.rank(target_class_, coordinates));
+            }
             target = saved_target;
+            source = saved_source;
         }
     }
 
   private:
+    /// A removal at q followed by one of the creations in [first, last), all in one GAS.
+    struct Annihilation {
+        uint8_t q;
+        int gas_sign;
+        size_t first;
+        size_t last;
+    };
+
     const StringAddress& source_;
     const StringAddress& target_;
     int source_class_;
     int target_class_;
-    std::vector<Orbitals> orbitals_;
+    std::vector<Annihilation> annihilations_;
+    std::vector<uint8_t> creations_;
 };
 
 } // namespace forte2
