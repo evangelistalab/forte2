@@ -60,7 +60,8 @@ def test_ci_2():
     assert ci.E_ci[0] == approx(-100.019788438077)
 
 
-def test_ci_n2_with_symmetry():
+@pytest.mark.parametrize("alg", ["hz", "kh"])
+def test_ci_n2_with_symmetry(alg):
     xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
@@ -79,6 +80,7 @@ def test_ci_n2_with_symmetry():
             states=State(nel=14, multiplicity=1, ms=0.0),
             core_orbitals=4,
             active_orbitals=6,
+            ci_params=CIParams(ci_algorithm=alg),
         )
     )(rhf)
     ci.run()
