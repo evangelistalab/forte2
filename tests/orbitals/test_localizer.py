@@ -34,7 +34,8 @@ def test_localizer_water_rhf():
     assert bonds[1:].max(axis=0) == approx_abs([0.336427, 0.336427], 1e-6)
 
 
-def test_localizer_acrylic_acid():
+@pytest.mark.parametrize("charges, exponent", [("iao", 4), ("mulliken", 2)])
+def test_localizer_acrylic_acid(charges, exponent):
     # geometry from http://www.iboview.org/bin/ibo-ref.20141030.tar.bz2
     xyz = """
     C                 1.9750101       -0.0359056        0.0000000
@@ -49,7 +50,7 @@ def test_localizer_acrylic_acid():
     """
     system = System(xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    loc = Localizer()(rhf)
+    loc = Localizer(charges=charges, exponent=exponent)(rhf)
     loc.run()
 
     C_occ = loc.mos.C[0][:, : rhf.ndocc]
@@ -108,6 +109,12 @@ def test_localizer_h4_chain():
     with pytest.raises(ValueError, match="don't represent"):
         virtual.run()
 
+    # Lowdin charges localize virtual orbitals, here one on each H
+    lowdin = Localizer(charges="lowdin", orbitals=[4, 5, 6, 7])(avas)
+    lowdin.run()
+    assert sorted(lowdin.populations[0].argmax(axis=0)) == [0, 1, 2, 3]
+    assert lowdin.populations[0].max(axis=0).min() > 0.9
+
     # without an MO space, the doubly and singly occupied orbitals are localized separately
     occupied = Localizer()(rohf)
     occupied.run()
@@ -135,3 +142,7 @@ def test_localizer_rejects_symmetry_and_bad_orbitals():
         Localizer(orbitals=[[0, 1], [1, 2]])
     with pytest.raises(ValueError, match="list of MO indices"):
         Localizer(orbitals=[0, [1, 2]])
+    with pytest.raises(ValueError, match="charges"):
+        Localizer(charges="boys")
+    with pytest.raises(ValueError, match="exponent"):
+        Localizer(exponent=3)

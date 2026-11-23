@@ -52,7 +52,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   
   * Zeroth order active space embedding theory (ASET(0)) [5]_
   * Intrinsic atomic orbitals (IAO) [6]_
-  * Intrinsic bond orbitals (IBO) [6]_
+  * Orbital localization: intrinsic bond orbitals (IBO) [6]_ and Pipek-Mezey orbitals with IAO, Löwdin, or Mulliken charges [12]_
   * A cube file generator for visualizing molecular orbitals
   
 
@@ -69,3 +69,4 @@ References
 .. [9] Surjuse, K. A.; Valeev, E. F. SAP-X2C: Optimally-Simple Two-Component Relativistic Hamiltonian with Size-Intensive Picture Change. J. Chem. Theory Comput. 2026, 22 (7), 3443-3452. https://doi.org/10.1021/acs.jctc.6c00032.
 .. [10] Plasser, F.; Ruckenbauer, M.; Mai, S.; Oppel, M.; Marquetand, P.; González, L. Efficient and Flexible Computation of Many-Electron Wave Function Overlaps. J. Chem. Theory Comput. 2016, 12 (3), 1207-1219. https://doi.org/10.1021/acs.jctc.5b01148.
 .. [11] Malmqvist, P. Å. Calculation of Transition Density Matrices by Nonunitary Orbital Transformations. Int. J. Quantum Chem. 1986, 30 (4), 479-494. https://doi.org/10.1002/qua.560300404.
+.. [12] Pipek, J.; Mezey, P. G. A Fast Intrinsic Localization Procedure Applicable for Ab Initio and Semiempirical Linear Combination of Atomic Orbital Wave Functions. J. Chem. Phys. 1989, 90 (9), 4916-4926. https://doi.org/10.1063/1.456588.

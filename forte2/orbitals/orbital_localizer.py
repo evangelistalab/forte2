@@ -1,24 +1,27 @@
 from dataclasses import dataclass
 from numbers import Integral
+from typing import Literal
 
 import numpy as np
 
 from forte2.base_classes import Method
 from forte2.data import Z_TO_ATOM_SYMBOL
 from forte2.helpers import logger
-from .iao import IAO
+from .orbital_charges import IAO, LowdinCharges, MullikenCharges
 from .pipek_mezey import pipek_mezey_rotation
 
 
 @dataclass
 class Localizer(Method):
     """
-    Localizes orbitals as intrinsic bond orbitals (IBOs).
+    Localizes orbitals by Pipek-Mezey optimization of their atomic charges.
 
     Each block of orbitals is rotated by the orthogonal transformation that maximizes
-    :math:`\\sum_A \\sum_i (Q^A_{ii})^4`, where :math:`Q^A_{ii}` is the intrinsic atomic
-    orbital (IAO) charge of orbital :math:`i` on atom :math:`A` [1]_. Rotations mix
-    orbitals only within a block.
+    :math:`\\sum_A \\sum_i (Q^A_{ii})^p`, where :math:`Q^A_{ii}` is the charge of orbital
+    :math:`i` on atom :math:`A`. Rotations mix orbitals only within a block. The default,
+    intrinsic atomic orbital (IAO) charges with :math:`p = 4`, gives intrinsic bond
+    orbitals (IBOs) [1]_; Mulliken charges with :math:`p = 2` give the original
+    Pipek-Mezey orbitals [2]_.
 
     Parameters
     ----------
@@ -27,6 +30,10 @@ class Localizer(Method):
         separately. By default, the active orbitals are localized one GAS at a time if the
         parent method defines an MO space; otherwise, the occupied orbitals are localized,
         the doubly and singly occupied ones separately.
+    charges : {"iao", "lowdin", "mulliken"}, optional, default="iao"
+        The definition of the atomic charges.
+    exponent : {2, 4}, optional, default=4
+        The localization power :math:`p`.
     split_by_occupation : bool, optional, default=False
         If True, each block is split into sets of orbitals with the same reference
         occupations, so the localized orbitals keep the reference determinant. The parent
@@ -41,7 +48,7 @@ class Localizer(Method):
     blocks : list[list[int]]
         The MO indices of each block that was localized.
     populations : list[NDArray]
-        The IAO charge of each localized orbital on each atom, shape (natom, norb), per
+        The charge of each localized orbital on each atom, shape (natom, norb), per
         block.
     U : NDArray
         The orthogonal rotation from the parent orbitals to the localized ones, shape
@@ -50,18 +57,25 @@ class Localizer(Method):
     Notes
     -----
     The IAOs span the frozen core, core, and active orbitals if the parent method defines
-    an MO space, and the occupied orbitals otherwise, so every block must lie within that
-    span. Rotations within an MO space leave CASCI and CASSCF energies unchanged, but not
-    the energies of approximate active-space solvers such as selected CI. A block that
-    crosses MO spaces, or reference occupations if the parent defines no MO space, also
-    changes CASCI and CASSCF energies, so the Localizer warns about it.
+    an MO space, and the occupied orbitals otherwise, so with IAO charges every block must
+    lie within that span. To localize virtual orbitals, use Löwdin charges; Mulliken
+    charges are poorly defined for diffuse orbitals and converge slowly. IAOs built from
+    the orbital basis itself are the Löwdin orthogonalized AOs.
+
+    Rotations within an MO space leave CASCI and CASSCF energies unchanged, but not the
+    energies of approximate active-space solvers such as selected CI. A block that crosses
+    MO spaces, or reference occupations if the parent defines no MO space, also changes
+    CASCI and CASSCF energies, so the Localizer warns about it.
 
     References
     ----------
     .. [1] G. Knizia, J. Chem. Theory Comput. 2013, 9, 4834-4843.
+    .. [2] J. Pipek and P. G. Mezey, J. Chem. Phys. 1989, 90, 4916-4926.
     """
 
     orbitals: list[int] | list[list[int]] | None = None
+    charges: Literal["iao", "lowdin", "mulliken"] = "iao"
+    exponent: Literal[2, 4] = 4
     split_by_occupation: bool = False
     maxiter: int = 100
     g_tol: float = 1e-8
@@ -73,6 +87,12 @@ class Localizer(Method):
                 raise ValueError(
                     f"orbitals lists an MO more than once: {self.orbitals}."
                 )
+        if self.charges not in ("iao", "lowdin", "mulliken"):
+            raise ValueError(
+                f"charges must be 'iao', 'lowdin', or 'mulliken', got {self.charges!r}."
+            )
+        if self.exponent not in (2, 4):
+            raise ValueError(f"exponent must be 2 or 4, got {self.exponent}.")
         if self.maxiter < 1:
             raise ValueError(f"maxiter must be positive, got {self.maxiter}.")
         self.requires = {"system", "mos"}
@@ -92,16 +112,20 @@ class Localizer(Method):
             self.parent_method.mo_space if "mo_space" in self.provides else None
         )
         self._check_orbitals()
-        iao = IAO.from_mos(self.system, self.mos, self.mo_space)
+        charge_model = self._charge_model()
 
         self.blocks = self._make_blocks()
         C = self.mos.C[0]
         self.populations = []
         self.U = np.eye(self.mos.nmo)
-        logger.log_info1("\nLocalizing orbitals as intrinsic bond orbitals")
-        charges = [iao.charge_matrices(C[:, block]) for block in self.blocks]
+        logger.log_info1(
+            f"\nLocalizing orbitals with {self.charges} charges and exponent {self.exponent}"
+        )
+        charges = [charge_model.charge_matrices(C[:, block]) for block in self.blocks]
         for block, Q in zip(self.blocks, charges):
-            U_block, Q, nsweep = pipek_mezey_rotation(Q, self.maxiter, self.g_tol)
+            U_block, Q, nsweep = pipek_mezey_rotation(
+                Q, self.exponent, self.maxiter, self.g_tol
+            )
             C[:, block] = C[:, block] @ U_block
             self.U[np.ix_(block, block)] = U_block
             self.populations.append(np.einsum("aii->ai", Q))
@@ -141,12 +165,28 @@ class Localizer(Method):
                 "Localization breaks point-group symmetry, but the orbitals of "
                 f"{name} span more than one irrep. Build the System with symmetry=False."
             )
+        if (
+            self.orbitals is None
+            and self.mo_space is None
+            and self.mos.occupations is None
+        ):
+            raise ValueError(
+                f"{name} provides neither an MO space nor reference occupations, so pass "
+                "the orbitals to localize."
+            )
         if self.split_by_occupation and self.mos.occupations is None:
             raise ValueError(
                 f"split_by_occupation needs reference occupations, but {name} provides "
                 "none. Orbitals from a correlated calculation have no reference "
                 "determinant."
             )
+
+    def _charge_model(self):
+        if self.charges == "iao":
+            return IAO.from_mos(self.system, self.mos, self.mo_space)
+        if self.charges == "lowdin":
+            return LowdinCharges(self.system)
+        return MullikenCharges(self.system)
 
     def _make_blocks(self):
         if self.orbitals is not None:

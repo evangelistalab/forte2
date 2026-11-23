@@ -170,7 +170,7 @@ def iao_partial_charge(system, g1_iao):
         The system for which the partial charge is calculated.
     g1_iao : NDArray
         The 1-particle spin-free density matrix in the IAO basis.
-        Calulated using `forte2.orbitlas.iao.IAO.make_sf_1rdm`.
+        Calulated using `forte2.orbitals.orbital_charges.IAO.make_sf_1rdm`.
 
     Returns
     -------

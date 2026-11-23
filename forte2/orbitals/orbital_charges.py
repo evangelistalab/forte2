@@ -6,6 +6,25 @@ from forte2.helpers import invsqrt_matrix
 from forte2.symmetry import real_sph_to_j_adapted
 
 
+def _atom_blocks(L, R, basis):
+    # L_A^T R_A for the rows of each atom A of the basis
+    atom_slices = [slice(*x) for x in basis.center_first_and_last]
+    return np.array([L[sl].T @ R[sl] for sl in atom_slices])
+
+
+def _orthogonalize(C, S):
+    """
+    Given a subset of molecular orbitals C, shape (nbf, n), n<= nbf,
+    orthonormalize among the n orbitals under the metric S,
+    such that C_ortho.T @ S @ C_ortho = I.
+    See appendix C of JCTC 2013, 9, 4834-4843
+    """
+
+    X = C.T.conj() @ S @ C
+    X_invsqrt, *_ = invsqrt_matrix(X)
+    return C @ X_invsqrt
+
+
 class IAO:
     """
     Class to represent the intrinsic atomic orbital (IAO).
@@ -199,18 +218,71 @@ class IAO:
                 "The IAOs don't represent the orbitals. The IAOs span the orbitals they "
                 "were built from, and a minimal set of valence-like orbitals beyond them."
             )
-        atom_slices = [slice(*x) for x in self.minao_basis.center_first_and_last]
-        return np.array([X[sl].T @ X[sl] for sl in atom_slices])
+        return _atom_blocks(X, X, self.minao_basis)
 
 
-def _orthogonalize(C, S):
+class LowdinCharges:
     """
-    Given a subset of molecular orbitals C, shape (nbf, n), n<= nbf,
-    orthonormalize among the n orbitals under the metric S,
-    such that C_ortho.T @ S @ C_ortho = I.
-    See appendix C of JCTC 2013, 9, 4834-4843
+    Löwdin charges of orbitals, from the symmetrically orthogonalized AOs of each atom.
+
+    Parameters
+    ----------
+    system : System
+        The system whose AO basis defines the atoms.
     """
 
-    X = C.T.conj() @ S @ C
-    X_invsqrt, *_ = invsqrt_matrix(X)
-    return C @ X_invsqrt
+    def __init__(self, system: System):
+        self.system = system
+        _, self.S_sqrt, _ = invsqrt_matrix(system.ints_overlap())
+
+    def charge_matrices(self, C):
+        """
+        Compute the Löwdin charge matrix of each atom for a set of orbitals.
+
+        Parameters
+        ----------
+        C : NDArray
+            The orbital coefficients, shape (nbf, norb).
+
+        Returns
+        -------
+        NDArray
+            The charge matrices, shape (natom, norb, norb). Element (A, i, j) is the
+            overlap of orbitals i and j restricted to the orthogonalized AOs of atom A.
+        """
+        X = self.S_sqrt @ C
+        return _atom_blocks(X, X, self.system.basis)
+
+
+class MullikenCharges:
+    """
+    Mulliken charges of orbitals, from the AOs of each atom.
+
+    Parameters
+    ----------
+    system : System
+        The system whose AO basis defines the atoms.
+    """
+
+    def __init__(self, system: System):
+        self.system = system
+        self.S = system.ints_overlap()
+
+    def charge_matrices(self, C):
+        """
+        Compute the Mulliken charge matrix of each atom for a set of orbitals.
+
+        Parameters
+        ----------
+        C : NDArray
+            The orbital coefficients, shape (nbf, norb).
+
+        Returns
+        -------
+        NDArray
+            The charge matrices, shape (natom, norb, norb). Element (A, i, j) is the
+            Mulliken overlap population of orbitals i and j on atom A, symmetrized in i
+            and j.
+        """
+        Q = _atom_blocks(C, self.S @ C, self.system.basis)
+        return 0.5 * (Q + Q.transpose(0, 2, 1))
