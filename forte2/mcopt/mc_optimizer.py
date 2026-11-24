@@ -175,6 +175,7 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
             system.
         """
         self._startup()
+        self.converged = False
         self.Hcore = self.system.ints_hcore()  # hcore in AO basis
         fock_builder = self.system.fock_builder
 
@@ -305,14 +306,9 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
                 self.iter += 1
             if self.iter >= self.maxiter and not conv:
                 logger.log_info1("=" * width)
-                if self.die_if_not_converged:
-                    raise RuntimeError(
-                        f"Orbital optimization did not converge in {self.maxiter} iterations."
-                    )
-                else:
-                    logger.log_warning(
-                        f"Orbital optimization did not converge in {self.maxiter} iterations."
-                    )
+                logger.log_warning(
+                    f"Orbital optimization did not converge in {self.maxiter} iterations."
+                )
         self.ci_solver.set_ints(
             self.orb_opt.Ecore + self.system.nuclear_repulsion,
             self.orb_opt.Fcore[self.actv, self.actv],
@@ -338,11 +334,11 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
         perm = self.mo_space.contig_to_orig
         self.mos.C[0] = self._C[:, perm].copy()
 
-        # optionally, rotate the final orbitals to semicanonical or natural orbitals
-        self._rotate_final_orbitals()
-
-        # print information
-        self._post_process()
+        # optionally rotate the final orbitals, then print and store the result
+        self._finalize(
+            self.converged,
+            f"Orbital optimization did not converge in {self.maxiter} iterations.",
+        )
 
         convergence_status = self.ci_solver.get_convergence_status()
         if convergence_status and not all(convergence_status):

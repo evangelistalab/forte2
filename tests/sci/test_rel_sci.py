@@ -299,8 +299,7 @@ def test_rel_sci_natural_noncontiguous_mo_space():
     assert natural_occs == approx(original_occs)
 
 
-@pytest.mark.slow
-def test_rel_sci_casscf_hf_ghf():
+def test_rel_sci_casscf_hf_ghf(tmp_path):
     """RelSelectedCISolver drops into relativistic CASSCF"""
     xyz = """
     H 0.0 0.0 0.0
@@ -331,8 +330,20 @@ def test_rel_sci_casscf_hf_ghf():
 
     assert mc.E == approx(-100.1361832608)
 
+    mc.result.to_npz(tmp_path / "temp_test_rel_sci_casscf_hf_ghf.npz")
+    with np.load(
+        tmp_path / "temp_test_rel_sci_casscf_hf_ghf.npz", allow_pickle=True
+    ) as f:
+        assert np.allclose(f["ci_energies"], ci_solver.E_tot)
+        C = f["mo_coeff"][()]["C"][0]
+        C_unrotated = f["mo_coeff_unrotated"][()]["C"][0]
+        act = mc.mo_space.active_indices
+        assert np.allclose(C, mc.mos.C[0])
+        assert np.allclose(C[:, act], C_unrotated[:, act] @ f["active_rotation"])
+        assert np.allclose(f["rdm1"][0], mc.make_rdm(0, order=1, spin_type="so"))
 
-def test_rel_sci_transition_dipole():
+
+def test_rel_sci_transition_dipole(tmp_path):
     conv = _h2_ghf_upcast()
 
     sci = CI(
@@ -357,6 +368,17 @@ def test_rel_sci_transition_dipole():
     assert sci.ci_solver.vertical_transition_energies[(0, 1)] == approx(
         sci.E_ci[1] - sci.E_ci[0]
     )
+
+    sci.result.to_npz(tmp_path / "temp_test_rel_sci_transition_dipole.npz")
+    with np.load(
+        tmp_path / "temp_test_rel_sci_transition_dipole.npz", allow_pickle=True
+    ) as f:
+        assert np.allclose(f["ci_energies"], sci.ci_solver.E_tot)
+        assert np.allclose(f["mo_coeff"][()]["C"][0], sci.mos.C[0])
+        assert np.allclose(f["rdm1"][1], sci.make_rdm(1, order=1, spin_type="so"))
+        assert (
+            f["transition_dipoles"][()].keys() == sci.result.transition_dipoles.keys()
+        )
 
 
 @pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
@@ -393,6 +415,7 @@ def test_rel_sci_final_orbitals(final_orbitals):
     assert sci.E_ci[0] == approx(-100.10065023157668)
 
 
+@pytest.mark.slow
 def test_rel_sci_pt2_split_is_independent_of_var_threshold():
     """
     ept2_var + ept2_pt is the Epstein-Nesbet PT2 over the determinants outside the

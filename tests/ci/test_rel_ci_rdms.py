@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from forte2 import MOSpace, State
 from forte2.jkbuilder import SpinorbitalIntegrals
@@ -129,6 +130,7 @@ def test_ci_2rdm():
     assert np.allclose(tdm2_10_sigma, tdm2_01_sigma.T.conj())
 
 
+@pytest.mark.slow
 def test_ci_3rdm():
     # Test 3-RDMs
     rdm3_0_sparse = make_so_3rdm_debug(ci, 0)

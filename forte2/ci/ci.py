@@ -594,26 +594,6 @@ class _CISingleStateSolver:
         )
         return make_cumulant_from_rdms(self, root, order=order, spin_type=spin_type)
 
-    def compute_natural_occupation_numbers(self):
-        """
-        Compute the natural occupation numbers from the 1-RDMs.
-
-        Returns
-        -------
-        (norb, nroot) NDArray
-            The natural occupation numbers for each root.
-        """
-        if not self.executed:
-            raise RuntimeError("CI solver has not been executed yet.")
-        spin_type = "so" if self.two_component else "sf"
-        no = np.zeros((self.norb, self.nroot))
-        for i in range(self.nroot):
-            no[:, i] = np.linalg.eigvalsh(
-                self.make_rdm(i, order=1, spin_type=spin_type)
-            )[::-1]
-
-        return no
-
     def set_ints(self, scalar, oei, tei):
         """
         Set the active-space integrals for the CI solver.
@@ -701,6 +681,8 @@ class CISolver(CIBase):
         The eigenvalues (energies) computed by each sub-solver.
     evals_flat, E : NDArray
         The flattened array of eigenvalues from all sub-solvers.
+    E_tot : NDArray
+        The total energies of the CI roots, identical to `E` for this solver.
     E_avg : float
         The average energy computed from the state-averaged CI roots.
     """
@@ -803,9 +785,8 @@ class CI(ActiveSpaceDriver, Method):
     do_transition_dipole : bool, optional, default=False
         Whether to compute transition dipoles and oscillator strengths.
     die_if_not_converged : bool, optional, default=True
-        Whether a solver that fails to converge raises instead of warning. Set on
-        the driver rather than the solver: a one-shot calculation has no later
-        iteration to recover from.
+        Whether to raise an error if the solver does not converge. The error is
+        raised after ``result`` is stored.
 
     Attributes
     ----------
@@ -813,6 +794,8 @@ class CI(ActiveSpaceDriver, Method):
         The state-averaged energy.
     E_ci : NDArray
         A copy of the per-root energies.
+    result : ActiveSpaceResult
+        The results of the calculation, stored even if it did not converge.
     """
 
     ci_solver: CIBase

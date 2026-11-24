@@ -1,6 +1,10 @@
 from typing import ClassVar
 
 import numpy as np
+from numpy.typing import NDArray
+
+from .mo import MO
+from .results import ActiveSpaceResult
 
 
 class ActiveSpaceDriver:
@@ -33,13 +37,14 @@ class ActiveSpaceDriver:
 
         self._register_parent_method(parent_method)
         self.ci_solver.log_level = logger.get_verbosity_level()
-        self.ci_solver.die_if_not_converged = self.die_if_not_converged
+        # the driver raises after storing its result, so the solver must not
+        self.ci_solver.die_if_not_converged = False
         return self
 
     def run(self):
         """
         Solve with the owned solver, then finish: copy its results,
-        rotate the final orbitals once, and report.
+        rotate the final orbitals once, report, and store the result.
         """
         if not self.parent_method.executed:
             self.parent_method.run()
@@ -51,10 +56,31 @@ class ActiveSpaceDriver:
         self.mo_space = self.ci_solver.mo_space
         self.dtype = self.ci_solver.dtype
 
-        self._rotate_final_orbitals()
-        self._post_process()
+        self._finalize(
+            all(self.ci_solver.get_convergence_status()),
+            "CI solver did not converge for all roots.",
+        )
         self.executed = True
         return self
+
+    def _finalize(self, converged: bool, message: str) -> None:
+        """
+        Rotate the final orbitals, report, and store ``self.result``. A run that
+        dies skips the rotation and raises only after the result is stored.
+        """
+        from forte2.system import ModelSystem
+
+        die = self.die_if_not_converged and not converged
+        mo_unrotated, active_rotation = self._rotate_final_orbitals(skip=die)
+        # every root's 1-RDM is built once, for both the report and the result
+        rdm1 = self.ci_solver._make_root_rdm1s()
+        dipoles = None
+        if not isinstance(self.system, ModelSystem):
+            dipoles = self.ci_solver.compute_dipoles(self.mos.C[0], rdm1)
+        self._post_process(rdm1, dipoles)
+        self.result = self._make_result(mo_unrotated, active_rotation, rdm1, dipoles)
+        if die:
+            raise RuntimeError(message)
 
     def reset(self):
         """
@@ -72,16 +98,26 @@ class ActiveSpaceDriver:
         self.E_avg = self.ci_solver.E_avg
         self.E = self.E_avg
 
-    def _rotate_final_orbitals(self) -> None:
+    def _rotate_final_orbitals(
+        self, skip: bool = False
+    ) -> tuple[MO, NDArray] | tuple[None, None]:
         """
         Rotate to the requested final orbitals, once, at the end of the driver's
         run, then re-solve in the new basis. A no-op beyond copying the solver's
-        results unless "semicanonical" or "natural" was asked for.
+        results if ``skip`` is True or unless "semicanonical" or "natural" was asked for.
 
         Changing the orbital basis is the driver's job, not the solver's: the
         solver only ever answers in the basis it is handed. Here the driver picks
         the new orbitals, hands the solver integrals built from them, and asks it
         to solve again.
+
+        Returns
+        -------
+        mo_unrotated : MO | None
+            A copy of the orbitals before the rotation.
+        Uactv : NDArray | None
+            The active-space rotation, in active-index order.
+            Both are None if the orbitals were not rotated.
         """
         from forte2.orbitals import (
             check_final_orbital_energy_invariance,
@@ -92,9 +128,10 @@ class ActiveSpaceDriver:
         # the solver shares this driver's MO object, so it sees the new orbitals
         self.ci_solver.mos = self.mos
         self._copy_solver_results()
-        if self.final_orbitals not in ("semicanonical", "natural"):
-            return
+        if skip or self.final_orbitals not in ("semicanonical", "natural"):
+            return None, None
 
+        mo_unrotated = self.mos.copy()
         contig = self.mos.permute(self.mo_space.orig_to_contig)
         C_final, Uactv = make_final_orbitals(
             self.final_orbitals,
@@ -131,11 +168,38 @@ class ActiveSpaceDriver:
             new_E_avg=self.E_avg,
             hard_fail_hint="Consider increasing davidson_liu_params.maxiter.",
         )
+        return mo_unrotated, Uactv
+
+    def _make_result(
+        self,
+        mo_unrotated: MO | None,
+        active_rotation: NDArray | None,
+        rdm1: NDArray,
+        dipoles: NDArray | None,
+    ) -> ActiveSpaceResult:
+        ci = self.ci_solver
+        transition_properties = {}
+        if self.do_transition_dipole:
+            transition_properties = {
+                "trdm1": dict(ci.transition_rdms),
+                "transition_dipoles": dict(ci.transition_dipoles),
+                "oscillator_strengths": dict(ci.oscillator_strengths),
+            }
+
+        return ActiveSpaceResult(
+            ci_energies=np.array(ci.E_tot),
+            mo_coeff=self.mos.copy(),
+            mo_coeff_unrotated=mo_unrotated,
+            active_rotation=active_rotation,
+            rdm1=rdm1,
+            dipoles=dipoles,
+            **transition_properties,
+        )
 
     def _print_orbital_composition(self) -> None:
         """Hook: print the composition of the final orbitals. No-op by default."""
 
-    def _post_process(self) -> None:
+    def _post_process(self, rdm1: NDArray, dipoles: NDArray | None) -> None:
         from forte2.ci.ci_utils import (
             pretty_print_ci_dets,
             pretty_print_ci_nat_occ_numbers,
@@ -143,7 +207,7 @@ class ActiveSpaceDriver:
         )
 
         self.ci_solver._print_energy_summary()
-        self.ci_solver.compute_natural_occupation_numbers()
+        self.ci_solver.compute_natural_occupation_numbers(rdm1)
         pretty_print_ci_nat_occ_numbers(
             self.ci_solver.sa_info,
             self.mo_space,
@@ -154,7 +218,7 @@ class ActiveSpaceDriver:
         pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)
         self._print_orbital_composition()
         if self.do_transition_dipole:
-            self.ci_solver.compute_transition_properties(self.mos.C[0])
+            self.ci_solver.compute_transition_properties(self.mos.C[0], dipoles)
             pretty_print_ci_transition_props(
                 self.ci_solver.sa_info,
                 self.ci_solver.transition_dipoles,

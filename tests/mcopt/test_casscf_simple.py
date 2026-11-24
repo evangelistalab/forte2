@@ -1,6 +1,7 @@
 import pytest
 
-from forte2 import CISolver, MCOptimizer, RHF, State, System
+from forte2 import CI, CISolver, MCOptimizer, RHF, State, System
+from forte2.base_classes import DavidsonLiuParams
 from forte2.helpers.comparisons import approx, is_diagonal_matrix
 from forte2.orbitals import transfer_orbitals
 
@@ -213,3 +214,58 @@ def test_casscf_rejects_orbitals_from_another_geometry():
     fresh = casscf(RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(displaced))
     fresh.run()
     assert seeded.E == approx(fresh.E)
+
+
+def test_results_stored_before_nonconvergence_error():
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.069592187400
+    H            0.000000000000    -0.783151105291     0.552239257834
+    H            0.000000000000     0.783151105291     0.552239257834
+    """
+    system = System(
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+    scf = RHF(charge=0, maxiter=2)(system)
+    with pytest.raises(RuntimeError, match="did not converge"):
+        scf.run()
+    assert not scf.executed
+    assert scf.result.energy == scf.E
+
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
+    rhf.run()
+
+    ci = CI(
+        CISolver(
+            State(nel=10, multiplicity=1, ms=0.0),
+            core_orbitals=[0],
+            active_orbitals=[1, 2, 3, 4, 5, 6],
+            nroots=3,
+            davidson_liu_params=DavidsonLiuParams(maxiter=2),
+        ),
+        final_orbitals="natural",
+    )(rhf)
+    with pytest.raises(RuntimeError, match="CI solver did not converge"):
+        ci.run()
+    assert not ci.executed
+    assert ci.result.ci_energies == approx(ci.E_ci)
+    # a dying run skips the final-orbital rotation
+    assert ci.result.mo_coeff_unrotated is None
+    assert ci.result.active_rotation is None
+    assert ci.result.rdm1.shape == (3, 2, 6, 6)
+
+    mc = MCOptimizer(
+        CISolver(
+            State(nel=10, multiplicity=1, ms=0.0),
+            core_orbitals=[0],
+            active_orbitals=[1, 2, 3, 4, 5, 6],
+        ),
+        maxiter=1,
+    )(rhf)
+    with pytest.raises(RuntimeError, match="Orbital optimization did not converge"):
+        mc.run()
+    assert not mc.executed
+    assert not mc.converged
+    assert mc.result.ci_energies == approx(mc.E_ci)
+    assert mc.result.mo_coeff_unrotated is None
+    assert mc.result.active_rotation is None

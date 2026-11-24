@@ -120,8 +120,9 @@ def get_1e_property(
         case _:
             raise ValueError(f"Property '{property_name}' is not supported.")
 
-    # picture change doubles up the integral size, so no need to block-diagonalize here
-    if system.two_component and not do_picture_change:
+    # so-X2C picture change already returns spinor-basis integrals
+    so_picture_change = do_picture_change and system.x2c.x2c_type == "so"
+    if system.two_component and not so_picture_change:
         if isinstance(oei, list):
             oei = [(block_diag_2x2(_)) for _ in oei]
         else:
