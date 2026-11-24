@@ -318,12 +318,10 @@ class MOSpace:
         self.ncore = _mo_space.ncore
         self.core_indices = _mo_space.core_indices
 
-        self.docc_orbitals = self.docc_indices = (
-            self.frozen_core_indices + self.core_indices
-        )
+        self.docc_indices: list[int] = self.frozen_core_indices + self.core_indices
 
         self.nactv = _mo_space.nactv
-        self.active_indices = _mo_space.active_indices
+        self.active_indices: list[int] = _mo_space.active_indices
 
         self.nvirt = _mo_space.nvirt
         self.virtual_indices = _mo_space.virtual_indices

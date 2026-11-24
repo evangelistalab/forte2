@@ -7,6 +7,7 @@ own ``ints.orbitals_on_grid``. Coefficient-level comparisons against the
 writer's own permutation cannot detect convention errors; this can.
 """
 
+import logging
 import math
 import re
 
@@ -821,8 +822,56 @@ def test_molden_rejects_shells_beyond_g():
     system = System(
         xyz="Ne 0 0 0", basis_set="cc-pv5z", auxiliary_basis_set="def2-universal-jkfit"
     )
-    with pytest.raises(NotImplementedError, match="up to g"):
+    with pytest.raises(
+        NotImplementedError,
+        match="up to g.*ignore_unsupported_shells=True.*normalization",
+    ):
         molden_string(system, C=np.eye(system.nbf))
+
+
+def test_molden_omits_shells_beyond_g(tmp_path, caplog):
+    system = System(
+        xyz="Ne 0.31 -0.22 0.13\nHe 1.45 0.71 -0.93",
+        basis_set="cc-pv5z",
+        auxiliary_basis_set="def2-universal-jkfit",
+    )
+    basis = system.basis
+    offsets = basis.shell_offsets
+    retained = np.ones(system.nbf, dtype=bool)
+    for i in range(basis.nshells):
+        if basis[i].l > 4:
+            retained[offsets[i] : offsets[i + 1]] = False
+    assert not retained.all()
+    C = np.random.default_rng(7).normal(size=(system.nbf, 4))
+    with caplog.at_level(logging.CRITICAL):
+        path = write_molden(
+            system,
+            tmp_path / "filtered.molden",
+            C=[C[:, :2], C[:, 2:]],
+            ignore_unsupported_shells=True,
+        )
+    assert "may lose normalization" in caplog.text
+
+    parsed = _parse_molden(path.read_text())
+    assert parsed["C"].shape == (retained.sum(), 4)
+    assert [mo["spin"] for mo in parsed["mos"]] == ["Alpha", "Alpha", "Beta", "Beta"]
+    assert max(l for _, l, _, _ in parsed["shells"]) == 4
+
+    # Zero the omitted AO rows in the full basis to compare orbital values.
+    C[~retained] = 0
+    points = _points(system, n=80)
+    expected = _forte2_on_points(system, C, points)
+    actual = parsed["C"].T @ _eval_molden_aos(parsed, points)
+    np.testing.assert_allclose(actual, expected, atol=1e-9, rtol=1e-9)
+
+
+def test_molden_requires_at_least_one_supported_shell(h2_sto3g):
+    basis = ints.Basis()
+    basis.add(ints.Shell(5, [1.0], [1.0], h2_sto3g.atoms[0][1]))
+    h2_sto3g.basis = basis
+    h2_sto3g.nbf = basis.size
+    with pytest.raises(ValueError, match="no shells in Molden output"):
+        molden_string(h2_sto3g, C=np.eye(h2_sto3g.nbf), ignore_unsupported_shells=True)
 
 
 class _OrbitalsOnly(Method):

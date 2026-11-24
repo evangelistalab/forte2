@@ -9,7 +9,7 @@ class MO:
     Class to hold molecular orbital coefficients and their associated irrep labels and indices.
     """
 
-    C: list
+    C: list[np.ndarray]
     spinorbital: bool
     irrep_labels: list
     irrep_indices: list

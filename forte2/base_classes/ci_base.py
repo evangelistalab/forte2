@@ -168,7 +168,7 @@ class CIBase(ActiveSpaceSolver):
         """
         return np.dot(self.weights_flat, self.evals_flat)
 
-    def make_average_rdm(self, order: int):
+    def make_average_rdm(self, order: int) -> np.ndarray:
         """
         Make the state-averaged RDM of the given order, from the CI vectors, in each
         sub-solver's native representation (spin-free for one-component backends,

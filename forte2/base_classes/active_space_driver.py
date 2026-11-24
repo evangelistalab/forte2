@@ -180,7 +180,7 @@ class ActiveSpaceDriver:
     def make_cumulant(self, root: int, *, order: int, spin_type: str):
         return self.ci_solver.make_cumulant(root, order=order, spin_type=spin_type)
 
-    def make_average_rdm(self, order: int):
+    def make_average_rdm(self, order: int) -> np.ndarray:
         return self.ci_solver.make_average_rdm(order)
 
     def make_average_cumulant(self, order: int):

@@ -64,7 +64,7 @@ To use a relativistic Hamiltonian, see :doc:`relativistic`.
 Exporting orbitals
 ------------------
 
-Once a method has been run, you can export its orbitals for visualization in any program that reads Molden files (Molden, Jmol, VibeMol, IboView, ...)::
+Once a method has been run, you can export its orbitals for visualization in any program that reads Molden files (VibeMol, Molden, Jmol, IboView, ...)::
 
     forte2.write_molden(rhf, "rhf.molden")
     forte2.write_molden(casscf, "casscf.molden")
@@ -78,13 +78,8 @@ Each orbital carries its symmetry label, an energy and an occupation:
 
 Methods whose orbitals derive from a correlated calculation by other means, such as ``ASET`` and ``DSRG_MRPT2``, are not supported directly; write the orbitals of the underlying ``MCOptimizer`` instead, or pass the coefficients explicitly as shown below.
 
-Active-space export uses the AO Hamiltonian from the calculation, even after a
-later X2C override on the same ``System``. With the on-the-fly Fock builder,
-export the spatial calculation before running a two-component method on the
-same ``System``, or use separate systems for the two calculations.
-
 To write any other set of orbitals, for example localized orbitals, pass the ``System`` and the coefficients.
-``forte2.molden_string`` returns the same text without writing a file::
+:func:`forte2.molden_string <forte2.orbitals.molden.molden_string>` returns the same text without writing a file::
 
     forte2.write_molden(rhf.system, "localized.molden", C=C_loc, occupations=occ)
     text = forte2.molden_string(casscf)
@@ -92,13 +87,10 @@ To write any other set of orbitals, for example localized orbitals, pass the ``S
 Explicit coefficient arrays must contain at least one orbital, and all supplied
 coefficients, energies, and occupations must be finite.
 
-Unrestricted exports use a single ``[MO]`` section by default. When loading into
-PySCF, use ``forte2.write_molden(uhf, "uhf.molden", split_spin_blocks=True)``
-to write one section per spin. PySCF requires this layout when the total number
-of alpha and beta orbitals equals the number of AO basis functions. Use the
-default layout for readers that expect a single section.
-
 Molden files cover real, one-component orbitals with shells up to g.
+Pass ``ignore_unsupported_shells=True`` to omit shells beyond g and their
+MO coefficients. The exported orbitals may lose normalization.
+
 For two-component orbitals, or for grid-based visualization, write cube files::
 
     forte2.write_orbital_cubes(rhf.system, rhf.mos.C[0], indices=[0, 1, 2], filepath="cubes")

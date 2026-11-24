@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from abc import abstractmethod
+from collections.abc import Sequence
 import time
 
 import numpy as np
@@ -346,10 +347,12 @@ class SCFBase(Method):
         self._print_ao_composition()
 
     @abstractmethod
-    def _build_fock(self, H, fock_builder, S): ...
+    def _build_fock(
+        self, H, fock_builder, S
+    ) -> tuple[list[np.ndarray], list[np.ndarray]]: ...
 
     @abstractmethod
-    def _build_density_matrix(self): ...
+    def _build_density_matrix(self) -> Sequence[np.ndarray]: ...
 
     @abstractmethod
     def _initial_guess(self, H, guess_type="minao"):
@@ -358,7 +361,9 @@ class SCFBase(Method):
     @abstractmethod
     def _build_ao_grad(self, S, F): ...
 
-    def _diagonalize_fock(self, F):
+    def _diagonalize_fock(
+        self, F
+    ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray]]:
         """Return the energies, orbitals and irreps of each Fock matrix, occupied first."""
         eps, C, irreps = (list(x) for x in zip(*(self._eigh(f) for f in F)))
         return self._occupy(eps, C, irreps)
