@@ -11,7 +11,6 @@
 #include "helpers/memory.h"
 
 #include "ci/ci_strings.h"
-#include "ci/flat/ci_strings.h"
 #include "determinant/rel_slater_rules.h"
 #include "ci/ci_sigma_builder.h"
 
@@ -171,11 +170,10 @@ class RelCISigmaBuilder {
     get_Kblock_spans(size_t nrows, size_t ncols) const;
 
     /// Contract a spinor density over shared hole strings and restore canonical orbital order.
-    template <typename GetHoleList, typename OrbitalIndex>
+    template <size_t Rank>
     void contract_spinor_rdm(np_vector_complex C_left, np_vector_complex C_right,
-                             std::complex<double>* rdm_data, const CIOrbitalIrrepBlocks& orbitals,
-                             const ci_flat::StringAddress& holes, GetHoleList get_hole_list,
-                             OrbitalIndex orbital_index) const;
+                             std::complex<double>* rdm_data,
+                             const CIOrbitalIrrepBlocks& orbitals) const;
 };
 
 } // namespace forte2

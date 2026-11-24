@@ -2,7 +2,6 @@
 
 #include <array>
 #include <map>
-#include <mutex>
 #include <optional>
 #include <span>
 #include <vector>
@@ -11,10 +10,6 @@
 #include "helpers/spin.h"
 
 namespace forte2 {
-
-namespace ci_flat {
-class CIStrings;
-}
 
 /// @brief A block of CI coefficients for a pair of alpha and beta string classes.
 /// @details The block contains alpha_size rows and beta_size columns in row-major order.
@@ -80,9 +75,6 @@ class CIStrings {
     Determinant determinant(size_t address) const;
     std::vector<Determinant> make_determinants() const;
 
-    /// @brief Construct the flat string tables on demand for the remaining flat contractions.
-    const ci_flat::CIStrings& flat_strings() const;
-
   private:
     size_t na_;
     size_t nb_;
@@ -94,13 +86,6 @@ class CIStrings {
     std::vector<DeterminantBlock> blocks_;
     std::map<std::pair<int, int>, size_t> block_indices_;
     size_t ndet_ = 0;
-
-    // Input for the flat contractions during the transition to GAS products.
-    std::vector<std::vector<int>> flat_orbital_symmetry_;
-    std::vector<int> flat_gas_min_;
-    std::vector<int> flat_gas_max_;
-    mutable std::mutex flat_strings_mutex_;
-    mutable std::shared_ptr<const ci_flat::CIStrings> flat_strings_;
 };
 
 /// View a determinant block with the spectator index contiguous. Alpha already uses this

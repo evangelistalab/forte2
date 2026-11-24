@@ -12,7 +12,6 @@
 #include "helpers/spin.h"
 
 #include "ci/ci_strings.h"
-#include "ci/flat/ci_strings.h"
 #include "ci/ci_orbital_blocks.h"
 #include "determinant/slater_rules.h"
 #include "determinant/ci_spin_adapter.h"
@@ -381,12 +380,9 @@ class CISigmaBuilder {
                                         size_t nrows, size_t ncols) const;
 
     /// Contract signed left and right K-blocks over the shared alpha/beta hole strings.
-    template <typename Gather>
+    template <size_t AlphaRank, size_t BetaRank>
     void contract_mixed_spin_rdm(np_vector C_left, np_vector C_right, double* rdm_data,
-                                 const CIOrbitalIrrepBlocks& orbitals,
-                                 const ci_flat::StringAddress& alpha_holes,
-                                 const ci_flat::StringAddress& beta_holes,
-                                 std::string_view rdm_name, Gather gather) const;
+                                 const CIOrbitalIrrepBlocks& orbitals) const;
 };
 
 } // namespace forte2
