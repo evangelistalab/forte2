@@ -33,6 +33,9 @@ size_t Kblock_column_capacity(size_t nrows, size_t ncols, size_t memory_size) {
                      static_cast<size_t>(std::numeric_limits<int>::max())});
 }
 
+/// @brief Single excitations connecting a Knowles-Handy intermediate to a determinant block.
+/// @details spin specifies the string on which the substitutions act. The other spin's
+/// string class is the same in the intermediate and determinant block.
 struct ExcitationConnection {
     const DeterminantBlock& determinant;
     Spin spin;

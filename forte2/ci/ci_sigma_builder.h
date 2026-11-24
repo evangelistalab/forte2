@@ -30,6 +30,9 @@ enum class CIAlgorithm {
     Harrison_Zarrabian // Harrison-Zarrabian algorithm; does not require the stronger V symmetry.
 };
 
+/// @brief Compute sigma vectors and reduced density matrices for nonrelativistic CI.
+/// @details This class uses the determinant space in CIStrings and stores the integrals and
+/// work buffers for the Harrison-Zarrabian or Knowles-Handy algorithm.
 class CISigmaBuilder {
   public:
     // == Class Constructor ==

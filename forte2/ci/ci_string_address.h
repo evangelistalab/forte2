@@ -12,34 +12,45 @@
 
 namespace forte2 {
 
-/// A string in one GAS factor. The rank is local to its electron count and irrep.
+/// @brief The irrep and rank of a string in one GAS space.
+/// @details The rank indexes strings with the same electron count and irrep in that space.
 struct LocalStringAddress {
     size_t rank;
     int irrep;
 };
 
-/// The size of each GAS, its orbital labels, and the shared local string tables.
-/// A table is built once per (GAS slot, electron count) needed by any spin or operator.
-/// The stored bits use active orbital indices, but each string occupies only its own GAS.
+/// @brief Store the GAS orbital layout and the strings and substitutions for each GAS space.
+/// @details Each GAS space has one table for each electron count needed by either spin.
+/// The variational and intermediate string spaces share these tables. The bits in a local
+/// string use active orbital indices and are set only for orbitals in its GAS space.
 class GASStringBasis {
   public:
+    /// @brief Strings and substitution tables for one GAS space, electron count, and irrep.
+    /// @details Each substitution table stores one row per source string. Creation rows are
+    /// indexed by vacant orbitals and annihilation rows by occupied orbitals, in orbital order.
+    /// The target irrep is the source irrep XOR the orbital irrep.
     struct Sector {
         std::vector<String> strings;
         /// Positions in the original enumeration, before partitioning the strings by irrep.
         std::vector<size_t> positions;
-        /// Local target ranks for allowed creation or annihilation, in orbital order.
+        /// Ranks of the target strings in their respective irreps.
         std::vector<size_t> creations;
         std::vector<size_t> annihilations;
     };
 
+    /// @brief All strings with a given electron count in one GAS space.
+    /// @details sectors groups the strings by irrep and addresses maps occupation bit strings
+    /// to their local addresses. Product addressing uses in_order and Sector::positions to
+    /// recover the local enumeration order when there are several GAS spaces and irreps.
     struct Factor {
-        std::vector<Sector> sectors;              ///< Indexed by irrep.
-        std::vector<LocalStringAddress> in_order; ///< Original local enumeration order.
+        std::vector<Sector> sectors;
+        std::vector<LocalStringAddress> in_order;
         ankerl::unordered_dense::map<String, LocalStringAddress, String::Hash> addresses;
     };
 
-    /// The creation targets for one local string, indexed by its vacant orbitals in order.
-    /// Reuse the row when trying several creation operators on the same string.
+    /// @brief A row of the creation table for one local string.
+    /// @details ranks refers to the target ranks in the basis, in order of the vacant orbitals
+    /// in string. orbital_start is the first orbital of the source GAS space.
     struct CreationRow {
         const GASStringBasis& basis;
         String string;
@@ -105,12 +116,14 @@ class GASStringBasis {
     std::vector<std::vector<std::optional<Factor>>> factors_;
 };
 
-/// A spin-string address space with row-major GAS product ordering within each class.
-/// A class is (occupation index * nirrep + total irrep). The count for each suffix of the
-/// product and each suffix irrep gives the number of admissible completions. This implements
-/// the same address order as filtering the lexicographic Cartesian product by total irrep.
+/// @brief Map between the address of a spin string and its local GAS string addresses.
+/// @details A string class is indexed by occupation index * nirrep + total irrep. Within
+/// each class, strings follow the lexicographic order of the Cartesian product of the local
+/// strings with the required total irrep. The counts for the remaining GAS spaces give the
+/// number of strings that complete a given choice of local strings.
 class StringAddress {
   public:
+    /// @brief The class index and the rank of a spin string within that class.
     struct Index {
         size_t rank;
         int string_class;
@@ -152,9 +165,12 @@ class StringAddress {
                               occupation_t& occupation) const;
 
   private:
+    /// @brief Local string tables and counts for a single GAS occupation pattern.
+    /// @details factors contains one table per GAS space, in input order. The entry
+    /// suffix_counts[g * nirrep + h] counts strings formed from GAS spaces g onward with irrep h.
     struct Product {
         std::vector<const GASStringBasis::Factor*> factors;
-        std::vector<size_t> suffix_counts; ///< Indexed by (GAS boundary, suffix irrep).
+        std::vector<size_t> suffix_counts;
     };
 
     const Product& product(int string_class) const {

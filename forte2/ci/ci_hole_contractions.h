@@ -12,7 +12,8 @@
 
 namespace forte2 {
 
-/// Connections from one determinant block to a hole product in one spin sector.
+/// @brief The substitutions connecting a determinant block to a hole class for one spin.
+/// @tparam Rank Number of holes of that spin.
 template <size_t Rank> struct HoleConnection {
     const DeterminantBlock& determinant;
     HoleSubstitutions<Rank> substitutions;
@@ -68,6 +69,7 @@ template <size_t Rank> auto same_spin_hole_connections(const CIStrings& lists, S
 
 /// Generate only alpha/beta hole products that share a variational determinant block.
 template <size_t AlphaRank, size_t BetaRank> auto mixed_hole_connections(const CIStrings& lists) {
+    /// @brief The alpha and beta hole substitutions for one determinant block.
     struct Connection {
         const DeterminantBlock& determinant;
         HoleSubstitutions<AlphaRank> alpha;
@@ -110,6 +112,7 @@ void for_each_mixed_hole_substitution(const HoleSubstitutions<AlphaRank>& alpha,
                                       const HoleSubstitutions<BetaRank>& beta, size_t beta_size,
                                       size_t start, size_t size, std::span<LocalStringAddress> work,
                                       Visit&& visit) {
+    /// @brief The orbitals, sign, and target rank of a beta substitution in this chunk.
     struct BetaEntry {
         typename HoleSubstitutions<BetaRank>::Orbitals orbitals;
         int sign;
@@ -227,6 +230,7 @@ template <size_t Rank>
 void accumulate_same_spin_rdm(const CIStrings& lists, Spin spin, std::span<double> left,
                               std::span<double> right, std::span<double> left_scratch,
                               std::span<double> right_scratch, double* rdm, size_t dimension) {
+    /// @brief The orbitals, sign, and ket string rank for a substitution from this hole string.
     struct Substitution {
         typename HoleSubstitutions<Rank>::Orbitals orbitals;
         int sign;

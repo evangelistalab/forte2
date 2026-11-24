@@ -11,8 +11,10 @@
 
 namespace forte2 {
 
-/// A row-major alpha-by-beta coefficient block of a single allowed GAS occupation pair.
-/// Both spin classes carry a total irrep. The block belongs to their XOR irrep.
+/// @brief A block of CI coefficients for a pair of alpha and beta string classes.
+/// @details The block contains alpha_size rows and beta_size columns in row-major order.
+/// offset is the position of its first coefficient in the CI vector. The block irrep is
+/// the XOR of the alpha and beta class irreps.
 struct DeterminantBlock {
     int alpha_class;
     int beta_class;
@@ -26,11 +28,21 @@ struct DeterminantBlock {
     size_t spectator_size(Spin spin) const { return is_alpha(spin) ? beta_size : alpha_size; }
 };
 
-/// The symmetry-resolved GAS determinant space and its intermediate spin-string products.
-/// Spin string spaces share the local GAS basis. Only the allowed alpha/beta products get
-/// coefficient blocks. Full determinant strings can be composed at the API boundary.
+/// @brief Store the determinant space and the spin-string spaces used in CI contractions.
+/// @details The variational, hole, and one-hole/one-particle string spaces share a GASStringBasis.
+/// The determinant blocks pair alpha and beta string classes that obey the GAS occupation bounds
+/// and have the target total irrep. The determinant accessors combine the local strings when a
+/// full determinant is needed.
 class CIStrings {
   public:
+    /// @brief Construct the determinant space for the given electron counts and symmetry.
+    /// @param na Number of alpha electrons.
+    /// @param nb Number of beta electrons. Use zero for spinors.
+    /// @param nirrep Number of irreps in the system's point group.
+    /// @param symmetry Irrep of the target determinant space.
+    /// @param orbital_symmetry Orbital irreps in each GAS space, in active orbital order.
+    /// @param gas_min Minimum total occupation of each GAS space.
+    /// @param gas_max Maximum total occupation of each GAS space.
     CIStrings(size_t na, size_t nb, int nirrep, int symmetry,
               const std::vector<std::vector<int>>& orbital_symmetry,
               const std::vector<int>& gas_min, const std::vector<int>& gas_max);

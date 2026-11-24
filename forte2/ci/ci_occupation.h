@@ -10,6 +10,9 @@ namespace forte2 {
 /// Occupation of each GAS slot in input order, including empty slots.
 using occupation_t = std::vector<int>;
 
+/// @brief The alpha and beta GAS occupations allowed by the electron counts and GAS bounds.
+/// @details Each entry in pairs indexes one alpha occupation and one beta occupation whose
+/// combined electron counts satisfy the GAS bounds.
 struct GASOccupations {
     std::vector<occupation_t> alpha;
     std::vector<occupation_t> beta;

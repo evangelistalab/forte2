@@ -16,6 +16,9 @@
 
 namespace forte2 {
 
+/// @brief Compute sigma vectors and reduced density matrices for two-component CI.
+/// @details CIStrings stores the spinor occupations in the alpha strings. This class stores
+/// the complex integrals and work buffers for the Harrison-Zarrabian algorithm.
 class RelCISigmaBuilder {
   public:
     // == Class Constructor ==

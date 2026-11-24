@@ -10,9 +10,8 @@
 
 namespace forte2 {
 
-/// Index layout for CI matrices whose orbital rows and columns are grouped by irrep.
-///
-/// A row represents one orbital, pair, or triplet, depending on the factory used. Its canonical
+/// @brief Index layout for CI matrices whose orbital rows and columns are grouped by irrep.
+/// @details A row represents one orbital, pair, or triplet. Its canonical
 /// index follows the original orbital ordering and the conventions in helpers/indexing.hpp.
 /// The tuple irrep is the XOR of its orbital irreps. Rows of each irrep retain their relative
 /// canonical order, and local_row() maps a canonical index to its row within that irrep.
@@ -23,8 +22,9 @@ namespace forte2 {
 /// 0 and 4, respectively, and the packed matrix contains five elements.
 class CIOrbitalIrrepBlocks {
   public:
-    /// Describe the rows and storage of one irrep block in a packed matrix.
-    /// The block's position in blocks_ gives its irrep. An empty block occupies zero elements.
+    /// @brief The orbital indices and matrix offset for one irrep.
+    /// @details The position in blocks_ gives the irrep. The same indices are used for rows
+    /// and columns. An empty block occupies zero elements in the packed matrix.
     struct Block {
         /// Canonical orbital-tuple index for each local row. The column mapping is identical.
         std::vector<size_t> canonical_rows;
@@ -178,16 +178,19 @@ class CIOrbitalIrrepBlocks {
         }
     }
 
-    std::vector<Block> blocks_;      ///< One block per irrep, including empty blocks.
-    std::vector<size_t> local_rows_; ///< Maps each canonical index to its local row.
+    /// One block per irrep, including empty blocks.
+    std::vector<Block> blocks_;
+    /// Maps each canonical index to its local row.
+    std::vector<size_t> local_rows_;
     size_t max_rows_ = 0;
     size_t packed_matrix_size_ = 0;
 };
 
-/// The rows within an orbital irrep that can act on a given intermediate product.
-/// Canonical indices are mapped to the restricted row order. The original packed integral
+/// @brief The integral matrix for the orbital indices that can act on an intermediate.
+/// @details Canonical indices are mapped to the restricted row order. The original packed integral
 /// block is borrowed when every row is active. A subset is packed into a smaller square
 /// matrix using the selected rows on both axes.
+/// @tparam Scalar Integral type, double for spatial orbitals or std::complex<double> for spinors.
 template <typename Scalar> class CIOrbitalMatrixBlock {
   public:
     CIOrbitalMatrixBlock(const CIOrbitalIrrepBlocks& layout,
@@ -230,13 +233,13 @@ template <typename Scalar> class CIOrbitalMatrixBlock {
     size_t size_ = 0;
 };
 
-/// Provide writable irrep blocks for accumulating an RDM with GEMM.
-///
-/// The caller owns the layout and a zero-initialized square output matrix indexed by canonical
-/// orbital tuples. Both must outlive this object. When rows span several irreps, the object owns
-/// a temporary packed matrix, and unpack() copies the accumulated blocks to the output. A single
-/// block can accumulate directly into the output because its local rows already follow the
-/// canonical order.
+/// @brief Store the irrep blocks used to accumulate a reduced density matrix.
+/// @details The caller owns the layout and a zero-initialized square output matrix indexed by
+/// canonical orbital tuples. Both must outlive this object. When rows span several irreps, the
+/// object owns a temporary packed matrix, and unpack() copies the accumulated blocks to the
+/// output. A single block can accumulate directly into the output because its local rows already
+/// follow the canonical order.
+/// @tparam Scalar RDM element type, double or std::complex<double>.
 template <typename Scalar> class CIIrrepRDM {
   public:
     CIIrrepRDM(const CIOrbitalIrrepBlocks& layout, Scalar* output)
@@ -255,9 +258,12 @@ template <typename Scalar> class CIIrrepRDM {
     }
 
   private:
-    const CIOrbitalIrrepBlocks& layout_; ///< Borrowed map from local rows to canonical indices.
-    Scalar* output_;                     ///< Borrowed dense RDM storage in canonical order.
-    std::vector<Scalar> packed_;         ///< Owned RDM blocks when an unpacking step is needed.
+    /// Map from local rows to canonical indices, owned by the caller.
+    const CIOrbitalIrrepBlocks& layout_;
+    /// RDM output in canonical order, owned by the caller.
+    Scalar* output_;
+    /// Temporary storage for the RDM blocks when an unpacking step is needed.
+    std::vector<Scalar> packed_;
 };
 
 } // namespace forte2

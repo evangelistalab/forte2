@@ -21,6 +21,8 @@ from .ci import _CISingleStateSolver
 class _RelCISingleStateSolver(_CISingleStateSolver):
     """
     Two-component (relativistic) CI solver for a single state.
+
+    The system that supplies the integrals also determines the number of irreps.
     """
 
     two_component: ClassVar[bool] = True

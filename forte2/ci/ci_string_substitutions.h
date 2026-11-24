@@ -9,10 +9,12 @@
 
 namespace forte2 {
 
-/// Connect two string classes by creating the electrons missing from a hole string.
-/// Only operators with the required GAS occupation change and total irrep are stored.
-/// The orbitals appear in descending order, so creating them in that order is the adjoint of
-/// the annihilation order used for HZ and the RDMs. Untouched factors keep their coordinates.
+/// @brief Connect a hole string class to a variational string class by electron creation.
+/// @details The stored orbital tuples have the required GAS occupation and irrep changes.
+/// Applying the creation operators in descending orbital order gives the adjoint of the
+/// annihilation used in the Harrison-Zarrabian sigma build and the RDMs. Each operator
+/// updates the local address in its GAS space.
+/// @tparam Rank Number of electrons to create.
 template <size_t Rank> class HoleSubstitutions {
   public:
     using Orbitals = std::array<uint8_t, Rank>;
@@ -62,8 +64,10 @@ template <size_t Rank> class HoleSubstitutions {
     }
 
   private:
-    /// One shared creation with a range of children at the next level. The last level
-    /// is stored in orbitals_, which also supplies the row support of the contraction.
+    /// @brief A creation operator shared by several orbital tuples.
+    /// @details The range [first, last) indexes the next operators in prefixes_, or the full
+    /// tuples in orbitals_ at the last step. The full tuples also give the orbital indices
+    /// used in the contraction.
     struct CreationPrefix {
         uint8_t orbital;
         size_t first;
@@ -136,8 +140,10 @@ template <size_t Rank> class HoleSubstitutions {
     std::vector<Orbitals> orbitals_;
 };
 
-/// The a†_p a_q operators connecting two classes in the same GAS orbital layout.
-/// The orbital pairs are shared by the source strings and grouped by their annihilation.
+/// @brief Store the single excitations connecting two string classes with the same GAS layout.
+/// @details Each excitation annihilates an electron in orbital q and creates one in orbital p.
+/// The orbital pairs are shared by the source strings and grouped by q so the annihilation
+/// can be evaluated once for all its creation partners.
 class ExcitationSubstitutions {
   public:
     ExcitationSubstitutions(const StringAddress& source, int source_class,
@@ -188,7 +194,9 @@ class ExcitationSubstitutions {
     }
 
   private:
-    /// A removal at q followed by one of the creations in [first, last), all in one GAS.
+    /// @brief An annihilation operator and its allowed creation partners.
+    /// @details The range [first, last) indexes creations_ for orbital q. gas_sign is the
+    /// sign from the electrons in the GAS spaces preceding the operators.
     struct Annihilation {
         uint8_t q;
         int gas_sign;
