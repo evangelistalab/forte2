@@ -161,6 +161,7 @@ void CISigmaBuilder::contract_mixed_spin_rdm(np_vector C_left, np_vector C_right
                                              const ci_flat::StringAddress& alpha_holes,
                                              const ci_flat::StringAddress& beta_holes,
                                              std::string_view rdm_name, Gather gather) const {
+    const auto& flat_lists = lists_.flat_strings();
     const size_t max_composite_K = max_composite_hole_dimension(alpha_holes, beta_holes, rdm_name);
     if (max_composite_K == 0)
         return;
@@ -190,7 +191,8 @@ void CISigmaBuilder::contract_mixed_spin_rdm(np_vector C_left, np_vector C_right
                 const size_t Kdim = std::min(Kblock_size, maxK - Kblock_start);
                 std::fill_n(Kblock_left.begin(), nrows * Kdim, 0.0);
                 std::fill_n(Kblock_right.begin(), nrows * Kdim, 0.0);
-                gather(lists_, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, orbitals, Kblocks);
+                gather(flat_lists, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, orbitals,
+                       Kblocks);
                 matrix_product('N', 'T', nrows, nrows, Kdim, 1.0, Kblock_left.data(), Kdim,
                                Kblock_right.data(), Kdim, 1.0, rdm_blocks.data(block), nrows);
                 Kblock_start += Kdim;
@@ -207,8 +209,9 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
     if (norb == 0 || lists_.na() == 0 || lists_.nb() == 0)
         return rdm;
 
+    const auto& flat_lists = lists_.flat_strings();
     contract_mixed_spin_rdm(C_left, C_right, rdm.data(), opposite_spin_pairs_,
-                            *lists_.alpha_address_1h(), *lists_.beta_address_1h(), "2-RDM",
+                            *flat_lists.alpha_address_1h(), *flat_lists.beta_address_1h(), "2-RDM",
                             gather_ab_2rdm_block);
     rdm2_ab_timer_ += timer.elapsed_seconds();
     return rdm;
@@ -225,8 +228,9 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
         return rdm;
 
     const auto triplets = CIOrbitalIrrepBlocks::aab_triplets(lists_);
-    contract_mixed_spin_rdm(C_left, C_right, rdm.data(), triplets, *lists_.alpha_address_2h(),
-                            *lists_.beta_address_1h(), "AAB 3-RDM", gather_aab_3rdm_block);
+    const auto& flat_lists = lists_.flat_strings();
+    contract_mixed_spin_rdm(C_left, C_right, rdm.data(), triplets, *flat_lists.alpha_address_2h(),
+                            *flat_lists.beta_address_1h(), "AAB 3-RDM", gather_aab_3rdm_block);
     return rdm;
 }
 
@@ -241,8 +245,9 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
         return rdm;
 
     const auto triplets = CIOrbitalIrrepBlocks::abb_triplets(lists_);
-    contract_mixed_spin_rdm(C_left, C_right, rdm.data(), triplets, *lists_.alpha_address_1h(),
-                            *lists_.beta_address_2h(), "ABB 3-RDM", gather_abb_3rdm_block);
+    const auto& flat_lists = lists_.flat_strings();
+    contract_mixed_spin_rdm(C_left, C_right, rdm.data(), triplets, *flat_lists.alpha_address_1h(),
+                            *flat_lists.beta_address_2h(), "ABB 3-RDM", gather_abb_3rdm_block);
     return rdm;
 }
 

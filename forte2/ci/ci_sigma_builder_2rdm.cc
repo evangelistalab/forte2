@@ -6,14 +6,17 @@
 
 #include "ci_sigma_builder.h"
 
+#include "ci/flat/gather_block.h"
+
 namespace forte2 {
 
 np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, Spin spin) const {
+    const auto& flat_lists = lists_.flat_strings();
     local_timer timer;
 
-    const auto na = lists_.na();
-    const auto nb = lists_.nb();
-    const size_t norb = lists_.norb();
+    const auto na = flat_lists.na();
+    const auto nb = flat_lists.nb();
+    const size_t norb = flat_lists.norb();
 
     // if there are less than two orbitals, return an empty matrix
     if (norb < 2) {
@@ -33,43 +36,43 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, S
 
     auto rdm_data = rdm.data();
 
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
+    const auto& alpha_address = flat_lists.alpha_address();
+    const auto& beta_address = flat_lists.beta_address();
 
-    int num_2h_classes = is_alpha(spin) ? lists_.alpha_address_2h()->nclasses()
-                                        : lists_.beta_address_2h()->nclasses();
+    int num_2h_classes = is_alpha(spin) ? flat_lists.alpha_address_2h()->nclasses()
+                                        : flat_lists.beta_address_2h()->nclasses();
 
     for (int class_K = 0; class_K < num_2h_classes; ++class_K) {
-        size_t maxK = is_alpha(spin) ? lists_.alpha_address_2h()->strpcls(class_K)
-                                     : lists_.beta_address_2h()->strpcls(class_K);
+        size_t maxK = is_alpha(spin) ? flat_lists.alpha_address_2h()->strpcls(class_K)
+                                     : flat_lists.beta_address_2h()->strpcls(class_K);
 
         // loop over blocks of matrix C
-        for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-            if (lists_.block_size(nI) == 0)
+        for (const auto& [nI, class_Ia, class_Ib] : flat_lists.determinant_classes()) {
+            if (flat_lists.block_size(nI) == 0)
                 continue;
 
-            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ia, class_Ib);
+            auto tl = gather_block(Cl_span, TL, spin, flat_lists, class_Ia, class_Ib);
 
-            for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+            for (const auto& [nJ, class_Ja, class_Jb] : flat_lists.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
                 if ((is_alpha(spin) and (class_Ib != class_Jb)) or
                     (is_beta(spin) and (class_Ia != class_Ja)))
                     continue;
-                if (lists_.block_size(nJ) == 0)
+                if (flat_lists.block_size(nJ) == 0)
                     continue;
 
                 const size_t maxL = is_alpha(spin) ? beta_address->strpcls(class_Ib)
                                                    : alpha_address->strpcls(class_Ia);
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
+                    auto tr = gather_block(Cr_span, TR, spin, flat_lists, class_Ja, class_Jb);
                     for (size_t K{0}; K < maxK; ++K) {
                         auto& Kllist = is_alpha(spin)
-                                           ? lists_.get_alpha_2h_list(class_K, K, class_Ia)
-                                           : lists_.get_beta_2h_list(class_K, K, class_Ib);
+                                           ? flat_lists.get_alpha_2h_list(class_K, K, class_Ia)
+                                           : flat_lists.get_beta_2h_list(class_K, K, class_Ib);
                         auto& Krlist = is_alpha(spin)
-                                           ? lists_.get_alpha_2h_list(class_K, K, class_Ja)
-                                           : lists_.get_beta_2h_list(class_K, K, class_Jb);
+                                           ? flat_lists.get_alpha_2h_list(class_K, K, class_Ja)
+                                           : flat_lists.get_beta_2h_list(class_K, K, class_Jb);
                         for (const auto& [sign_K, p, q, I] : Kllist) {
                             const size_t pq_index = pair_index_gt(p, q);
                             for (const auto& [sign_L, r, s, J] : Krlist) {

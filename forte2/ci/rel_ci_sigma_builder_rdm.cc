@@ -12,16 +12,17 @@ namespace forte2 {
 
 np_matrix_complex RelCISigmaBuilder::compute_so_1rdm(np_vector_complex C_left,
                                                      np_vector_complex C_right) const {
-    const auto na = lists_.na();
-    const auto norb = lists_.norb();
+    const auto& flat_lists = lists_.flat_strings();
+    const auto na = flat_lists.na();
+    const auto norb = flat_lists.norb();
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({norb, norb});
 
     // skip building the RDM if there are no electrons or there are zero orbitals
     if (na < 1 || norb < 1)
         return rdm;
 
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
+    const auto& alpha_address = flat_lists.alpha_address();
+    const auto& beta_address = flat_lists.beta_address();
     auto rdm_view = rdm.view();
     auto Cl_span = vector::as_span<std::complex<double>>(C_left);
     auto Cr_span = vector::as_span<std::complex<double>>(C_right);
@@ -30,28 +31,29 @@ np_matrix_complex RelCISigmaBuilder::compute_so_1rdm(np_vector_complex C_left,
     Spin spin = Spin::Alpha;
 
     // loop over blocks of the right state
-    for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-        if (lists_.block_size(nI) == 0)
+    for (const auto& [nI, class_Ia, class_Ib] : flat_lists.determinant_classes()) {
+        if (flat_lists.block_size(nI) == 0)
             continue;
 
-        auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ia, class_Ib);
+        const auto tr = Cr_span.subspan(flat_lists.block_offset(nI), flat_lists.block_size(nI));
 
         // loop over blocks of the left state
-        for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+        for (const auto& [nJ, class_Ja, class_Jb] : flat_lists.determinant_classes()) {
             // The string class on which we don't act must be the same for I and J
             if ((is_alpha(spin) and (class_Ib != class_Jb)) or
                 (is_beta(spin) and (class_Ia != class_Ja)))
                 continue;
-            if (lists_.block_size(nJ) == 0)
+            if (flat_lists.block_size(nJ) == 0)
                 continue;
 
-            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ja, class_Jb);
+            const auto tl = Cl_span.subspan(flat_lists.block_offset(nJ), flat_lists.block_size(nJ));
 
             const size_t maxL =
                 is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
 
-            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alpha_vo_list(class_Ia, class_Ja)
-                                                    : lists_.get_beta_vo_list(class_Ib, class_Jb);
+            const auto& pq_vo_list = is_alpha(spin)
+                                         ? flat_lists.get_alpha_vo_list(class_Ia, class_Ja)
+                                         : flat_lists.get_beta_vo_list(class_Ib, class_Jb);
 
             for (const auto& [pq, vo_list] : pq_vo_list) {
                 const auto& [p, q] = pq;
@@ -76,6 +78,7 @@ void RelCISigmaBuilder::contract_spinor_rdm(np_vector_complex C_left, np_vector_
                                             const ci_flat::StringAddress& holes,
                                             GetHoleList get_hole_list,
                                             OrbitalIndex orbital_index) const {
+    const auto& flat_lists = lists_.flat_strings();
     if (lists_.ndet() == 0)
         return;
 
@@ -99,13 +102,13 @@ void RelCISigmaBuilder::contract_spinor_rdm(np_vector_complex C_left, np_vector_
 
             // Gather all determinant classes into the same K-blocks to include transitions
             // between GAS occupation patterns in one GEMM per chunk.
-            for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                if (lists_.block_size(nI) == 0)
+            for (const auto& [nI, class_Ia, class_Ib] : flat_lists.determinant_classes()) {
+                if (flat_lists.block_size(nI) == 0)
                     continue;
-                const size_t offset = lists_.block_offset(nI);
+                const size_t offset = flat_lists.block_offset(nI);
                 for (size_t K = 0; K < K_size; ++K) {
                     for (const auto& sub :
-                         (lists_.*get_hole_list)(class_K, K_start + K, class_Ia)) {
+                         (flat_lists.*get_hole_list)(class_K, K_start + K, class_Ia)) {
                         const size_t row = orbitals.local_row(orbital_index(sub));
                         const double sign = static_cast<double>(sub.sign);
                         const size_t det_index = offset + sub.J;
@@ -133,8 +136,9 @@ np_tensor4_complex RelCISigmaBuilder::compute_so_2rdm(np_vector_complex C_left,
 
     const size_t npairs = norb * (norb - 1) / 2;
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({npairs, npairs});
+    const auto& flat_lists = lists_.flat_strings();
     contract_spinor_rdm(
-        C_left, C_right, rdm.data(), spinor_pairs_, *lists_.alpha_address_2h(),
+        C_left, C_right, rdm.data(), spinor_pairs_, *flat_lists.alpha_address_2h(),
         &ci_flat::CIStrings::get_alpha_2h_list,
         [](const ci_flat::H2StringSubstitution& sub) { return pair_index_gt(sub.p, sub.q); });
     return matrix::packed_tensor4_to_tensor4<std::complex<double>>(rdm);
@@ -149,7 +153,8 @@ np_tensor6_complex RelCISigmaBuilder::compute_so_3rdm(np_vector_complex C_left,
     const size_t ntriplets = norb * (norb - 1) * (norb - 2) / 6;
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({ntriplets, ntriplets});
     const auto triplets = CIOrbitalIrrepBlocks::spinor_triplets(lists_);
-    contract_spinor_rdm(C_left, C_right, rdm.data(), triplets, *lists_.alpha_address_3h(),
+    const auto& flat_lists = lists_.flat_strings();
+    contract_spinor_rdm(C_left, C_right, rdm.data(), triplets, *flat_lists.alpha_address_3h(),
                         &ci_flat::CIStrings::get_alpha_3h_list,
                         [](const ci_flat::H3StringSubstitution& sub) {
                             return triplet_index_gt(sub.p, sub.q, sub.r);

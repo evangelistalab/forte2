@@ -17,6 +17,9 @@
 
 namespace forte2 {
 
+/// @brief Compute sigma vectors and reduced density matrices for two-component CI.
+/// @details CIStrings stores the spinor occupations in the alpha strings. This class stores
+/// the complex integrals and work buffers for the Harrison-Zarrabian algorithm.
 class RelCISigmaBuilder {
   public:
     // == Class Constructor ==
@@ -109,8 +112,8 @@ class RelCISigmaBuilder {
     /// @brief The CI algorithm to use for building the Hamiltonian
     // Default to Harrison-Zarrabian: Knowles-Handy is unimplemented for this class.
     CIAlgorithm algorithm_ = CIAlgorithm::Harrison_Zarrabian;
-    /// @brief The ci_flat::CIStrings object containing the determinant classes and their properties
-    const ci_flat::CIStrings& lists_;
+    /// @brief The CIStrings object containing the determinant classes and their properties
+    const CIStrings& lists_;
     const CIOrbitalIrrepBlocks orbital_rows_ = CIOrbitalIrrepBlocks::orbitals(lists_);
     const CIOrbitalIrrepBlocks spinor_pairs_ = CIOrbitalIrrepBlocks::strict_pairs(lists_);
     /// @brief The scalar energy
@@ -123,11 +126,6 @@ class RelCISigmaBuilder {
     int log_level_ = 3;
 
     // == Class Private Functions/Data ==
-
-    /// @brief Temporary vectors used for gathering and scattering blocks of the CI matrix
-    /// These vectors are allocated when the class is constructed and resized as needed
-    mutable std::vector<std::complex<double>> TR;
-    mutable std::vector<std::complex<double>> TL;
 
     /// @brief Temporary vectors used to store blocks of data of the form
     /// L(op,K,L) = <K|op|I> C_{IL}
@@ -179,15 +177,5 @@ class RelCISigmaBuilder {
                              const ci_flat::StringAddress& holes, GetHoleList get_hole_list,
                              OrbitalIndex orbital_index) const;
 };
-
-[[nodiscard]] std::span<std::complex<double>>
-gather_block(std::span<std::complex<double>> source, std::span<std::complex<double>> dest,
-             Spin spin, const ci_flat::CIStrings& lists, int class_Ia, int class_Ib);
-
-void zero_block(std::span<std::complex<double>> dest, Spin spin, const ci_flat::CIStrings& lists,
-                int class_Ia, int class_Ib);
-
-void scatter_block(std::span<std::complex<double>> source, std::span<std::complex<double>> dest,
-                   Spin spin, const ci_flat::CIStrings& lists, int class_Ia, int class_Ib);
 
 } // namespace forte2
