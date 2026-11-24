@@ -3,7 +3,7 @@
 #include "helpers/np_vector_functions.h"
 
 #include "ci_sigma_builder.h"
-#include "ci_strings_makers.h"
+#include "ci/flat/ci_strings_makers.h"
 
 namespace forte2 {
 

@@ -155,7 +155,7 @@ generate_1h1p_occupations(const std::vector<std::array<int, 6>>& gas_occupations
     for (const auto& gas_occupation : gas_occupations) {
         for (size_t n = 0; n < num_gas_spaces; n++) {
             if (gas_occupation[n] >= 1) {
-                // Generate all valid GAS occupations resulting from 
+                // Generate all valid GAS occupations resulting from
                 // moving an electron this GAS to all other GASes
                 for (size_t s = 0; s < num_gas_spaces; s++) {
                     std::array<int, 6> new_occ = gas_occupation;
@@ -167,8 +167,8 @@ generate_1h1p_occupations(const std::vector<std::array<int, 6>>& gas_occupations
             }
         }
     }
-    // Edge case: when all GASes are empty, we still need a single allowed 
-    // GAS occupation list, this is so that an empty spectator string is 
+    // Edge case: when all GASes are empty, we still need a single allowed
+    // GAS occupation list, this is so that an empty spectator string is
     // generated for the Knowles-Handy algorithm
     for (const auto& gas_occupation : gas_occupations) {
         add_unique(gas_occupation);

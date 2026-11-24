@@ -8,7 +8,7 @@
 
 #include "helpers/ndarray.h"
 #include "helpers/math_structures.h"
-#include "ci/ci_strings.h"
+#include "ci/flat/ci_strings.h"
 
 namespace forte2 {
 

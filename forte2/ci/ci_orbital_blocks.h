@@ -5,7 +5,7 @@
 #include <utility>
 #include <vector>
 
-#include "ci/ci_strings.h"
+#include "ci/flat/ci_strings.h"
 
 namespace forte2 {
 

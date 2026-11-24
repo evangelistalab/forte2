@@ -8,9 +8,9 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 
-#include "ci/ci_strings.h"
+#include "ci/flat/ci_strings.h"
 #include "ci/ci_permutation.hpp"
-#include "ci/ci_string_address.h"
+#include "ci/flat/ci_string_address.h"
 #include "ci/ci_sigma_builder.h"
 #include "determinant/ci_spin_adapter.h"
 #include "ci/rel_ci_sigma_builder.h"

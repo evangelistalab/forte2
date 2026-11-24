@@ -2,10 +2,10 @@
 
 #include <memory>
 
-#include "ci/ci_strings_defs.h"
-#include "ci/ci_string_address.h"
-#include "ci/ci_string_class.h"
-#include "ci/ci_strings.h"
+#include "ci/flat/ci_strings_defs.h"
+#include "ci/flat/ci_string_address.h"
+#include "ci/flat/ci_string_class.h"
+#include "ci/flat/ci_strings.h"
 
 #include "helpers/spin.h"
 

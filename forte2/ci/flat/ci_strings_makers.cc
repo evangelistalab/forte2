@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <numeric>
 
-#include "ci/ci_string_address.h"
-#include "ci/ci_strings.h"
-#include "ci/ci_strings_makers.h"
+#include "ci/flat/ci_string_address.h"
+#include "ci/flat/ci_strings.h"
+#include "ci/flat/ci_strings_makers.h"
 
 #include "helpers/cartesian_product.hpp"
 #include "helpers/indexing.hpp"
