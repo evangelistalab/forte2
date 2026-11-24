@@ -9,4 +9,5 @@ User guide
     symmetry
     integrals
     rdms
+    exporting_orbitals
     gradients

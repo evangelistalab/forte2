@@ -60,40 +60,7 @@ To run the whole chain, call ``run`` on its last method::
     casscf.run()
 
 To use a relativistic Hamiltonian, see :doc:`relativistic`.
-
-Exporting orbitals
-------------------
-
-Once a method has been run, you can export its orbitals for visualization in any program that reads Molden files (VibeMol, Molden, Jmol, IboView, ...)::
-
-    forte2.write_molden(rhf, "rhf.molden")
-    forte2.write_molden(casscf, "casscf.molden")
-
-This works for SCF references (RHF, ROHF, UHF), AVAS, and active-space drivers and solvers (``CI``, ``MCOptimizer``, ``CISolver``, ...).
-Each orbital carries its symmetry label, an energy and an occupation:
-
-* SCF exports orbital energies and occupations from the SCF density. For reordered orbitals, it projects the stored Fock matrix onto the exported orbitals.
-* AVAS: the reference Fock diagonal, and the nominal (0, 1 or 2) occupations of the SCF reference it rotates.
-* CI, MCOptimizer and their solvers: the diagonal of the generalized Fock matrix; 2 for core orbitals, the diagonal of the state-averaged 1-RDM for active orbitals (the natural occupation numbers when ``final_orbitals="natural"``), and 0 for virtual orbitals.
-
-Methods whose orbitals derive from a correlated calculation by other means, such as ``ASET`` and ``DSRG_MRPT2``, are not supported directly; write the orbitals of the underlying ``MCOptimizer`` instead, or pass the coefficients explicitly as shown below.
-
-To write any other set of orbitals, for example localized orbitals, pass the ``System`` and the coefficients.
-:func:`forte2.molden_string <forte2.orbitals.molden.molden_string>` returns the same text without writing a file::
-
-    forte2.write_molden(rhf.system, "localized.molden", C=C_loc, occupations=occ)
-    text = forte2.molden_string(casscf)
-
-Explicit coefficient arrays must contain at least one orbital, and all supplied
-coefficients, energies, and occupations must be finite.
-
-Molden files cover real, one-component orbitals with shells up to g.
-Pass ``ignore_unsupported_shells=True`` to omit shells beyond g and their
-MO coefficients. The exported orbitals may lose normalization.
-
-For two-component orbitals, or for grid-based visualization, write cube files::
-
-    forte2.write_orbital_cubes(rhf.system, rhf.mos.C[0], indices=[0, 1, 2], filepath="cubes")
+To visualize orbitals from a completed method, see :doc:`exporting_orbitals`.
 
 Parallelism
 -----------
