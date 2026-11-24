@@ -73,7 +73,8 @@ template <typename GetHoleList, typename OrbitalIndex>
 void RelCISigmaBuilder::contract_spinor_rdm(np_vector_complex C_left, np_vector_complex C_right,
                                             std::complex<double>* rdm_data,
                                             const CIOrbitalIrrepBlocks& orbitals,
-                                            const StringAddress& holes, GetHoleList get_hole_list,
+                                            const ci_flat::StringAddress& holes,
+                                            GetHoleList get_hole_list,
                                             OrbitalIndex orbital_index) const {
     if (lists_.ndet() == 0)
         return;
@@ -132,10 +133,10 @@ np_tensor4_complex RelCISigmaBuilder::compute_so_2rdm(np_vector_complex C_left,
 
     const size_t npairs = norb * (norb - 1) / 2;
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({npairs, npairs});
-    contract_spinor_rdm(C_left, C_right, rdm.data(), spinor_pairs_, *lists_.alpha_address_2h(),
-                        &CIStrings::get_alpha_2h_list, [](const H2StringSubstitution& sub) {
-                            return pair_index_gt(sub.p, sub.q);
-                        });
+    contract_spinor_rdm(
+        C_left, C_right, rdm.data(), spinor_pairs_, *lists_.alpha_address_2h(),
+        &ci_flat::CIStrings::get_alpha_2h_list,
+        [](const ci_flat::H2StringSubstitution& sub) { return pair_index_gt(sub.p, sub.q); });
     return matrix::packed_tensor4_to_tensor4<std::complex<double>>(rdm);
 }
 
@@ -149,7 +150,8 @@ np_tensor6_complex RelCISigmaBuilder::compute_so_3rdm(np_vector_complex C_left,
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({ntriplets, ntriplets});
     const auto triplets = CIOrbitalIrrepBlocks::spinor_triplets(lists_);
     contract_spinor_rdm(C_left, C_right, rdm.data(), triplets, *lists_.alpha_address_3h(),
-                        &CIStrings::get_alpha_3h_list, [](const H3StringSubstitution& sub) {
+                        &ci_flat::CIStrings::get_alpha_3h_list,
+                        [](const ci_flat::H3StringSubstitution& sub) {
                             return triplet_index_gt(sub.p, sub.q, sub.r);
                         });
 

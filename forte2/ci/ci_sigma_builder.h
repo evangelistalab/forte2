@@ -11,6 +11,7 @@
 #include "helpers/ndarray.h"
 #include "helpers/spin.h"
 
+#include "ci/ci_strings.h"
 #include "ci/flat/ci_strings.h"
 #include "ci/ci_orbital_blocks.h"
 #include "determinant/slater_rules.h"
@@ -270,8 +271,8 @@ class CISigmaBuilder {
 
     /// @brief The CI algorithm to use for building the Hamiltonian
     CIAlgorithm algorithm_ = CIAlgorithm::Knowles_Handy; // Default to Knowles-Handy algorithm
-    /// @brief The CIStrings object containing the determinant classes and their properties
-    const CIStrings& lists_;
+    /// @brief The ci_flat::CIStrings object containing the determinant classes and their properties
+    const ci_flat::CIStrings& lists_;
     // Both algorithms use ordered pairs for the opposite-spin 2-RDM.
     const CIOrbitalIrrepBlocks opposite_spin_pairs_ = CIOrbitalIrrepBlocks::ordered_pairs(lists_);
     std::optional<CIOrbitalIrrepBlocks> orbital_rows_;
@@ -381,18 +382,19 @@ class CISigmaBuilder {
     template <typename Gather>
     void contract_mixed_spin_rdm(np_vector C_left, np_vector C_right, double* rdm_data,
                                  const CIOrbitalIrrepBlocks& orbitals,
-                                 const StringAddress& alpha_holes, const StringAddress& beta_holes,
+                                 const ci_flat::StringAddress& alpha_holes,
+                                 const ci_flat::StringAddress& beta_holes,
                                  std::string_view rdm_name, Gather gather) const;
 };
 
 [[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,
-                                             Spin spin, const CIStrings& lists, int class_Ia,
-                                             int class_Ib);
+                                             Spin spin, const ci_flat::CIStrings& lists,
+                                             int class_Ia, int class_Ib);
 
-void zero_block(std::span<double> dest, Spin spin, const CIStrings& lists, int class_Ia,
+void zero_block(std::span<double> dest, Spin spin, const ci_flat::CIStrings& lists, int class_Ia,
                 int class_Ib);
 
 void scatter_block(std::span<double> source, std::span<double> dest, Spin spin,
-                   const CIStrings& lists, int class_Ia, int class_Ib);
+                   const ci_flat::CIStrings& lists, int class_Ia, int class_Ib);
 
 } // namespace forte2

@@ -8,9 +8,8 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/ndarray.h>
 
-#include "ci/flat/ci_strings.h"
+#include "ci/ci_strings.h"
 #include "ci/ci_permutation.hpp"
-#include "ci/flat/ci_string_address.h"
 #include "ci/ci_sigma_builder.h"
 #include "determinant/ci_spin_adapter.h"
 #include "ci/rel_ci_sigma_builder.h"
@@ -71,7 +70,6 @@ void export_ci_strings_api(nb::module_& sub_m) {
             "gas_max"_a,
             "Initialize CIStrings with the electron counts, number of point-group irreps, state "
             "symmetry, orbital symmetries, and occupation bounds for each GAS space.")
-        .def_prop_ro("alpha_address", &CIStrings::alpha_address)
         .def_prop_ro("na", &CIStrings::na)
         .def_prop_ro("nb", &CIStrings::nb)
         .def_prop_ro("symmetry", &CIStrings::symmetry)
@@ -102,6 +100,7 @@ void export_ci_sigma_builder_api(nb::module_& sub_m) {
     nb::class_<CISigmaBuilder>(sub_m, "CISigmaBuilder")
         .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int, const std::string&>(),
              "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "algorithm"_a = "kh",
+             nb::keep_alive<1, 2>(),
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
         .def("get_algorithm", &CISigmaBuilder::get_algorithm,
              "Get the current sigma build algorithm")
@@ -181,7 +180,8 @@ void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
         .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int,
                       const std::string&>(),
              "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "algorithm"_a = "hz",
-             "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
+             nb::keep_alive<1, 2>(),
+             "Initialize the RelCISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
         .def("get_algorithm", &RelCISigmaBuilder::get_algorithm,
              "Get the current sigma build algorithm")
         .def("set_memory", &RelCISigmaBuilder::set_memory, "memory"_a,

@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <map>
 
-namespace forte2 {
+namespace forte2::ci_flat {
 class StringClass {
   public:
     StringClass(size_t symmetry, size_t nirrep,
@@ -66,4 +66,4 @@ class StringClass {
     std::array<String, 6> gas_masks_;
 };
 
-} // namespace forte2
+} // namespace forte2::ci_flat

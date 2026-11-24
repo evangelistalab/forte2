@@ -10,7 +10,7 @@
 #include "ci/flat/ci_string_address.h"
 #include "ci/flat/ci_string_class.h"
 
-namespace forte2 {
+namespace forte2::ci_flat {
 
 class CIStrings {
   public:
@@ -312,4 +312,4 @@ class CIStrings {
     }
 };
 
-} // namespace forte2
+} // namespace forte2::ci_flat

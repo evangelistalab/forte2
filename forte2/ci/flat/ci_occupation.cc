@@ -4,7 +4,7 @@
 
 #include "ci_occupation.h"
 
-namespace forte2 {
+namespace forte2::ci_flat {
 
 void add_occupation_pair(const occupation_t& alpha_occ, const occupation_t& beta_occ,
                          std::vector<occupation_t>& alpha_occupations,
@@ -176,4 +176,4 @@ generate_1h1p_occupations(const std::vector<std::array<int, 6>>& gas_occupations
     return one_hole_one_particle_occ;
 }
 
-} // namespace forte2
+} // namespace forte2::ci_flat

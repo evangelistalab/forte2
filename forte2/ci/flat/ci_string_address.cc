@@ -1,7 +1,7 @@
 #include "ci_string_address.h"
 #include "helpers/numeric.hpp"
 
-namespace forte2 {
+namespace forte2::ci_flat {
 
 StringAddress::StringAddress(const std::vector<int>& gas_size, int ne,
                              const std::vector<std::vector<String>>& strings)
@@ -48,4 +48,4 @@ int StringAddress::nclasses() const { return nclasses_; }
 
 size_t StringAddress::strpcls(int h) const { return strpcls_[h]; }
 
-} // namespace forte2
+} // namespace forte2::ci_flat

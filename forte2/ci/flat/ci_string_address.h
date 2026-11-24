@@ -6,7 +6,7 @@
 
 #include "determinant/determinant.h"
 
-namespace forte2 {
+namespace forte2::ci_flat {
 /**
  * @brief The StringAddress class
  * This class computes the address of a string
@@ -61,4 +61,4 @@ class StringAddress {
     const std::vector<int> gas_size_;
 };
 
-} // namespace forte2
+} // namespace forte2::ci_flat

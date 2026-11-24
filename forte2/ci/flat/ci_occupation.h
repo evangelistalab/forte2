@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace forte2 {
+namespace forte2::ci_flat {
 
 const size_t max_active_spaces = 6;
 using occupation_t = std::array<int, max_active_spaces>;
@@ -32,4 +32,4 @@ std::vector<std::array<int, 6>>
 generate_1h1p_occupations(const std::vector<std::array<int, 6>>& gas_occupations,
                           const std::vector<int>& gas_size);
 
-} // namespace forte2
+} // namespace forte2::ci_flat

@@ -25,9 +25,11 @@ double scatter_b_time_write = 0.0;
 double transpose_1_time = 0.0;
 double transpose_2_time = 0.0;
 
-CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
+CISigmaBuilder::CISigmaBuilder(const CIStrings& ci_strings, double E, np_matrix& H, np_tensor4& V,
                                int log_level, const std::string& algorithm)
-    : lists_(lists), E_(E), slater_rules_(lists.norb(), E, H, V), log_level_(log_level) {
+    : lists_(ci_strings.flat_strings()), E_(E), slater_rules_(ci_strings.norb(), E, H, V),
+      log_level_(log_level) {
+    const auto& lists = lists_;
 
     if (algorithm == "kh" or algorithm == "knowles-handy") {
         algorithm_ = CIAlgorithm::Knowles_Handy;
@@ -253,7 +255,7 @@ void CISigmaBuilder::H0(std::span<double> basis, std::span<double> sigma) const 
 }
 
 std::span<double> gather_block(std::span<double> source, std::span<double> dest, Spin spin,
-                               const CIStrings& lists, int class_Ia, int class_Ib) {
+                               const ci_flat::CIStrings& lists, int class_Ia, int class_Ib) {
     const auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
     const auto offset = lists.block_offset(block_index);
     const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
@@ -269,7 +271,7 @@ std::span<double> gather_block(std::span<double> source, std::span<double> dest,
     return dest;
 }
 
-void zero_block(std::span<double> dest, Spin spin, const CIStrings& lists, int class_Ia,
+void zero_block(std::span<double> dest, Spin spin, const ci_flat::CIStrings& lists, int class_Ia,
                 int class_Ib) {
     const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
     const auto maxIb = lists.beta_address()->strpcls(class_Ib);
@@ -286,7 +288,7 @@ void zero_block(std::span<double> dest, Spin spin, const CIStrings& lists, int c
 }
 
 void scatter_block(std::span<double> source, std::span<double> dest, Spin spin,
-                   const CIStrings& lists, int class_Ia, int class_Ib) {
+                   const ci_flat::CIStrings& lists, int class_Ia, int class_Ib) {
     size_t maxIa = lists.alpha_address()->strpcls(class_Ia);
     size_t maxIb = lists.beta_address()->strpcls(class_Ib);
 

@@ -6,7 +6,7 @@
 
 #include "determinant/determinant.h"
 
-namespace forte2 {
+namespace forte2::ci_flat {
 
 /// A structure to store how the string J is connected to the string I and the corresponding sign
 /// I -> sign J
@@ -91,4 +91,4 @@ using H2List = std::map<HListKey, std::vector<H2StringSubstitution>>;
 /// string I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
 using H3List = std::map<HListKey, std::vector<H3StringSubstitution>>;
 
-} // namespace forte2
+} // namespace forte2::ci_flat

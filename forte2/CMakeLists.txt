@@ -123,6 +123,9 @@ nanobind_add_module(
   ci/ci_sigma_builder_harrison_zarrabian.cc
   ci/ci_sigma_builder_knowles_handy.cc
   determinant/ci_spin_adapter.cc
+  ci/ci_strings.cc
+  ci/ci_string_address.cc
+  ci/ci_occupation.cc
   ci/flat/ci_strings.cc
   ci/flat/ci_strings_makers.cc
   ci/flat/ci_string_address.cc

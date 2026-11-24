@@ -12,7 +12,7 @@
 
 #include "ci_strings.h"
 
-namespace forte2 {
+namespace forte2::ci_flat {
 
 // Global debug flag
 bool debug_gas_strings = false;
@@ -336,4 +336,4 @@ const std::vector<H3StringSubstitution>& CIStrings::get_beta_3h_list(int class_I
     return lookup_hole_list<H3List, H3StringSubstitution>(beta_3h_list, class_I, add_I, class_J);
 }
 
-} // namespace forte2
+} // namespace forte2::ci_flat
