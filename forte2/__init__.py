@@ -28,6 +28,7 @@ from .orbitals import (
     CubeGenerator,
     Cube,
     ASET,
+    ASET2,
     write_orbital_cubes,
     SpinorUpcaster,
 )

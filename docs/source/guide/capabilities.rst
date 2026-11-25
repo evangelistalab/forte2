@@ -51,6 +51,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
 * Various orbital manipulation routines
   
   * Zeroth order active space embedding theory (ASET(0)) [5]_
+  * Second-order active-space embedding theory (ASET(2)) [12]_
   * Intrinsic atomic orbitals (IAO) [6]_
   * Intrinsic bond orbitals (IBO) [6]_
   * A cube file generator for visualizing molecular orbitals
@@ -69,3 +70,4 @@ References
 .. [9] Surjuse, K. A.; Valeev, E. F. SAP-X2C: Optimally-Simple Two-Component Relativistic Hamiltonian with Size-Intensive Picture Change. J. Chem. Theory Comput. 2026, 22 (7), 3443-3452. https://doi.org/10.1021/acs.jctc.6c00032.
 .. [10] Plasser, F.; Ruckenbauer, M.; Mai, S.; Oppel, M.; Marquetand, P.; González, L. Efficient and Flexible Computation of Many-Electron Wave Function Overlaps. J. Chem. Theory Comput. 2016, 12 (3), 1207-1219. https://doi.org/10.1021/acs.jctc.5b01148.
 .. [11] Malmqvist, P. Å. Calculation of Transition Density Matrices by Nonunitary Orbital Transformations. Int. J. Quantum Chem. 1986, 30 (4), 479-494. https://doi.org/10.1002/qua.560300404.
+.. [12] He, N.; Li, C.; Evangelista, F. A. Second-Order Active-Space Embedding Theory. J. Chem. Theory Comput. 2022, 18 (3), 1527-1541. https://doi.org/10.1021/acs.jctc.1c01099.
