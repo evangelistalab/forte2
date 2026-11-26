@@ -12,12 +12,10 @@
 
 namespace forte2 {
 
-RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& ci_strings, double E, np_matrix_complex& H,
+RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H,
                                      np_tensor4_complex& V, int log_level,
                                      const std::string& algorithm)
-    : lists_(ci_strings.flat_strings()), E_(E), rel_slater_rules_(ci_strings.norb(), E, H, V),
-      log_level_(log_level) {
-    const auto& lists = lists_;
+    : lists_(lists), E_(E), rel_slater_rules_(lists.norb(), E, H, V), log_level_(log_level) {
     if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
         algorithm_ = CIAlgorithm::Harrison_Zarrabian;
     } else if (algorithm == "kh" or algorithm == "knowles-handy") {
@@ -33,19 +31,6 @@ RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& ci_strings, double E, np_m
     if (lists.nb() != 0)
         throw std::runtime_error("RelCISigmaBuilder requires nb == 0 (two-component CI treats all "
                                  "electrons as alpha spinors).");
-
-    // Find the size of the largest symmetry block
-    size_t max_size = 0;
-    for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        max_size = std::max(lists.block_size(nI), max_size);
-    }
-
-    LOG(log_level_) << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("
-                    << 2 * max_size * sizeof(std::complex<double>) / (1024 * 1024) << " MB).\n";
-
-    // Resize the TR and TL vectors to the maximum block size
-    TR.resize(max_size);
-    TL.resize(max_size);
 
     set_Hamiltonian(E, H, V);
 }
@@ -148,62 +133,6 @@ void RelCISigmaBuilder::sigma_two_electron(np_vector_complex basis, np_vector_co
 void RelCISigmaBuilder::H0(std::span<std::complex<double>> basis,
                            std::span<std::complex<double>> sigma) const {
     add(basis.size(), static_cast<std::complex<double>>(E_), basis.data(), 1, sigma.data(), 1);
-}
-
-std::span<std::complex<double>> gather_block(std::span<std::complex<double>> source,
-                                             std::span<std::complex<double>> dest, Spin spin,
-                                             const ci_flat::CIStrings& lists, int class_Ia,
-                                             int class_Ib) {
-    const auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
-    const auto offset = lists.block_offset(block_index);
-    const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
-    const auto maxIb = lists.beta_address()->strpcls(class_Ib);
-
-    if (is_alpha(spin)) {
-        std::span<std::complex<double>> dest_span(source.data() + offset, maxIa * maxIb);
-        return dest_span;
-    }
-    for (size_t Ia{0}; Ia < maxIa; ++Ia)
-        for (size_t Ib{0}; Ib < maxIb; ++Ib)
-            dest[Ib * maxIa + Ia] = source[offset + Ia * maxIb + Ib];
-    return dest;
-}
-
-void zero_block(std::span<std::complex<double>> dest, Spin spin, const ci_flat::CIStrings& lists,
-                int class_Ia, int class_Ib) {
-    const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
-    const auto maxIb = lists.beta_address()->strpcls(class_Ib);
-
-    if (is_alpha(spin)) {
-        for (size_t Ia{0}; Ia < maxIa; ++Ia)
-            for (size_t Ib{0}; Ib < maxIb; ++Ib)
-                dest[Ia * maxIb + Ib] = 0.0;
-    } else {
-        for (size_t Ib{0}; Ib < maxIb; ++Ib)
-            for (size_t Ia{0}; Ia < maxIa; ++Ia)
-                dest[Ib * maxIa + Ia] = 0.0;
-    }
-}
-
-void scatter_block(std::span<std::complex<double>> source, std::span<std::complex<double>> dest,
-                   Spin spin, const ci_flat::CIStrings& lists, int class_Ia, int class_Ib) {
-    size_t maxIa = lists.alpha_address()->strpcls(class_Ia);
-    size_t maxIb = lists.beta_address()->strpcls(class_Ib);
-
-    auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
-    auto offset = lists.block_offset(block_index);
-
-    if (is_alpha(spin)) {
-        // Add m to C
-        for (size_t I{0}, maxI{maxIa * maxIb}; I < maxI; ++I)
-            // for (size_t Ib{0}; Ib < maxIb; ++Ib)
-            dest[offset + I] += source[I];
-    } else {
-        // Add m transposed to C
-        for (size_t Ia{0}; Ia < maxIa; ++Ia)
-            for (size_t Ib{0}; Ib < maxIb; ++Ib)
-                dest[offset + Ia * maxIb + Ib] += source[Ib * maxIa + Ia];
-    }
 }
 
 np_vector_complex RelCISigmaBuilder::form_Hdiag(const std::vector<Determinant>& dets) const {

@@ -38,6 +38,7 @@ CIStrings::CIStrings(size_t na, size_t nb, int nirrep, int symmetry,
     };
     setup_spin(alpha_strings_, std::move(alpha));
     setup_spin(beta_strings_, std::move(beta));
+    basis->prepare_substitutions();
 
     for (const auto& [alpha_occ, beta_occ] : occupation_pairs_) {
         for (int alpha_irrep = 0; alpha_irrep < nirrep; ++alpha_irrep) {

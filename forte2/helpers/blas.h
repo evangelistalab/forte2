@@ -30,16 +30,17 @@ void cblas_zdotc_sub(const int N, const std::complex<double>* X, const int incX,
 
 } // extern "C"
 
-inline void matrix_product(char transa, char transb, int m, int n, int k, double alpha, double* a,
-                           int lda, double* b, int ldb, double beta, double* c, int ldc) {
+inline void matrix_product(char transa, char transb, int m, int n, int k, double alpha,
+                           const double* a, int lda, const double* b, int ldb, double beta,
+                           double* c, int ldc) {
     if (m == 0 || n == 0 || k == 0)
         return;
     dgemm_(&transb, &transa, &n, &m, &k, &alpha, b, &ldb, a, &lda, &beta, c, &ldc);
 }
 
 inline void matrix_product(char transa, char transb, int m, int n, int k,
-                           std::complex<double> alpha, std::complex<double>* a, int lda,
-                           std::complex<double>* b, int ldb, std::complex<double> beta,
+                           std::complex<double> alpha, const std::complex<double>* a, int lda,
+                           const std::complex<double>* b, int ldb, std::complex<double> beta,
                            std::complex<double>* c, int ldc) {
     if (m == 0 || n == 0 || k == 0)
         return;

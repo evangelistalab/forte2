@@ -4,6 +4,7 @@
 
 #include "ci_sigma_builder.h"
 #include "ci/flat/ci_strings_makers.h"
+#include "ci/flat/gather_block.h"
 
 namespace forte2 {
 
@@ -11,8 +12,8 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
                                           np_vector C_left, np_vector C_right, Spin spin) const {
     const auto& sigmabuilder_left = *this;
 
-    const auto& lists_left = sigmabuilder_left.lists_;
-    const auto& lists_right = sigmabuilder_right.lists_;
+    const auto& lists_left = sigmabuilder_left.lists_.flat_strings();
+    const auto& lists_right = sigmabuilder_right.lists_.flat_strings();
 
     // Get the number of electrons
     const auto na_left = lists_left.na();
