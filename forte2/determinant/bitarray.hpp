@@ -100,16 +100,17 @@ template <size_t N> class BitArray {
         word_t mask_;  // mask for the bit
     };
 
-    /// @brief Access the bits of a BitArray object as if they were a vector of bools
+    /// @brief Access an occupation bit.
     /// @param index the index of the bit to access
-    /// @return a Proxy object that can be used to read or write the bit
-    Proxy operator[](size_t index) noexcept { return Proxy(getword(index), whichbit(index)); }
-
-    /// @brief Access the bits of a BitArray object as if they were a vector of bools (const
-    /// version)
-    /// @param index the index of the bit to access
-    /// @return the value of the bit
-    constexpr bool operator[](size_t index) const noexcept { return get_bit(index); }
+    /// @return A writable proxy for mutable lvalues, or a bool for const objects and rvalues.
+    constexpr auto operator[](this auto&& self, size_t index) noexcept {
+        using Self = std::remove_reference_t<decltype(self)>;
+        if constexpr (std::is_lvalue_reference_v<decltype(self)> && !std::is_const_v<Self>) {
+            return Proxy(static_cast<BitArray&>(self).getword(index), whichbit(index));
+        } else {
+            return static_cast<const BitArray&>(self).get_bit(index);
+        }
+    }
 
     class iterator {
       public:
