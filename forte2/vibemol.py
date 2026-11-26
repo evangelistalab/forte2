@@ -1,5 +1,7 @@
 """Prepare Forte2 calculation results for the VibeMol notebook viewer."""
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from forte2.mcopt import MCOptimizer
@@ -162,3 +164,174 @@ def transition_dipole(method, i, j) -> tuple[np.ndarray, float]:
     raise ValueError(
         f"No transition for {(i, j)}. Available pairs: {sorted(available)}."
     )
+
+
+@dataclass(frozen=True)
+class Shown:
+    """Handle to the last queued command and its applied vector scale.
+
+    Attributes
+    ----------
+    future : object
+        Future returned by the viewer's last command.
+    scale : float or None
+        Applied scale in angstrom per atomic unit of the quantity shown.
+        None when the command did not specify a scale.
+    """
+
+    future: object
+    scale: float | None = None
+
+
+def _require_sequential_commands(viewer):
+    if getattr(viewer, "sequential_commands", False) is not True:
+        raise RuntimeError(
+            "forte2.vibemol needs vibemol-widget 0.2.0 or later, "
+            "which runs commands in order"
+        )
+
+
+def _scale_for_length(magnitude, length, quantity):
+    if magnitude == 0:
+        raise ValueError(f"Cannot scale zero {quantity}. Supply an explicit scale.")
+    return length / float(magnitude)
+
+
+def show_orbitals(viewer, method, *, indices=None, title=None) -> Shown:
+    """Load a method's Molden document and optionally show selected orbitals.
+
+    Parameters
+    ----------
+    viewer : object
+        Notebook viewer supporting sequential commands.
+    method : Method
+        Executed method supported by the Molden writer.
+    indices : iterable of int, optional
+        One-based Molden indices to show in the current viewer mode.
+    title : str, optional
+        Molden title and filename stem.
+
+    Returns
+    -------
+    Shown
+        Future for loading, or for showing the selected orbitals if given.
+    """
+    _require_sequential_commands(viewer)
+    document = orbitals_molden(method, title=title)
+    future = viewer.load(document, clear_first=True)
+    if indices is not None:
+        future = viewer.show_orbitals(indices)
+    return Shown(future)
+
+
+def show_forces(
+    viewer,
+    method,
+    root=None,
+    *,
+    scale=None,
+    max_length=1.0,
+    name="forces",
+    color="#B22D73",
+) -> Shown:
+    """Draw one force arrow per atom on the viewer's active structure.
+
+    Parameters
+    ----------
+    viewer : object
+        Notebook viewer supporting sequential commands.
+    method : MCOptimizer, RHF, UHF or GHF
+        Method supplying forces in the active structure's System atom order.
+    root : int, optional
+        Zero-based root for MCOptimizer. Use None for SCF.
+    scale : float, optional
+        Angstrom per Hartree/bohr. If omitted, scale the largest force to
+        ``max_length``.
+    max_length : float, optional
+        Length in angstrom of the largest force arrow for automatic scaling.
+    name, color : str, optional
+        Vector set name and color.
+
+    Returns
+    -------
+    Shown
+        Future and applied scale, which can be reused for another state.
+    """
+    _require_sequential_commands(viewer)
+    values = forces(method, root=root)
+    if scale is None:
+        scale = _scale_for_length(
+            np.linalg.norm(values, axis=1).max(), max_length, "forces"
+        )
+    future = viewer.set_atom_vectors(
+        name, values.tolist(), color, scale=scale, atomic_numbers=atomic_numbers(method)
+    )
+    return Shown(future, scale)
+
+
+def show_dipole(
+    viewer, method, root, *, scale=None, length=1.5, name="dipole", color="#2365C6"
+) -> Shown:
+    """Draw a neutral state's total dipole at the center of mass.
+
+    Parameters
+    ----------
+    viewer : object
+        Notebook viewer supporting sequential commands.
+    method : ActiveSpaceDriver
+        Executed driver with ``do_transition_dipole=True``.
+    root : int
+        Zero-based absolute root index.
+    scale : float, optional
+        Angstrom per atomic unit of dipole. If omitted, use ``length``
+        to scale the dipole.
+    length : float, optional
+        Arrow length in angstrom for automatic scaling.
+    name, color : str, optional
+        Arrow name and color.
+
+    Returns
+    -------
+    Shown
+        Future and applied scale.
+
+    Raises
+    ------
+    ValueError
+        If the dipole is unavailable or zero without an explicit scale.
+    """
+    _require_sequential_commands(viewer)
+    vector = state_dipole(method, root)
+    if scale is None:
+        scale = _scale_for_length(np.linalg.norm(vector), length, "dipole")
+    future = viewer.set_arrow(name, vector.tolist(), color, scale=scale)
+    return Shown(future, scale)
+
+
+def show_transition_dipole(
+    viewer, method, i, j, *, length=2.4, name="transition dipole", color="#208375"
+) -> Shown:
+    """Draw a two-headed transition dipole whose overall sign is arbitrary.
+
+    Parameters
+    ----------
+    viewer : object
+        Notebook viewer supporting sequential commands.
+    method : ActiveSpaceDriver
+        Executed driver with ``do_transition_dipole=True``.
+    i, j : int
+        Zero-based absolute root indices, in either order.
+    length : float, optional
+        Arrow length in angstrom.
+    name, color : str, optional
+        Arrow name and color.
+
+    Returns
+    -------
+    Shown
+        Future for creating the arrow.
+    """
+    _require_sequential_commands(viewer)
+    vector, _ = transition_dipole(method, i, j)
+    future = viewer.set_arrow(name, vector.tolist(), color, length=length, heads="both")
+    return Shown(future)
