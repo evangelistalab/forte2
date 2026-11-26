@@ -89,6 +89,8 @@ def test_2c_casscf_with_rohf():
     assert (ci_solver.E[4] - ci_solver.E[3]) * EH_TO_WN == pytest.approx(
         393.7085978290238, abs=1e-2
     )
+    # spinors interleave alpha and beta, so the singly occupied alpha orbital is 9th
+    assert conv.mos.occupations[0][:10].tolist() == [1] * 9 + [0]
 
 
 def test_2c_casscf_with_uhf():

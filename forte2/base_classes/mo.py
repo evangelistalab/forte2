@@ -7,12 +7,28 @@ import numpy as np
 class MO:
     """
     Class to hold molecular orbital coefficients and their associated irrep labels and indices.
+
+    Parameters
+    ----------
+    C : list[NDArray]
+        The MO coefficients: one array for restricted or spinorbital MOs, and the alpha
+        and beta arrays for unrestricted MOs.
+    spinorbital : bool
+        Whether the MOs are spinors.
+    irrep_labels : list[list[str]]
+        The irrep label of each MO, one list per array in ``C``.
+    irrep_indices : list[list[int]]
+        The irrep index of each MO, one list per array in ``C``.
+    occupations : list[NDArray], optional, default=None
+        The occupation of each MO in the reference determinant. Same length convention as ``C``.
+        None if the MOs have no associated reference determinant.
     """
 
     C: list
     spinorbital: bool
     irrep_labels: list
     irrep_indices: list
+    occupations: list | None = None
 
     nmo: int = field(init=False)
     nbf: int = field(init=False)
@@ -55,6 +71,20 @@ class MO:
                 raise ValueError(
                     f"Length of irrep_labels[{i}] and irrep_indices[{i}] must match number of MOs ({self.nmo}), but got {len(labels)} and {len(indices)}."
                 )
+        if self.occupations is not None:
+            self.occupations = [
+                np.asarray(occ, dtype=float) for occ in self.occupations
+            ]
+            nocc_arrays = 1 if self.spinorbital else 2
+            if len(self.occupations) != nocc_arrays:
+                raise ValueError(
+                    f"occupations must hold {nocc_arrays} array(s), but got {len(self.occupations)}."
+                )
+            for i, occ in enumerate(self.occupations):
+                if occ.shape != (self.nmo,):
+                    raise ValueError(
+                        f"occupations[{i}] has shape {occ.shape} but expected ({self.nmo},)."
+                    )
 
     @property
     def Ca(self):
@@ -83,6 +113,9 @@ class MO:
             spinorbital=self.spinorbital,
             irrep_labels=[label.copy() for label in self.irrep_labels],
             irrep_indices=[ind.copy() for ind in self.irrep_indices],
+            occupations=(
+                [occ.copy() for occ in self.occupations] if self.occupations else None
+            ),
         )
 
     def to_spinorbital_basis(self, cmplx=True):
@@ -115,16 +148,25 @@ class MO:
             C_2c[: self.nbf, ::2] = self.C[0]
             C_2c[self.nbf :, 1::2] = self.C[0]
 
+        occupations = None
+        if self.occupations is not None:
+            occ_2c = np.zeros(self.nmo * 2)
+            occ_2c[::2] = self.occupations[0]
+            occ_2c[1::2] = self.occupations[1]
+            occupations = [occ_2c]
+
         return self.__class__(
             C=[C_2c],
             spinorbital=True,
             irrep_labels=list_spatial_to_spinor(self.irrep_labels),
             irrep_indices=list_spatial_to_spinor(self.irrep_indices),
+            occupations=occupations,
         )
 
     def permute(self, perm):
         """
-        Apply a permutation to the MO coefficients and irrep labels and indices.
+        Apply a permutation to the MO coefficients, irrep labels and indices, and
+        occupations.
 
         Parameters
         ----------
@@ -154,4 +196,7 @@ class MO:
             spinorbital=self.spinorbital,
             irrep_labels=[[labels[i] for i in perm] for labels in self.irrep_labels],
             irrep_indices=[[ind[i] for i in perm] for ind in self.irrep_indices],
+            occupations=(
+                [occ[perm] for occ in self.occupations] if self.occupations else None
+            ),
         )

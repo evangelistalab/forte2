@@ -1,3 +1,5 @@
+import numpy as np
+
 from forte2 import RHF, System
 from forte2.orbitals.iao import IAO
 from forte2.props.props import iao_partial_charge
@@ -23,6 +25,8 @@ def test_iao_hcn():
     assert charges == approx(
         [-0.007844869262523702, 0.21755558427361243, -0.2097107150110915]
     )
+    assert iao.charge_matrices(C_occ).sum(axis=0) == approx(np.eye(7))
+    assert np.allclose(IAO.from_mos(system, rhf.mos).C_iao, iao.C_iao)
 
 
 def test_iao_ch4():

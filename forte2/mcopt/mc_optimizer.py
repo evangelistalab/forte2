@@ -109,6 +109,8 @@ class MCOptimizerBase(ActiveSpaceDriver, Method):
 
         self.system = self.parent_method.system
         self.mos = self.parent_method.mos.copy()
+        # orbitals downstream of a correlated calculation have no reference determinant
+        self.mos.occupations = None
         self._check_orthonormal_orbitals()
         # make sure to register parent_method
         self.ci_solver = self.ci_solver(self.parent_method)

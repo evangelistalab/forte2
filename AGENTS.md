@@ -41,7 +41,10 @@ contract between links in the chain as three attributes set in `__post_init__`:
 
 `_register_parent_method` enforces all three at bind time (`__call__`), so incompatible pipelines fail
 at construction rather than mid-run. MO coefficients travel as an `MO` value object (`base_classes/mo.py`),
-reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`.
+reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`. `self.mos.occupations` holds the
+reference-determinant occupations (alpha and beta arrays for spatial MOs, one array for spinors);
+the SCF sets them, `copy`/`permute`/`to_spinorbital_basis` carry them, and the active-space drivers
+set them to `None`.
 
 #### Solvers and drivers
 
@@ -164,7 +167,7 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 - `mcopt` — MCSCF/CASSCF/GASSCF optimizer, exposed as `forte2.MCOptimizer` (not `MCSCF`).
 - `dsrg` — DSRG-MRPT2 and its relativistic variant.
 - `x2c` — exact two-component relativistic transform (`sf` scalar, `so` spin-orbit); gated by `System.x2c.x2c_type` (`System.x2c` is always an `X2CParams`; `X2CParams()` means no X2C).
-- `orbitals` — AVAS, ASET embedding, IAO/IBO, semicanonicalizer, cube generation, `SpinorUpcaster`.
+- `orbitals` — AVAS, ASET embedding, IAO, `Localizer` (IBO localization of orbital sets), semicanonicalizer, cube generation, `SpinorUpcaster`.
 - `props`, `gradients`, `optimize` — 1e-properties/populations; DF-based analytic gradients plus
   `FDGradient`, which differentiates *any* rebuildable method's energy by finite differences (see
   "Rebuilding a chain at a new geometry" above); `GeometryOptimizer` drives either.

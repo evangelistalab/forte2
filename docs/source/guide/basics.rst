@@ -61,6 +61,33 @@ To run the whole chain, call ``run`` on its last method::
 
 To use a relativistic Hamiltonian, see :doc:`relativistic`.
 
+Orbital localization
+--------------------
+
+``Localizer`` rotates orbitals into intrinsic bond orbitals (IBOs), which maximize the charges of
+the orbitals on single atoms, measured in intrinsic atomic orbitals (IAOs). To localize the AVAS
+active orbitals before the CASSCF calculation, insert a ``Localizer`` between them::
+
+    loc = forte2.Localizer()(avas)
+    casscf = forte2.MCOptimizer(ci_solver)(loc)
+
+Rotations within the active space don't change CASCI or CASSCF energies. Localized active orbitals
+help active-space solvers whose accuracy depends on the orbital basis, such as selected CI, because
+the strongest correlations then connect orbitals on neighboring atoms.
+
+By default, ``Localizer`` localizes the active orbitals, one GAS at a time. If the method before it
+defines no orbital spaces, for example an SCF method, ``Localizer`` localizes the occupied orbitals,
+the doubly and singly occupied ones separately. To localize other orbitals, pass their MO indices to
+``orbitals``, or a list of index lists to localize several sets separately, for example
+``orbitals=[[0, 1, 2], [5, 6]]``. If a set mixes orbital spaces, ``Localizer`` warns that the
+energies of the methods that follow change. To keep orbitals with different reference occupations
+apart, set ``split_by_occupation=True``; a doubly occupied orbital then never mixes with a singly
+occupied one.
+
+The IAOs span the frozen core, core, and active orbitals, or the occupied orbitals if there are no
+orbital spaces, so ``Localizer`` can't localize virtual orbitals. Localization breaks point-group
+symmetry, so build the ``System`` with ``symmetry=False``.
+
 Parallelism
 -----------
 

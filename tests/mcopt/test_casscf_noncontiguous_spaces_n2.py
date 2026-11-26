@@ -31,6 +31,7 @@ def test_mcscf_noncontiguous_spaces():
     virt = sorted(set(range(system.nbf)) - set(core + actv))
     perm = np.argsort(core + actv + virt)
     rhf.mos = rhf.mos.permute(perm)
+    assert np.array_equal(rhf.mos.occupations[0], perm < rhf.na)
 
     ci_solver = CISolver(
         State(nel=14, multiplicity=1, ms=0.0),
@@ -43,3 +44,4 @@ def test_mcscf_noncontiguous_spaces():
     )(rhf)
     mc.run()
     assert mc.E == approx(ecasscf)
+    assert mc.mos.occupations is None
