@@ -148,11 +148,10 @@ class VectorSpace {
         return c;
     }
 
-    /// @brief Negate a vector
-    Derived operator-() const {
-        Derived result = self();
-        result *= F{-1};
-        return result;
+    /// @brief Negate a vector, reusing its storage when called on an rvalue
+    Derived operator-(this auto self) {
+        self *= F{-1};
+        return self;
     }
 
     /// @brief Add two vectors
@@ -172,20 +171,17 @@ class VectorSpace {
     /// @brief Multiply a vector by a scalar
     /// @param scalar the scalar to multiply by
     /// @return the result of the multiplication
-    Derived operator*(F scalar) const {
-        Derived result = self();
-        result *= scalar;
-        return result;
+    Derived operator*(this auto self, F scalar) {
+        self *= scalar;
+        return self;
     }
 
     /// @brief Divide a vector by a scalar
     /// @param scalar the scalar to divide by
     /// @return the result of the division
-    Derived operator/(F scalar) const {
-        assert(scalar != F(0)); // Prevent division by zero
-        Derived result = self();
-        result /= scalar;
-        return result;
+    Derived operator/(this auto self, F scalar) {
+        self /= scalar;
+        return self;
     }
 
     /// @brief Add two vectors
