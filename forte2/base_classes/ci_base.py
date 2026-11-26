@@ -32,6 +32,9 @@ class CIBase(ActiveSpaceSolver):
     ### Non-init attributes
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
+    ao_hcore: np.ndarray | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     # By default, assume the solver is not invariant to orbital rotations.
     # Subclasses can override this.
@@ -165,7 +168,7 @@ class CIBase(ActiveSpaceSolver):
         """
         return np.dot(self.weights_flat, self.evals_flat)
 
-    def make_average_rdm(self, order: int):
+    def make_average_rdm(self, order: int) -> np.ndarray:
         """
         Make the state-averaged RDM of the given order, from the CI vectors, in each
         sub-solver's native representation (spin-free for one-component backends,
@@ -252,6 +255,7 @@ class CIBase(ActiveSpaceSolver):
         self.active_indices = self.mo_space.active_indices
 
         ints = self.make_active_space_ints()
+        self.ao_hcore = getattr(ints, "ao_hcore", None)
 
         active_orbsym = [
             [self.mos.irrep_indices[0][i] for i in active_space]

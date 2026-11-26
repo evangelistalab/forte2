@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.typing import NDArray
 
 from forte2.lib import ints
 from forte2.integrals.libcint_utils import (
@@ -193,7 +194,7 @@ def nuclear_repulsion(system):
         return ints.nuclear_repulsion(system.atoms)
 
 
-def overlap(system, basis1=None, basis2=None):
+def overlap(system, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the overlap integral between two basis sets.
 
@@ -219,7 +220,7 @@ def overlap(system, basis1=None, basis2=None):
         return cint_overlap(system, basis1, basis2)
 
 
-def kinetic(system, basis1=None, basis2=None):
+def kinetic(system, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the kinetic energy integral between two basis sets.
 
@@ -245,7 +246,7 @@ def kinetic(system, basis1=None, basis2=None):
         return cint_kinetic(system, basis1, basis2)
 
 
-def nuclear(system, basis1=None, basis2=None):
+def nuclear(system, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the nuclear attraction integral between two basis sets.
 
@@ -286,7 +287,9 @@ def nuclear(system, basis1=None, basis2=None):
             return cint_nuclear(system, basis1, basis2)
 
 
-def emultipole1(system, basis1=None, basis2=None, origin=None):
+def emultipole1(
+    system, basis1=None, basis2=None, origin=None
+) -> list[NDArray[np.float64]]:
     r"""
     Compute the electric multipole moment integrals of up to first order (dipole)
     between two basis sets.
@@ -329,7 +332,9 @@ def emultipole1(system, basis1=None, basis2=None, origin=None):
         return [overlap_mat, dipole[0], dipole[1], dipole[2]]
 
 
-def emultipole2(system, basis1=None, basis2=None, origin=None):
+def emultipole2(
+    system, basis1=None, basis2=None, origin=None
+) -> list[NDArray[np.float64]]:
     r"""
     Compute the electric multipole moment integrals of up to second order (quadrupole)
     between two basis sets.
@@ -363,7 +368,9 @@ def emultipole2(system, basis1=None, basis2=None, origin=None):
     return ints.emultipole2(basis1, basis2, origin)
 
 
-def emultipole3(system, basis1=None, basis2=None, origin=None):
+def emultipole3(
+    system, basis1=None, basis2=None, origin=None
+) -> list[NDArray[np.float64]]:
     r"""
     Compute the electric multipole moment integrals of up to third order (octupole)
     between two basis sets.
@@ -399,7 +406,7 @@ def emultipole3(system, basis1=None, basis2=None, origin=None):
     return ints.emultipole3(basis1, basis2, origin)
 
 
-def opVop(system, basis1=None, basis2=None):
+def opVop(system, basis1=None, basis2=None) -> list[NDArray[np.float64]]:
     r"""
     Compute the small component nuclear potential integral between two basis sets.
 
@@ -464,7 +471,7 @@ def _gaussian_nuclear_deriv_blocks(system, basis):
         yield atom, total + total.transpose(0, 2, 1)
 
 
-def nuclear_deriv(system, weights, basis1=None, basis2=None):
+def nuclear_deriv(system, weights, basis1=None, basis2=None) -> NDArray[np.float64]:
     """Contract nuclear-attraction derivatives without storing all matrices."""
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     weights = np.asarray(weights)
@@ -502,7 +509,7 @@ def _opvop_cint_deriv_blocks(system, basis):
     """Yield analytic libcint opVop derivatives one atom at a time."""
     atm, bas, env, shell_slice = _cint_env(system, basis, basis)
 
-    def format_cint_ip(raw):
+    def format_cint_ip(raw: NDArray[np.float64]) -> NDArray[np.float64]:
         raw = raw.transpose(0, 2, 1).reshape(3, 4, basis.size, basis.size)
         # Libcint's cross-product components use the transpose convention.
         raw[:, :3] *= -1.0
@@ -581,7 +588,7 @@ def _opvop_deriv_blocks(system, basis1, basis2):
     return _opvop_finite_difference_blocks(system, basis1, basis2)
 
 
-def opVop_deriv(system, weights, basis1=None, basis2=None):
+def opVop_deriv(system, weights, basis1=None, basis2=None) -> NDArray[np.float64]:
     """Contract all four opVop component derivatives with AO weights."""
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     weights = np.asarray(weights)
@@ -599,7 +606,7 @@ def opVop_deriv(system, weights, basis1=None, basis2=None):
     return gradient
 
 
-def erf_nuclear(system, omega, basis1=None, basis2=None):
+def erf_nuclear(system, omega: float, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the error function attenuated nuclear attraction integral between two basis sets.
 
@@ -629,7 +636,7 @@ def erf_nuclear(system, omega, basis1=None, basis2=None):
     return ints.erf_nuclear(basis1, basis2, (omega, system.atoms))
 
 
-def erfc_nuclear(system, omega, basis1=None, basis2=None):
+def erfc_nuclear(system, omega: float, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the complementary error function attenuated nuclear attraction integral between two basis sets.
 
@@ -659,7 +666,9 @@ def erfc_nuclear(system, omega, basis1=None, basis2=None):
     return ints.erfc_nuclear(basis1, basis2, (omega, system.atoms))
 
 
-def coulomb_4c(system, basis1=None, basis2=None, basis3=None, basis4=None):
+def coulomb_4c(
+    system, basis1=None, basis2=None, basis3=None, basis4=None
+) -> NDArray[np.float64]:
     r"""
     Compute the four-center two-electron Coulomb integral between four basis sets.
 
@@ -697,8 +706,8 @@ def coulomb_3c(
     basis1=None,
     basis2=None,
     basis3=None,
-    preserve_density_norm=False,
-):
+    preserve_density_norm: bool = False,
+) -> NDArray[np.float64]:
     r"""
     Compute the three-center two-electron Coulomb integral between three basis sets.
 
@@ -746,7 +755,9 @@ def coulomb_3c(
     return res
 
 
-def coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
+def coulomb_3c_opVop(
+    system, basis1=None, basis2=None, basis3=None
+) -> list[NDArray[np.float64]]:
     r"""
     Compute the small-component potential generated by a three-center density basis.
 
@@ -784,7 +795,7 @@ def coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
         return cint_coulomb_3c_opVop(system, _basis1, _basis2, _basis3)
 
 
-def coulomb_2c(system, basis1=None, basis2=None):
+def coulomb_2c(system, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the two-center two-electron Coulomb integral between two basis sets.
 
@@ -818,7 +829,9 @@ def coulomb_2c(system, basis1=None, basis2=None):
     return res
 
 
-def coulomb_3c_deriv(system, W3, basis1=None, basis2=None, basis3=None):
+def coulomb_3c_deriv(
+    system, W3, basis1=None, basis2=None, basis3=None
+) -> NDArray[np.float64]:
     r"""
     Contract first derivatives of three-center Coulomb integrals with weights.
 
@@ -854,7 +867,7 @@ def coulomb_3c_deriv(system, W3, basis1=None, basis2=None, basis3=None):
     )
 
 
-def coulomb_2c_deriv(system, W2, basis1=None, basis2=None):
+def coulomb_2c_deriv(system, W2, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Contract first derivatives of two-center Coulomb metric integrals with weights.
 
@@ -886,7 +899,9 @@ def coulomb_2c_deriv(system, W2, basis1=None, basis2=None):
     return ints.coulomb_2c_deriv(_basis1, _basis2, np.asarray(W2), system.atoms)
 
 
-def erf_coulomb_3c(system, omega, basis1=None, basis2=None, basis3=None):
+def erf_coulomb_3c(
+    system, omega: float, basis1=None, basis2=None, basis3=None
+) -> NDArray[np.float64]:
     r"""
     Compute the error function attenuated three-center two-electron Coulomb integral between three basis sets.
 
@@ -918,7 +933,9 @@ def erf_coulomb_3c(system, omega, basis1=None, basis2=None, basis3=None):
     return ints.erf_coulomb_3c(basis1, basis2, basis3, omega)
 
 
-def erf_coulomb_2c(system, omega, basis1=None, basis2=None):
+def erf_coulomb_2c(
+    system, omega: float, basis1=None, basis2=None
+) -> NDArray[np.float64]:
     r"""
     Compute the error function attenuated two-center two-electron Coulomb integral between two basis sets.
 
@@ -948,7 +965,9 @@ def erf_coulomb_2c(system, omega, basis1=None, basis2=None):
     return ints.erf_coulomb_2c(basis1, basis2, omega)
 
 
-def erfc_coulomb_3c(system, omega, basis1=None, basis2=None, basis3=None):
+def erfc_coulomb_3c(
+    system, omega: float, basis1=None, basis2=None, basis3=None
+) -> NDArray[np.float64]:
     r"""
     Compute the complementary error function attenuated three-center two-electron Coulomb integral between three basis sets.
 
@@ -980,7 +999,9 @@ def erfc_coulomb_3c(system, omega, basis1=None, basis2=None, basis3=None):
     return ints.erfc_coulomb_3c(basis1, basis2, basis3, omega)
 
 
-def erfc_coulomb_2c(system, omega, basis1=None, basis2=None):
+def erfc_coulomb_2c(
+    system, omega: float, basis1=None, basis2=None
+) -> NDArray[np.float64]:
     r"""
     Compute the complementary error function attenuated two-center two-electron Coulomb integral between two basis sets.
 
@@ -1010,7 +1031,9 @@ def erfc_coulomb_2c(system, omega, basis1=None, basis2=None):
     return ints.erfc_coulomb_2c(basis1, basis2, omega)
 
 
-def _cint_env(system, *bases, origin=None):
+def _cint_env(
+    system, *bases, origin=None
+) -> tuple[NDArray[np.int32], NDArray[np.int32], NDArray[np.float64], list[int]]:
     """
     Build the libcint environment for integrals over ``bases``.
 
@@ -1031,13 +1054,14 @@ def _cint_env(system, *bases, origin=None):
 
 
 def _f2c(arr):
+    """Remove the leading component axis of a single-component integral array."""
     if arr.shape[0] == 1:
         return arr[0]
     else:
         return arr
 
 
-def cint_overlap(system, basis1=None, basis2=None):
+def cint_overlap(system, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the overlap integral between two basis sets using the Libcint library.
 
@@ -1061,7 +1085,7 @@ def cint_overlap(system, basis1=None, basis2=None):
     return _f2c(res)
 
 
-def cint_overlap_spinor(system, basis1=None, basis2=None):
+def cint_overlap_spinor(system, basis1=None, basis2=None) -> NDArray[np.complex128]:
     r"""
     Compute the overlap integral between two basis sets using the Libcint library.
 
@@ -1086,7 +1110,7 @@ def cint_overlap_spinor(system, basis1=None, basis2=None):
     return _f2c(res)
 
 
-def cint_kinetic(system, basis1=None, basis2=None):
+def cint_kinetic(system, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the kinetic energy integral between two basis sets using the Libcint library.
 
@@ -1110,7 +1134,7 @@ def cint_kinetic(system, basis1=None, basis2=None):
     return _f2c(res)
 
 
-def cint_nuclear(system, basis1=None, basis2=None):
+def cint_nuclear(system, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the nuclear attraction integral between two basis sets using the Libcint library.
 
@@ -1134,7 +1158,7 @@ def cint_nuclear(system, basis1=None, basis2=None):
     return _f2c(res)
 
 
-def cint_opVop(system, basis1=None, basis2=None):
+def cint_opVop(system, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the small component nuclear potential integral between two basis sets using the Libcint library.
 
@@ -1167,7 +1191,7 @@ def cint_opVop(system, basis1=None, basis2=None):
     return _f2c(res)
 
 
-def cint_opVop_spinor(system, basis1=None, basis2=None):
+def cint_opVop_spinor(system, basis1=None, basis2=None) -> NDArray[np.complex128]:
     r"""
     Compute the small component nuclear potential integral between two basis sets using the Libcint library.
 
@@ -1196,11 +1220,12 @@ def cint_opVop_spinor(system, basis1=None, basis2=None):
     return _f2c(res)
 
 
-def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
+def cint_emultipole1(
+    system, basis1=None, basis2=None, origin=None
+) -> NDArray[np.float64]:
     r"""
-    Compute the electric multipole moment integrals of up to first order (dipole)
-    between two basis sets using the Libcint library.
-    Note that the zeroth order (overlap) is also returned as the first element.
+    Compute the first-order electric multipole integrals (dipole) between two
+    basis sets using the Libcint library.
 
     .. math::
         \mu^{12}_{\mu\nu,\alpha} = \int \chi^{1}_\mu(\mathbf{r}) r_\alpha \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
@@ -1221,7 +1246,7 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
     Returns
     -------
     emultipole1 : ndarray
-        The first electric multipole moment integrals
+        The dipole integrals in x, y, z order along the leading axis.
     """
     _require_libcint()
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
@@ -1231,7 +1256,7 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
     return _f2c(res)
 
 
-def cint_sprsp(system, basis1=None, basis2=None, origin=None):
+def cint_sprsp(system, basis1=None, basis2=None, origin=None) -> NDArray[np.float64]:
     r"""
     Compute the small-component dipole integral between two basis sets using the Libcint library.
 
@@ -1267,7 +1292,7 @@ def cint_sprsp(system, basis1=None, basis2=None, origin=None):
     return _f2c(res)
 
 
-def cint_coulomb_2c(system, basis1=None, basis2=None):
+def cint_coulomb_2c(system, basis1=None, basis2=None) -> NDArray[np.float64]:
     r"""
     Compute the two-center two-electron Coulomb integral between two basis sets using the Libcint library.
 
@@ -1296,7 +1321,7 @@ def cint_coulomb_2c(system, basis1=None, basis2=None):
     return _f2c(res)
 
 
-def _s_density_contraction_norms(basis):
+def _s_density_contraction_norms(basis: ints.Basis) -> NDArray[np.float64]:
     """Return physical norms of unnormalized s-type density contractions."""
     scales = []
     for shell in basis:
@@ -1320,8 +1345,8 @@ def cint_coulomb_3c(
     basis1=None,
     basis2=None,
     basis3=None,
-    preserve_density_norm=False,
-):
+    preserve_density_norm: bool = False,
+) -> NDArray[np.float64]:
     """Compute three-center Coulomb integrals with Libcint.
 
     When ``preserve_density_norm`` is True, restore the physical norms of an
@@ -1338,7 +1363,9 @@ def cint_coulomb_3c(
     return res
 
 
-def cint_coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
+def cint_coulomb_3c_opVop(
+    system, basis1=None, basis2=None, basis3=None
+) -> list[NDArray[np.float64]]:
     """Compute an SAP small-component potential with Libcint's dedicated kernel."""
     _require_libcint()
     _basis1, _basis2, _basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
@@ -1387,15 +1414,24 @@ class CInt3cBySlice:
 
         return (ib1 - ib0, jb1 - jb0, kb1 - kb0)
 
-    def compute(self, shell_slices, buf):
+    def compute(self, shell_slices, buf) -> NDArray[np.float64]:
         """
         Compute the three-center two-electron Coulomb integrals for the given shell slices.
 
         Parameters
         ----------
-        shell_slices : list[tuple]
-            A list of tuples, where each tuple contains the shell slice indices for the auxiliary basis and the two primary bases in the format:
-            [(aux_start, aux_end), (prim1_start, prim1_end), (prim2_start, prim2_end)]
+        shell_slices : sequence of pairs of int
+            Half-open shell ranges for the auxiliary basis and both orbital
+            bases, in that order.
+        buf : buffer or None
+            Writable storage for the integral tensor. Passing None allocates
+            storage for this call.
+
+        Returns
+        -------
+        NDArray[np.float64]
+            The integral tensor with axes ordered as auxiliary, first orbital,
+            and second orbital basis functions.
         """
         shape = self._get_shape(shell_slices)
         buf1 = np.ndarray(shape, buffer=buf)

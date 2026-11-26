@@ -60,6 +60,7 @@ To run the whole chain, call ``run`` on its last method::
     casscf.run()
 
 To use a relativistic Hamiltonian, see :doc:`relativistic`.
+To visualize orbitals from a completed method, see :doc:`exporting_orbitals`.
 
 Parallelism
 -----------

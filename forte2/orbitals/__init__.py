@@ -1,5 +1,6 @@
 from .avas import AVAS
 from .cube_generator import write_orbital_cubes, CubeGenerator
+from .molden import write_molden, molden_string
 from .semicanonicalizer import Semicanonicalizer
 from .natural_orbitals import NaturalOrbitals, make_natural_orbitals
 from .final_orbitals import (

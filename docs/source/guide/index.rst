@@ -10,4 +10,5 @@ User guide
     integrals
     determinants
     rdms
+    exporting_orbitals
     gradients
