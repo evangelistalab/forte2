@@ -1,8 +1,8 @@
 import numpy as np
 
 from forte2 import RHF, System
-from forte2.orbitals.iao import IAO
-from forte2.props.props import iao_partial_charge
+from forte2.orbitals.orbital_charges import IAO, LowdinCharges, MullikenCharges
+from forte2.props.props import iao_partial_charge, mulliken_population
 from forte2.helpers.comparisons import approx
 
 
@@ -27,6 +27,16 @@ def test_iao_hcn():
     )
     assert iao.charge_matrices(C_occ).sum(axis=0) == approx(np.eye(7))
     assert np.allclose(IAO.from_mos(system, rhf.mos).C_iao, iao.C_iao)
+
+    # IAOs built from the orbital basis itself are the Lowdin orthogonalized AOs
+    iao_b1 = IAO(system, C_occ, minao_basis=system.basis)
+    lowdin = LowdinCharges(system)
+    assert iao_b1.charge_matrices(C_occ) == approx(lowdin.charge_matrices(C_occ))
+
+    mulliken = MullikenCharges(system)
+    populations = 2 * np.einsum("aii->a", mulliken.charge_matrices(C_occ))
+    _, reference = mulliken_population(system, 2 * rhf.D[0])
+    assert system.atomic_charges - populations == approx(reference)
 
 
 def test_iao_ch4():

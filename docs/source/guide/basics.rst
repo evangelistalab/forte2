@@ -64,9 +64,10 @@ To use a relativistic Hamiltonian, see :doc:`relativistic`.
 Orbital localization
 --------------------
 
-``Localizer`` rotates orbitals into intrinsic bond orbitals (IBOs), which maximize the charges of
-the orbitals on single atoms, measured in intrinsic atomic orbitals (IAOs). To localize the AVAS
-active orbitals before the CASSCF calculation, insert a ``Localizer`` between them::
+``Localizer`` rotates orbitals to concentrate the charge of each orbital on as few atoms as
+possible, as in Pipek-Mezey localization. By default, it measures the charges in intrinsic atomic
+orbitals (IAOs), which gives intrinsic bond orbitals (IBOs). To localize the AVAS active orbitals
+before the CASSCF calculation, insert a ``Localizer`` between them::
 
     loc = forte2.Localizer()(avas)
     casscf = forte2.MCOptimizer(ci_solver)(loc)
@@ -74,6 +75,12 @@ active orbitals before the CASSCF calculation, insert a ``Localizer`` between th
 Rotations within the active space don't change CASCI or CASSCF energies. Localized active orbitals
 help active-space solvers whose accuracy depends on the orbital basis, such as selected CI, because
 the strongest correlations then connect orbitals on neighboring atoms.
+
+To use other atomic charges, set ``charges`` to ``"lowdin"`` or ``"mulliken"``, and set the
+localization power ``exponent`` to 2 or 4. The original Pipek-Mezey orbitals use Mulliken charges
+and exponent 2::
+
+    loc = forte2.Localizer(charges="mulliken", exponent=2)(avas)
 
 By default, ``Localizer`` localizes the active orbitals, one GAS at a time. If the method before it
 defines no orbital spaces, for example an SCF method, ``Localizer`` localizes the occupied orbitals,
@@ -85,8 +92,10 @@ apart, set ``split_by_occupation=True``; a doubly occupied orbital then never mi
 occupied one.
 
 The IAOs span the frozen core, core, and active orbitals, or the occupied orbitals if there are no
-orbital spaces, so ``Localizer`` can't localize virtual orbitals. Localization breaks point-group
-symmetry, so build the ``System`` with ``symmetry=False``.
+orbital spaces, so IAO charges can't localize virtual orbitals. To localize virtual orbitals, use
+Löwdin charges. Mulliken charges are poorly defined for diffuse virtual orbitals, and localization
+with them converges slowly. Localization breaks point-group symmetry, so build the ``System`` with
+``symmetry=False``.
 
 Parallelism
 -----------

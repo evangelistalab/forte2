@@ -11,7 +11,7 @@ from .final_orbitals import (
 )
 from .orbital_blocks import OrbitalBlockBuilder
 from .aset import ASET
-from .iao import IAO
+from .orbital_charges import IAO, LowdinCharges, MullikenCharges
 from .orbital_localizer import Localizer
 from .converters import SpinorUpcaster
 from .orbital_overlap import mo_overlap, transfer_orbitals

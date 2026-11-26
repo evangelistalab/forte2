@@ -167,7 +167,7 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
 - `mcopt` — MCSCF/CASSCF/GASSCF optimizer, exposed as `forte2.MCOptimizer` (not `MCSCF`).
 - `dsrg` — DSRG-MRPT2 and its relativistic variant.
 - `x2c` — exact two-component relativistic transform (`sf` scalar, `so` spin-orbit); gated by `System.x2c.x2c_type` (`System.x2c` is always an `X2CParams`; `X2CParams()` means no X2C).
-- `orbitals` — AVAS, ASET embedding, IAO, `Localizer` (IBO localization of orbital sets), semicanonicalizer, cube generation, `SpinorUpcaster`.
+- `orbitals` — AVAS, ASET embedding, IAO and Löwdin/Mulliken orbital charges (`orbital_charges.py`), `Localizer` (Pipek-Mezey/IBO localization of orbital sets), semicanonicalizer, cube generation, `SpinorUpcaster`.
 - `props`, `gradients`, `optimize` — 1e-properties/populations; DF-based analytic gradients plus
   `FDGradient`, which differentiates *any* rebuildable method's energy by finite differences (see
   "Rebuilding a chain at a new geometry" above); `GeometryOptimizer` drives either.
