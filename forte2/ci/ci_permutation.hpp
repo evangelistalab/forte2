@@ -18,28 +18,28 @@ namespace detail {
 /// Creating the orbitals perm[u] in descending order of u also accumulates the correct fermionic
 /// sign.
 template <typename T>
-void map_strings(const StringList& strings, const StringAddress& address, const auto& perm,
-                 const auto& phase, int norb, std::vector<std::vector<size_t>>& pi,
-                 std::vector<std::vector<T>>& epsilon) {
-    pi.resize(strings.size());
-    epsilon.resize(strings.size());
-    for (size_t h = 0; h < strings.size(); ++h) {
-        pi[h].resize(strings[h].size());
-        epsilon[h].resize(strings[h].size());
-        for (size_t I = 0; I < strings[h].size(); ++I) {
-            auto J = String::zero();
-            T f = 1.0;
+void map_strings(const StringAddress& address, const auto& perm, const auto& phase, int norb,
+                 std::vector<std::vector<size_t>>& pi, std::vector<std::vector<T>>& epsilon) {
+    pi.resize(address.nclasses());
+    epsilon.resize(address.nclasses());
+    std::vector<LocalStringAddress> work(address.basis().ngas());
+    occupation_t occupation(address.basis().ngas());
+    for (int h = 0; h < address.nclasses(); ++h) {
+        pi[h].resize(address.size(h));
+        epsilon[h].resize(address.size(h));
+        for (size_t i = 0; i < address.size(h); ++i) {
+            const auto source = address.string_at(h, i, work);
+            auto target = String::zero();
+            T factor = 1.0;
             for (int u = norb - 1; u >= 0; --u) {
-                if (strings[h][I].get_bit(u)) {
-                    f *= conjugate(phase(u)) * J.create(perm(u));
-                }
+                if (source.get_bit(u))
+                    factor *= conjugate(phase(u)) * target.create(perm(u));
             }
-            const auto& [add_J, class_J] = address.address_and_class(J);
-            if (class_J != h) {
+            const auto j = address.find(target, work, occupation);
+            if (!j || j->string_class != h)
                 throw std::runtime_error("The permutation moves a string out of its class.");
-            }
-            pi[h][I] = add_J;
-            epsilon[h][I] = f;
+            pi[h][i] = j->rank;
+            epsilon[h][i] = factor;
         }
     }
 }
@@ -67,23 +67,25 @@ permutation_map(const CIStrings& lists, np_vector_int perm,
     const int norb = static_cast<int>(lists.norb());
     std::vector<std::vector<size_t>> pi_a, pi_b;
     std::vector<std::vector<T>> epsilon_a, epsilon_b;
-    detail::map_strings<T>(lists.alpha_strings(), *lists.alpha_address(), perm_v, phase_v, norb,
-                           pi_a, epsilon_a);
-    detail::map_strings<T>(lists.beta_strings(), *lists.beta_address(), perm_v, phase_v, norb, pi_b,
-                           epsilon_b);
+    detail::map_strings<T>(lists.strings(Spin::Alpha), perm_v, phase_v, norb, pi_a, epsilon_a);
+    detail::map_strings<T>(lists.strings(Spin::Beta), perm_v, phase_v, norb, pi_b, epsilon_b);
 
     auto pi = make_zeros<nb::numpy, int64_t, 1>({lists.ndet()});
     auto epsilon = make_zeros<nb::numpy, T, 1>({lists.ndet()});
     auto pi_v = pi.view();
     auto epsilon_v = epsilon.view();
-    // the alpha and beta strings stay in their classes, so each determinant stays in its block
-    lists.for_each_element([&](const auto block, const auto class_Ia, const auto class_Ib,
-                               const auto Ia, const auto Ib, const auto idx) {
-        const size_t nIb = lists.beta_address()->strpcls(class_Ib);
-        pi_v(idx) = static_cast<int64_t>(lists.block_offset(block) + pi_a[class_Ia][Ia] * nIb +
-                                         pi_b[class_Ib][Ib]);
-        epsilon_v(idx) = epsilon_a[class_Ia][Ia] * epsilon_b[class_Ib][Ib];
-    });
+    for (const auto& block : lists.blocks()) {
+        const int ac = block.alpha_class;
+        const int bc = block.beta_class;
+        for (size_t a = 0; a < block.alpha_size; ++a) {
+            for (size_t b = 0; b < block.beta_size; ++b) {
+                const auto index = block.offset + a * block.beta_size + b;
+                pi_v(index) = static_cast<int64_t>(block.offset + pi_a[ac][a] * block.beta_size +
+                                                   pi_b[bc][b]);
+                epsilon_v(index) = epsilon_a[ac][a] * epsilon_b[bc][b];
+            }
+        }
+    }
     return {pi, epsilon};
 }
 

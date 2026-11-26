@@ -1,14 +1,14 @@
 #include <algorithm>
 #include <numeric>
 
-#include "ci/ci_string_address.h"
-#include "ci/ci_strings.h"
-#include "ci/ci_strings_makers.h"
+#include "ci/flat/ci_string_address.h"
+#include "ci/flat/ci_strings.h"
+#include "ci/flat/ci_strings_makers.h"
 
 #include "helpers/cartesian_product.hpp"
 #include "helpers/indexing.hpp"
 
-namespace forte2 {
+namespace forte2::ci_flat {
 
 StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
                                         const std::vector<int>& space_size,
@@ -354,4 +354,4 @@ VOListMap find_ov_string_map(const CIStrings& list_left, const CIStrings& list_r
     return vo_list;
 }
 
-} // namespace forte2
+} // namespace forte2::ci_flat

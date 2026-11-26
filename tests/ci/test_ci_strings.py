@@ -1,3 +1,7 @@
+from functools import reduce
+from itertools import combinations
+from operator import xor
+
 import pytest
 from forte2 import MOSpace, State
 from forte2.lib.ci_helpers import CIStrings
@@ -30,8 +34,8 @@ def test_ci_strings_empty_active_space(orbital_symmetry):
     assert vacuum.gas_size == [0] * max(1, len(orbital_symmetry))
     assert list(vacuum.make_determinants()) == [Determinant.zero()]
     assert vacuum.ngas_spaces == max(1, len(orbital_symmetry))
-    assert vacuum.gas_alpha_occupations == [[0] * 6]
-    assert vacuum.gas_beta_occupations == [[0] * 6]
+    assert vacuum.gas_alpha_occupations == [[0] * vacuum.ngas_spaces]
+    assert vacuum.gas_beta_occupations == [[0] * vacuum.ngas_spaces]
     assert vacuum.gas_occupations == [(0, 0)]
     assert vacuum.ndet == 1
 
@@ -60,10 +64,44 @@ def test_ci_strings_gas_bounds_with_empty_slot():
     assert impossible.ndet == 0
 
 
-def test_ci_strings_gas_space_limit():
-    assert CIStrings(1, 0, 1, 0, [[0]] * 6, [], []).ndet == 6
-    with pytest.raises(ValueError, match="At most 6 GAS spaces"):
-        CIStrings(1, 0, 1, 0, [[0]] * 7, [], [])
+@pytest.mark.parametrize("symmetry", [0, 3])
+def test_ci_strings_many_gas_factors_and_address_order(symmetry):
+    orbital_symmetry = [[0, 1], [], [0], [2], [1, 0], [2], [0, 3], [1]]
+    upper = [4, 0, 2, 2, 4, 2, 1, 1]
+    lower = [0] * 7 + [1]
+    ci_strings = CIStrings(2, 2, 4, symmetry, orbital_symmetry, lower, upper)
+    irreps = [h for gas in orbital_symmetry for h in gas]
+    gas_index = [g for g, gas in enumerate(orbital_symmetry) for _ in gas]
+    assert ci_strings.ngas_spaces == len(orbital_symmetry)
+
+    spin_strings = []
+    for occupied in combinations(range(len(irreps)), 2):
+        bits = tuple(p in occupied for p in range(len(irreps)))
+        gas = tuple(sum(gas_index[p] == g for p in occupied) for g in range(len(upper)))
+        irrep = reduce(xor, (irreps[p] for p in occupied), 0)
+        spin_strings.append((bits, gas, irrep))
+
+    expected = []
+    for a, a_gas, ha in spin_strings:
+        for b, b_gas, hb in spin_strings:
+            if ha ^ hb != symmetry:
+                continue
+            if not all(
+                lo <= n + m <= hi for lo, n, m, hi in zip(lower, a_gas, b_gas, upper)
+            ):
+                continue
+            # Occupation pair order, then alpha irrep, then the two lexicographic strings.
+            order = (tuple(zip(a_gas, b_gas)), ha, a, b)
+            determinant = Determinant("".join("0ab2"[i + 2 * j] for i, j in zip(a, b)))
+            expected.append((order, determinant))
+
+    expected = [d for _, d in sorted(expected, key=lambda entry: entry[0])]
+    assert expected
+    assert list(ci_strings.make_determinants()) == expected
+    assert [ci_strings.determinant(i) for i in range(len(expected))] == expected
+    assert [ci_strings.determinant_index(d) for d in expected] == list(
+        range(len(expected))
+    )
 
 
 @pytest.mark.parametrize("na, nb, expected", [(1, 1, ("ab", "ba")), (2, 0, ("aa",))])
@@ -109,8 +147,8 @@ def test_ci_strings_singlet():
     assert ci_strings.nb == 4
     assert ci_strings.ngas_spaces == 3
     assert ci_strings.gas_size == [1, 2, 3]
-    assert ci_strings.gas_alpha_occupations == [[0, 2, 2, 0, 0, 0], [1, 2, 1, 0, 0, 0]]
-    assert ci_strings.gas_beta_occupations == [[1, 2, 1, 0, 0, 0], [0, 2, 2, 0, 0, 0]]
+    assert ci_strings.gas_alpha_occupations == [[0, 2, 2], [1, 2, 1]]
+    assert ci_strings.gas_beta_occupations == [[1, 2, 1], [0, 2, 2]]
     assert ci_strings.gas_occupations == [(0, 0), (1, 1), (1, 0)]
 
 
@@ -142,15 +180,15 @@ def test_ci_strings_triplet():
     assert ci_strings.ngas_spaces == 3
     assert ci_strings.gas_size == [1, 2, 3]
     assert ci_strings.gas_alpha_occupations == [
-        [0, 2, 3, 0, 0, 0],
-        [1, 1, 3, 0, 0, 0],
-        [1, 2, 2, 0, 0, 0],
+        [0, 2, 3],
+        [1, 1, 3],
+        [1, 2, 2],
     ]
     assert ci_strings.gas_beta_occupations == [
-        [0, 1, 2, 0, 0, 0],
-        [0, 2, 1, 0, 0, 0],
-        [1, 1, 1, 0, 0, 0],
-        [1, 2, 0, 0, 0, 0],
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 1, 1],
+        [1, 2, 0],
     ]
     assert ci_strings.gas_occupations == [
         (0, 0),

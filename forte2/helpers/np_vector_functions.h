@@ -64,7 +64,8 @@ template <typename T> std::span<T> as_span(nb::ndarray<nb::numpy, T, nb::ndim<1>
     if (vec.ndim() != 1) {
         throw std::runtime_error("np_vector must be 1-dimensional to convert to std::span.");
     }
-    if (vec.stride(0) != 1) {
+    // An empty array can have a zero stride and still represent a contiguous range.
+    if (vec.shape(0) != 0 && vec.stride(0) != 1) {
         throw std::runtime_error("np_vector must have stride 1 to convert to std::span.");
     }
     return std::span<T>(vec.data(), vec.shape(0));

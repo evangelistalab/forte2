@@ -11,6 +11,7 @@
 #include "helpers/memory.h"
 
 #include "ci/ci_strings.h"
+#include "ci/flat/ci_strings.h"
 #include "determinant/rel_slater_rules.h"
 #include "ci/ci_sigma_builder.h"
 
@@ -108,8 +109,8 @@ class RelCISigmaBuilder {
     /// @brief The CI algorithm to use for building the Hamiltonian
     // Default to Harrison-Zarrabian: Knowles-Handy is unimplemented for this class.
     CIAlgorithm algorithm_ = CIAlgorithm::Harrison_Zarrabian;
-    /// @brief The CIStrings object containing the determinant classes and their properties
-    const CIStrings& lists_;
+    /// @brief The ci_flat::CIStrings object containing the determinant classes and their properties
+    const ci_flat::CIStrings& lists_;
     const CIOrbitalIrrepBlocks orbital_rows_ = CIOrbitalIrrepBlocks::orbitals(lists_);
     const CIOrbitalIrrepBlocks spinor_pairs_ = CIOrbitalIrrepBlocks::strict_pairs(lists_);
     /// @brief The scalar energy
@@ -175,19 +176,18 @@ class RelCISigmaBuilder {
     template <typename GetHoleList, typename OrbitalIndex>
     void contract_spinor_rdm(np_vector_complex C_left, np_vector_complex C_right,
                              std::complex<double>* rdm_data, const CIOrbitalIrrepBlocks& orbitals,
-                             const StringAddress& holes, GetHoleList get_hole_list,
+                             const ci_flat::StringAddress& holes, GetHoleList get_hole_list,
                              OrbitalIndex orbital_index) const;
 };
 
-[[nodiscard]] std::span<std::complex<double>> gather_block(std::span<std::complex<double>> source,
-                                                           std::span<std::complex<double>> dest,
-                                                           Spin spin, const CIStrings& lists,
-                                                           int class_Ia, int class_Ib);
+[[nodiscard]] std::span<std::complex<double>>
+gather_block(std::span<std::complex<double>> source, std::span<std::complex<double>> dest,
+             Spin spin, const ci_flat::CIStrings& lists, int class_Ia, int class_Ib);
 
-void zero_block(std::span<std::complex<double>> dest, Spin spin, const CIStrings& lists,
+void zero_block(std::span<std::complex<double>> dest, Spin spin, const ci_flat::CIStrings& lists,
                 int class_Ia, int class_Ib);
 
 void scatter_block(std::span<std::complex<double>> source, std::span<std::complex<double>> dest,
-                   Spin spin, const CIStrings& lists, int class_Ia, int class_Ib);
+                   Spin spin, const ci_flat::CIStrings& lists, int class_Ia, int class_Ib);
 
 } // namespace forte2

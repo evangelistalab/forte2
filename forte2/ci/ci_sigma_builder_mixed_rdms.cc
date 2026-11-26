@@ -14,8 +14,9 @@ namespace forte2 {
 
 namespace {
 
-size_t max_composite_hole_dimension(const StringAddress& alpha_address,
-                                    const StringAddress& beta_address, std::string_view rdm_name) {
+size_t max_composite_hole_dimension(const ci_flat::StringAddress& alpha_address,
+                                    const ci_flat::StringAddress& beta_address,
+                                    std::string_view rdm_name) {
     size_t max_alpha = 0;
     for (int class_Ka = 0; class_Ka < alpha_address.nclasses(); ++class_Ka) {
         max_alpha = std::max(max_alpha, alpha_address.strpcls(class_Ka));
@@ -49,7 +50,7 @@ struct RDMKBlocks {
 };
 
 /// Gather signed alpha/beta one-hole coefficients into a composite-hole K-block.
-void gather_ab_2rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, size_t maxKb,
+void gather_ab_2rdm_block(const ci_flat::CIStrings& lists, int class_Ka, int class_Kb, size_t maxKb,
                           size_t Kblock_start, size_t Kdim, const CIOrbitalIrrepBlocks& pairs,
                           const RDMKBlocks& Kblocks) {
     const size_t norb = lists.norb();
@@ -81,9 +82,9 @@ void gather_ab_2rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, si
 }
 
 /// Gather signed two-alpha-hole/one-beta-hole coefficients into an AAB 3-RDM K-block.
-void gather_aab_3rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, size_t maxKb,
-                           size_t Kblock_start, size_t Kdim, const CIOrbitalIrrepBlocks& triplets,
-                           const RDMKBlocks& Kblocks) {
+void gather_aab_3rdm_block(const ci_flat::CIStrings& lists, int class_Ka, int class_Kb,
+                           size_t maxKb, size_t Kblock_start, size_t Kdim,
+                           const CIOrbitalIrrepBlocks& triplets, const RDMKBlocks& Kblocks) {
     const size_t norb = lists.norb();
     for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
         if (lists.block_size(nI) == 0)
@@ -116,9 +117,9 @@ void gather_aab_3rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, s
 }
 
 /// Gather signed one-alpha-hole/two-beta-hole coefficients into an ABB 3-RDM K-block.
-void gather_abb_3rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, size_t maxKb,
-                           size_t Kblock_start, size_t Kdim, const CIOrbitalIrrepBlocks& triplets,
-                           const RDMKBlocks& Kblocks) {
+void gather_abb_3rdm_block(const ci_flat::CIStrings& lists, int class_Ka, int class_Kb,
+                           size_t maxKb, size_t Kblock_start, size_t Kdim,
+                           const CIOrbitalIrrepBlocks& triplets, const RDMKBlocks& Kblocks) {
     const size_t norb = lists.norb();
     const size_t npair = norb * (norb - 1) / 2;
     for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
@@ -157,8 +158,8 @@ void gather_abb_3rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, s
 template <typename Gather>
 void CISigmaBuilder::contract_mixed_spin_rdm(np_vector C_left, np_vector C_right, double* rdm_data,
                                              const CIOrbitalIrrepBlocks& orbitals,
-                                             const StringAddress& alpha_holes,
-                                             const StringAddress& beta_holes,
+                                             const ci_flat::StringAddress& alpha_holes,
+                                             const ci_flat::StringAddress& beta_holes,
                                              std::string_view rdm_name, Gather gather) const {
     const size_t max_composite_K = max_composite_hole_dimension(alpha_holes, beta_holes, rdm_name);
     if (max_composite_K == 0)

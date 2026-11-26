@@ -4,7 +4,7 @@
 #include "determinant/determinant.h"
 #include "ci_string_class.h"
 
-namespace forte2 {
+namespace forte2::ci_flat {
 StringClass::StringClass(size_t symmetry, size_t nirrep,
                          const std::vector<std::vector<int>>& orbital_symmetry,
                          const std::vector<std::array<int, 6>>& alpha_occupation,
@@ -112,4 +112,4 @@ size_t StringClass::beta_string_class(const String& s) const {
     return beta_occupation_group_.at(occupation) * nirrep_ + symmetry(s);
 }
 
-} // namespace forte2
+} // namespace forte2::ci_flat

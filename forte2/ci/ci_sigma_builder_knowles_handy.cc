@@ -33,19 +33,22 @@ size_t Kblock_column_capacity(size_t nrows, size_t ncols, size_t memory_size) {
 
 void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size_t dim2,
                   size_t dim3);
-void gather_alpha_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                        size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                        std::span<const double> basis, std::span<double> Kblock);
-void gather_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                       size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                       std::span<double> basis, std::span<double> TR, std::span<double> Kblock2);
-void scatter_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                        size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                        std::span<const double> Kblock1, std::span<double> TR,
-                        std::span<double> sigma);
-void scatter_alpha_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                         size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim,
-                         size_t maxKb, std::span<const double> Kblock2, std::span<double> sigma);
+void gather_alpha_block(const ci_flat::CIStrings& lists, const CIOrbitalIrrepBlocks& pairs,
+                        size_t class_Ka, size_t class_Kb, size_t Ka_start, size_t Ka_size,
+                        size_t Kdim, size_t maxKb, std::span<const double> basis,
+                        std::span<double> Kblock);
+void gather_beta_block(const ci_flat::CIStrings& lists, const CIOrbitalIrrepBlocks& pairs,
+                       size_t class_Ka, size_t class_Kb, size_t Ka_start, size_t Ka_size,
+                       size_t Kdim, size_t maxKb, std::span<double> basis, std::span<double> TR,
+                       std::span<double> Kblock2);
+void scatter_beta_block(const ci_flat::CIStrings& lists, const CIOrbitalIrrepBlocks& pairs,
+                        size_t class_Ka, size_t class_Kb, size_t Ka_start, size_t Ka_size,
+                        size_t Kdim, size_t maxKb, std::span<const double> Kblock1,
+                        std::span<double> TR, std::span<double> sigma);
+void scatter_alpha_block(const ci_flat::CIStrings& lists, const CIOrbitalIrrepBlocks& pairs,
+                         size_t class_Ka, size_t class_Kb, size_t Ka_start, size_t Ka_size,
+                         size_t Kdim, size_t maxKb, std::span<const double> Kblock2,
+                         std::span<double> sigma);
 } // namespace
 
 void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, Spin spin) const {
@@ -254,9 +257,10 @@ void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size
     parallel_for_chunked(dim1, kernel);
 }
 
-void gather_alpha_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                        size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                        std::span<const double> basis, std::span<double> Kblock) {
+void gather_alpha_block(const ci_flat::CIStrings& lists, const CIOrbitalIrrepBlocks& pairs,
+                        size_t class_Ka, size_t class_Kb, size_t Ka_start, size_t Ka_size,
+                        size_t Kdim, size_t maxKb, std::span<const double> basis,
+                        std::span<double> Kblock) {
 
     // An unchanged spectator string must have the same GAS occupation and irrep.
     const auto nirrep = lists.nirrep();
@@ -289,9 +293,10 @@ void gather_alpha_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pair
     }
 }
 
-void gather_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                       size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                       std::span<double> basis, std::span<double> TR, std::span<double> Kblock2) {
+void gather_beta_block(const ci_flat::CIStrings& lists, const CIOrbitalIrrepBlocks& pairs,
+                       size_t class_Ka, size_t class_Kb, size_t Ka_start, size_t Ka_size,
+                       size_t Kdim, size_t maxKb, std::span<double> basis, std::span<double> TR,
+                       std::span<double> Kblock2) {
 
     const auto nirrep = lists.nirrep();
     const auto& Ka_occ = lists.gas_alpha_1h1p_occupations()[class_Ka / nirrep];
@@ -323,10 +328,10 @@ void gather_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs
     }
 }
 
-void scatter_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                        size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim, size_t maxKb,
-                        std::span<const double> Kblock1, std::span<double> TR,
-                        std::span<double> sigma) {
+void scatter_beta_block(const ci_flat::CIStrings& lists, const CIOrbitalIrrepBlocks& pairs,
+                        size_t class_Ka, size_t class_Kb, size_t Ka_start, size_t Ka_size,
+                        size_t Kdim, size_t maxKb, std::span<const double> Kblock1,
+                        std::span<double> TR, std::span<double> sigma) {
     const auto nirrep = lists.nirrep();
     const auto& Ka_occ = lists.gas_alpha_1h1p_occupations()[class_Ka / nirrep];
     for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
@@ -360,9 +365,10 @@ void scatter_beta_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pair
     }
 }
 
-void scatter_alpha_block(const CIStrings& lists, const CIOrbitalIrrepBlocks& pairs, size_t class_Ka,
-                         size_t class_Kb, size_t Ka_start, size_t Ka_size, size_t Kdim,
-                         size_t maxKb, std::span<const double> Kblock2, std::span<double> sigma) {
+void scatter_alpha_block(const ci_flat::CIStrings& lists, const CIOrbitalIrrepBlocks& pairs,
+                         size_t class_Ka, size_t class_Kb, size_t Ka_start, size_t Ka_size,
+                         size_t Kdim, size_t maxKb, std::span<const double> Kblock2,
+                         std::span<double> sigma) {
     const auto nirrep = lists.nirrep();
     const auto& Kb_occ = lists.gas_beta_1h1p_occupations()[class_Kb / nirrep];
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {

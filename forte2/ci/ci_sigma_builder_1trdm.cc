@@ -3,7 +3,7 @@
 #include "helpers/np_vector_functions.h"
 
 #include "ci_sigma_builder.h"
-#include "ci_strings_makers.h"
+#include "ci/flat/ci_strings_makers.h"
 
 namespace forte2 {
 
@@ -47,7 +47,7 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
     auto string_list = find_string_map(lists_left, lists_right, spin);
     // Compute the VO lists that map the strings of the right and left wave functions. We only
     // need strings for the part that is affected by the a^+_p a_q operator.
-    VOListMap vo_list_map = find_ov_string_map(lists_left, lists_right, spin);
+    ci_flat::VOListMap vo_list_map = find_ov_string_map(lists_left, lists_right, spin);
 
     auto Cl_span = vector::as_span<double>(C_left);
     auto Cr_span = vector::as_span<double>(C_right);

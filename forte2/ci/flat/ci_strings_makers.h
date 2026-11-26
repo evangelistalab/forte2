@@ -2,14 +2,14 @@
 
 #include <memory>
 
-#include "ci/ci_strings_defs.h"
-#include "ci/ci_string_address.h"
-#include "ci/ci_string_class.h"
-#include "ci/ci_strings.h"
+#include "ci/flat/ci_strings_defs.h"
+#include "ci/flat/ci_string_address.h"
+#include "ci/flat/ci_string_class.h"
+#include "ci/flat/ci_strings.h"
 
 #include "helpers/spin.h"
 
-namespace forte2 {
+namespace forte2::ci_flat {
 
 /// Make strings of for norb bits with ne of these set to 1 and (norb - ne) set to 0
 /// @return strings sorted according to their irrep
@@ -78,4 +78,4 @@ find_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin sp
 
 VOListMap find_ov_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin);
 
-} // namespace forte2
+} // namespace forte2::ci_flat

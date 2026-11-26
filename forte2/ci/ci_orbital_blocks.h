@@ -5,7 +5,7 @@
 #include <utility>
 #include <vector>
 
-#include "ci/ci_strings.h"
+#include "ci/flat/ci_strings.h"
 
 namespace forte2 {
 
@@ -35,7 +35,7 @@ class CIOrbitalIrrepBlocks {
     };
 
     /// Single orbitals, indexed by p.
-    static CIOrbitalIrrepBlocks orbitals(const CIStrings& lists) {
+    static CIOrbitalIrrepBlocks orbitals(const ci_flat::CIStrings& lists) {
         CIOrbitalIrrepBlocks result(lists.nirrep());
         for (const int irrep : lists.string_class()->mo_sym())
             result.add_row(irrep);
@@ -44,42 +44,44 @@ class CIOrbitalIrrepBlocks {
     }
 
     /// Opposite-spin pairs (p,q), with both indices unrestricted.
-    static CIOrbitalIrrepBlocks ordered_pairs(const CIStrings& lists) {
+    static CIOrbitalIrrepBlocks ordered_pairs(const ci_flat::CIStrings& lists) {
         return make_pairs(lists, [norb = lists.norb()](size_t) { return norb; });
     }
 
     /// Antisymmetric pairs (p,q) with p > q.
-    static CIOrbitalIrrepBlocks strict_pairs(const CIStrings& lists) {
+    static CIOrbitalIrrepBlocks strict_pairs(const ci_flat::CIStrings& lists) {
         return make_pairs(lists, [](size_t p) { return p; });
     }
 
     /// Knowles-Handy excitation pairs (p,q) with p >= q.
-    static CIOrbitalIrrepBlocks pairs_with_diagonal(const CIStrings& lists) {
+    static CIOrbitalIrrepBlocks pairs_with_diagonal(const ci_flat::CIStrings& lists) {
         return make_pairs(lists, [](size_t p) { return p + 1; });
     }
 
     /// Two alpha indices p > q followed by an unrestricted beta index r.
-    static CIOrbitalIrrepBlocks aab_triplets(const CIStrings& lists) {
+    static CIOrbitalIrrepBlocks aab_triplets(const ci_flat::CIStrings& lists) {
         return make_triplets(
             lists, [](size_t p) { return p; }, [norb = lists.norb()](size_t) { return norb; });
     }
 
     /// An unrestricted alpha index p followed by two beta indices q > r.
-    static CIOrbitalIrrepBlocks abb_triplets(const CIStrings& lists) {
+    static CIOrbitalIrrepBlocks abb_triplets(const ci_flat::CIStrings& lists) {
         return make_triplets(
             lists, [norb = lists.norb()](size_t) { return norb; }, [](size_t q) { return q; });
     }
 
     /// Antisymmetric spinor triplets with p > q > r.
-    static CIOrbitalIrrepBlocks spinor_triplets(const CIStrings& lists) {
+    static CIOrbitalIrrepBlocks spinor_triplets(const ci_flat::CIStrings& lists) {
         return make_triplets(lists, [](size_t p) { return p; }, [](size_t q) { return q; });
     }
 
     /// Select the orbital irrep required for an intermediate to reach the target CI state.
     /// class_Ka and class_Kb label the intermediate's alpha and beta strings, including any
     /// spectator. The required tuple irrep is the target irrep XOR the two string irreps.
-    /// Pass the CIStrings whose orbital labels and irrep count were used to build this layout.
-    const Block& for_intermediate(const CIStrings& lists, size_t class_Ka, size_t class_Kb) const {
+    /// Pass the ci_flat::CIStrings whose orbital labels and irrep count were used to build this
+    /// layout.
+    const Block& for_intermediate(const ci_flat::CIStrings& lists, size_t class_Ka,
+                                  size_t class_Kb) const {
         // The string-class number is occupation * nirrep + irrep. Irrep products use XOR.
         const auto nirrep = lists.nirrep();
         const auto intermediate_irrep = (class_Ka % nirrep) ^ (class_Kb % nirrep);
@@ -140,7 +142,7 @@ class CIOrbitalIrrepBlocks {
   private:
     explicit CIOrbitalIrrepBlocks(int nirrep) : blocks_(nirrep) {}
 
-    static CIOrbitalIrrepBlocks make_pairs(const CIStrings& lists, auto end_q) {
+    static CIOrbitalIrrepBlocks make_pairs(const ci_flat::CIStrings& lists, auto end_q) {
         CIOrbitalIrrepBlocks result(lists.nirrep());
         const auto& irreps = lists.string_class()->mo_sym();
         for (size_t p = 0; p < irreps.size(); ++p) {
@@ -151,7 +153,8 @@ class CIOrbitalIrrepBlocks {
         return result;
     }
 
-    static CIOrbitalIrrepBlocks make_triplets(const CIStrings& lists, auto end_q, auto end_r) {
+    static CIOrbitalIrrepBlocks make_triplets(const ci_flat::CIStrings& lists, auto end_q,
+                                              auto end_r) {
         CIOrbitalIrrepBlocks result(lists.nirrep());
         const auto& irreps = lists.string_class()->mo_sym();
         for (size_t p = 0; p < irreps.size(); ++p) {
