@@ -1,19 +1,22 @@
 #include <cassert>
+#include <stdexcept>
 
 #include "determinant/determinant.h"
 #include "ci_string_class.h"
 
 namespace forte2 {
-StringClass::StringClass(size_t symmetry, const std::vector<std::vector<int>>& orbital_symmetry,
+StringClass::StringClass(size_t symmetry, size_t nirrep,
+                         const std::vector<std::vector<int>>& orbital_symmetry,
                          const std::vector<std::array<int, 6>>& alpha_occupation,
                          const std::vector<std::array<int, 6>>& beta_occupation,
-                         const std::vector<std::pair<size_t, size_t>>& occupations) {
-    nirrep_ = 1;
+                         const std::vector<std::pair<size_t, size_t>>& occupations)
+    : nirrep_(nirrep) {
+    if (symmetry >= nirrep_) {
+        throw std::invalid_argument("Target symmetry is outside the irrep range.");
+    }
+
     for (const auto& sym : orbital_symmetry) {
-        for (const auto& s : sym) {
-            mo_sym_.push_back(s);
-            nirrep_ = std::max(nirrep_, static_cast<size_t>(std::abs(s + 1)));
-        }
+        mo_sym_.insert(mo_sym_.end(), sym.begin(), sym.end());
     }
     for (size_t i = 0; i < alpha_occupation.size(); i++) {
         alpha_occupation_group_[alpha_occupation[i]] = i;

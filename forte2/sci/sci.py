@@ -528,6 +528,7 @@ class _SelectedCISingleStateSolver:
             ci_strings = CIStrings(
                 na_active,
                 nb_active,
+                1,
                 0,
                 [[0] * nactv],
                 [],
@@ -537,6 +538,7 @@ class _SelectedCISingleStateSolver:
             ci_strings = CIStrings(
                 na_active,
                 nb_active,
+                1,
                 0,
                 [[0] * nocc, [0] * nactv],
                 [noccel],
