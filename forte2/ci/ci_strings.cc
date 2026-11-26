@@ -1,5 +1,4 @@
 #include "ci_strings.h"
-#include "ci/flat/ci_strings.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -9,8 +8,7 @@ namespace forte2 {
 CIStrings::CIStrings(size_t na, size_t nb, int nirrep, int symmetry,
                      const std::vector<std::vector<int>>& orbital_symmetry,
                      const std::vector<int>& gas_min, const std::vector<int>& gas_max)
-    : na_(na), nb_(nb), symmetry_(symmetry), flat_orbital_symmetry_(orbital_symmetry),
-      flat_gas_min_(gas_min), flat_gas_max_(gas_max) {
+    : na_(na), nb_(nb), symmetry_(symmetry) {
     if (gas_min.size() > orbital_symmetry.size() || gas_max.size() > orbital_symmetry.size())
         throw std::invalid_argument(
             "CIStrings: GAS occupation bounds must refer to existing GAS slots.");
@@ -55,15 +53,6 @@ CIStrings::CIStrings(size_t na, size_t nb, int nirrep, int symmetry,
             ndet_ = next;
         }
     }
-}
-
-const ci_flat::CIStrings& CIStrings::flat_strings() const {
-    std::lock_guard<std::mutex> lock(flat_strings_mutex_);
-    if (!flat_strings_) {
-        flat_strings_ = std::make_shared<ci_flat::CIStrings>(
-            na_, nb_, nirrep(), symmetry_, flat_orbital_symmetry_, flat_gas_min_, flat_gas_max_);
-    }
-    return *flat_strings_;
 }
 
 std::vector<Determinant> CIStrings::make_determinants() const {

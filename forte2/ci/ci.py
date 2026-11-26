@@ -56,6 +56,8 @@ class _CISingleStateSolver:
 
     Attributes
     ----------
+    nirrep : int
+        The number of irreps in the point group of the system that supplies the integrals.
     eigensolver : DavidsonLiuSolver
         The eigensolver used to find the roots of the CI problem.
     E (evals) : NDArray

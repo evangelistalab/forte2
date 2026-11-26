@@ -91,8 +91,6 @@ class CIOrbitalIrrepBlocks {
     size_t local_row(size_t canonical_index) const { return local_rows_[canonical_index]; }
     /// Total number of scalar elements in the packed square blocks.
     size_t packed_matrix_size() const { return packed_matrix_size_; }
-    /// Maximum row count across the orbital irrep blocks.
-    size_t max_rows() const { return max_rows_; }
     /// Whether all rows fit in a single block in canonical order, including an empty layout.
     bool is_dense() const { return max_rows_ == local_rows_.size(); }
 

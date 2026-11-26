@@ -3,66 +3,22 @@
 #include "helpers/np_vector_functions.h"
 
 #include "ci_sigma_builder.h"
-
-#include "ci/flat/gather_block.h"
+#include "ci_one_rdm.h"
 
 namespace forte2 {
 
 np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, Spin spin) const {
-    const auto& flat_lists = lists_.flat_strings();
-    const auto na = flat_lists.na();
-    const auto nb = flat_lists.nb();
-    const auto norb = flat_lists.norb();
+    const auto na = lists_.na();
+    const auto nb = lists_.nb();
+    const auto norb = lists_.norb();
     auto rdm = make_zeros<nb::numpy, double, 2>({norb, norb});
 
     // skip building the RDM if there are no electrons or there are zero orbitals
     if ((is_alpha(spin) and (na < 1)) or (is_beta(spin) and (nb < 1)) or (norb < 1))
         return rdm;
 
-    const auto& alpha_address = flat_lists.alpha_address();
-    const auto& beta_address = flat_lists.beta_address();
-    auto rdm_view = rdm.view();
-    auto Cl_span = vector::as_span<double>(C_left);
-    auto Cr_span = vector::as_span<double>(C_right);
-
-    // loop over blocks of the right state
-    for (const auto& [nI, class_Ia, class_Ib] : flat_lists.determinant_classes()) {
-        if (flat_lists.block_size(nI) == 0)
-            continue;
-
-        auto tr = gather_block(Cr_span, TR, spin, flat_lists, class_Ia, class_Ib);
-
-        // loop over blocks of the left state
-        for (const auto& [nJ, class_Ja, class_Jb] : flat_lists.determinant_classes()) {
-            // The string class on which we don't act must be the same for I and J
-            if ((is_alpha(spin) and (class_Ib != class_Jb)) or
-                (is_beta(spin) and (class_Ia != class_Ja)))
-                continue;
-            if (flat_lists.block_size(nJ) == 0)
-                continue;
-
-            auto tl = gather_block(Cl_span, TL, spin, flat_lists, class_Ja, class_Jb);
-
-            const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
-
-            const auto& pq_vo_list = is_alpha(spin)
-                                         ? flat_lists.get_alpha_vo_list(class_Ia, class_Ja)
-                                         : flat_lists.get_beta_vo_list(class_Ib, class_Jb);
-
-            for (const auto& [pq, vo_list] : pq_vo_list) {
-                const auto& [p, q] = pq;
-                double rdm_element = 0.0;
-                for (const auto& [sign, I, J] : vo_list) {
-                    // Compute the RDM element contribution
-                    for (size_t idx{0}; idx != maxL; ++idx) {
-                        rdm_element += sign * tl[J * maxL + idx] * tr[I * maxL + idx];
-                    }
-                }
-                rdm_view(p, q) += rdm_element;
-            }
-        }
-    }
+    accumulate_one_rdm<double>(lists_, spin, vector::as_span<double>(C_left),
+                               vector::as_span<double>(C_right), TL, TR, rdm.view());
     return rdm;
 }
 

@@ -151,3 +151,9 @@ to ``State``, for example ``State(nel=14, multiplicity=1, ms=0.0, symmetry=0)``.
 Full CI uses the total number of irreps in the system's point group, including irreps absent from
 the active orbitals. When calling the low-level ``CIStrings`` constructor directly, pass this
 count as ``nirrep`` before the target ``symmetry`` argument.
+
+GAS-CI enumerates strings separately in each GAS slot and groups them by local electron count
+and irrep. A spin-string address identifies a product of those local strings whose irreps combine
+to the required total. Hole and excitation substitutions use the local tables of the GAS slots
+where the operator acts. GAS occupation lists use one entry per supplied slot, including zeros
+for empty slots.

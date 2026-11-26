@@ -225,4 +225,47 @@ void contract_same_spin_sigma(const CIStrings& lists, Spin spin, std::span<Scala
     }
 }
 
+/// Accumulate the same-spin real density over holes and the unchanged opposite spin.
+template <size_t Rank>
+void accumulate_same_spin_rdm(const CIStrings& lists, Spin spin, std::span<double> left,
+                              std::span<double> right, std::span<double> left_scratch,
+                              std::span<double> right_scratch, double* rdm, size_t dimension) {
+    /// @brief The orbitals, sign, and ket string rank for a substitution from this hole string.
+    struct Substitution {
+        typename HoleSubstitutions<Rank>::Orbitals orbitals;
+        int sign;
+        size_t rank;
+    };
+    std::vector<LocalStringAddress> left_work(lists.ngas_spaces()), right_work(lists.ngas_spaces());
+    std::vector<Substitution> right_substitutions;
+    const auto& holes = lists.strings(spin, Rank);
+    for (const auto& [classes, links] : same_spin_hole_connections<Rank>(lists, spin)) {
+        const size_t count = holes.size(classes.first);
+        for (const auto& bra : links) {
+            const auto spectators = bra.determinant.spectator_size(spin);
+            const auto cl = gather_block(left, left_scratch, spin, bra.determinant);
+            for (const auto& ket : links) {
+                const auto cr = gather_block(right, right_scratch, spin, ket.determinant);
+                for (size_t k = 0; k < count; ++k) {
+                    right_substitutions.clear();
+                    ket.substitutions.for_each_hole_substitution(
+                        k, right_work, [&](const auto& tuple, int sign, size_t j) {
+                            right_substitutions.push_back({tuple, sign, j});
+                        });
+                    bra.substitutions.for_each_hole_substitution(
+                        k, left_work, [&](const auto& tuple, int sign, size_t i) {
+                            const auto row = hole_orbital_index(tuple) * dimension;
+                            for (const auto& [indices, ket_sign, j] : right_substitutions) {
+                                const auto col = hole_orbital_index(indices);
+                                rdm[row + col] += sign * ket_sign *
+                                                  dot(spectators, cl.data() + i * spectators, 1,
+                                                      cr.data() + j * spectators, 1);
+                            }
+                        });
+                }
+            }
+        }
+    }
+}
+
 } // namespace forte2
