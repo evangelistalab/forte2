@@ -338,6 +338,10 @@ class FockBuilder:
         """
         assert C.shape[1] == g1.shape[0], "C and g1 must have compatible dimensions"
 
+        if C.shape[1] == 0:
+            z = np.zeros((C.shape[0], C.shape[0]), dtype=C.dtype)
+            return z, z
+
         try:
             # C^*_{\rho u} C_{\sigma v} \gamma_{uv} = C^*_{\rho u} C_{\sigma v} L_ua L_va^*
             # = (C_{\sigma v} L_va^*) (C^*_{\rho u} L_ua)

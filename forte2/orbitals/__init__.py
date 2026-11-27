@@ -11,6 +11,7 @@ from .final_orbitals import (
 )
 from .orbital_blocks import OrbitalBlockBuilder
 from .aset import ASET
+from .aset2 import ASET2, DressedFragmentSystem, DressedFockBuilder
 from .iao import IAO, IBO
 from .converters import SpinorUpcaster
 from .orbital_overlap import mo_overlap, transfer_orbitals
