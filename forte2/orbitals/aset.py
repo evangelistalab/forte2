@@ -2,14 +2,15 @@ from dataclasses import dataclass, field
 import numpy as np
 import re
 
-import forte2
 from forte2.lib import ints
+from forte2.scf import RHF, ROHF, GHF
 from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.system.basis_utils import BasisInfo
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import block_diag_2x2, block_eigh
 from forte2.base_classes import ActiveSpaceDriver, Method
 from forte2.data import ATOM_SYMBOL_TO_Z
+from forte2.orbitals.avas import AVAS
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 from forte2.orbitals.final_orbitals import FinalOrbitals
 
@@ -86,22 +87,15 @@ class ASET(Method):
         self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, parent_method):
-        has_mo_space = isinstance(parent_method, Method) and {
-            "system",
-            "mos",
-            "mo_space",
-        }.issubset(parent_method.provides)
-        assert (
-            isinstance(
-                parent_method,
-                (ActiveSpaceDriver, forte2.scf.RHF, forte2.scf.ROHF),
-            )
-            or has_mo_space
-        ), (
-            "Parent method must be MCOptimizer, CI, RHF, ROHF, or a Method providing "
-            f"system/mos/mo_space (e.g. AVAS), got {type(parent_method)}"
-        )
         self._register_parent_method(parent_method)
+        if not isinstance(
+            parent_method,
+            (ActiveSpaceDriver, RHF, ROHF, GHF, AVAS),
+        ):
+            raise TypeError(
+                "Parent method must be MCOptimizer, CI, RHF, ROHF, GHF, or AVAS, "
+                f"got {type(parent_method).__name__}."
+            )
         return self
 
     def run(self):
@@ -112,49 +106,47 @@ class ASET(Method):
         nmo = self.mos.C[0].shape[1]
         if isinstance(self.parent_method, ActiveSpaceDriver):
             self.mo_space = self.parent_method.mo_space
-            if self.mo_space.nactv == 0:
-                self._g1 = np.zeros((0, 0))
-            else:
-                self._g1 = self.parent_method.ci_solver.make_average_rdm(1)
-        elif isinstance(self.parent_method, forte2.scf.RHF):
-            self.mo_space = MOSpace(
-                nmo=nmo,
-                core_orbitals=list(range(self.parent_method.ndocc)),
-                active_orbitals=[],
-            )
-            self._g1 = np.zeros((0, 0))
-        elif isinstance(self.parent_method, forte2.scf.ROHF):
-            nd = self.parent_method.ndocc
-            ns = self.parent_method.nsocc
-            self.mo_space = MOSpace(
-                nmo=nmo,
-                core_orbitals=list(range(nd)),
-                active_orbitals=list(range(nd, nd + ns)),
-            )
-            self._g1 = np.eye(ns)
+            self._g1 = self.parent_method.make_average_rdm(1)
         else:
-            self.mo_space = self.parent_method.mo_space
-            nactv = self.mo_space.nactv
-            if nactv == 0:
-                self._g1 = np.zeros((0, 0))
-            else:
-                nel = None
-                cur = self.parent_method
-                while cur is not None:
-                    if hasattr(cur, "nel"):
-                        nel = cur.nel
-                        break
-                    cur = getattr(cur, "parent_method", None)
-                if nel is None:
-                    nel = int(round(self.system.Zsum))
-                occ_avg = float(
-                    np.clip(
-                        (nel - 2 * len(self.mo_space.docc_indices)) / nactv,
-                        0.0,
-                        2.0,
-                    )
+            if isinstance(self.parent_method, RHF):
+                self.mo_space = MOSpace(
+                    nmo=nmo,
+                    core_orbitals=list(range(self.parent_method.ndocc)),
+                    active_orbitals=[],
                 )
-                self._g1 = occ_avg * np.eye(nactv)
+            elif isinstance(self.parent_method, ROHF):
+                nd = self.parent_method.ndocc
+                ns = self.parent_method.nsocc
+                self.mo_space = MOSpace(
+                    nmo=nmo,
+                    core_orbitals=list(range(nd)),
+                    active_orbitals=list(range(nd, nd + ns)),
+                )
+            elif isinstance(self.parent_method, GHF):
+                self.mo_space = MOSpace(
+                    nmo=nmo,
+                    core_orbitals=list(range(self.parent_method.nocc)),
+                    active_orbitals=[],
+                )
+            elif isinstance(self.parent_method, AVAS):
+                self.mo_space = self.parent_method.mo_space
+
+            scf = (
+                self.parent_method.parent_method
+                if isinstance(self.parent_method, AVAS)
+                else self.parent_method
+            )
+            if self.mo_space.nactv == 0:
+                dtype = complex if self.two_component else float
+                self._g1 = np.zeros((0, 0), dtype=dtype)
+            else:
+                S_ao = ints.overlap(self.system.basis)
+                if self.two_component:
+                    S_ao = block_diag_2x2(S_ao)
+                D_ao = scf._build_total_density_matrix()
+                SC_act = S_ao @ self.mos.C[0][:, self.mo_space.active_indices]
+                g1 = (SC_act.conj().T @ D_ao @ SC_act).T
+                self._g1 = 0.5 * (g1 + g1.conj().T)
         self.mo_space = self.mo_space.update_frozen_orbitals(
             self.frozen_core_orbitals, self.frozen_virtual_orbitals
         )
@@ -345,45 +337,6 @@ class ASET(Method):
 
         return P_ao_frag
 
-    @staticmethod
-    def _canonicalize_projector_nullspace(
-        vals: np.ndarray,
-        U: np.ndarray,
-        h: np.ndarray,
-        C_block: np.ndarray,
-        F_ao: np.ndarray,
-        tol: float,
-        ascending: bool,
-        null_tol: float = 1e-10,
-    ) -> tuple[np.ndarray, np.ndarray, list[int]]:
-        """
-        Canonicalize the degenerate zero-eigenvalue null space of a projector block
-        using the generalized Fock matrix.
-
-        Returns the updated rotation matrix ``U``, irrep array ``h``, and priority
-        index list (non-null orbitals ordered by descending projector eigenvalue,
-        followed by null-space orbitals ordered by Fock energy).
-        """
-        nonnull_pos = [k for k, v in enumerate(vals) if v >= null_tol]
-        null_pos = [k for k, v in enumerate(vals) if v < null_tol]
-        nonnull_pos.sort(key=lambda k: vals[k], reverse=True)
-        if not null_pos:
-            return U, h, nonnull_pos
-
-        C_null = C_block @ U[:, null_pos]
-        F_null = C_null.conj().T @ F_ao @ C_null
-        h_null = h[null_pos]
-        f_vals, U_f, h_f = block_eigh(F_null, h_null, atol=0.0, rtol=tol, sort=True)
-        if not ascending:
-            U_f = U_f[:, ::-1]
-            h_f = h_f[::-1]
-
-        U_out = U.copy()
-        h_out = h.copy()
-        U_out[:, null_pos] = U_out[:, null_pos] @ U_f
-        h_out[null_pos] = h_f
-        return U_out, h_out, nonnull_pos + null_pos
-
     def _make_embedding(self):
         """
         Perform Orbital Partitioning for ASET.
@@ -428,66 +381,29 @@ class ASET(Method):
         # resort the virtual eigenvalue/eigenvector pairs, and their irreps with them
         lv_vals = lv_vals[::-1]
         Uv = Uv[:, ::-1]
-        h_v = h_v[::-1]
-
-        # When cutoff_method="num_of_orbitals" requests more fragment orbitals than the
-        # numerical rank of the fragment projector, canonicalize the degenerate zero-eigenvalue
-        # null space with the generalized Fock matrix so the A/B cut is deterministic and
-        # minimizes off-diagonal F_{A,B} couplings (crucial for smooth ASET(2) PESs).
-        null_tol = 1e-10
-        need_occ_null = (
-            self.cutoff_method == "num_of_orbitals"
-            and self.num_A_occ is not None
-            and self.num_A_occ > int(np.sum(lo_vals >= null_tol))
-            and np.any(lo_vals < null_tol)
-        )
-        need_vir_null = (
-            self.cutoff_method == "num_of_orbitals"
-            and self.num_A_vir is not None
-            and self.num_A_vir > int(np.sum(lv_vals >= null_tol))
-            and np.any(lv_vals < null_tol)
-        )
-        occ_order = sorted(
-            range(len(core_inds)), key=lambda k: lo_vals[k], reverse=True
-        )
-        vir_order = sorted(
-            range(len(virt_inds)), key=lambda k: lv_vals[k], reverse=True
-        )
-        if need_occ_null or need_vir_null:
-            F_ao = self.system.fock_builder.build_generalized_fock(
-                C_core=C_contig[:, self.mo_space.docc],
-                C_act=C_contig[:, self.mo_space.actv],
-                g1=self._g1,
-            )
-            if need_occ_null:
-                Uo, h_o, occ_order = self._canonicalize_projector_nullspace(
-                    lo_vals,
-                    Uo,
-                    h_o,
-                    C[:, core_inds],
-                    F_ao,
-                    tol=tol,
-                    ascending=False,
-                    null_tol=null_tol,
-                )
-            if need_vir_null:
-                Uv, h_v, vir_order = self._canonicalize_projector_nullspace(
-                    lv_vals,
-                    Uv,
-                    h_v,
-                    C[:, virt_inds],
-                    F_ao,
-                    tol=tol,
-                    ascending=True,
-                    null_tol=null_tol,
-                )
-
         irreps[core_inds] = h_o
-        irreps[virt_inds] = h_v
+        irreps[virt_inds] = h_v[::-1]
 
-        # Ordered (global_mo_idx, projector_eigenvalue) lists
-        occ_pairs = [(core_inds[k], lo_vals[k]) for k in occ_order]
-        vir_pairs = [(virt_inds[k], lv_vals[k]) for k in vir_order]
+        # Sort the eigenvalue/eigenvector pairs by eigenvalue in descending order
+        occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
+        vir_pairs = sorted(zip(virt_inds, lv_vals), key=lambda x: x[1], reverse=True)
+
+        if self.cutoff_method == "num_of_orbitals":
+            null_tol = 1.0e-10
+            n_nonnull_occ = int(np.sum(lo_vals >= null_tol))
+            if self.num_A_occ is not None and self.num_A_occ > n_nonnull_occ:
+                raise ValueError(
+                    f"num_A_occ={self.num_A_occ} exceeds the {n_nonnull_occ} core "
+                    f"orbitals with nonzero overlap on fragment {self.fragment}. "
+                    "Enlarge 'fragment' or reduce 'num_A_occ'."
+                )
+            n_nonnull_vir = int(np.sum(lv_vals >= null_tol))
+            if self.num_A_vir is not None and self.num_A_vir > n_nonnull_vir:
+                raise ValueError(
+                    f"num_A_vir={self.num_A_vir} exceeds the {n_nonnull_vir} virtual "
+                    f"orbitals with nonzero overlap on fragment {self.fragment}. "
+                    "Enlarge 'fragment' or reduce 'num_A_vir'."
+                )
 
         # Apply the unitary transformations to the occupied and virtual blocks of C
         C[:, core_inds] = C[:, core_inds] @ Uo

@@ -15,6 +15,7 @@ from forte2 import (
     SpinorUpcaster,
     State,
     System,
+    UHF,
     X2CParams,
 )
 from forte2.base_classes import DavidsonLiuParams
@@ -849,10 +850,10 @@ def _make_hnnf_system(z_f: float = 2.75) -> System:
     )
 
 
-def test_aset_parent_methods_rhf_rohf_ci_avas():
+def test_aset_parent_methods_rhf_rohf_ghf_ci_avas():
     system = _make_hnnf_system()
 
-    # 1. RHF -> ASET -> CI (nactv == 0)
+    # 1. RHF -> ASET -> CI (nactv == 0) and RHF -> CI(nactv == 0) -> ASET -> CI
     rhf = RHF(charge=0)(system)
     aset_rhf = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(rhf)
     ci_rhf = CI(CISolver(State(nel=24, multiplicity=1, ms=0.0)))(aset_rhf).run()
@@ -862,8 +863,24 @@ def test_aset_parent_methods_rhf_rohf_ci_avas():
     assert aset_rhf.semican is not None
     assert ci_rhf.E == approx(rhf.E)
 
+    ci_zero = CI(
+        CISolver(
+            State(nel=24, multiplicity=1, ms=0.0),
+            core_orbitals=12,
+            active_orbitals=0,
+        )
+    )(rhf)
+    aset_ci_zero = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(
+        ci_zero
+    )
+    ci_after_zero = CI(CISolver(State(nel=24, multiplicity=1, ms=0.0)))(
+        aset_ci_zero
+    ).run()
+    assert aset_ci_zero.mo_space.nactv == 0
+    assert ci_after_zero.E == approx(rhf.E)
+
     # 2. ROHF -> ASET -> CI (triplet O2 + H2, nactv == 2)
-    sys_rohf = System(
+    sys_o2_h2 = System(
         xyz="""
         O 0.00 0.00 0.00
         O 0.00 0.00 1.21
@@ -874,14 +891,52 @@ def test_aset_parent_methods_rhf_rohf_ci_avas():
         auxiliary_basis_set="def2-universal-jkfit",
         symmetry=False,
     )
-    rohf = ROHF(charge=0, ms=1.0)(sys_rohf)
+    rohf = ROHF(charge=0, ms=1.0)(sys_o2_h2)
     aset_rohf = ASET(fragment=["O"], cutoff_method="threshold", cutoff=0.5)(rohf)
     ci_rohf = CI(CISolver(State(nel=18, multiplicity=3, ms=1.0)))(aset_rohf).run()
     assert aset_rohf.executed
     assert aset_rohf.mo_space.nactv == 2
+    assert np.allclose(aset_rohf._g1, np.eye(2), atol=1e-12)
     assert ci_rohf.E == approx(rohf.E)
 
-    # 3. RHF -> CI -> ASET -> CI (CASCI parent)
+    # 3. GHF -> ASET -> CI(RelCISolver) and GHF -> AVAS -> ASET (2-component)
+    sys_fh_h2 = System(
+        xyz="""
+        F 0.00 0.00 0.00
+        H 0.00 0.00 0.92
+        H 0.00 0.00 4.00
+        H 0.00 0.00 4.74
+        """,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-jkfit",
+        symmetry=False,
+    )
+    ghf = GHF(charge=0)(sys_fh_h2)
+    aset_ghf = ASET(fragment=["F", "H1"], cutoff_method="threshold", cutoff=0.5)(ghf)
+    ci_ghf = CI(RelCISolver(State(nel=12, multiplicity=1, ms=0.0)))(aset_ghf).run()
+    assert aset_ghf.executed
+    assert aset_ghf.two_component
+    assert aset_ghf.mo_space.nactv == 0
+    assert ci_ghf.E == approx(ghf.E)
+
+    avas_ghf = AVAS(
+        subspace=["F(2p)"],
+        selection_method="separate",
+        num_active_docc=2,
+        num_active_uocc=2,
+    )(ghf)
+    aset_avas_ghf = ASET(fragment=["F", "H1"], cutoff_method="threshold", cutoff=0.5)(
+        avas_ghf
+    ).run()
+    assert aset_avas_ghf.two_component
+    assert aset_avas_ghf.mo_space.nactv == 4
+    assert np.allclose(
+        np.sort(np.linalg.eigvalsh(aset_avas_ghf._g1))[::-1],
+        np.array([1.0, 1.0, 0.0, 0.0]),
+        atol=1e-12,
+    )
+
+    # 4. RHF -> CI -> ASET -> CI (CASCI parent)
     ci_parent = CI(
         CISolver(
             State(nel=24, multiplicity=1, ms=0.0),
@@ -897,21 +952,57 @@ def test_aset_parent_methods_rhf_rohf_ci_avas():
     assert aset_ci.mo_space.nactv == 2
     assert ci_child.E == approx(ci_parent.E)
 
-    # 4. RHF -> AVAS -> ASET -> MCOptimizer (general Method providing mo_space)
-    avas = AVAS(
+    # 5. Charged RHF(charge=2) -> AVAS -> ASET -> MCOptimizer (exact SCF density matrix)
+    rhf_cat = RHF(charge=2)(system)
+    avas_cat = AVAS(
         subspace=["N(2p)"],
         selection_method="separate",
         num_active_docc=1,
         num_active_uocc=1,
-    )(rhf)
-    aset_avas = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(avas)
-    mc_avas = MCOptimizer(CISolver(State(nel=24, multiplicity=1, ms=0.0)))(
-        aset_avas
+    )(rhf_cat)
+    aset_avas_cat = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(
+        avas_cat
+    )
+    mc_avas_cat = MCOptimizer(CISolver(State(nel=22, multiplicity=1, ms=0.0)))(
+        aset_avas_cat
     ).run()
-    assert aset_avas.executed
-    assert aset_avas.mo_space.nactv == 2
-    assert mc_avas.converged
-    assert mc_avas.E <= rhf.E + 1e-10
+    assert aset_avas_cat.executed
+    assert aset_avas_cat.mo_space.nactv == 2
+    assert np.allclose(
+        np.sort(np.linalg.eigvalsh(aset_avas_cat._g1))[::-1],
+        np.array([2.0, 0.0]),
+        atol=1e-12,
+    )
+    assert mc_avas_cat.converged
+    assert mc_avas_cat.E <= rhf_cat.E + 1e-10
+
+    # 6. Charged open-shell ROHF(charge=1, ms=0.5) -> AVAS -> ASET
+    rohf_cat = ROHF(charge=1, ms=0.5)(sys_o2_h2)
+    avas_rohf_cat = AVAS(
+        subspace=["O(2p)"],
+        selection_method="separate",
+        num_active_docc=1,
+        num_active_uocc=1,
+    )(rohf_cat)
+    aset_avas_rohf_cat = ASET(fragment=["O"], cutoff_method="threshold", cutoff=0.5)(
+        avas_rohf_cat
+    ).run()
+    assert aset_avas_rohf_cat.mo_space.nactv == 3
+    assert np.allclose(
+        np.sort(np.linalg.eigvalsh(aset_avas_rohf_cat._g1))[::-1],
+        np.array([2.0, 1.0, 0.0]),
+        atol=1e-12,
+    )
+
+    # 7. Parent validation: unbound parent -> RuntimeError, unsupported Method -> TypeError
+    with pytest.raises(RuntimeError, match="has not been bound"):
+        ASET(fragment=["H"])(RHF(charge=0))
+    uhf = UHF(charge=0, ms=0.0)(system)
+    with pytest.raises(TypeError, match="Parent method must be"):
+        ASET(fragment=["H"])(uhf)
+    pt2 = DSRG_MRPT2(flow_param=0.5)(ci_child)
+    with pytest.raises(TypeError, match="Parent method must be"):
+        ASET(fragment=["H"])(pt2)
 
 
 def test_aset_num_of_orbitals_none_fallback():
@@ -971,77 +1062,36 @@ def test_aset_num_of_orbitals_none_fallback():
         )
 
 
-def test_aset_projector_nullspace_fock_canonicalization():
+def test_aset_num_of_orbitals_exceeding_fragment_support_raises():
     system = _make_hnnf_system()
-    rhf = RHF(charge=0)(system)
-    ci_parent = CI(
-        CISolver(
-            State(nel=24, multiplicity=1, ms=0.0),
-            core_orbitals=11,
-            active_orbitals=2,
-        )
-    )(rhf).run()
+    rhf = RHF(charge=0)(system).run()
 
-    # Fragment ["H"] has 1 AO in sto-3g, so rank(P_vv) <= 1 while nvirt == 3;
-    # requesting num_A_vir=2 forces selection from the degenerate virtual null space.
-    aset1 = ASET(
-        fragment=["H"],
-        cutoff_method="num_of_orbitals",
-        num_A_occ=3,
-        num_A_vir=2,
-    )(ci_parent)
-    ci1 = CI(CISolver(State(nel=24, multiplicity=1, ms=0.0)))(aset1)
-    pt2_1 = DSRG_MRPT2(flow_param=0.5)(ci1).run()
+    # Fragment ["H"] has 1 AO in sto-3g, so at most 1 core and 1 virtual orbital
+    # have nonzero overlap on ["H"].
+    with pytest.raises(ValueError, match="Enlarge 'fragment'"):
+        ASET(
+            fragment=["H"],
+            cutoff_method="num_of_orbitals",
+            num_A_occ=None,
+            num_A_vir=2,
+        )(rhf).run()
 
-    # (a) Verify null-space virtuals are ordered by ascending Fock energy:
-    # semicanonicalization mixes the non-null and null-space virtuals inside A_virt,
-    # so recover the null-space direction inside A_virt via eigh(P_{A_virt, A_virt})
-    # and check its Fock energy against the remaining null-space virtuals in B_virt.
-    lv_vals = aset1.partition["lv_vals"]
-    assert int(np.sum(lv_vals >= 1e-10)) < 2
-    C_semican = aset1.semican.C_semican
-    F_semican = aset1.semican.fock_semican
-    a_vir_slice = aset1.emb_space.A_virt
-    b_vir_slice = aset1.emb_space.B_virt
-    P_ao = aset1.P_ao_frag
-    P_a_vir = C_semican[:, a_vir_slice].T @ P_ao @ C_semican[:, a_vir_slice]
-    P_b_vir = C_semican[:, b_vir_slice].T @ P_ao @ C_semican[:, b_vir_slice]
-    evals_pa, evecs_pa = np.linalg.eigh(P_a_vir)
-    null_mask_a = evals_pa < 1e-10
-    assert np.sum(null_mask_a) >= 1
-    assert np.max(np.abs(P_b_vir)) < 1e-10
-    U_null_a = evecs_pa[:, null_mask_a]
-    null_a_eps = np.linalg.eigvalsh(
-        U_null_a.T @ F_semican[a_vir_slice, a_vir_slice] @ U_null_a
-    )
-    null_b_eps = np.diag(F_semican[b_vir_slice, b_vir_slice])
-    assert len(null_b_eps) >= 1
-    assert np.max(null_a_eps) <= np.min(null_b_eps) + 1e-10
+    with pytest.raises(ValueError, match="Enlarge 'fragment'"):
+        ASET(
+            fragment=["H"],
+            cutoff_method="num_of_orbitals",
+            num_A_occ=2,
+            num_A_vir=None,
+        )(rhf).run()
 
-    # (b) Apply a random orthogonal rotation within the parent virtual space;
-    # null-space Fock canonicalization makes ASET -> CI -> DSRG_MRPT2 invariant.
-    ci_parent_rot = CI(
-        CISolver(
-            State(nel=24, multiplicity=1, ms=0.0),
-            core_orbitals=11,
-            active_orbitals=2,
-        )
-    )(rhf).run()
-    virt_inds = ci_parent_rot.mo_space.virtual_indices
-    rng = np.random.default_rng(42)
-    Q, _ = np.linalg.qr(rng.standard_normal((len(virt_inds), len(virt_inds))))
-    ci_parent_rot.mos.C[0][:, virt_inds] = ci_parent_rot.mos.C[0][:, virt_inds] @ Q
-
-    aset2 = ASET(
-        fragment=["H"],
-        cutoff_method="num_of_orbitals",
-        num_A_occ=3,
-        num_A_vir=2,
-    )(ci_parent_rot)
-    ci2 = CI(CISolver(State(nel=24, multiplicity=1, ms=0.0)))(aset2)
-    pt2_2 = DSRG_MRPT2(flow_param=0.5)(ci2).run()
-
-    assert abs(pt2_2.E - pt2_1.E) < 1e-10
+    # Fragment ["N", "H"] has 11 AOs in sto-3g while HNNF has 12 core orbitals.
+    with pytest.raises(ValueError, match="Enlarge 'fragment'"):
+        ASET(
+            fragment=["N", "H"],
+            cutoff_method="num_of_orbitals",
+            num_A_occ=12,
+            num_A_vir=None,
+        )(rhf).run()
 
 
 def test_aset_rebuild_and_rebind_method_chain():
