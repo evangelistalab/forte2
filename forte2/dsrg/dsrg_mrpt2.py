@@ -90,116 +90,77 @@ class DSRG_MRPT2(SADSRGBase):
         # E += einsum("mnef,mnef->", V["ccvv"], S2["ccvv"]), one m at a time
         E = 0.0
         cvB = self.ints["B"]["cv"]
-
-        Vbare_m = np.empty((self.ncore, self.nvirt, self.nvirt))
-        Vtmp = np.empty((self.ncore, self.nvirt, self.nvirt))
-        Vr_m = np.empty((self.ncore, self.nvirt, self.nvirt))
+        eps = self.ints["eps"]
+        V_m = np.empty((self.ncore, self.nvirt, self.nvirt))
+        S_m = np.empty((self.ncore, self.nvirt, self.nvirt))
 
         for m in range(self.ncore):
-            np.einsum(
-                "eB,nfB->nfe",
-                cvB[m, ...],
-                cvB,
-                optimize=True,
-                out=Vr_m,
-            )
-            np.copyto(Vtmp, Vr_m.swapaxes(1, 2))
-            Vbare_m[:] = 2.0 * Vr_m - Vtmp
+            # V_m[n,f,e] = V[m,n,e,f]
+            np.einsum("eB,nfB->nfe", cvB[m], cvB, optimize=True, out=V_m)
+            np.multiply(V_m, 2.0, out=S_m)
+            S_m -= V_m.swapaxes(1, 2)
 
             renormalize_3index(
-                Vr_m,
-                self.ints["eps"]["c"][m],
-                self.ints["eps"]["c"],
-                self.ints["eps"]["v"],
-                self.ints["eps"]["v"],
-                self.flow_param,
+                V_m, S_m, eps["c"][m], eps["c"], eps["v"], eps["v"], self.flow_param
             )
 
-            E += np.einsum("nfe,nfe->", Vr_m, Vbare_m, optimize=True)
+            E += np.einsum("nfe,nfe->", V_m, S_m, optimize=True)
         return E
 
     def _compute_pt2_energy_cavv(self, form_hbar=False):
+        # E += einsum("muef,mvef,uv->", V["cavv"], S2["cavv"], gamma1), one m at
+        # a time. V and S2 carry the denominators of their own active index.
         E = 0.0
         vaB = self.ints["B"]["va"]
         cvB = self.ints["B"]["cv"]
-        Vbare_m = np.empty((self.nvirt, self.nvirt, self.nact))
-        Vtmp = np.empty((self.nvirt, self.nvirt, self.nact))
-        Vr_m = np.empty((self.nvirt, self.nvirt, self.nact))
+        eps = self.ints["eps"]
+        # so that the denominator of V_m[e,f,u] is e_m - e_e - e_f + e_u
+        e_efu = (-eps["v"], eps["v"], -eps["a"])
+        V_m = np.empty((self.nvirt, self.nvirt, self.nact))
+        S_m = np.empty((self.nvirt, self.nvirt, self.nact))
 
         for m in range(self.ncore):
-            np.einsum(
-                "eB,fvB->efv",
-                cvB[m, ...],
-                vaB,
-                optimize=True,
-                out=Vr_m,
-            )
-            np.copyto(Vtmp, Vr_m.swapaxes(0, 1))
-            Vbare_m[:] = 2.0 * Vr_m - Vtmp
+            # V_m[e,f,u] = V[m,u,e,f]
+            np.einsum("eB,fuB->efu", cvB[m], vaB, optimize=True, out=V_m)
+            np.multiply(V_m, 2.0, out=S_m)
+            S_m -= V_m.swapaxes(0, 1)
 
-            renormalize_3index(
-                Vr_m,
-                self.ints["eps"]["c"][m],
-                -self.ints["eps"]["v"],
-                self.ints["eps"]["v"],
-                -self.ints["eps"]["a"],
-                self.flow_param,
-            )
+            renormalize_3index(V_m, S_m, eps["c"][m], *e_efu, self.flow_param)
 
             E += np.einsum(
-                "efu,efv,uv->", Vr_m, Vbare_m, self.cumulants["gamma1"], optimize=True
+                "efu,efv,uv->", V_m, S_m, self.cumulants["gamma1"], optimize=True
             )
             if form_hbar:
-                self.hbar1 += 0.5 * np.einsum(
-                    "efu,efv->uv", Vr_m, Vbare_m, optimize=True
-                )
+                self.hbar1 += 0.5 * np.einsum("efu,efv->vu", V_m, S_m, optimize=True)
 
         return E
 
     def _compute_pt2_energy_ccav(self, form_hbar=False):
+        # E += einsum("mnve,mnue,uv->", V["ccav"], S2["ccav"], eta1), one m at a
+        # time. V and S2 carry the denominators of their own active index.
         E = 0.0
-
         cvB = self.ints["B"]["cv"]
         caB = self.ints["B"]["ca"]
-
-        Vbare_m = np.empty((self.ncore, self.nact, self.nvirt))
-        Vtmp = np.empty((self.ncore, self.nact, self.nvirt))
-        Vr_m = np.empty((self.ncore, self.nact, self.nvirt))
+        eps = self.ints["eps"]
+        V_m = np.empty((self.ncore, self.nact, self.nvirt))
+        S_m = np.empty((self.ncore, self.nact, self.nvirt))
 
         for m in range(self.ncore):
-            # mneu
-            np.einsum(
-                "eB,nuB->nue",
-                cvB[m, ...],
-                caB,
-                optimize=True,
-                out=Vr_m,
-            )
-            # mnue
-            np.einsum(
-                "uB,neB->nue",
-                caB[m, ...],
-                cvB,
-                optimize=True,
-                out=Vtmp,
-            )
-            Vbare_m[:] = 2.0 * Vr_m - Vtmp
+            # V_m[n,u,e] = V[m,n,u,e] and S_m[n,u,e] = V[n,m,u,e]
+            np.einsum("uB,neB->nue", caB[m], cvB, optimize=True, out=V_m)
+            np.einsum("eB,nuB->nue", cvB[m], caB, optimize=True, out=S_m)
+            S_m *= -1.0
+            S_m += V_m
+            S_m += V_m
 
             renormalize_3index(
-                Vr_m,
-                self.ints["eps"]["c"][m],
-                self.ints["eps"]["c"],
-                self.ints["eps"]["a"],
-                self.ints["eps"]["v"],
-                self.flow_param,
+                V_m, S_m, eps["c"][m], eps["c"], eps["a"], eps["v"], self.flow_param
             )
 
             E += np.einsum(
-                "nue,nve,uv->", Vr_m, Vbare_m, self.cumulants["eta1"], optimize=True
+                "nve,nue,uv->", V_m, S_m, self.cumulants["eta1"], optimize=True
             )
             if form_hbar:
-                self.hbar1 -= 0.5 * np.einsum(
-                    "nue,nve->uv", Vr_m, Vbare_m, optimize=True
-                )
+                self.hbar1 -= 0.5 * np.einsum("nue,nve->uv", V_m, S_m, optimize=True)
 
         return E

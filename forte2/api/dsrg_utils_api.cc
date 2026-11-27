@@ -61,19 +61,22 @@ void export_dsrg_utils_api(nb::module_& m) {
         "Renormalizes a block of two-electron integrals: V_renorm = V * (1 + exp(-s*denom^2))");
     sub_m.def(
         "renormalize_3index",
-        [](np_tensor3& v, double& ep, np_vector& eq, np_vector& er, np_vector& es,
-           double flow_param) { renormalize_3index<double>(v, ep, eq, er, es, flow_param); },
-        "v"_a, "ep"_a, "eq"_a, "er"_a, "es"_a, "flow_param"_a,
-        "Renormalizes a block of three-index intermediates: V_renorm = V * (1 + exp(-s*denom^2)) * "
-        "(1 - exp(-s*denom^2)) / denom");
+        [](np_tensor3_c& v, np_tensor3_c& t, double ep, np_vector_c& eq, np_vector_c& er,
+           np_vector_c& es,
+           double flow_param) { renormalize_3index<double>(v, t, ep, eq, er, es, flow_param); },
+        nb::arg("v").noconvert(), nb::arg("t").noconvert(), "ep"_a, "eq"_a, "er"_a, "es"_a,
+        "flow_param"_a,
+        "Renormalizes a batch of three-index intermediates: v_renorm = v * (1 + "
+        "exp(-s*denom^2)) and t_renorm = t * (1 - exp(-s*denom^2)) / denom");
     sub_m.def(
         "renormalize_3index",
-        [](np_tensor3_complex& v, double& ep, np_vector& eq, np_vector& er, np_vector& es,
-           double flow_param) {
-            renormalize_3index<std::complex<double>>(v, ep, eq, er, es, flow_param);
+        [](np_tensor3_complex_c& v, np_tensor3_complex_c& t, double ep, np_vector_c& eq,
+           np_vector_c& er, np_vector_c& es, double flow_param) {
+            renormalize_3index<std::complex<double>>(v, t, ep, eq, er, es, flow_param);
         },
-        "v"_a, "ep"_a, "eq"_a, "er"_a, "es"_a, "flow_param"_a,
-        "Renormalizes a block of three-index intermediates: V_renorm = V * (1 + exp(-s*denom^2)) * "
-        "(1 - exp(-s*denom^2)) / denom");
+        nb::arg("v").noconvert(), nb::arg("t").noconvert(), "ep"_a, "eq"_a, "er"_a, "es"_a,
+        "flow_param"_a,
+        "Renormalizes a batch of three-index intermediates: v_renorm = v * (1 + "
+        "exp(-s*denom^2)) and t_renorm = t * (1 - exp(-s*denom^2)) / denom");
 }
 } // namespace forte2

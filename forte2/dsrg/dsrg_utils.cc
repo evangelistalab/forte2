@@ -18,12 +18,7 @@ double taylor_exp(double z) {
 }
 
 double regularized_denominator(double x, double s) {
-    double z = std::sqrt(s) * x;
-    if (fabs(z) <= taylor_epsilon) {
-        return taylor_exp(z) * std::sqrt(s);
-    } else {
-        return (1. - std::exp(-s * x * x)) / x;
-    }
+    return regularized_denominator(x, s, std::exp(-s * x * x));
 }
 
 } // namespace forte2
