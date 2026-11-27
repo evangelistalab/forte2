@@ -11,3 +11,4 @@ User guide
     rdms
     exporting_orbitals
     gradients
+    vibemol
