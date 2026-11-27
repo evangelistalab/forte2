@@ -105,10 +105,8 @@ def test_sf_mrpt3_n2_sa():
 def test_sf_mrpt3_hf_sa():
     """Four singlets, including the degenerate 1Pi pair, with no frozen core.
 
-    The four energy terms are pinned separately: the third-order terms differ
-    by 1e-6 Eh here between renormalizing Hbar(2) with first- and with
-    second-order amplitudes, which the N2 references cannot resolve. The
-    second-order term must also reproduce a standalone DSRG-MRPT2.
+    Checks each energy term separately, and checks the second-order term against
+    a standalone DSRG-MRPT2.
     """
     xyz = """
     H 0.000000000000 0.000000000000 -0.949624435830

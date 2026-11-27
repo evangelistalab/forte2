@@ -13,7 +13,9 @@ class _DSRGHelper:
     member of each exchange pair are read as transposes of the stored ones.
 
     A commutator kernel accumulates [H, T] + [H, T]^dagger, the off-diagonal
-    part of [H, T - T^dagger], into the stored blocks of its result.
+    part of [H, T - T^dagger], into the stored blocks of its result. With
+    store_large=False, H_T_C0 and H_T_C1_aa skip the terms of the ccav, ccvv
+    and cavv blocks.
     """
 
     # elements of B['vv'] contracted at a time by the streamed kernels
@@ -36,6 +38,9 @@ class _DSRGHelper:
             "aaav",
             "aavv",
         ]
+        # DSRG-MRPT2 leaves out ccav, ccvv and cavv, the blocks with at most
+        # one active index, and streams their terms (store_large=False).
+        self.hp_2_small_labels = ["ccaa", "caaa", "caav", "cava", "aaav", "aavv"]
         self.non_od_1_labels = ["cc", "aa", "vv"]
         # The non-off-diagonal two-body blocks the kernels below read, one of
         # each Hermitian/exchange pair. Blocks with three or four virtual
@@ -65,7 +70,7 @@ class _DSRGHelper:
 
     # fmt: off
     @staticmethod
-    def H_T_C0(F, V, T1, T2, S2, cumulants, scale=1.0):
+    def H_T_C0(F, V, T1, T2, S2, cumulants, scale=1.0, store_large=True):
         # 32 lines
 
         g1 = cumulants['gamma1']
@@ -101,9 +106,10 @@ class _DSRGHelper:
         C0 += scale * +0.500 * einsum('mxwu,mvzy,wz,uvxy->', V['caaa'], S2['caaa'], e1, l2)
         C0 += scale * -0.500 * einsum('mxuw,mvzy,wz,uvxy->', V['caaa'], T2['caaa'], e1, l2)
         C0 += scale * -0.500 * einsum('mxvw,muyz,wz,uvxy->', V['caaa'], T2['caaa'], e1, l2)
-        C0 += scale * +1.000 * einsum('mnef,mnef->', V['ccvv'], S2['ccvv'])
-        C0 += scale * +1.000 * einsum('muef,mvef,uv->', V['cavv'], S2['cavv'], g1)
-        C0 += scale * +1.000 * einsum('mnve,mnue,uv->', V['ccav'], S2['ccav'], e1)
+        if store_large:
+            C0 += scale * +1.000 * einsum('mnef,mnef->', V['ccvv'], S2['ccvv'])
+            C0 += scale * +1.000 * einsum('muef,mvef,uv->', V['cavv'], S2['cavv'], g1)
+            C0 += scale * +1.000 * einsum('mnve,mnue,uv->', V['ccav'], S2['ccav'], e1)
         if l3 is not None:
             C0 += scale * +1.000 * einsum('yxwe,vuze,xyzuwv->', V['aaav'], T2['aaav'], l3)
             C0 += scale * -1.000 * einsum('mzuv,mwxy,xyzuwv->', V['caaa'], T2['caaa'], l3)
@@ -111,7 +117,7 @@ class _DSRGHelper:
         return C0
 
     @staticmethod
-    def H_T_C1_aa(C1, F, V, T1, T2, S2, cumulants, scale=1.0):
+    def H_T_C1_aa(C1, F, V, T1, T2, S2, cumulants, scale=1.0, store_large=True):
         # 60 lines
 
         g1 = cumulants['gamma1']
@@ -129,7 +135,6 @@ class _DSRGHelper:
         C1 += scale * +1.000 * einsum('ua,vwxa,uw->vx', F['av'], T2['aaav'], g1)
         C1 += scale * -0.500 * einsum('ua,vwxa,uv->wx', F['av'], T2['aaav'], g1)
         C1 += scale * -0.500 * einsum('ijuv,ijwx,xv->uw', V['ccaa'], S2['ccaa'], e1)
-        C1 += scale * -1.000 * einsum('ijua,ijva->uv', V['ccav'], S2['ccav'])
         C1 += scale * +1.000 * einsum('iuvw,ixvw->xu', V['caaa'], S2['caaa'])
         C1 += scale * -0.500 * einsum('iuvw,iuxy,xv->wy', V['caaa'], S2['caaa'], e1)
         C1 += scale * -0.500 * einsum('iuvw,iuxy,yw->vx', V['caaa'], S2['caaa'], e1)
@@ -159,7 +164,6 @@ class _DSRGHelper:
         C1 += scale * +0.500 * einsum('iuav,iwax,uw->vx', V['cava'], S2['cava'], e1)
         C1 += scale * -0.500 * einsum('iuav,iwax,xv->wu', V['cava'], S2['cava'], g1)
         C1 += scale * +2.000 * einsum('iuav,ia->vu', V['cava'], T1['cv'])
-        C1 += scale * +1.000 * einsum('iuab,ivab->vu', V['cavv'], S2['cavv'])
         C1 += scale * -1.000 * einsum('uvwa,uvxa->wx', V['aaav'], S2['aaav'])
         C1 += scale * +0.500 * einsum('uvwa,xvya,ux->wy', V['aaav'], S2['aaav'], e1)
         C1 += scale * +0.500 * einsum('uvwa,uxya,vx->wy', V['aaav'], S2['aaav'], e1)
@@ -178,6 +182,9 @@ class _DSRGHelper:
         C1 += scale * +1.000 * einsum('uvwa,xyza,vzyx->wu', V['aaav'], T2['aaav'], l2)
         C1 += scale * -0.500 * einsum('uvwa,xyza,uzyx->wv', V['aaav'], T2['aaav'], l2)
         C1 += scale * +0.500 * einsum('uvab,wxab,vx->wu', V['aavv'], S2['aavv'], g1)
+        if store_large:
+            C1 += scale * -1.000 * einsum('ijua,ijva->uv', V['ccav'], S2['ccav'])
+            C1 += scale * +1.000 * einsum('iuab,ivab->vu', V['cavv'], S2['cavv'])
 
     @staticmethod
     def H_T_C2_aaaa(C2, F, V, T1, T2, S2, cumulants, scale=1.0):
