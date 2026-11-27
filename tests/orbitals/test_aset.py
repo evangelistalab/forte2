@@ -4,18 +4,22 @@ from pathlib import Path
 
 from forte2 import (
     ASET,
+    AVAS,
     CI,
     CISolver,
     GHF,
     MCOptimizer,
     RelCISolver,
     RHF,
+    ROHF,
     SpinorUpcaster,
     State,
     System,
+    UHF,
     X2CParams,
 )
 from forte2.base_classes import DavidsonLiuParams
+from forte2.base_classes.rebuild import rebind_method_chain, rebuild_method_chain
 from forte2.dsrg import DSRG_MRPT2, RelDSRG_MRPT2
 from forte2.data.atom_data import EH_TO_WN
 from forte2.helpers.comparisons import approx, approx_abs
@@ -829,3 +833,290 @@ def test_aset_keeps_symmetry_labels():
     # A fragment of one of the two equivalent atoms breaks the symmetry.
     with pytest.raises(ValueError, match="ASET fragment breaks D2H symmetry"):
         embed(li2(True), ["Li1"])
+
+
+def _make_hnnf_system(z_f: float = 2.75) -> System:
+    xyz = f"""
+    H 0.00 0.00 0.00
+    N 0.00 0.00 1.02
+    N 1.15 0.00 1.45
+    F 1.15 0.00 {z_f:.4f}
+    """
+    return System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-jkfit",
+        symmetry=False,
+    )
+
+
+def test_aset_parent_methods_rhf_rohf_ghf_ci_avas():
+    system = _make_hnnf_system()
+
+    # 1. RHF -> ASET -> CI (nactv == 0) and RHF -> CI(nactv == 0) -> ASET -> CI
+    rhf = RHF(charge=0)(system)
+    aset_rhf = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(rhf)
+    ci_rhf = CI(CISolver(State(nel=24, multiplicity=1, ms=0.0)))(aset_rhf).run()
+    assert aset_rhf.executed
+    assert aset_rhf.mo_space.nactv == 0
+    assert aset_rhf.emb_space is not None
+    assert aset_rhf.semican is not None
+    assert ci_rhf.E == approx(rhf.E)
+
+    ci_zero = CI(
+        CISolver(
+            State(nel=24, multiplicity=1, ms=0.0),
+            core_orbitals=12,
+            active_orbitals=0,
+        )
+    )(rhf)
+    aset_ci_zero = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(
+        ci_zero
+    )
+    ci_after_zero = CI(CISolver(State(nel=24, multiplicity=1, ms=0.0)))(
+        aset_ci_zero
+    ).run()
+    assert aset_ci_zero.mo_space.nactv == 0
+    assert ci_after_zero.E == approx(rhf.E)
+
+    # 2. ROHF -> ASET -> CI (triplet O2 + H2, nactv == 2)
+    sys_o2_h2 = System(
+        xyz="""
+        O 0.00 0.00 0.00
+        O 0.00 0.00 1.21
+        H 0.00 0.00 4.00
+        H 0.00 0.00 4.74
+        """,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-jkfit",
+        symmetry=False,
+    )
+    rohf = ROHF(charge=0, ms=1.0)(sys_o2_h2)
+    aset_rohf = ASET(fragment=["O"], cutoff_method="threshold", cutoff=0.5)(rohf)
+    ci_rohf = CI(CISolver(State(nel=18, multiplicity=3, ms=1.0)))(aset_rohf).run()
+    assert aset_rohf.executed
+    assert aset_rohf.mo_space.nactv == 2
+    assert np.allclose(aset_rohf._g1, np.eye(2), atol=1e-12)
+    assert ci_rohf.E == approx(rohf.E)
+
+    # 3. GHF -> ASET -> CI(RelCISolver) and GHF -> AVAS -> ASET (2-component)
+    sys_fh_h2 = System(
+        xyz="""
+        F 0.00 0.00 0.00
+        H 0.00 0.00 0.92
+        H 0.00 0.00 4.00
+        H 0.00 0.00 4.74
+        """,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-jkfit",
+        symmetry=False,
+    )
+    ghf = GHF(charge=0)(sys_fh_h2)
+    aset_ghf = ASET(fragment=["F", "H1"], cutoff_method="threshold", cutoff=0.5)(ghf)
+    ci_ghf = CI(RelCISolver(State(nel=12, multiplicity=1, ms=0.0)))(aset_ghf).run()
+    assert aset_ghf.executed
+    assert aset_ghf.two_component
+    assert aset_ghf.mo_space.nactv == 0
+    assert ci_ghf.E == approx(ghf.E)
+
+    avas_ghf = AVAS(
+        subspace=["F(2p)"],
+        selection_method="separate",
+        num_active_docc=2,
+        num_active_uocc=2,
+    )(ghf)
+    aset_avas_ghf = ASET(fragment=["F", "H1"], cutoff_method="threshold", cutoff=0.5)(
+        avas_ghf
+    ).run()
+    assert aset_avas_ghf.two_component
+    assert aset_avas_ghf.mo_space.nactv == 4
+    assert np.allclose(
+        np.sort(np.linalg.eigvalsh(aset_avas_ghf._g1))[::-1],
+        np.array([1.0, 1.0, 0.0, 0.0]),
+        atol=1e-12,
+    )
+
+    # 4. RHF -> CI -> ASET -> CI (CASCI parent)
+    ci_parent = CI(
+        CISolver(
+            State(nel=24, multiplicity=1, ms=0.0),
+            core_orbitals=11,
+            active_orbitals=2,
+        )
+    )(rhf)
+    aset_ci = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(
+        ci_parent
+    )
+    ci_child = CI(CISolver(State(nel=24, multiplicity=1, ms=0.0)))(aset_ci).run()
+    assert aset_ci.executed
+    assert aset_ci.mo_space.nactv == 2
+    assert ci_child.E == approx(ci_parent.E)
+
+    # 5. Charged RHF(charge=2) -> AVAS -> ASET -> MCOptimizer (exact SCF density matrix)
+    rhf_cat = RHF(charge=2)(system)
+    avas_cat = AVAS(
+        subspace=["N(2p)"],
+        selection_method="separate",
+        num_active_docc=1,
+        num_active_uocc=1,
+    )(rhf_cat)
+    aset_avas_cat = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(
+        avas_cat
+    )
+    mc_avas_cat = MCOptimizer(CISolver(State(nel=22, multiplicity=1, ms=0.0)))(
+        aset_avas_cat
+    ).run()
+    assert aset_avas_cat.executed
+    assert aset_avas_cat.mo_space.nactv == 2
+    assert np.allclose(
+        np.sort(np.linalg.eigvalsh(aset_avas_cat._g1))[::-1],
+        np.array([2.0, 0.0]),
+        atol=1e-12,
+    )
+    assert mc_avas_cat.converged
+    assert mc_avas_cat.E <= rhf_cat.E + 1e-10
+
+    # 6. Charged open-shell ROHF(charge=1, ms=0.5) -> AVAS -> ASET
+    rohf_cat = ROHF(charge=1, ms=0.5)(sys_o2_h2)
+    avas_rohf_cat = AVAS(
+        subspace=["O(2p)"],
+        selection_method="separate",
+        num_active_docc=1,
+        num_active_uocc=1,
+    )(rohf_cat)
+    aset_avas_rohf_cat = ASET(fragment=["O"], cutoff_method="threshold", cutoff=0.5)(
+        avas_rohf_cat
+    ).run()
+    assert aset_avas_rohf_cat.mo_space.nactv == 3
+    assert np.allclose(
+        np.sort(np.linalg.eigvalsh(aset_avas_rohf_cat._g1))[::-1],
+        np.array([2.0, 1.0, 0.0]),
+        atol=1e-12,
+    )
+
+    # 7. Parent validation: unbound parent -> RuntimeError, unsupported Method -> TypeError
+    with pytest.raises(RuntimeError, match="has not been bound"):
+        ASET(fragment=["H"])(RHF(charge=0))
+    uhf = UHF(charge=0, ms=0.0)(system)
+    with pytest.raises(TypeError, match="Parent method must be"):
+        ASET(fragment=["H"])(uhf)
+    pt2 = DSRG_MRPT2(flow_param=0.5)(ci_child)
+    with pytest.raises(TypeError, match="Parent method must be"):
+        ASET(fragment=["H"])(pt2)
+
+
+def test_aset_num_of_orbitals_none_fallback():
+    system = _make_hnnf_system()
+    rhf = RHF(charge=0)(system).run()
+
+    aset_ref = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(
+        rhf
+    ).run()
+
+    # num_A_occ=None falls back to threshold; num_A_vir=3 is fixed
+    aset_mix1 = ASET(
+        fragment=["H", "N"],
+        cutoff_method="num_of_orbitals",
+        cutoff=0.5,
+        num_A_occ=None,
+        num_A_vir=3,
+    )(rhf).run()
+    assert len(aset_mix1.partition["index_A_occ"]) == len(
+        aset_ref.partition["index_A_occ"]
+    )
+    assert len(aset_mix1.partition["index_A_vir"]) == 3
+
+    # num_A_occ=4 is fixed; num_A_vir=None falls back to threshold
+    aset_mix2 = ASET(
+        fragment=["H", "N"],
+        cutoff_method="num_of_orbitals",
+        cutoff=0.5,
+        num_A_occ=4,
+        num_A_vir=None,
+    )(rhf).run()
+    assert len(aset_mix2.partition["index_A_occ"]) == 4
+    assert len(aset_mix2.partition["index_A_vir"]) == len(
+        aset_ref.partition["index_A_vir"]
+    )
+
+    # Parameter validation
+    with pytest.raises(AssertionError):
+        ASET(fragment=["H"], cutoff_method="num_of_orbitals", num_A_occ=-1, num_A_vir=0)
+    with pytest.raises(AssertionError):
+        ASET(fragment=["H"], cutoff_method="num_of_orbitals", num_A_occ=0, num_A_vir=-1)
+    with pytest.raises(AssertionError):
+        ASET(
+            fragment=["H"],
+            cutoff_method="num_of_orbitals",
+            cutoff=1.5,
+            num_A_occ=None,
+            num_A_vir=2,
+        )
+    with pytest.raises(AssertionError):
+        ASET(
+            fragment=["H"],
+            cutoff_method="num_of_orbitals",
+            cutoff=0.0,
+            num_A_occ=2,
+            num_A_vir=None,
+        )
+
+
+def test_aset_num_of_orbitals_exceeding_fragment_support_raises():
+    system = _make_hnnf_system()
+    rhf = RHF(charge=0)(system).run()
+
+    # Fragment ["H"] has 1 AO in sto-3g, so at most 1 core and 1 virtual orbital
+    # have nonzero overlap on ["H"].
+    with pytest.raises(ValueError, match="Enlarge 'fragment'"):
+        ASET(
+            fragment=["H"],
+            cutoff_method="num_of_orbitals",
+            num_A_occ=None,
+            num_A_vir=2,
+        )(rhf).run()
+
+    with pytest.raises(ValueError, match="Enlarge 'fragment'"):
+        ASET(
+            fragment=["H"],
+            cutoff_method="num_of_orbitals",
+            num_A_occ=2,
+            num_A_vir=None,
+        )(rhf).run()
+
+    # Fragment ["N", "H"] has 11 AOs in sto-3g while HNNF has 12 core orbitals.
+    with pytest.raises(ValueError, match="Enlarge 'fragment'"):
+        ASET(
+            fragment=["N", "H"],
+            cutoff_method="num_of_orbitals",
+            num_A_occ=12,
+            num_A_vir=None,
+        )(rhf).run()
+
+
+def test_aset_rebuild_and_rebind_method_chain():
+    sys1 = _make_hnnf_system(z_f=2.75)
+    sys2 = _make_hnnf_system(z_f=2.85)
+
+    def make_chain(system):
+        rhf = RHF(charge=0)(system)
+        aset = ASET(fragment=["H", "N"], cutoff_method="threshold", cutoff=0.5)(rhf)
+        ci = CI(CISolver(State(nel=24, multiplicity=1, ms=0.0)))(aset)
+        pt2 = DSRG_MRPT2(flow_param=0.5)(ci)
+        return aset, pt2
+
+    aset1, pt2_1 = make_chain(sys1)
+    pt2_1.run()
+    assert aset1.fragment == ["H", "N"]
+
+    _, pt2_fresh = make_chain(sys2)
+    pt2_fresh.run()
+
+    pt2_rebuilt = rebuild_method_chain(pt2_1, sys2).run()
+    assert abs(pt2_rebuilt.E - pt2_fresh.E) < 1e-12
+    assert aset1.fragment == ["H", "N"]
+    assert pt2_rebuilt.parent_method.parent_method.fragment == ["H", "N"]
+
+    rebind_method_chain(pt2_1, sys2).run()
+    assert abs(pt2_1.E - pt2_fresh.E) < 1e-12
+    assert aset1.fragment == ["H", "N"]

@@ -2,14 +2,15 @@ from dataclasses import dataclass, field
 import numpy as np
 import re
 
-import forte2
 from forte2.lib import ints
+from forte2.scf import RHF, ROHF, GHF
 from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.system.basis_utils import BasisInfo
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import block_diag_2x2, block_eigh
-from forte2.base_classes import Method
+from forte2.base_classes import ActiveSpaceDriver, Method
 from forte2.data import ATOM_SYMBOL_TO_Z
+from forte2.orbitals.avas import AVAS
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 from forte2.orbitals.final_orbitals import FinalOrbitals
 
@@ -17,7 +18,7 @@ from forte2.orbitals.final_orbitals import FinalOrbitals
 @dataclass
 class ASET(Method):
     """
-    Zeroth-order Active Space Embedding Theory (ASET(0)) method for paritioning and projecting molecules.
+    Zeroth-order Active Space Embedding Theory (ASET(0)) method for partitioning and projecting molecules.
 
     Parameters
     ----------
@@ -31,10 +32,21 @@ class ASET(Method):
         Method for choosing the embedding cutoff. Options include "threshold", "num_of_orbitals".
     cutoff : float, optional, default = 0.5
         Projector eigenvalue for simple threshold methods.
-    num_A_occ : int, optional, default=0
-        Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-    num_A_vir : int, optional, default=0
-        Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
+    num_A_occ : int | None, optional, default=0
+        Number of occupied orbitals assigned to fragment A when ``cutoff_method`` is
+        ``"num_of_orbitals"``. If ``None``, occupied orbitals fall back to ``cutoff``.
+    num_A_vir : int | None, optional, default=0
+        Number of virtual orbitals assigned to fragment A when ``cutoff_method`` is
+        ``"num_of_orbitals"``. If ``None``, virtual orbitals fall back to ``cutoff``.
+
+    Attributes
+    ----------
+    emb_space : EmbeddingMOSpace
+        Embedding orbital partition into frozen core, environment occupied (B),
+        fragment occupied (A), active, fragment virtual (A), environment virtual (B),
+        and frozen virtual subspaces.
+    semican : Semicanonicalizer
+        Semicanonicalizer built on ``emb_space`` during :meth:`run`.
 
     Notes
     -----
@@ -62,8 +74,8 @@ class ASET(Method):
     frozen_virtual_orbitals: int | list[int] = None
     cutoff_method: str = "threshold"
     cutoff: float = 0.5
-    num_A_occ: int = 0
-    num_A_vir: int = 0
+    num_A_occ: int | None = 0
+    num_A_vir: int | None = 0
 
     executed: bool = field(default=False, init=False)
     final_orbitals: FinalOrbitals = field(default="semicanonical", init=False)
@@ -71,14 +83,19 @@ class ASET(Method):
     def __post_init__(self):
         self._regex = r"^([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)??$"
         self._check_parameters()
-        self.requires = {"system", "mos", "mo_space"}
+        self.requires = {"system", "mos"}
         self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, parent_method):
-        assert isinstance(
-            parent_method, forte2.mcopt.MCOptimizer
-        ), f"Parent method must be MCSCF, got {type(parent_method)}"
         self._register_parent_method(parent_method)
+        if not isinstance(
+            parent_method,
+            (ActiveSpaceDriver, RHF, ROHF, GHF, AVAS),
+        ):
+            raise TypeError(
+                "Parent method must be MCOptimizer, CI, RHF, ROHF, GHF, or AVAS, "
+                f"got {type(parent_method).__name__}."
+            )
         return self
 
     def run(self):
@@ -86,7 +103,50 @@ class ASET(Method):
             self.parent_method.run()
         self.system = self.parent_method.system
         self.mos = self.parent_method.mos.copy()
-        self.mo_space = self.parent_method.mo_space
+        nmo = self.mos.C[0].shape[1]
+        if isinstance(self.parent_method, ActiveSpaceDriver):
+            self.mo_space = self.parent_method.mo_space
+            self._g1 = self.parent_method.make_average_rdm(1)
+        else:
+            if isinstance(self.parent_method, RHF):
+                self.mo_space = MOSpace(
+                    nmo=nmo,
+                    core_orbitals=list(range(self.parent_method.ndocc)),
+                    active_orbitals=[],
+                )
+            elif isinstance(self.parent_method, ROHF):
+                nd = self.parent_method.ndocc
+                ns = self.parent_method.nsocc
+                self.mo_space = MOSpace(
+                    nmo=nmo,
+                    core_orbitals=list(range(nd)),
+                    active_orbitals=list(range(nd, nd + ns)),
+                )
+            elif isinstance(self.parent_method, GHF):
+                self.mo_space = MOSpace(
+                    nmo=nmo,
+                    core_orbitals=list(range(self.parent_method.nocc)),
+                    active_orbitals=[],
+                )
+            elif isinstance(self.parent_method, AVAS):
+                self.mo_space = self.parent_method.mo_space
+
+            scf = (
+                self.parent_method.parent_method
+                if isinstance(self.parent_method, AVAS)
+                else self.parent_method
+            )
+            if self.mo_space.nactv == 0:
+                dtype = complex if self.two_component else float
+                self._g1 = np.zeros((0, 0), dtype=dtype)
+            else:
+                S_ao = ints.overlap(self.system.basis)
+                if self.two_component:
+                    S_ao = block_diag_2x2(S_ao)
+                D_ao = scf._build_total_density_matrix()
+                SC_act = S_ao @ self.mos.C[0][:, self.mo_space.active_indices]
+                g1 = (SC_act.conj().T @ D_ao @ SC_act).T
+                self._g1 = 0.5 * (g1 + g1.conj().T)
         self.mo_space = self.mo_space.update_frozen_orbitals(
             self.frozen_core_orbitals, self.frozen_virtual_orbitals
         )
@@ -112,14 +172,14 @@ class ASET(Method):
         logger.log_info1(
             f"Cutoff method: {self.cutoff_method} \nCutoff value: {self.cutoff}"
         )
-        self.fragment = self._parse_fragment(self.fragment)
+        self.fragment_atoms = self._parse_fragment(self.fragment)
         self.P_ao_frag = self._make_fragment_projector()
-        self.executed = True
         self.partition = self._make_embedding()
         self._print_embedding_info(**self.partition)
         logger.log_info1("\nMO space is updated.")
         self._update_mo_space_from_partition()
         logger.log_info1("\nASET procedure completed.")
+        self.executed = True
 
         return self
 
@@ -132,11 +192,20 @@ class ASET(Method):
         if self.cutoff_method == "threshold":
             assert (
                 self.cutoff > 0 and self.cutoff < 1
-            ), f"threshold must be in [0, 1], got {self.cutoff}"
+            ), f"threshold must be in (0, 1), got {self.cutoff}"
         elif self.cutoff_method == "num_of_orbitals":
-            assert (
-                self.num_A_occ >= 0 and self.num_A_vir >= 0
-            ), f"Number of occupied and virtual orbitals in Fragment A must be non-negative, got {self.num_A_occ}, {self.num_A_vir}"
+            if self.num_A_occ is None or self.num_A_vir is None:
+                assert (
+                    self.cutoff > 0 and self.cutoff < 1
+                ), f"threshold must be in (0, 1), got {self.cutoff}"
+            if self.num_A_occ is not None:
+                assert (
+                    self.num_A_occ >= 0
+                ), f"Number of occupied orbitals in Fragment A must be non-negative, got {self.num_A_occ}"
+            if self.num_A_vir is not None:
+                assert (
+                    self.num_A_vir >= 0
+                ), f"Number of virtual orbitals in Fragment A must be non-negative, got {self.num_A_vir}"
 
     def _parse_fragment(self, frag_str: str | list[str]) -> list[int]:
         """
@@ -227,7 +296,7 @@ class ASET(Method):
 
         # 2. Collect ao indices in fragment
         frag_ao_indices = []
-        for atom_idx in self.fragment:
+        for atom_idx in self.fragment_atoms:
             # atomic number for this atom
             Z_i = int(self.system.atoms[atom_idx][0])
 
@@ -319,6 +388,23 @@ class ASET(Method):
         occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
         vir_pairs = sorted(zip(virt_inds, lv_vals), key=lambda x: x[1], reverse=True)
 
+        if self.cutoff_method == "num_of_orbitals":
+            null_tol = 1.0e-10
+            n_nonnull_occ = int(np.sum(lo_vals >= null_tol))
+            if self.num_A_occ is not None and self.num_A_occ > n_nonnull_occ:
+                raise ValueError(
+                    f"num_A_occ={self.num_A_occ} exceeds the {n_nonnull_occ} core "
+                    f"orbitals with nonzero overlap on fragment {self.fragment}. "
+                    "Enlarge 'fragment' or reduce 'num_A_occ'."
+                )
+            n_nonnull_vir = int(np.sum(lv_vals >= null_tol))
+            if self.num_A_vir is not None and self.num_A_vir > n_nonnull_vir:
+                raise ValueError(
+                    f"num_A_vir={self.num_A_vir} exceeds the {n_nonnull_vir} virtual "
+                    f"orbitals with nonzero overlap on fragment {self.fragment}. "
+                    "Enlarge 'fragment' or reduce 'num_A_vir'."
+                )
+
         # Apply the unitary transformations to the occupied and virtual blocks of C
         C[:, core_inds] = C[:, core_inds] @ Uo
         C[:, virt_inds] = C[:, virt_inds] @ Uv
@@ -334,27 +420,35 @@ class ASET(Method):
                 (index_A_vir if v > self.cutoff else index_B_vir).append(i)
 
         elif self.cutoff_method == "num_of_orbitals":
-            for rank, (glob_i, v) in enumerate(occ_pairs):
-                if rank < self.num_A_occ:
-                    index_A_occ.append(glob_i)
-                else:
-                    index_B_occ.append(glob_i)
-                    if v > 0.5:
-                        logger.log_info1(
-                            f"Warning! Occupied orbital {glob_i} has eigenvalue {v:8.6f} "
-                            "and is assigned to B."
-                        )
+            if self.num_A_occ is None:
+                for i, v in occ_pairs:
+                    (index_A_occ if v > self.cutoff else index_B_occ).append(i)
+            else:
+                for rank, (glob_i, v) in enumerate(occ_pairs):
+                    if rank < self.num_A_occ:
+                        index_A_occ.append(glob_i)
+                    else:
+                        index_B_occ.append(glob_i)
+                        if v > 0.5:
+                            logger.log_info1(
+                                f"Warning! Occupied orbital {glob_i} has eigenvalue {v:8.6f} "
+                                "and is assigned to B."
+                            )
 
-            for rank, (glob_i, v) in enumerate(vir_pairs):
-                if rank < self.num_A_vir:
-                    index_A_vir.append(glob_i)
-                else:
-                    index_B_vir.append(glob_i)
-                    if v > 0.5:
-                        logger.log_info1(
-                            f"Warning! Virtual orbital {glob_i} has eigenvalue {v:8.6f} "
-                            "and is assigned to B."
-                        )
+            if self.num_A_vir is None:
+                for i, v in vir_pairs:
+                    (index_A_vir if v > self.cutoff else index_B_vir).append(i)
+            else:
+                for rank, (glob_i, v) in enumerate(vir_pairs):
+                    if rank < self.num_A_vir:
+                        index_A_vir.append(glob_i)
+                    else:
+                        index_B_vir.append(glob_i)
+                        if v > 0.5:
+                            logger.log_info1(
+                                f"Warning! Virtual orbital {glob_i} has eigenvalue {v:8.6f} "
+                                "and is assigned to B."
+                            )
         index_A_occ.sort()
         index_B_occ.sort()
         index_A_vir.sort()
@@ -363,7 +457,7 @@ class ASET(Method):
         # Semi-canonicalize the blocks
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
-        g1 = self.parent_method.ci_solver.make_average_rdm(1)
+        g1 = self._g1
         emb_space = EmbeddingMOSpace(
             nmo=self.nmo,
             frozen_core_orbitals=frozen_core_inds,
@@ -374,6 +468,7 @@ class ASET(Method):
             B_virtual_orbitals=index_B_vir,
             frozen_virtual_orbitals=frozen_virt_inds,
         )
+        self.emb_space = emb_space
 
         # Copy the orbitals into embedding contiguous order
         C_emb = C[:, emb_space.orig_to_contig].copy()
@@ -385,6 +480,7 @@ class ASET(Method):
             irrep_indices=irreps[emb_space.orig_to_contig],
         )
         semican.semi_canonicalize(g1=g1, C_contig=C_emb)
+        self.semican = semican
 
         # Replace the original orbitals with the semi-canonicalized ones in the original order
         self.mos.C[0] = semican.C_semican[:, emb_space.contig_to_orig].copy()
