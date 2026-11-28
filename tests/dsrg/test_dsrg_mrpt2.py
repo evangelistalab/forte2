@@ -89,6 +89,38 @@ def test_sf_mrpt2_o2_triplet():
     assert ci_solver.E[0] == approx(-149.965334494277)  # dsrg.relax_energies[1, 1]
 
 
+def test_sf_mrpt2_h2o_correlated_core():
+    """Two singlets with the O 2s orbital as correlated core and one relaxation.
+
+    The active 1-RDM is not diagonal and the core is shallow enough for the
+    ccav and cavv blocks to be renormalized. References are forte (version 1)
+    SA-MRDSRG with corr_level pt2 and int_type df.
+    """
+    xyz = """
+    O  0.000000000000  0.000000000000 -0.068516219320
+    H  0.000000000000 -0.790689573744  0.543701060715
+    H  0.000000000000  0.790689573744  0.543701060715
+    """
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+
+    ci_solver = CISolver(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        core_orbitals=2,
+        active_orbitals=6,
+        nroots=2,
+    )
+    mc = MCOptimizer(ci_solver, e_tol=1e-12, g_tol=1e-8)(rhf)
+
+    dsrg = DSRG_MRPT2(flow_param=0.5, frozen_core_orbitals=1, relax_reference="once")(
+        mc
+    )
+    dsrg.run()
+
+    assert dsrg.relax_energies[0, 0] == approx(-76.082524351114)
+    assert dsrg.relax_eigvals == approx([-76.226940440305, -75.943038648763])
+
+
 def test_mrpt2_all_active():
     xyz = f"""
     H 0.0 0.0 0.0

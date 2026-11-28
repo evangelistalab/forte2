@@ -34,10 +34,10 @@ def renormalize_V_block(v: Annotated[NDArray[numpy.complex128], dict(shape=(None
     """
 
 @overload
-def renormalize_3index(v: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None))], ep: float, eq: Annotated[NDArray[numpy.float64], dict(shape=(None,))], er: Annotated[NDArray[numpy.float64], dict(shape=(None,))], es: Annotated[NDArray[numpy.float64], dict(shape=(None,))], flow_param: float) -> None: ...
+def renormalize_3index(v: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')], t: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')], ep: float, eq: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], er: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], es: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], flow_param: float) -> None: ...
 
 @overload
-def renormalize_3index(v: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None))], ep: float, eq: Annotated[NDArray[numpy.float64], dict(shape=(None,))], er: Annotated[NDArray[numpy.float64], dict(shape=(None,))], es: Annotated[NDArray[numpy.float64], dict(shape=(None,))], flow_param: float) -> None:
+def renormalize_3index(v: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None), order='C')], t: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None), order='C')], ep: float, eq: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], er: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], es: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], flow_param: float) -> None:
     """
-    Renormalizes a block of three-index intermediates: V_renorm = V * (1 + exp(-s*denom^2)) * (1 - exp(-s*denom^2)) / denom
+    Renormalizes a batch of three-index intermediates: v_renorm = v * (1 + exp(-s*denom^2)) and t_renorm = t * (1 - exp(-s*denom^2)) / denom
     """

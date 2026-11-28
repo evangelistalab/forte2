@@ -4,7 +4,7 @@ import pytest
 from forte2 import AVAS, CI, GHF, MCOptimizer, RelCISolver, System, X2CParams
 from forte2.base_classes import CIParams
 from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx, approx_vtight
 from forte2.data.atom_data import EH_TO_WN
 
 
@@ -330,6 +330,41 @@ def test_mrpt2_sh_with_slow():
     assert dsrg.relax_eigvals == approx(dsrg_slow.relax_eigvals)
     assert dsrg.relax_eigvals_history == approx(dsrg_slow.relax_eigvals_history)
     assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
+
+
+def test_rel_mrpt2_h2o_correlated_core_with_slow():
+    """The O 2s orbital as correlated core, with one relaxation.
+
+    The active 1-RDM is not diagonal and the core is shallow enough for the
+    ccav and cavv blocks to be renormalized, which the streamed terms of the
+    fast implementation must reproduce.
+    """
+    xyz = """
+    O  0.000000000000  0.000000000000 -0.068516219320
+    H  0.000000000000 -0.790689573744  0.543701060715
+    H  0.000000000000  0.790689573744  0.543701060715
+    """
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    mf = GHF(charge=0, e_tol=1e-12)(system)
+
+    ci_solver = RelCISolver(nel=10, core_orbitals=4, active_orbitals=12)
+    mc = MCOptimizer(ci_solver, e_tol=1e-12, g_tol=1e-8)(mf)
+    dsrg = RelDSRG_MRPT2(
+        flow_param=0.5, frozen_core_orbitals=2, relax_reference="once"
+    )(mc)
+    dsrg.run()
+
+    ci_solver = RelCISolver(nel=10, core_orbitals=4, active_orbitals=12)
+    mc = MCOptimizer(ci_solver, e_tol=1e-12, g_tol=1e-8)(mf)
+    dsrg_slow = RelDSRG_MRPT2_Slow(
+        flow_param=0.5, frozen_core_orbitals=2, relax_reference="once"
+    )(mc)
+    dsrg_slow.run()
+
+    assert dsrg_slow.relax_energies[0, 0] == approx(-76.219317059688)
+    assert dsrg_slow.relax_eigvals[0] == approx(-76.221845715230)
+    assert dsrg.relax_energies[0, 0] == approx_vtight(dsrg_slow.relax_energies[0, 0])
+    assert dsrg.relax_eigvals == approx_vtight(dsrg_slow.relax_eigvals)
 
 
 def test_rel_mrpt2_all_active():

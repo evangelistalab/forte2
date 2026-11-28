@@ -60,6 +60,8 @@ class RelDSRG_MRPT2(DSRGBase):
               J. Chem. Phys. 2016, 144, 204111.
     .. [4] C. Li and F. A. Evangelista, "Driven similarity renormalization group for excited states: A state-averaged perturbation theory",
            J. Chem. Phys. 2018, 148, 124106.
+    .. [5] Z. Zhao and F. A. Evangelista, "One-step relativistic driven similarity renormalization group multireference perturbation theory",
+           J. Chem. Theory Comput. 2026, 22, 7230-7248.
     """
 
     def __post_init__(self):
@@ -504,9 +506,8 @@ class RelDSRG_MRPT2(DSRGBase):
         Vr_i = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
         B_cv = self.ints["B"]["cv"]
         for i in range(self.ncore):
-            # T2 = conj(Vbare) * renorm
-            # V = Vbare * (1 + exp)
-            # So, we compute conj(Vbare) * Vr, where Vr = Vbare * renorm * (1 + exp)
+            # T2 = conj(Vbare * renorm) and V = Vbare * (1 + exp), so we compute
+            # conj(Vbare_i) * Vr_i with Vbare_i = Vbare * renorm, Vr_i = Vbare * (1 + exp)
             # this path is optimal because it is basically B_cv @ B_cv[i].T
             np.einsum("aB,jbB->jba", B_cv[i, :, :], B_cv, optimize=True, out=Vbare_i)
             np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
@@ -515,6 +516,7 @@ class RelDSRG_MRPT2(DSRGBase):
             Vr_i[:] = Vbare_i
             renormalize_3index(
                 Vr_i,
+                Vbare_i,
                 self.ints["eps"]["c"][i],
                 self.ints["eps"]["c"],
                 self.ints["eps"]["v"],
@@ -549,9 +551,9 @@ class RelDSRG_MRPT2(DSRGBase):
         B_av = self.ints["B"]["av"]
         B_cv = self.ints["B"]["cv"]
         for i in range(self.ncore):
-            # T2 = conj(Vbare) * renorm
-            # V = Vbare * (1 + exp)
-            # So, we compute Vbare * Vr, where Vr = Vbare * renorm * (1 + exp)
+            # T2 = conj(Vbare * renorm) and V = Vbare * (1 + exp), each with the
+            # denominator of its own active index, so we compute
+            # conj(Vbare_i) * Vr_i with Vbare_i = Vbare * renorm, Vr_i = Vbare * (1 + exp)
             # again, this path is optimal because it is basically B_av @ B_cv[i].T
             np.einsum("aB,ubB->uba", B_cv[i, :, :], B_av, optimize=True, out=Vbare_i)
             np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
@@ -560,6 +562,7 @@ class RelDSRG_MRPT2(DSRGBase):
             Vr_i[:] = Vbare_i
             renormalize_3index(
                 Vr_i,
+                Vbare_i,
                 self.ints["eps"]["c"][i],
                 self.ints["eps"]["a"],
                 self.ints["eps"]["v"],
@@ -611,9 +614,9 @@ class RelDSRG_MRPT2(DSRGBase):
         B_cv = self.ints["B"]["cv"]
         B_ca = self.ints["B"]["ca"]
         for i in range(self.ncore):
-            # T2 = conj(Vbare) * renorm
-            # V = Vbare * (1 + exp)
-            # So, we compute conj(Vbare) * Vr, where Vr = Vbare * renorm * (1 + exp)
+            # T2 = conj(Vbare * renorm) and V = Vbare * (1 + exp), each with the
+            # denominator of its own active index, so we compute
+            # conj(Vbare_i) * Vr_i with Vbare_i = Vbare * renorm, Vr_i = Vbare * (1 + exp)
             np.einsum("uB,jaB->jau", B_ca[i, :, :], B_cv, optimize=True, out=Vbare_i)
             np.einsum("aB,juB->jau", B_cv[i, :, :], B_ca, optimize=True, out=Vtmp)
             Vbare_i -= Vtmp
@@ -621,6 +624,7 @@ class RelDSRG_MRPT2(DSRGBase):
             Vr_i[:] = Vbare_i
             renormalize_3index(
                 Vr_i,
+                Vbare_i,
                 self.ints["eps"]["c"][i],
                 self.ints["eps"]["c"],
                 self.ints["eps"]["v"],

@@ -335,4 +335,4 @@ def cint_int3c2e_spsp1_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[nu
 
 HAS_LIBCINT: bool = True
 
-libint2_max_am: int = 6
+libint2_max_am: int = 7
