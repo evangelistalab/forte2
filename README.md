@@ -37,6 +37,20 @@ git clone git@github.com:evangelistalab/forte2.git
 cd forte2
 conda env create -f environment.yml
 conda activate forte2
+```
+
+By default, the environment uses OpenBLAS for numerical linear algebra routines.
+To switch to another implementation, run the following command:
+
+```bash
+conda install "libblas=*=*BLAS_VARIANT"
+```
+
+Replace `BLAS_VARIANT` with `newaccelerate` for Apple's Accelerate framework (macOS only) or `mkl` for Intel MKL (x86-64 only). These tend to be more optimized for the target architectures and are recommended if available.
+
+Finally, compile and install Forte2:
+
+```bash
 pip install --no-build-isolation -ve .
 ```
 

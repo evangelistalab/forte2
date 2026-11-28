@@ -26,6 +26,16 @@ or if you want to develop Forte2, follow these steps to compile Forte2 from sour
     $ conda env create -f environment.yml
     $ conda activate forte2
 
+   The environment uses OpenBLAS by default. To switch to another implementation, run the following command::
+
+    $ conda install "libblas=*=*BLAS_VARIANT"
+
+   Replace ``BLAS_VARIANT`` with ``newaccelerate`` for Apple's Accelerate framework (macOS only) or ``mkl`` for Intel MKL (x86-64 only).
+   These tend to be more optimized for the target architectures and are recommended if available.
+
+   Forte2 links the BLAS and LAPACK libraries that the environment selects, which numpy and scipy also use.
+   If you switch after you build Forte2, build it again.
+
 3. Build the project::
 
     $ pip install --no-build-isolation -ve .

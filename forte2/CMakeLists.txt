@@ -69,9 +69,16 @@ endif()
 # Import nanobind through CMake's find_package mechanism
 find_package(nanobind CONFIG REQUIRED)
 
-# Find BLAS and LAPACK
+# Pass -DBLA_VENDOR=<vendor> to link a specific implementation instead.
+if(NOT DEFINED BLA_VENDOR AND DEFINED ENV{CONDA_PREFIX})
+  set(BLA_VENDOR Generic)
+  set(BLAS_ROOT "$ENV{CONDA_PREFIX}")
+  set(LAPACK_ROOT "$ENV{CONDA_PREFIX}")
+endif()
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
+message(STATUS "${Cyan}Found BLAS${ColourReset}: ${BLAS_LIBRARIES}")
+message(STATUS "${Cyan}Found LAPACK${ColourReset}: ${LAPACK_LIBRARIES}")
 
 # We are now ready to compile the actual extension module
 nanobind_add_module(

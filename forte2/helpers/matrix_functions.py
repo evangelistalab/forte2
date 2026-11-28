@@ -324,6 +324,38 @@ def cholesky_wrapper(M, tol):
     return B
 
 
+def cholesky_pd(A):
+    """
+    Lower Cholesky factor of a positive definite matrix.
+
+    Parameters
+    ----------
+    A : NDArray
+        The Hermitian matrix to decompose.
+
+    Returns
+    -------
+    NDArray
+        The lower triangular factor L, with A = L L^H.
+
+    Raises
+    ------
+    scipy.linalg.LinAlgError
+        If A is not positive definite to working precision.
+    """
+    L = sp.linalg.cholesky(A, lower=True)
+    # Rounding perturbs each pivot by up to about n * eps * A[i, i]. A linearly
+    # dependent column leaves a pivot within that bound, of either sign, so the
+    # factorization can succeed on a singular matrix.
+    pivots = np.diag(L).real ** 2
+    bound = A.shape[0] * np.finfo(A.dtype).eps * np.diag(A).real
+    if np.any(pivots <= bound):
+        raise sp.linalg.LinAlgError(
+            "The matrix is not positive definite to working precision."
+        )
+    return L
+
+
 def block_diag_2x2(M, force_complex=True):
     """
     Return a block-diagonal matrix with two copies of `M` on the diagonal.
@@ -578,7 +610,7 @@ def compute_Am1y(A, y, ortho_rtol=None):
     """
     if ortho_rtol is None:
         try:
-            L = sp.linalg.cholesky(A, lower=True)
+            L = cholesky_pd(A)
         except sp.linalg.LinAlgError as exc:
             raise ValueError(
                 "Input matrix A is not positive definite.\n"
