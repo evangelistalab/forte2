@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import CI, GHF, MOSpace, RHF, RelCISolver, SpinorUpcaster, System, X2CParams
-from forte2.base_classes import CIParams
+from forte2.base_classes import CIParams, DavidsonLiuParams
 from forte2.helpers.comparisons import approx
 from forte2 import CI
 
@@ -211,29 +211,32 @@ def test_rel_ci_hf_transition_dipole_ghf():
         unit="bohr",
         x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
-    scf = GHF(charge=0)(system)
-    ci = CI(
-        RelCISolver(
-            nel=10, nroots=5, core_orbitals=2, active_orbitals=12, do_test_rdms=True
-        ),
-        do_transition_dipole=True,
-    )(scf)
+    scf = GHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
+    ci_solver = RelCISolver(
+        nel=10,
+        nroots=5,
+        core_orbitals=2,
+        active_orbitals=12,
+        do_test_rdms=True,
+        davidson_liu_params=DavidsonLiuParams(r_tol=1e-9),
+    )
+    ci = CI(ci_solver, do_transition_dipole=True)(scf)
     ci.run()
-    assert ci.E_ci[0] == approx(-100.10065023157668)
-    assert ci.E_ci[1] == approx(-99.7875319545)
-    assert ci.E_ci[3] == approx(-99.7866432345)
+    assert ci.E_ci[0] == approx(-100.100650231627)
+    assert ci.E_ci[1] == approx(-99.787531954923)
+    assert ci.E_ci[3] == approx(-99.786643234939)
 
     assert np.abs(ci.ci_solver.transition_dipoles[(0, 0)]) == pytest.approx(
-        [0.0, 0.0, 7.54974120895005e-01], abs=1e-6
+        [0.0, 0.0, 0.754974191437], abs=1e-6
     )
     assert np.abs(ci.ci_solver.transition_dipoles[(1, 1)]) == pytest.approx(
-        [0.0, 0.0, 7.21278331621541e-01], abs=1e-6
+        [0.0, 0.0, 0.721279294502], abs=1e-6
     )
     assert np.abs(ci.ci_solver.transition_dipoles[(3, 3)]) == pytest.approx(
-        [0.0, 0.0, 7.21062788763614e-01], abs=1e-6
+        [0.0, 0.0, 0.721063421489], abs=1e-6
     )
     assert np.abs(ci.ci_solver.oscillator_strengths[(0, 3)]) == pytest.approx(
-        1.7104694791515446e-05, abs=1e-6
+        1.712074876720e-05, abs=1e-6
     )
 
 

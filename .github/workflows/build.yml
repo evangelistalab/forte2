@@ -40,6 +40,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-22.04, macos-latest, ubuntu-24.04-arm, ubuntu-22.04-arm]
+        # BLAS variant per runner; runners not listed keep the OpenBLAS from environment.yml
+        include:
+          - os: macos-latest
+            blas: newaccelerate
+          - os: ubuntu-latest
+            blas: mkl
 
     steps:
     - name: Checkout code
@@ -58,14 +64,22 @@ jobs:
         auto-activate-base: false
         add-pip-as-python-dependency: true
 
+    # numpy, scipy and forte2 all link the generic libblas, so this moves all three.
+    # libcblas and liblapack follow libblas.
+    - name: Switch BLAS to ${{ matrix.blas }}
+      if: matrix.blas
+      run: |
+        conda install -n forte -y "libblas=*=*${{ matrix.blas }}"
+
+    # The build tree links the variant's library file, so each variant needs its own cache
     - name: Restore C++ build tree
       id: cache-restore
       uses: actions/cache/restore@v4
       with:
         path: build
-        key: cxxbuild-${{ matrix.os }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-${{ github.run_id }}
+        key: cxxbuild-${{ matrix.os }}-${{ matrix.blas || 'openblas' }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-${{ github.run_id }}
         restore-keys: |
-          cxxbuild-${{ matrix.os }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-
+          cxxbuild-${{ matrix.os }}-${{ matrix.blas || 'openblas' }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-
 
     - name: Restore ccache
       id: ccache-restore
@@ -93,7 +107,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: build
-        key: cxxbuild-${{ matrix.os }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-${{ github.run_id }}
+        key: cxxbuild-${{ matrix.os }}-${{ matrix.blas || 'openblas' }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-${{ github.run_id }}
 
     - name: Save ccache
       if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
@@ -108,12 +122,13 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         OS: ${{ matrix.os }}
+        BLAS: ${{ matrix.blas || 'openblas' }}
       run: |
         # The caches are named
-        # "ccache-<os>-<runid>" and "cxxbuild-<os>-<64hexhash>-<runid>"
+        # "ccache-<os>-<runid>" and "cxxbuild-<os>-<blas>-<64hexhash>-<runid>"
         for pat in \
           "^ccache-${OS}-[0-9]+\$" \
-          "^cxxbuild-${OS}-[0-9a-f]+-[0-9]+\$"; do
+          "^cxxbuild-${OS}-${BLAS}-[0-9a-f]+-[0-9]+\$"; do
           # Newest first; keep index 0 (the generation we just saved), delete the rest.
           ids=$(gh cache list --ref "$GITHUB_REF" \
                   --sort created_at --order desc --limit 100 \

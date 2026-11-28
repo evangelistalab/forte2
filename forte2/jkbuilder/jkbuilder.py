@@ -9,6 +9,7 @@ from forte2 import integrals
 from forte2.lib import ints
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import (
+    cholesky_pd,
     cholesky_wrapper,
     invsqrt_matrix,
     print_metric_info,
@@ -202,7 +203,7 @@ class FockBuilder:
         else:
             # M = L L^T
             try:
-                L = sp.linalg.cholesky(M, lower=True)
+                L = cholesky_pd(M)
             except sp.linalg.LinAlgError:
                 raise ValueError(
                     "Density fitting Coulomb metric (P|Q) is not positive definite.\n"
@@ -829,7 +830,7 @@ class FockBuilderOTF:
         else:
             # M = L L.T
             try:
-                self.L = sp.linalg.cholesky(M, lower=True)
+                self.L = cholesky_pd(M)
             except sp.linalg.LinAlgError:
                 raise ValueError(
                     "Density fitting Coulomb metric (P|Q) is not positive definite.\n"
