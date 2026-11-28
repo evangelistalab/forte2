@@ -11,22 +11,23 @@ N 0.0 0.0 2.074
 """
 
 
-def _n2_system():
+def _n2_system(symmetry=False):
     return System(
         xyz=N2_XYZ,
         basis_set="cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
+        symmetry=symmetry,
     )
 
 
 def test_sf_mrpt3_n2_ss():
-    """State-specific CAS(6,6) with the 1s pair frozen and iterative relaxation.
+    """State-specific CAS(6,6) in D2h with the 1s pair frozen and iterative relaxation.
 
     Each row of relax_energies is forte's Fixed Ref. / Relaxed Ref. / Eref for
     one macro-iteration, so this pins the whole trajectory.
     """
-    system = _n2_system()
+    system = _n2_system(symmetry=True)
     rhf = RHF(charge=0, e_tol=1e-12)(system)
 
     ci_solver = CISolver(

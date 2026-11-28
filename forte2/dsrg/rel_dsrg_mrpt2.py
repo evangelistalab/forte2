@@ -60,6 +60,8 @@ class RelDSRG_MRPT2(DSRGBase):
               J. Chem. Phys. 2016, 144, 204111.
     .. [4] C. Li and F. A. Evangelista, "Driven similarity renormalization group for excited states: A state-averaged perturbation theory",
            J. Chem. Phys. 2018, 148, 124106.
+    .. [5] Z. Zhao and F. A. Evangelista, "One-step relativistic driven similarity renormalization group multireference perturbation theory",
+           J. Chem. Theory Comput. 2026, 22, 7230-7248.
     """
 
     def __post_init__(self):

@@ -41,7 +41,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   
   * Non-relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
   * Non-relativistic DSRG-MRPT3 with reference relaxation and state-averaging [12]_
-  * Two-component relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
+  * Two-component relativistic DSRG-MRPT2 with reference relaxation and state-averaging [13]_
   
 * Nuclear gradients and geometry optimization (see :doc:`gradients`)
 
@@ -71,3 +71,4 @@ References
 .. [10] Plasser, F.; Ruckenbauer, M.; Mai, S.; Oppel, M.; Marquetand, P.; González, L. Efficient and Flexible Computation of Many-Electron Wave Function Overlaps. J. Chem. Theory Comput. 2016, 12 (3), 1207-1219. https://doi.org/10.1021/acs.jctc.5b01148.
 .. [11] Malmqvist, P. Å. Calculation of Transition Density Matrices by Nonunitary Orbital Transformations. Int. J. Quantum Chem. 1986, 30 (4), 479-494. https://doi.org/10.1002/qua.560300404.
 .. [12] Li, C.; Evangelista, F. A. Driven Similarity Renormalization Group: Third-Order Multireference Perturbation Theory. J. Chem. Phys. 2017, 146 (12), 124132. https://doi.org/10.1063/1.4979016.
+.. [13] Zhao, Z.; Evangelista, F. A. One-Step Relativistic Driven Similarity Renormalization Group Multireference Perturbation Theory. J. Chem. Theory Comput. 2026, 22 (14), 7230-7248. https://doi.org/10.1021/acs.jctc.6c00935.
